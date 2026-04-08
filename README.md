@@ -107,24 +107,33 @@ python tools/ingest_turn.py \
   --speaker dm \
   --text "The innkeeper leans forward and whispers: 'The old tower has been sealed for twenty years. Those who enter do not return.'"
 
-
-### Bootstrapping From an Existing Transcript
-
-If you already have a large transcript, import it in one step:
-
-```bash
-python tools/bootstrap_session.py \\
-  --session sessions/session-001 \\
-  --file path/to/full-transcript.txt
-```
-
-Use `--dry-run` first to preview parsed turns and writes.
 # Add a player prompt
 python tools/ingest_turn.py \
   --session sessions/session-001 \
   --speaker player \
   --text "I ask the innkeeper if anyone has tried to investigate the tower recently."
 ```
+
+
+### Bootstrapping From an Existing Transcript
+
+If you already have a large transcript, import it in one step:
+
+Put the source text in a local-only folder that is gitignored:
+
+```bash
+mkdir -p sessions/_import
+# Place your raw transcript text at:
+# sessions/_import/session-001-full-transcript.txt
+```
+
+```bash
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt
+```
+
+Use `--dry-run` first to preview parsed turns and writes.
 
 ### Updating State
 

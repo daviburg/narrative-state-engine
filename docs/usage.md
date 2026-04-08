@@ -56,10 +56,18 @@ The script will:
 
 If you already have a large transcript file, bootstrap a session in one pass:
 
+Use a local-only import folder (gitignored) for raw source text:
+
 ```bash
-python tools/bootstrap_session.py \\
-  --session sessions/session-001 \\
-  --file path/to/full-transcript.txt
+mkdir -p sessions/_import
+# Place your transcript at:
+# sessions/_import/session-001-full-transcript.txt
+```
+
+```bash
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt
 ```
 
 Useful flags:
