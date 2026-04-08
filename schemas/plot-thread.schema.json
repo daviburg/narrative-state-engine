@@ -1,0 +1,61 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "plot-thread.schema.json",
+  "title": "PlotThread",
+  "description": "A narrative thread: a story arc, mystery, conflict, or ongoing situation.",
+  "type": "object",
+  "required": ["id", "title", "description", "status", "first_seen_turn"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'plot-sealed-tower'."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short human-readable title.",
+      "minLength": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Summary of the plot thread based on transcript evidence."
+    },
+    "status": {
+      "type": "string",
+      "description": "Current status of this thread.",
+      "enum": ["active", "dormant", "resolved", "abandoned"]
+    },
+    "related_entities": {
+      "type": "array",
+      "description": "IDs of entities involved in this thread.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "description": "Unresolved questions within this thread. Do not answer with inference; list as questions.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "key_turns": {
+      "type": "array",
+      "description": "Turn IDs that contain significant events for this thread.",
+      "items": {
+        "type": "string",
+        "pattern": "^turn-[0-9]{3,}$"
+      }
+    },
+    "first_seen_turn": {
+      "type": "string",
+      "description": "Turn ID when this thread was first identified.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "last_updated_turn": {
+      "type": "string",
+      "description": "Turn ID of the most recent update.",
+      "pattern": "^turn-[0-9]{3,}$"
+    }
+  }
+}

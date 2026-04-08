@@ -1,0 +1,49 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "prompt-candidate.schema.json",
+  "title": "PromptCandidate",
+  "description": "A candidate next-player-prompt with rationale, risk, and objective alignment.",
+  "type": "object",
+  "required": ["id", "recommendation_mode", "proposed_prompt", "rationale", "expected_upside", "risk", "objective_refs"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'pc-001'."
+    },
+    "recommendation_mode": {
+      "type": "string",
+      "description": "The generation strategy for this candidate.",
+      "enum": ["desired_outcome", "roleplay_consistent", "all_options"]
+    },
+    "style": {
+      "type": "string",
+      "description": "The approach style of this prompt.",
+      "enum": ["safe", "probing", "aggressive", "diplomatic", "deceptive", "exploratory", "direct"]
+    },
+    "proposed_prompt": {
+      "type": "string",
+      "description": "The exact text the player would send to the DM.",
+      "minLength": 1
+    },
+    "rationale": {
+      "type": "string",
+      "description": "Why this prompt is suggested and what it is intended to accomplish."
+    },
+    "expected_upside": {
+      "type": "string",
+      "description": "What the player stands to gain if this prompt succeeds."
+    },
+    "risk": {
+      "type": "string",
+      "description": "What could go wrong or what information it might reveal to the DM."
+    },
+    "objective_refs": {
+      "type": "array",
+      "description": "IDs of objectives this prompt advances.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

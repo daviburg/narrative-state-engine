@@ -1,0 +1,45 @@
+{
+  "as_of_turn": "turn-006",
+  "current_world_state": "Player is inside The Broken Wheel inn in Thornhaven. The innkeeper has deflected a direct question about the missing scholar. The village is deserted at dusk. A young villager with a bandaged arm showed a brief reaction to the player's mention of the missing scholar.",
+  "player_state": {
+    "location": "The Broken Wheel inn, Thornhaven",
+    "condition": "No injuries; cover identity as 'traveling scholar' established",
+    "inventory_notes": "Must pay for room in advance — implies limited goodwill with innkeeper",
+    "relationships_summary": "Innkeeper: neutral-to-guarded; Young villager: unknown — reacted to the scholar mention"
+  },
+  "known_constraints": [
+    "Innkeeper did not confirm or deny knowledge of the missing scholar",
+    "Innkeeper did not offer her name",
+    "The village streets are empty at dusk with all shutters closed",
+    "A young man with a bandaged arm is present in the inn"
+  ],
+  "inferred_constraints": [
+    {
+      "statement": "The innkeeper knows something about the missing scholar but chose not to share it",
+      "confidence": 0.7,
+      "source_turns": ["turn-006"]
+    },
+    {
+      "statement": "The deserted village may be connected to the missing scholar's visit two months ago",
+      "confidence": 0.5,
+      "source_turns": ["turn-002", "turn-006"]
+    },
+    {
+      "statement": "The young man's bandaged arm may be related to whatever incident occurred",
+      "confidence": 0.4,
+      "source_turns": ["turn-006"]
+    }
+  ],
+  "opportunities": [
+    "Accept the room to establish a base and observe the inn overnight",
+    "Approach the young villager with the bandaged arm separately from the innkeeper",
+    "Ask the innkeeper follow-up questions about local ruins or the old tower",
+    "Observe the inn patrons for further behavioral cues"
+  ],
+  "risks": [
+    "Pressing the innkeeper too hard may cause her to become hostile or ask the player to leave",
+    "Player's cover identity as 'scholar' is now established — changing it would be suspicious",
+    "Staying in the inn means being in an environment where the innkeeper controls information flow"
+  ],
+  "active_threads": ["plot-missing-scholar", "plot-village-fear"]
+}

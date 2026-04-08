@@ -1,0 +1,57 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "evidence.schema.json",
+  "title": "Evidence",
+  "description": "A piece of tagged information extracted from the transcript.",
+  "type": "object",
+  "required": ["id", "statement", "classification", "confidence", "source_turns"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'ev-001'."
+    },
+    "statement": {
+      "type": "string",
+      "description": "The evidence statement, written in neutral language."
+    },
+    "classification": {
+      "type": "string",
+      "description": "How this evidence was obtained or classified.",
+      "enum": ["explicit_evidence", "inference", "dm_bait", "player_hypothesis"]
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Confidence score 0.0 (speculative) to 1.0 (certain). Use 1.0 only for explicit_evidence.",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "source_turns": {
+      "type": "array",
+      "description": "Turn IDs that support or produced this evidence.",
+      "items": {
+        "type": "string",
+        "pattern": "^turn-[0-9]{3,}$"
+      },
+      "minItems": 1
+    },
+    "related_entities": {
+      "type": "array",
+      "description": "Entity IDs relevant to this evidence.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "related_threads": {
+      "type": "array",
+      "description": "Plot thread IDs relevant to this evidence.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes on why this is classified as it is."
+    }
+  }
+}

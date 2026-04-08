@@ -1,0 +1,75 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "entity.schema.json",
+  "title": "Entity",
+  "description": "A named entity in the game world: character, location, faction, or item.",
+  "type": "object",
+  "required": ["id", "name", "type", "description", "first_seen_turn"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'char-innkeeper' or 'loc-thornhaven'."
+    },
+    "name": {
+      "type": "string",
+      "description": "Display name of the entity.",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "description": "Entity category.",
+      "enum": ["character", "location", "faction", "item", "creature", "concept"]
+    },
+    "description": {
+      "type": "string",
+      "description": "Factual description based on transcript evidence."
+    },
+    "attributes": {
+      "type": "object",
+      "description": "Key-value attributes (e.g. role, alignment, condition). Values may be tagged as inference.",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "description": "Known relationships to other entities.",
+      "items": {
+        "type": "object",
+        "required": ["target_id", "relationship"],
+        "additionalProperties": false,
+        "properties": {
+          "target_id": {
+            "type": "string",
+            "description": "ID of the related entity."
+          },
+          "relationship": {
+            "type": "string",
+            "description": "Description of the relationship (e.g. 'owns', 'fears', 'member of')."
+          },
+          "confidence": {
+            "type": "number",
+            "description": "Confidence in this relationship (0.0–1.0). Omit if explicit.",
+            "minimum": 0.0,
+            "maximum": 1.0
+          }
+        }
+      }
+    },
+    "first_seen_turn": {
+      "type": "string",
+      "description": "Turn ID when this entity was first mentioned.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "last_updated_turn": {
+      "type": "string",
+      "description": "Turn ID of the most recent update.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "notes": {
+      "type": "string",
+      "description": "Additional notes, open questions, or player hypotheses about this entity."
+    }
+  }
+}

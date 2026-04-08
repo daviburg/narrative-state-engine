@@ -1,0 +1,32 @@
+[
+  {
+    "id": "pc-001",
+    "recommendation_mode": "desired_outcome",
+    "style": "safe",
+    "proposed_prompt": "I pay for the room and thank the innkeeper. While she processes the payment, I glance over toward the young man with the bandaged arm and give a neutral nod — just acknowledging him as a fellow patron, nothing more.",
+    "rationale": "Accepting the room establishes a legitimate presence without further antagonizing the innkeeper. The neutral nod to the young villager plants a seed of acknowledgment without the innkeeper feeling her authority is bypassed.",
+    "expected_upside": "Secures a base of operations. Opens a potential channel with the young villager without alerting the innkeeper. Low commitment.",
+    "risk": "The innkeeper may note the player's attention to the young villager and warn him to stay quiet.",
+    "objective_refs": ["obj-find-missing-scholar", "obj-understand-village-situation"]
+  },
+  {
+    "id": "pc-002",
+    "recommendation_mode": "desired_outcome",
+    "style": "probing",
+    "proposed_prompt": "I pay for the room. Then I mention casually, while putting away my coin: 'I heard there was an old tower near here — something about ruins from an older settlement. My colleague mentioned it in her last letter. Worth a look if I'm in the area. Do you know it?'",
+    "rationale": "Shifts the framing from 'missing person' (sensitive, may trigger defensiveness) to 'ruins research' (plausible scholarly interest). May elicit information about the tower without the emotional weight of the missing scholar question. Also plants the scholar's gender ('her') to see if the innkeeper reacts.",
+    "expected_upside": "May surface information about the tower and whether the DM connects it to the missing scholar. The pronoun 'her' could prompt the innkeeper to inadvertently confirm or deny she knows the person.",
+    "risk": "The innkeeper may recognize this as an indirect rephrasing of the same question and become more guarded. Low risk of triggering open hostility.",
+    "objective_refs": ["obj-find-missing-scholar"]
+  },
+  {
+    "id": "pc-003",
+    "recommendation_mode": "all_options",
+    "style": "exploratory",
+    "proposed_prompt": "After paying for the room and getting the key, I find a quiet seat at the bar — not next to the young villager, but within earshot — and order something to eat. I make no further mention of the scholar. Instead I listen to whatever conversation is happening and observe the room.",
+    "rationale": "Passive observation gathers ambient information without triggering any NPC defensiveness. A patient approach that may surface organic details the DM has seeded.",
+    "expected_upside": "May overhear relevant conversation. Lets the young villager see that the player is not an immediate threat. May surface additional NPCs or behavioral cues.",
+    "risk": "Slower approach; may produce nothing this turn. If the DM rewards direct action over observation, this may feel unproductive.",
+    "objective_refs": ["obj-understand-village-situation"]
+  }
+]

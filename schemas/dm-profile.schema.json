@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "dm-profile.schema.json",
+  "title": "DMProfile",
+  "description": "An inferred behavioral profile of the AI DM, built from observed patterns.",
+  "type": "object",
+  "required": ["last_updated_turn", "confidence"],
+  "additionalProperties": false,
+  "properties": {
+    "last_updated_turn": {
+      "type": "string",
+      "description": "Most recent turn this profile reflects.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "tone": {
+      "type": "string",
+      "description": "Overall narrative tone (e.g. 'dark and atmospheric', 'lighthearted', 'terse')."
+    },
+    "structure_patterns": {
+      "type": "array",
+      "description": "Observed patterns in how the DM structures responses.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hint_patterns": {
+      "type": "array",
+      "description": "Observed patterns in how the DM delivers hints or clues.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "adversarial_level": {
+      "type": "string",
+      "description": "How adversarial the DM appears (e.g. 'low', 'moderate', 'high').",
+      "enum": ["low", "moderate", "high", "unknown"]
+    },
+    "formatting_preferences": {
+      "type": "array",
+      "description": "Observed formatting choices (e.g. 'uses bullet points for NPC dialogue', 'describes scenes in second person').",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Freeform notes and observations about the DM style."
+    },
+    "confidence": {
+      "type": "number",
+      "description": "Overall confidence in this profile based on observed turns (0.0–1.0).",
+      "minimum": 0.0,
+      "maximum": 1.0
+    }
+  }
+}
