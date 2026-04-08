@@ -43,6 +43,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 from datetime import datetime, timezone
 from typing import NamedTuple
@@ -94,8 +95,9 @@ def parse_markdown_format(content: str) -> list[Turn]:
         start = m.end()
         end = matches[i + 1].start() if i + 1 < len(matches) else len(content)
         text = content[start:end].strip()
-        # Strip decorative separators
-        text = re.sub(r"^---+\s*", "", text, flags=re.MULTILINE).strip()
+        # Strip only standalone separators at turn boundaries.
+        text = re.sub(r"\A\s*---\s*(?:\r?\n)?", "", text)
+        text = re.sub(r"(?:\r?\n)?\s*---\s*\Z", "", text).strip()
         if text:
             turns.append(Turn(sequence=seq, speaker=speaker, text=text))
 
@@ -121,23 +123,22 @@ def parse_labeled_format(
         **You**: ...
     """
     # Build a regex that matches any known label at the start of a line.
-    # Labels may be wrapped in **, [], or nothing, followed by : or ]:
+    # Labels may be wrapped in **, [], or nothing.
     def _label_pattern(labels: list[str]) -> str:
         escaped = [re.escape(l) for l in labels]
-        return r"(?:\*{0,2})(?:\[)?(?:" + "|".join(escaped) + r")(?:\])?\*{0,2}\s*:"
+        return r"(?:\*{0,2})(?:\[)?(?:" + "|".join(escaped) + r")(?:\])?\*{0,2}"
 
-    all_dm = "|".join(re.escape(l) for l in dm_labels)
-    all_player = "|".join(re.escape(l) for l in player_labels)
+    dm_label_pattern = _label_pattern(dm_labels)
+    player_label_pattern = _label_pattern(player_labels)
+    any_label_pattern = r"(?:" + dm_label_pattern + r"|" + player_label_pattern + r")"
 
     # Match any speaker label at the start of a line
     speaker_re = re.compile(
-        r"^(?P<raw_label>(?:\*{0,2})(?:\[)?(?:"
-        + all_dm + "|" + all_player
-        + r")(?:\])?\*{0,2})\s*:",
+        r"^(?P<raw_label>" + any_label_pattern + r")\s*:",
         re.IGNORECASE | re.MULTILINE,
     )
 
-    dm_re = re.compile(r"^(?:\*{0,2})(?:\[)?(?:" + all_dm + r")(?:\])?\*{0,2}$", re.IGNORECASE)
+    dm_re = re.compile(r"^" + dm_label_pattern + r"$", re.IGNORECASE)
 
     splits = list(speaker_re.finditer(content))
     if not splits:
@@ -243,18 +244,37 @@ def write_turn_files(
     return written
 
 
-def write_full_transcript(raw_dir: str, turns: list[Turn], dry_run: bool, overwrite: bool) -> None:
+def write_full_transcript(
+    raw_dir: str,
+    turns: list[Turn],
+    dry_run: bool,
+    overwrite: bool,
+    allow_raw_overwrite: bool,
+) -> None:
     """Write or append to raw/full-transcript.md."""
     os.makedirs(raw_dir, exist_ok=True)
     transcript_path = os.path.join(raw_dir, "full-transcript.md")
 
-    if os.path.exists(transcript_path) and not overwrite:
-        print(f"  [SKIP]   {transcript_path} (already exists; use --overwrite to replace)")
-        return
+    if os.path.exists(transcript_path):
+        if not overwrite:
+            print(f"  [SKIP]   {transcript_path} (already exists; use --overwrite to replace turn files)")
+            return
+        if not allow_raw_overwrite:
+            print(
+                f"  [SKIP]   {transcript_path} (raw transcript is immutable by default; "
+                "pass --allow-raw-overwrite to force replacement with backup)"
+            )
+            return
 
     if dry_run:
         print(f"  [DRY]    would write {transcript_path} ({len(turns)} turns)")
         return
+
+    if os.path.exists(transcript_path):
+        timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        backup_path = f"{transcript_path}.bak-{timestamp}"
+        shutil.copy2(transcript_path, backup_path)
+        print(f"  [BACKUP] {backup_path}")
 
     lines: list[str] = ["# Full Transcript\n"]
     for turn in turns:
@@ -392,7 +412,13 @@ def main() -> None:
     parser.add_argument(
         "--overwrite",
         action="store_true",
-        help="Overwrite existing turn files and full-transcript.md if they already exist.",
+        help="Overwrite existing turn files if they already exist.",
+    )
+    parser.add_argument(
+        "--allow-raw-overwrite",
+        action="store_true",
+        help="Allow replacing raw/full-transcript.md when used with --overwrite. "
+             "A timestamped backup will be created first.",
     )
     parser.add_argument(
         "--dry-run",
@@ -464,7 +490,13 @@ def main() -> None:
     write_turn_files(transcript_dir, turns, dry_run=args.dry_run, overwrite=args.overwrite)
 
     print("\nWriting raw transcript:")
-    write_full_transcript(raw_dir, turns, dry_run=args.dry_run, overwrite=args.overwrite)
+    write_full_transcript(
+        raw_dir,
+        turns,
+        dry_run=args.dry_run,
+        overwrite=args.overwrite,
+        allow_raw_overwrite=args.allow_raw_overwrite,
+    )
 
     print("\nChecking metadata:")
     ensure_metadata(session_dir, turns, dry_run=args.dry_run)

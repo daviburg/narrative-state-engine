@@ -166,7 +166,10 @@ def generate_prompt_candidates(
     # Skip regeneration only when explicitly requested
     if os.path.exists(candidates_file) and not force_regen:
         existing = load_json(candidates_file, default=[])
-        print(f"  Kept existing prompt candidates: {len(existing)} candidate(s). (pass --force to regenerate)")
+        print(
+            f"  Kept existing prompt candidates: {len(existing)} candidate(s). "
+            "(regeneration is disabled because you passed --no-regen)"
+        )
         return
 
     # Generate a scaffold with placeholder candidates
@@ -177,7 +180,7 @@ def generate_prompt_candidates(
     scaffold = [
         {
             "id": "pc-001",
-            "recommendation_mode": "desired_outcome",
+            "recommendation_mode": mode,
             "style": "probing",
             "proposed_prompt": f"TODO: Write a probing prompt to {first_opp.lower()}",
             "rationale": "Information gathering is the safest first step.",
@@ -187,7 +190,7 @@ def generate_prompt_candidates(
         },
         {
             "id": "pc-002",
-            "recommendation_mode": "desired_outcome",
+            "recommendation_mode": mode,
             "style": "safe",
             "proposed_prompt": "TODO: Write a cautious, low-commitment action prompt.",
             "rationale": "Minimize risk while still advancing the situation.",
@@ -197,7 +200,7 @@ def generate_prompt_candidates(
         },
         {
             "id": "pc-003",
-            "recommendation_mode": "all_options",
+            "recommendation_mode": mode,
             "style": "direct",
             "proposed_prompt": "TODO: Write a direct action prompt.",
             "rationale": "Efficient path to the objective if the situation is stable.",
