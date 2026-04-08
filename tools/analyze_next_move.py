@@ -104,7 +104,7 @@ def format_objectives(objectives: list) -> str:
     return "\n".join(lines)
 
 
-def generate_analysis(session_dir: str, mode: str) -> None:
+def generate_analysis(session_dir: str, mode: str, force_regen: bool = True) -> None:
     session_id = os.path.basename(session_dir)
     derived_dir = os.path.join(session_dir, "derived")
 
@@ -148,7 +148,7 @@ def generate_analysis(session_dir: str, mode: str) -> None:
         f.write(analysis)
     print(f"  Written: {analysis_file}")
 
-    generate_prompt_candidates(derived_dir, session_id, as_of_turn, state, objectives, mode)
+    generate_prompt_candidates(derived_dir, session_id, as_of_turn, state, objectives, mode, force_regen=force_regen)
 
 
 def generate_prompt_candidates(
@@ -158,16 +158,15 @@ def generate_prompt_candidates(
     state: dict,
     objectives: list,
     mode: str,
+    force_regen: bool = True,
 ) -> None:
-    """Generate a scaffold for prompt candidates if none exist, or note the mode."""
+    """Generate prompt candidates. Regenerates by default; pass force_regen=False to preserve existing file."""
     candidates_file = os.path.join(derived_dir, "prompt-candidates.json")
 
-    # If file already exists, just note the mode and remind the user to review
-    if os.path.exists(candidates_file):
+    # Skip regeneration only when explicitly requested
+    if os.path.exists(candidates_file) and not force_regen:
         existing = load_json(candidates_file, default=[])
-        print(f"  Found existing prompt candidates: {len(existing)} candidate(s).")
-        print(f"  Mode requested: {mode}")
-        print("  Review and update prompt-candidates.json as needed.")
+        print(f"  Kept existing prompt candidates: {len(existing)} candidate(s). (pass --force to regenerate)")
         return
 
     # Generate a scaffold with placeholder candidates
@@ -226,6 +225,11 @@ def main() -> None:
         default="desired_outcome",
         help="Prompt generation mode (default: desired_outcome).",
     )
+    parser.add_argument(
+        "--no-regen",
+        action="store_true",
+        help="Keep existing prompt-candidates.json instead of regenerating it.",
+    )
     args = parser.parse_args()
 
     session_dir = args.session
@@ -241,7 +245,7 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Generating next-move analysis for: {session_dir}")
-    generate_analysis(session_dir, args.mode)
+    generate_analysis(session_dir, args.mode, force_regen=not args.no_regen)
 
     print()
     print("Done. Review:")

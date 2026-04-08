@@ -20,6 +20,12 @@ try:
 except ImportError:
     HAS_JSONSCHEMA = False
 
+JSONSCHEMA_REQUIRED_MSG = (
+    "ERROR: jsonschema is not installed. Full schema validation requires it.\n"
+    "Install it with:  pip install -r requirements.txt\n"
+    "To run syntax-only checks instead, use:  --syntax-only"
+)
+
 
 # Map of JSON file basename patterns to schema files
 SCHEMA_MAP = {
@@ -41,7 +47,7 @@ def load_schema(schema_path: str) -> dict:
         return json.load(f)
 
 
-def validate_file(json_path: str, schema_path: str) -> list[str]:
+def validate_file(json_path: str, schema_path: str, syntax_only: bool = False) -> list[str]:
     """Validate a JSON file against a schema. Returns a list of error messages."""
     errors = []
 
@@ -52,8 +58,8 @@ def validate_file(json_path: str, schema_path: str) -> list[str]:
     except json.JSONDecodeError as e:
         return [f"JSON parse error: {e}"]
 
-    if not HAS_JSONSCHEMA:
-        return []  # Can't do schema validation without jsonschema
+    if syntax_only:
+        return []  # Caller explicitly requested syntax-only checks
 
     try:
         schema = load_schema(schema_path)
@@ -76,7 +82,7 @@ def validate_file(json_path: str, schema_path: str) -> list[str]:
     return errors
 
 
-def validate_dir(directory: str, repo_root: str) -> tuple[int, int]:
+def validate_dir(directory: str, repo_root: str, syntax_only: bool = False) -> tuple[int, int]:
     """Walk a directory and validate all JSON files with known schema mappings."""
     passed = 0
     failed = 0
@@ -103,7 +109,7 @@ def validate_dir(directory: str, repo_root: str) -> tuple[int, int]:
                 print(f"  [SKIP]   {json_path} (schema not found: {schema_path})")
                 continue
 
-            errors = validate_file(json_path, schema_path)
+            errors = validate_file(json_path, schema_path, syntax_only=syntax_only)
             if errors:
                 print(f"  [FAIL]   {json_path}")
                 for err in errors:
@@ -130,16 +136,21 @@ def main() -> None:
     parser.add_argument("--all", action="store_true", help="Validate all known directories.")
     parser.add_argument("--file", help="Validate a specific JSON file.")
     parser.add_argument("--schema", help="Schema to use when validating --file.")
+    parser.add_argument(
+        "--syntax-only",
+        action="store_true",
+        help="Check JSON syntax only; skip schema validation. Use when jsonschema is not installed.",
+    )
     args = parser.parse_args()
 
     if not any([args.session, args.framework, args.all, args.file]):
         parser.print_help()
         sys.exit(0)
 
-    if not HAS_JSONSCHEMA:
-        print("WARNING: jsonschema is not installed. Only checking JSON syntax.")
-        print("Install it with: pip install jsonschema")
-        print()
+    syntax_only = args.syntax_only
+    if not HAS_JSONSCHEMA and not syntax_only:
+        print(JSONSCHEMA_REQUIRED_MSG, file=sys.stderr)
+        sys.exit(1)
 
     repo_root = find_repo_root()
     total_passed = 0
@@ -157,7 +168,7 @@ def main() -> None:
         else:
             schema_path = args.schema
 
-        errors = validate_file(args.file, schema_path)
+        errors = validate_file(args.file, schema_path, syntax_only=syntax_only)
         if errors:
             print(f"[FAIL] {args.file}")
             for err in errors:
@@ -180,7 +191,7 @@ def main() -> None:
 
     for directory in directories:
         print(f"\nValidating: {directory}")
-        p, f = validate_dir(directory, repo_root)
+        p, f = validate_dir(directory, repo_root, syntax_only=syntax_only)
         total_passed += p
         total_failed += f
 
