@@ -27,12 +27,13 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: Install pip-audit
-        run: pip install pip-audit
+        run: pip install pip-audit==2.7.3
 
       - name: Syntax-check all tools
         run: |
           for f in tools/*.py; do
-            python -m py_compile "$f" && echo "OK: $f"
+            python -m py_compile "$f"
+            echo "OK: $f"
           done
 
       - name: Validate schemas and framework files
