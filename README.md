@@ -128,8 +128,8 @@ mkdir -p sessions/_import
 ```
 
 ```bash
-python tools/bootstrap_session.py \\
-  --session sessions/session-001 \\
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
   --file sessions/_import/session-001-full-transcript.txt
 ```
 
