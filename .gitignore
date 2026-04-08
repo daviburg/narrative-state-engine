@@ -21,3 +21,6 @@ Thumbs.db
 .vscode/settings.json
 *.swp
 *~
+
+# Local import source files (real session transcripts)
+sessions/_import/
