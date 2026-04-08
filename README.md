@@ -77,6 +77,7 @@ sessions/
       prompt-candidates.json
 
 tools/
+  bootstrap_session.py
   ingest_turn.py
   update_state.py
   analyze_next_move.py
@@ -106,6 +107,18 @@ python tools/ingest_turn.py \
   --speaker dm \
   --text "The innkeeper leans forward and whispers: 'The old tower has been sealed for twenty years. Those who enter do not return.'"
 
+
+### Bootstrapping From an Existing Transcript
+
+If you already have a large transcript, import it in one step:
+
+```bash
+python tools/bootstrap_session.py \\
+  --session sessions/session-001 \\
+  --file path/to/full-transcript.txt
+```
+
+Use `--dry-run` first to preview parsed turns and writes.
 # Add a player prompt
 python tools/ingest_turn.py \
   --session sessions/session-001 \
@@ -115,11 +128,23 @@ python tools/ingest_turn.py \
 
 ### Updating State
 
-After ingesting new turns, refresh summaries, catalogs, objectives, and evidence:
+After ingesting new turns, refresh the derived scaffold and summary:
 
 ```bash
 python tools/update_state.py --session sessions/session-001
 ```
+
+Current automated behavior:
+- Rebuilds `sessions/session-001/derived/turn-summary.md` from transcript files
+- Creates scaffold files if missing: `state.json`, `objectives.json`, `evidence.json`
+- Updates only `state.json.as_of_turn`
+
+Not automated yet:
+- Framework catalog updates (`framework/catalogs/*.json`)
+- Framework story updates (`framework/story/*`)
+- Framework DM profile updates (`framework/dm-profile/dm-profile.json`)
+
+Those updates are currently manual/Copilot-assisted.
 
 ### Generating Next-Move Analysis
 
@@ -147,14 +172,15 @@ This repository is configured for GitHub Copilot via `.github/copilot-instructio
 **Recommended workflow:**
 
 1. Open the session folder in VS Code.
-2. After each turn, paste the DM response into the transcript folder as a new `.md` file.
-3. Ask Copilot to update `derived/state.json`, `derived/objectives.json`, and `derived/evidence.json`.
-4. Ask Copilot to generate `derived/next-move-analysis.md` and `derived/prompt-candidates.json`.
+2. Add turns with `tools/ingest_turn.py` (or use `tools/bootstrap_session.py` for existing transcripts).
+3. Run `tools/update_state.py` to regenerate `turn-summary.md` and ensure derived scaffolds exist.
+4. Ask Copilot to update `derived/state.json`, `derived/objectives.json`, and `derived/evidence.json`.
+5. Run `tools/analyze_next_move.py` and refine prompt candidates as needed.
 5. Copilot will follow the instructions in `.github/copilot-instructions.md` to ensure consistency.
 
 **Example Copilot prompts:**
 
-- "Update the state and catalogs based on the latest DM turn."
+- "Update `derived/state.json`, `derived/objectives.json`, and `derived/evidence.json` based on the latest DM turn."
 - "Generate 3 prompt candidates focused on the current main objective."
 - "What evidence do we have for the tower being cursed vs. just abandoned?"
 
