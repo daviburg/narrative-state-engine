@@ -1,0 +1,4 @@
+# Default ownership for the repository.
+# GitHub uses the last matching pattern, so keep specific overrides below if added later.
+
+* @daviburg
