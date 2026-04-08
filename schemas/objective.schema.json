@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "objective.schema.json",
+  "title": "Objective",
+  "description": "A player objective: either a strategic long-term goal or a tactical short-term goal.",
+  "type": "object",
+  "required": ["id", "title", "type", "description", "priority", "status", "last_updated_turn"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'obj-find-missing-scholar'."
+    },
+    "title": {
+      "type": "string",
+      "description": "Short human-readable title.",
+      "minLength": 1
+    },
+    "type": {
+      "type": "string",
+      "description": "Objective type.",
+      "enum": ["strategic_long_term", "tactical_short_term"]
+    },
+    "description": {
+      "type": "string",
+      "description": "What achieving this objective requires."
+    },
+    "priority": {
+      "type": "integer",
+      "description": "Priority rank (1 = highest). Used to order prompt candidates.",
+      "minimum": 1
+    },
+    "status": {
+      "type": "string",
+      "description": "Current status of this objective.",
+      "enum": ["active", "completed", "failed", "suspended", "unknown"]
+    },
+    "success_indicators": {
+      "type": "array",
+      "description": "Observable signs that this objective has been or is being achieved.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "failure_indicators": {
+      "type": "array",
+      "description": "Observable signs that this objective has failed or is at risk.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "related_threads": {
+      "type": "array",
+      "description": "Plot thread IDs relevant to this objective.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "last_updated_turn": {
+      "type": "string",
+      "description": "Most recent turn that affected this objective.",
+      "pattern": "^turn-[0-9]{3,}$"
+    }
+  }
+}

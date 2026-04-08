@@ -1,0 +1,7 @@
+{
+  "session_id": "demo-session",
+  "title": "Demo Session — The Sealed Tower of Thornhaven",
+  "start_date": "2026-01-15",
+  "description": "A demonstration session showing how narrative-state-engine tracks a mystery involving a sealed tower, missing scholars, and an ambiguous innkeeper.",
+  "turn_count": 6
+}

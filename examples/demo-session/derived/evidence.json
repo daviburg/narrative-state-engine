@@ -1,0 +1,112 @@
+[
+  {
+    "id": "ev-001",
+    "statement": "Thornhaven is a small village of approximately 12 stone buildings around a central well.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-002"],
+    "related_entities": ["loc-thornhaven"],
+    "related_threads": [],
+    "notes": "Directly stated by the DM."
+  },
+  {
+    "id": "ev-002",
+    "statement": "All shutters in Thornhaven are closed and streets are empty at dusk.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-002"],
+    "related_entities": ["loc-thornhaven"],
+    "related_threads": ["plot-village-fear"],
+    "notes": "Directly stated by the DM."
+  },
+  {
+    "id": "ev-003",
+    "statement": "The Broken Wheel is the only building showing light at dusk.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-002"],
+    "related_entities": ["loc-broken-wheel-inn"],
+    "related_threads": [],
+    "notes": "Directly stated by the DM."
+  },
+  {
+    "id": "ev-004",
+    "statement": "A crow watched the player from the inn sign with 'unsettling intelligence'.",
+    "classification": "dm_bait",
+    "confidence": 0.35,
+    "source_turns": ["turn-002"],
+    "related_entities": ["creature-crow"],
+    "related_threads": [],
+    "notes": "Ambiguous detail. Could be atmospheric flavor or a planted narrative hook (familiar, omen, spy). Do not invest resources without corroborating evidence. Flagged for monitoring."
+  },
+  {
+    "id": "ev-005",
+    "statement": "The innkeeper is a heavyset woman with grey-streaked hair and watchful eyes who did not offer her name.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-004"],
+    "related_entities": ["char-innkeeper"],
+    "related_threads": [],
+    "notes": "Directly stated by the DM."
+  },
+  {
+    "id": "ev-006",
+    "statement": "The innkeeper said travelers don't come to Thornhaven 'this time of year', implying the player's arrival is unusual.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-004"],
+    "related_entities": ["char-innkeeper", "loc-thornhaven"],
+    "related_threads": [],
+    "notes": "Directly stated by the DM."
+  },
+  {
+    "id": "ev-007",
+    "statement": "The innkeeper's grip on the bar cloth tightened when the player mentioned the missing scholar.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-006"],
+    "related_entities": ["char-innkeeper"],
+    "related_threads": ["plot-missing-scholar"],
+    "notes": "Physical tell described by DM. Strong indicator that the innkeeper has relevant knowledge."
+  },
+  {
+    "id": "ev-008",
+    "statement": "The innkeeper denied knowledge of the scholar with: 'Scholars come and go. Can't keep track of every one.'",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-006"],
+    "related_entities": ["char-innkeeper"],
+    "related_threads": ["plot-missing-scholar"],
+    "notes": "The DM stated this directly. The verbal denial combined with the physical tell (ev-007) is notable."
+  },
+  {
+    "id": "ev-009",
+    "statement": "The innkeeper knows more about the missing scholar than she admitted.",
+    "classification": "inference",
+    "confidence": 0.75,
+    "source_turns": ["turn-006"],
+    "related_entities": ["char-innkeeper"],
+    "related_threads": ["plot-missing-scholar"],
+    "notes": "Derived from the combination of verbal denial and physical tell (tightened grip). Not confirmed — the innkeeper might simply be reacting to the sensitive topic generally."
+  },
+  {
+    "id": "ev-010",
+    "statement": "A young male villager with a bandaged arm made brief eye contact with the player when the missing scholar was mentioned, then looked away.",
+    "classification": "explicit_evidence",
+    "confidence": 1.0,
+    "source_turns": ["turn-006"],
+    "related_entities": ["char-young-villager"],
+    "related_threads": ["plot-missing-scholar", "plot-village-fear"],
+    "notes": "Directly described by DM. The timing of the glance (during the scholar mention) is significant."
+  },
+  {
+    "id": "ev-011",
+    "statement": "The young villager's bandaged arm may be connected to an incident related to the missing scholar or the cause of village fear.",
+    "classification": "player_hypothesis",
+    "confidence": 0.3,
+    "source_turns": ["turn-006"],
+    "related_entities": ["char-young-villager"],
+    "related_threads": ["plot-missing-scholar", "plot-village-fear"],
+    "notes": "Player hypothesis — not supported by direct evidence yet. Requires further investigation."
+  }
+]

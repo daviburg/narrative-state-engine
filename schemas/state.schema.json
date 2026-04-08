@@ -1,0 +1,80 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "state.schema.json",
+  "title": "State",
+  "description": "The current structured world and player state as understood after the latest turn.",
+  "type": "object",
+  "required": ["as_of_turn", "current_world_state", "player_state", "active_threads"],
+  "additionalProperties": false,
+  "properties": {
+    "as_of_turn": {
+      "type": "string",
+      "description": "The most recent turn this state reflects.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "current_world_state": {
+      "type": "string",
+      "description": "Narrative summary of the current world state (explicit evidence only)."
+    },
+    "player_state": {
+      "type": "object",
+      "description": "Current status of the player character.",
+      "properties": {
+        "location": { "type": "string" },
+        "condition": { "type": "string" },
+        "inventory_notes": { "type": "string" },
+        "relationships_summary": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "known_constraints": {
+      "type": "array",
+      "description": "Constraints confirmed by explicit DM statements.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "inferred_constraints": {
+      "type": "array",
+      "description": "Constraints derived from inference. Label as inference, not fact.",
+      "items": {
+        "type": "object",
+        "required": ["statement", "confidence", "source_turns"],
+        "additionalProperties": false,
+        "properties": {
+          "statement": { "type": "string" },
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          },
+          "source_turns": {
+            "type": "array",
+            "items": { "type": "string" }
+          }
+        }
+      }
+    },
+    "opportunities": {
+      "type": "array",
+      "description": "Identified opportunities available to the player.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "risks": {
+      "type": "array",
+      "description": "Identified risks or threats the player faces.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "active_threads": {
+      "type": "array",
+      "description": "IDs of currently active plot threads.",
+      "items": {
+        "type": "string"
+      }
+    }
+  }
+}

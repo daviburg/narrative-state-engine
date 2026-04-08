@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "turn.schema.json",
+  "title": "Turn",
+  "description": "A single exchange in the session transcript (one player prompt or one DM response).",
+  "type": "object",
+  "required": ["turn_id", "sequence_number", "speaker", "text"],
+  "additionalProperties": false,
+  "properties": {
+    "turn_id": {
+      "type": "string",
+      "description": "Unique identifier for this turn, e.g. 'turn-001'.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "sequence_number": {
+      "type": "integer",
+      "description": "1-based sequence position in the session.",
+      "minimum": 1
+    },
+    "speaker": {
+      "type": "string",
+      "description": "Who produced this turn.",
+      "enum": ["player", "dm"]
+    },
+    "text": {
+      "type": "string",
+      "description": "Verbatim text of the turn. Never modify after creation.",
+      "minLength": 1
+    },
+    "source_optional": {
+      "type": "string",
+      "description": "Optional source annotation (e.g. copy-paste origin, timestamp)."
+    },
+    "session_id": {
+      "type": "string",
+      "description": "The session this turn belongs to, e.g. 'session-001'."
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time",
+      "description": "Optional ISO 8601 timestamp when the turn was ingested."
+    }
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "obj-find-missing-scholar",
+    "title": "Find out what happened to the missing scholar",
+    "type": "strategic_long_term",
+    "description": "A scholar colleague visited Thornhaven two months ago to study ruins. They have not been heard from since. The player must determine their fate.",
+    "priority": 1,
+    "status": "active",
+    "success_indicators": [
+      "Learn the scholar's name or identity confirmation from an NPC",
+      "Discover the scholar's last known location or action in Thornhaven",
+      "Find physical evidence of the scholar's presence"
+    ],
+    "failure_indicators": [
+      "Evidence that the scholar is dead with no further leads",
+      "Player expelled from Thornhaven before gathering information"
+    ],
+    "related_threads": ["plot-missing-scholar"],
+    "last_updated_turn": "turn-006"
+  },
+  {
+    "id": "obj-understand-village-situation",
+    "title": "Understand why the village is deserted and fearful",
+    "type": "tactical_short_term",
+    "description": "The empty streets, closed shutters, and the innkeeper's guarded behavior suggest something has frightened the village. Understanding this context is essential to any other objectives.",
+    "priority": 2,
+    "status": "active",
+    "success_indicators": [
+      "An NPC explains the cause of the village's fearful behavior",
+      "Player observes direct evidence of the threat or incident"
+    ],
+    "failure_indicators": [
+      "Village closes off entirely before player gathers more information"
+    ],
+    "related_threads": ["plot-village-fear"],
+    "last_updated_turn": "turn-006"
+  }
+]
