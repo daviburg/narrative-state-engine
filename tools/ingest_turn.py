@@ -81,12 +81,14 @@ def main() -> None:
     )
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--text", help="Turn text provided inline.")
-    group.add_argument("--file", help="Path to a file containing the turn text.")    parser.add_argument(
+    group.add_argument("--file", help="Path to a file containing the turn text.")
+    parser.add_argument(
         "--extract",
         action="store_true",
         default=False,
         help="Run LLM-based semantic extraction after ingesting the turn.",
-    )    args = parser.parse_args()
+    )
+    args = parser.parse_args()
 
     session_dir = args.session
     if not os.path.isdir(session_dir):

@@ -29,6 +29,11 @@ from catalog_merger import (
 )
 from llm_client import LLMClient, LLMExtractionError
 
+try:
+    import jsonschema
+except ImportError:
+    jsonschema = None
+
 # Default confidence threshold — entities below this are logged but not cataloged
 DEFAULT_MIN_CONFIDENCE = 0.6
 
@@ -38,6 +43,53 @@ TEMPLATES_DIR = os.path.join(
     "templates",
     "extraction",
 )
+
+# Directory containing JSON schemas (relative to repo root)
+SCHEMAS_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "schemas",
+)
+
+_schema_cache: dict = {}
+
+
+def _load_schema(name: str) -> dict | None:
+    """Load and cache a JSON schema by filename (e.g. 'entity.schema.json')."""
+    if jsonschema is None:
+        return None
+    if name not in _schema_cache:
+        path = os.path.join(SCHEMAS_DIR, name)
+        if not os.path.exists(path):
+            return None
+        with open(path, "r", encoding="utf-8") as f:
+            _schema_cache[name] = json.load(f)
+    return _schema_cache.get(name)
+
+
+def _validate_entity(entity_data: dict) -> bool:
+    """Validate an entity dict against entity.schema.json. Returns True if valid."""
+    schema = _load_schema("entity.schema.json")
+    if schema is None:
+        return True  # Skip validation if jsonschema not available
+    try:
+        jsonschema.validate(entity_data, schema)
+        return True
+    except jsonschema.ValidationError as e:
+        print(f"  WARNING: Entity failed schema validation: {e.message}", file=sys.stderr)
+        return False
+
+
+def _validate_event(event_data: dict) -> bool:
+    """Validate an event dict against event.schema.json. Returns True if valid."""
+    schema = _load_schema("event.schema.json")
+    if schema is None:
+        return True
+    try:
+        jsonschema.validate(event_data, schema)
+        return True
+    except jsonschema.ValidationError as e:
+        print(f"  WARNING: Event failed schema validation: {e.message}", file=sys.stderr)
+        return False
 
 
 def load_template(name: str) -> str:
@@ -156,7 +208,8 @@ def extract_and_merge(
         # Fix proposed_id prefix for factions (models may use "fac-" instead of "faction-")
         pid = entity.get("proposed_id", "")
         if entity.get("type") == "faction" and pid and not pid.startswith("faction-"):
-            entity["proposed_id"] = "faction-" + pid.lstrip("fac-").lstrip("-")
+            suffix = pid.removeprefix("fac-").lstrip("-")
+            entity["proposed_id"] = "faction-" + suffix
 
     # Filter by confidence
     qualified = filter_by_confidence(discovered, min_confidence)
@@ -186,7 +239,7 @@ def extract_and_merge(
             continue
 
         entity_data = detail_result.get("entity")
-        if entity_data:
+        if entity_data and _validate_entity(entity_data):
             merge_entity(catalogs, entity_data)
 
         llm.delay()
@@ -224,8 +277,9 @@ def extract_and_merge(
             user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
         )
         new_events = event_result.get("events", [])
-        if new_events:
-            merge_events(events_list, new_events)
+        valid_events = [e for e in new_events if _validate_event(e)]
+        if valid_events:
+            merge_events(events_list, valid_events)
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
 
@@ -284,10 +338,9 @@ def extract_semantic_batch(
                     catalogs = load_catalogs(catalog_dir)
                     events_list = load_events(catalog_dir)
         except (json.JSONDecodeError, KeyError):
-            pass
+            pass  # Corrupted progress file; start from beginning
 
     total = len(turn_dicts)
-    entities_before = sum(len(v) for v in catalogs.values())
 
     print(f"  Processing {total - start_from} turns for semantic extraction...")
 

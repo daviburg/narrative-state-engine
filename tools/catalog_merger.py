@@ -170,7 +170,8 @@ def _update_existing_entity(current: dict, update: dict) -> None:
         if "attributes" not in current:
             current["attributes"] = {}
         existing_aliases = current["attributes"].get("aliases", "")
-        if old_name not in existing_aliases:
+        alias_list = [a.strip() for a in existing_aliases.split(",")] if existing_aliases else []
+        if old_name not in alias_list:
             if existing_aliases:
                 current["attributes"]["aliases"] = f"{existing_aliases}, {old_name}"
             else:
