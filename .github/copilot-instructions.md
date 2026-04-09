@@ -117,10 +117,17 @@ Adds --location flag and related schema updates. (#31)
 
 ### Pull Requests
 
-- Use `gh pr create` with `--title`, `--body`, and `--head` flags.
+- Use `gh pr create` with `--title`, `--body-file`, and `--head` flags.
+- Write the PR body to a temporary file (e.g. `/tmp/pr-body.md`) and pass it with `--body-file`. Delete the file after the command succeeds.
 - Include `Closes #N` in the PR body for each resolved issue.
 - Structure the PR body with a **Summary** section followed by per-issue subsections when fixing multiple issues.
 - Link the PR to all relevant issues so they close automatically on merge.
+
+Example:
+```
+gh pr create --title "fix: correct schema validation" --body-file /tmp/pr-body.md --head fix/issue-19
+rm /tmp/pr-body.md
+```
 
 Example body structure:
 ```
@@ -138,6 +145,24 @@ What was changed and why.
 
 Closes #19
 Closes #20
+```
+
+### Shell and File Writing Safety
+
+PowerShell uses the backtick `` ` `` as its escape character. Markdown content commonly contains backticks for inline code (e.g. `` `fix/` ``, `` `feat/` ``). Passing such content through PowerShell string interpolation silently corrupts it.
+
+**Rules:**
+
+- **Never** pass Markdown content (issue bodies, PR bodies, file content) as inline strings to `gh issue create --body`, `gh pr create --body`, `echo`, `Set-Content`, or any other shell command that performs string interpolation.
+- **Always** write Markdown content to a temporary file using a direct file-writing API (e.g. the built-in `create` or `edit` file tools, or `python -c "open(...).write(...)"`) and then reference that file.
+- For `gh` CLI: use `--body-file <path>` instead of `--body <string>` for both `gh issue create` and `gh pr create`.
+- Clean up temporary files after the command succeeds.
+
+Example — creating a GitHub issue safely:
+```
+# Write body to file first
+gh issue create --title "Bug: ..." --body-file /tmp/issue-body.md
+rm /tmp/issue-body.md
 ```
 
 ### Labels
