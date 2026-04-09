@@ -110,7 +110,8 @@ def _find_todo_strings(data, path: str = "") -> list[str]:
     warnings = []
     if isinstance(data, dict):
         for key, value in data.items():
-            warnings.extend(_find_todo_strings(value, f"{path}.{key}"))
+            child_path = key if not path else f"{path}.{key}"
+            warnings.extend(_find_todo_strings(value, child_path))
     elif isinstance(data, list):
         for i, item in enumerate(data):
             warnings.extend(_find_todo_strings(item, f"{path}[{i}]"))
@@ -152,9 +153,9 @@ def check_completeness(json_path: str, session_dir: str | None) -> list[str]:
                 )
             elif dm_turns > 0:
                 coverage = len(data) / dm_turns
-                warnings.append(
-                    f"Evidence coverage: {len(data)} entries from {dm_turns} DM turns "
-                    f"({coverage:.0%})"
+                print(
+                    f"  [INFO]   {json_path}: Evidence coverage: "
+                    f"{len(data)} entries from {dm_turns} DM turns ({coverage:.0%})"
                 )
 
     elif fname == "objectives.json":
@@ -244,13 +245,13 @@ def validate_dir(directory: str, repo_root: str, syntax_only: bool = False,
                 print(f"  [PASS]   {json_path}")
                 passed += 1
 
-            # Strict-mode completeness checks on derived files
-            if strict and "derived" in os.path.normpath(json_path).split(os.sep):
-                session_dir = _find_session_dir(json_path)
-                warnings = check_completeness(json_path, session_dir)
-                for w in warnings:
-                    print(f"  [WARN]   {json_path}: {w}")
-                completeness_warnings += len(warnings)
+                # Strict-mode completeness checks on derived files
+                if strict and "derived" in os.path.normpath(json_path).split(os.sep):
+                    session_dir = _find_session_dir(json_path)
+                    warnings = check_completeness(json_path, session_dir)
+                    for w in warnings:
+                        print(f"  [WARN]   {json_path}: {w}")
+                    completeness_warnings += len(warnings)
 
     return passed, failed, completeness_warnings
 
