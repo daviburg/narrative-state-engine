@@ -6,6 +6,14 @@
   "type": "object",
   "required": ["id", "name", "type", "description", "first_seen_turn"],
   "additionalProperties": false,
+  "allOf": [
+    { "if": { "properties": { "type": { "const": "character" } } },  "then": { "properties": { "id": { "pattern": "^char-" } } } },
+    { "if": { "properties": { "type": { "const": "location" } } },  "then": { "properties": { "id": { "pattern": "^loc-" } } } },
+    { "if": { "properties": { "type": { "const": "faction" } } },   "then": { "properties": { "id": { "pattern": "^faction-" } } } },
+    { "if": { "properties": { "type": { "const": "item" } } },      "then": { "properties": { "id": { "pattern": "^item-" } } } },
+    { "if": { "properties": { "type": { "const": "creature" } } },  "then": { "properties": { "id": { "pattern": "^creature-" } } } },
+    { "if": { "properties": { "type": { "const": "concept" } } },   "then": { "properties": { "id": { "pattern": "^concept-" } } } }
+  ],
   "properties": {
     "id": {
       "type": "string",

@@ -4,7 +4,7 @@
   "title": "Event",
   "description": "An atomic narrative event representing a discrete change in the game world.",
   "type": "object",
-  "required": ["id", "source_turn", "type", "description"],
+  "required": ["id", "source_turns", "type", "description"],
   "additionalProperties": false,
   "properties": {
     "id": {
@@ -12,10 +12,14 @@
       "description": "Unique identifier, e.g. 'evt-001'.",
       "pattern": "^evt-[0-9]+$"
     },
-    "source_turn": {
-      "type": "string",
-      "description": "Turn ID where the event occurred.",
-      "pattern": "^turn-[0-9]{3,}$"
+    "source_turns": {
+      "type": "array",
+      "description": "Turn IDs where the event occurred or is evidenced.",
+      "items": {
+        "type": "string",
+        "pattern": "^turn-[0-9]{3,}$"
+      },
+      "minItems": 1
     },
     "type": {
       "type": "string",

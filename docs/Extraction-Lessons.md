@@ -152,7 +152,7 @@ Fields:
 * `type` — one of: `character`, `location`, `faction`, `item`, `creature`, `concept`
 * `description` — factual, from transcript
 * `attributes` — key-value pairs (tag as inference where appropriate)
-* `relationships` — inline array of `{ target_id, relationship, confidence? }`
+* `relationships` — inline array of `{ target_id, relationship, type, direction?, confidence?, first_seen_turn?, last_updated_turn? }`
 * `first_seen_turn` — pattern: `turn-[0-9]{3,}`
 * `last_updated_turn` — pattern: `turn-[0-9]{3,}`
 * `notes`
@@ -184,7 +184,7 @@ See `schemas/event.schema.json` for the canonical schema.
 Fields:
 
 * `id` — pattern: `evt-[0-9]+`
-* `source_turn` — turn where the event occurred (pattern: `turn-[0-9]{3,}`)
+* `source_turns` — turns where the event occurred or is evidenced (pattern: `turn-[0-9]{3,}`)
 * `type` — one of: `birth`, `death`, `arrival`, `departure`, `construction`, `decision`, `encounter`, `recruitment`, `discovery`, `anomaly`, `other`
 * `related_entities` — array of entity IDs
 * `description`
