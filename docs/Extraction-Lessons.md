@@ -136,9 +136,9 @@ Correct rule:
 ## 3.1 Data Model
 
 > **Note:** This section was written outside the repo. Where the repo already defines
-> a schema (see `schemas/`), the repo schema is canonical. Concepts proposed here
-> that have no schema yet (Event, Anomaly, InvariantCheck) are tracked as future
-> work in issues #23, #26, and #29.
+> a schema (see `schemas/`), the repo schema is canonical. Event and Anomaly schemas
+> were added in issues #23 and #26. InvariantCheck is tracked as future work in
+> issue #29.
 
 ### Entity
 
@@ -152,7 +152,7 @@ Fields:
 * `type` — one of: `character`, `location`, `faction`, `item`, `creature`, `concept`
 * `description` — factual, from transcript
 * `attributes` — key-value pairs (tag as inference where appropriate)
-* `relationships` — inline array of `{ target_id, relationship, confidence? }`
+* `relationships` — inline array of `{ target_id, relationship, type, direction?, confidence?, first_seen_turn?, last_updated_turn? }`
 * `first_seen_turn` — pattern: `turn-[0-9]{3,}`
 * `last_updated_turn` — pattern: `turn-[0-9]{3,}`
 * `notes`
@@ -161,30 +161,35 @@ Fields:
 
 ### Relationship
 
-In the repo, relationships are stored **inline** on each entity as
-`relationships[]` entries (see `entity.schema.json`), not as separate objects.
+Relationships are stored **inline** on each entity as `relationships[]`
+entries (see `schemas/entity.schema.json`).
 
 Each entry contains:
 
 * `target_id` — ID of the related entity
 * `relationship` — freeform label (e.g., parent, partner, leader)
+* `type` — one of: `kinship`, `partnership`, `mentorship`, `political`, `factional`, `tribal_role`, `other`
+* `direction` — optional: `outgoing`, `incoming`, or `bidirectional`
 * `confidence` — optional, 0.0–1.0
+* `first_seen_turn` — optional, pattern: `turn-[0-9]{3,}`
+* `last_updated_turn` — optional, pattern: `turn-[0-9]{3,}`
 
 ---
 
-### Event *(not yet in repo — see issue #23)*
+### Event
 
-Atomic change in the system. The repo does not yet have an event schema;
-events are partially captured as evidence entries (`evidence.schema.json`)
-with `source_turns` for provenance.
+Atomic change in the system.
+See `schemas/event.schema.json` for the canonical schema.
 
-Proposed fields:
+Fields:
 
-* `id`
-* `source_turn` — turn where the event occurred (pattern: `turn-[0-9]{3,}`)
-* `type` (birth, arrival, construction, decision, anomaly)
+* `id` — pattern: `evt-[0-9]+`
+* `source_turns` — turns where the event occurred or is evidenced (pattern: `turn-[0-9]{3,}`)
+* `type` — one of: `birth`, `death`, `arrival`, `departure`, `construction`, `decision`, `encounter`, `recruitment`, `discovery`, `anomaly`, `other`
 * `related_entities` — array of entity IDs
 * `description`
+* `related_threads` — optional, plot thread IDs
+* `notes`
 
 ---
 
@@ -206,19 +211,22 @@ Fields:
 
 ---
 
-### Anomaly *(not yet in repo — see issue #26)*
+### Anomaly
 
-Deviation from expected behavior. The repo does not yet have an anomaly
-schema; anomalies are partially captured as evidence entries classified as
-`inference` or as `open_questions` on plot threads.
+Deviation from expected behavior.
+See `schemas/anomaly.schema.json` for the canonical schema.
 
-Proposed fields:
+Fields:
 
-* `id`
+* `id` — pattern: `anomaly-*`
+* `category` — optional: `environmental`, `entity-linked`, `artifact-linked`, `system`
 * `related_entities` — array of entity IDs (optional)
 * `description`
 * `first_seen_turn` — pattern: `turn-[0-9]{3,}`
-* `trend` (stable, expanding, diminishing, unknown)
+* `last_updated_turn` — optional, pattern: `turn-[0-9]{3,}`
+* `observation_turns` — optional, all turns where observed
+* `trend` — one of: `stable`, `expanding`, `diminishing`, `unknown`
+* `notes`
 
 Example:
 

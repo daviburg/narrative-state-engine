@@ -1,0 +1,52 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "event.schema.json",
+  "title": "Event",
+  "description": "An atomic narrative event representing a discrete change in the game world.",
+  "type": "object",
+  "required": ["id", "source_turns", "type", "description"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'evt-001'.",
+      "pattern": "^evt-[0-9]+$"
+    },
+    "source_turns": {
+      "type": "array",
+      "description": "Turn IDs where the event occurred or is evidenced.",
+      "items": {
+        "type": "string",
+        "pattern": "^turn-[0-9]{3,}$"
+      },
+      "minItems": 1
+    },
+    "type": {
+      "type": "string",
+      "description": "Category of event.",
+      "enum": ["birth", "death", "arrival", "departure", "construction", "decision", "encounter", "recruitment", "discovery", "anomaly", "other"]
+    },
+    "related_entities": {
+      "type": "array",
+      "description": "Entity IDs involved in or affected by this event.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string",
+      "description": "Factual description of the event based on transcript evidence."
+    },
+    "related_threads": {
+      "type": "array",
+      "description": "Plot thread IDs related to this event.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes or context about this event."
+    }
+  }
+}
