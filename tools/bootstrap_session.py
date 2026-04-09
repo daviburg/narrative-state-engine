@@ -427,8 +427,14 @@ def main() -> None:
     )
     parser.add_argument(
         "--encoding",
-        default="utf-8",
-        help="Source file encoding (default: utf-8).",
+        default="utf-8-sig",
+        help="Source file encoding (default: utf-8-sig, which handles BOM transparently).",
+    )
+    parser.add_argument(
+        "--normalize-quotes",
+        action="store_true",
+        help="Convert smart quotes and em-dashes in imported transcript content "
+             "to ASCII equivalents.",
     )
     args = parser.parse_args()
 
@@ -437,17 +443,47 @@ def main() -> None:
         print(f"ERROR: Source file not found: {args.file}", file=sys.stderr)
         sys.exit(1)
 
-    session_dir = args.session
+    # Ensure session directory is under sessions/ (fixes #19)
+    # Normalize first so equivalent relative paths like "./sessions/foo" are
+    # recognized correctly.  Preserve absolute paths.
+    session_dir = os.path.normpath(args.session)
+    if not os.path.isabs(session_dir):
+        first_component = session_dir.split(os.sep, 1)[0]
+        if first_component != "sessions":
+            session_dir = os.path.join("sessions", session_dir)
     os.makedirs(session_dir, exist_ok=True)
 
-    # Read source
-    try:
-        with open(args.file, "r", encoding=args.encoding) as f:
-            content = f.read()
-    except UnicodeDecodeError as e:
-        print(f"ERROR: Cannot read '{args.file}' with encoding '{args.encoding}': {e}", file=sys.stderr)
-        print("Try --encoding utf-16 or --encoding latin-1", file=sys.stderr)
+    # Read source (fixes #20 — encoding detection with fallback)
+    content = None
+    used_encoding = args.encoding
+    for enc in [args.encoding, "utf-8-sig", "utf-8", "latin-1"]:
+        if content is not None:
+            break
+        try:
+            with open(args.file, "r", encoding=enc) as f:
+                content = f.read()
+            used_encoding = enc
+        except UnicodeDecodeError:
+            continue
+    if content is None:
+        print(f"ERROR: Cannot read '{args.file}' with any attempted encoding.", file=sys.stderr)
+        print("Try --encoding utf-16 or check the file.", file=sys.stderr)
         sys.exit(1)
+    if used_encoding != args.encoding:
+        print(f"WARNING: Could not read with '{args.encoding}', fell back to '{used_encoding}'.")
+
+    # Normalize smart quotes / em-dashes to ASCII if requested (fixes #20)
+    if args.normalize_quotes:
+        content = (
+            content
+            .replace("\u2018", "'")
+            .replace("\u2019", "'")
+            .replace("\u201C", '"')
+            .replace("\u201D", '"')
+            .replace("\u2014", "--")
+            .replace("\u2013", "-")
+            .replace("\u2026", "...")
+        )
 
     if not content.strip():
         print("ERROR: Source file is empty.", file=sys.stderr)
