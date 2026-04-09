@@ -149,7 +149,7 @@ Closes #20
 
 ### Shell and File Writing Safety
 
-PowerShell uses the backtick `` ` `` as its escape character. Markdown content commonly contains backticks for inline code (e.g. `` `fix/` ``, `` `feat/` ``). Passing such content through PowerShell string interpolation silently corrupts it.
+PowerShell uses the backtick `` ` `` as its escape character during PowerShell parsing, especially in double-quoted or interpolated strings. Markdown content commonly contains backticks for inline code (e.g. `` `fix/` ``, `` `feat/` ``), so routing such content through inline PowerShell string construction can silently corrupt it.
 
 **Rules:**
 
