@@ -436,6 +436,13 @@ def main() -> None:
         help="Convert smart quotes and em-dashes in imported transcript content "
              "to ASCII equivalents.",
     )
+    parser.add_argument(
+        "--framework",
+        default="framework",
+        help="Path to the framework directory for catalog output "
+             "(default: framework). Use e.g. 'framework-local' to keep "
+             "extraction output out of the public repo.",
+    )
     args = parser.parse_args()
 
     # Validate inputs
@@ -591,7 +598,7 @@ def main() -> None:
 
         print("\nRunning semantic extraction:")
         extract_semantic_batch(
-            turn_dicts, session_dir, framework_dir="framework", dry_run=args.dry_run
+            turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run
         )
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":

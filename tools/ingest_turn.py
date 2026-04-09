@@ -88,6 +88,13 @@ def main() -> None:
         default=False,
         help="Run LLM-based semantic extraction after ingesting the turn.",
     )
+    parser.add_argument(
+        "--framework",
+        default="framework",
+        help="Path to the framework directory for catalog output "
+             "(default: framework). Use e.g. 'framework-local' to keep "
+             "extraction output out of the public repo.",
+    )
     args = parser.parse_args()
 
     session_dir = args.session
@@ -144,7 +151,7 @@ def main() -> None:
             from semantic_extraction import extract_semantic_single
 
             extract_semantic_single(
-                turn_id, args.speaker, text, session_dir, framework_dir="framework"
+                turn_id, args.speaker, text, session_dir, framework_dir=args.framework
             )
         except ModuleNotFoundError as exc:
             if exc.name == "semantic_extraction":
