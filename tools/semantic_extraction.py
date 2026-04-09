@@ -103,12 +103,20 @@ PLAYER_CHARACTER_SEED = {
 }
 
 
-def _ensure_player_character(catalogs: dict) -> None:
-    """Pre-seed the player character entry if it doesn't already exist."""
+def _ensure_player_character(catalogs: dict, first_turn_id: str | None = None) -> None:
+    """Pre-seed the player character entry if it doesn't already exist.
+
+    *first_turn_id* overrides the default ``turn-001`` provenance so the
+    seed is correct when extraction starts from a later turn.
+    """
     for entity in catalogs.get("characters.json", []):
         if entity.get("id") == "char-player":
             return
-    catalogs.setdefault("characters.json", []).append(dict(PLAYER_CHARACTER_SEED))
+    seed = dict(PLAYER_CHARACTER_SEED)
+    if first_turn_id:
+        seed["first_seen_turn"] = first_turn_id
+        seed["last_updated_turn"] = first_turn_id
+    catalogs.setdefault("characters.json", []).append(seed)
 
 
 def load_template(name: str) -> str:
@@ -213,15 +221,13 @@ def extract_and_merge(
         )
     except LLMExtractionError as e:
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
-        return catalogs, events_list
+        discovery_result = {"entities": []}
 
     if not isinstance(discovery_result, dict):
         print(f"  WARNING: Discovery returned non-dict for {turn_id}, skipping", file=sys.stderr)
-        return catalogs, events_list
+        discovery_result = {"entities": []}
 
     discovered = discovery_result.get("entities", [])
-    if not discovered:
-        return catalogs, events_list
 
     # Post-process discovery results: ensure provenance and fix ID prefixes
     for entity in discovered:
@@ -238,8 +244,6 @@ def extract_and_merge(
 
     # Filter by confidence
     qualified = filter_by_confidence(discovered, min_confidence)
-    if not qualified:
-        return catalogs, events_list
 
     # --- 2. Entity Detail Extraction (per entity above threshold) ---
     for entity_ref in qualified:
@@ -327,7 +331,7 @@ def extract_and_merge(
 
     # --- 4. Event Extraction ---
     next_evt_id = get_next_event_id(events_list)
-    entity_ids = [get_entity_id(e) for e in qualified if get_entity_id(e)]
+    entity_ids = [e["id"] for e in mentioned_entities]
 
     try:
         event_result = llm.extract_json(
@@ -351,10 +355,10 @@ def _dedup_catalogs(catalogs: dict) -> int:
     Merges entities within each catalog file that share the same lowercased
     name or have overlapping aliases.  The entry seen earliest
     (lowest first_seen_turn) is kept as the survivor; later duplicates are
-    merged into it via ``_update_existing_entity`` from catalog_merger.
+    merged into it via ``dedup_merge_entity`` from catalog_merger.
     Returns the number of duplicates merged.
     """
-    from catalog_merger import _update_existing_entity
+    from catalog_merger import dedup_merge_entity
 
     merged_count = 0
 
@@ -407,7 +411,7 @@ def _dedup_catalogs(catalogs: dict) -> int:
             members.sort(key=lambda i: entities[i].get("first_seen_turn", ""))
             survivor_idx = members[0]
             for dup_idx in members[1:]:
-                _update_existing_entity(entities[survivor_idx], entities[dup_idx])
+                dedup_merge_entity(entities[survivor_idx], entities[dup_idx])
                 to_remove.add(dup_idx)
                 merged_count += 1
 
@@ -448,7 +452,8 @@ def extract_semantic_batch(
     events_list = load_events(catalog_dir)
 
     # Pre-seed the player character so it can be tracked every turn
-    _ensure_player_character(catalogs)
+    first_turn = turn_dicts[0]["turn_id"] if turn_dicts else None
+    _ensure_player_character(catalogs, first_turn)
 
     # Progress tracking
     progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
@@ -555,7 +560,7 @@ def extract_semantic_single(
     events_list = load_events(catalog_dir)
 
     # Pre-seed the player character so it can be tracked every turn
-    _ensure_player_character(catalogs)
+    _ensure_player_character(catalogs, turn_id)
 
     turn = {"turn_id": turn_id, "speaker": speaker, "text": text}
 
