@@ -18,7 +18,8 @@ The primary workflow is a single user running the repo locally in VS Code with G
 - GitHub issues assignable to Copilot for async tasks
 
 **Limitations at this phase:**
-- State extraction (catalogs, evidence, objectives) requires Copilot assistance; it is not fully automated
+- State extraction (evidence, objectives, DM profile) requires Copilot assistance; it is not fully automated
+- Entity/relationship/event extraction is automated via LLM (see Phase 2 progress below) but other state updates remain manual
 - Single-user, single-session workflow
 - No automated pipeline between tool steps
 
@@ -28,14 +29,16 @@ The primary workflow is a single user running the repo locally in VS Code with G
 
 Divide session processing across multiple specialized agents, each with a focused scope:
 
-| Agent | Responsibility |
-|---|---|
-| Ingestion agent | Parse raw turns, write transcript files, update full-transcript.md |
-| Catalog agent | Extract and maintain entities, locations, factions, items |
-| Evidence agent | Tag and classify claims; maintain evidence.json |
-| Strategy agent | Generate next-move analysis; apply heuristics and risk model |
-| Prompt agent | Generate candidate player prompts optimized per mode |
-| DM profile agent | Infer and refine DM behavior from accumulated evidence |
+| Agent | Responsibility | Status |
+|---|---|---|
+| Ingestion agent | Parse raw turns, write transcript files, update full-transcript.md | — |
+| Catalog agent | Extract and maintain entities, locations, factions, items | **Implemented** (#43) |
+| Evidence agent | Tag and classify claims; maintain evidence.json | — |
+| Strategy agent | Generate next-move analysis; apply heuristics and risk model | — |
+| Prompt agent | Generate candidate player prompts optimized per mode | — |
+| DM profile agent | Infer and refine DM behavior from accumulated evidence | — |
+
+The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a four-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.
 
 Benefits:
 - Narrower per-agent context window → lower token cost
@@ -52,6 +55,8 @@ Goals:
 - Token-free (no cloud cost per session turn)
 - Offline-capable (no internet dependency during play)
 - Faster turnaround for frequent small-context tasks (catalog updates, summary refreshes)
+
+The semantic extraction pipeline (#43) already supports local models via Ollama (tested with `qwen2.5:3b`). The `config/llm.json` design decouples the pipeline from any specific provider.
 
 Design implications for earlier phases:
 - Keep context loading modular (catalog-first) so small local models can handle targeted tasks

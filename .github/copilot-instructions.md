@@ -79,6 +79,9 @@ When generating `derived/prompt-candidates.json`:
 | `framework/dm-profile/dm-profile.json` | Inferred DM behavior profile | Yes |
 | `framework/story/summary.md` | High-level story arc | Yes |
 | `schemas/*.schema.json` | JSON schemas | No |
+| `config/llm.json` | LLM provider/model configuration | Yes |
+| `templates/extraction/*.md` | LLM prompt templates for semantic extraction | Yes |
+| `requirements-llm.txt` | Optional LLM dependencies | Yes |
 
 ---
 
@@ -190,5 +193,6 @@ After each DM turn:
 1. Append the turn to `sessions/*/raw/full-transcript.md`
 2. Create a new `sessions/*/transcript/turn-NNN-dm.md`
 3. Run `python tools/update_state.py` or ask Copilot to update derived files
-4. Run `python tools/analyze_next_move.py` or ask Copilot to generate analysis
-5. Review `derived/next-move-analysis.md` and `derived/prompt-candidates.json`
+4. If LLM is configured, run `python tools/ingest_turn.py --extract` to auto-populate catalogs (or `bootstrap_session.py` for batch)
+5. Run `python tools/analyze_next_move.py` or ask Copilot to generate analysis
+6. Review `derived/next-move-analysis.md` and `derived/prompt-candidates.json`
