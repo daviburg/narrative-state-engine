@@ -90,6 +90,64 @@ Run `python tools/validate.py` to check compliance before committing.
 
 ---
 
+## Development Workflow
+
+### Branch Naming
+
+- Use `ix/` prefix for bug fixes, `eat/` for new features, and `docs/` for documentation-only changes.
+- Include issue numbers when applicable, e.g. `ix/issues-19-20-24` (multiple) or `eat/issues-31-new-catalog-schema` (single).
+- Keep branch names lowercase and hyphen-separated.
+
+### Commit Messages
+
+- Use conventional commit prefixes: `ix:` for bug fixes, `eat:` for new features, `docs:` for documentation, `chore:` for maintenance tasks.
+- Reference issue numbers in the commit body using `(#N)` or `Fixes #N`.
+
+Examples:
+```
+ix: correct schema validation for entity catalog entries
+
+Fixes #19
+```
+```
+eat: add location catalog support to bootstrap tool
+
+Adds --location flag and related schema updates. (#31)
+```
+
+### Pull Requests
+
+- Use `gh pr create` with `--title`, `--body`, and `--head` flags.
+- Include `Closes #N` in the PR body for each resolved issue.
+- Structure the PR body with a **Summary** section followed by per-issue subsections when fixing multiple issues.
+- Link the PR to all relevant issues so they close automatically on merge.
+
+Example body structure:
+```
+## Summary
+
+Brief description of the overall change.
+
+## Issue #19 — Short issue title
+
+What was changed and why.
+
+## Issue #20 — Short issue title
+
+What was changed and why.
+
+Closes #19
+Closes #20
+```
+
+### Labels
+
+- Apply the `bug` label for `ix/` (fix) branches.
+- Apply the `enhancement` label for `eat/` (feature) branches.
+- Apply the `documentation` label for `docs/` branches.
+
+---
+
 ## Workflow Reminder
 
 After each DM turn:
