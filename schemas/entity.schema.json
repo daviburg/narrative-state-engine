@@ -9,7 +9,8 @@
   "properties": {
     "id": {
       "type": "string",
-      "description": "Unique identifier, e.g. 'char-innkeeper' or 'loc-thornhaven'."
+      "description": "Unique identifier with type prefix, e.g. 'char-innkeeper', 'loc-thornhaven', 'faction-iron-ridge'.",
+      "pattern": "^(char|loc|faction|item|creature|concept)-"
     },
     "name": {
       "type": "string",
@@ -37,7 +38,7 @@
       "description": "Known relationships to other entities.",
       "items": {
         "type": "object",
-        "required": ["target_id", "relationship"],
+        "required": ["target_id", "relationship", "type"],
         "additionalProperties": false,
         "properties": {
           "target_id": {
@@ -46,13 +47,33 @@
           },
           "relationship": {
             "type": "string",
-            "description": "Description of the relationship (e.g. 'owns', 'fears', 'member of')."
+            "description": "Description of the relationship (e.g. 'parent', 'partner', 'leader')."
+          },
+          "type": {
+            "type": "string",
+            "description": "Category of relationship.",
+            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "tribal_role", "other"]
+          },
+          "direction": {
+            "type": "string",
+            "description": "Directionality of the relationship from this entity's perspective.",
+            "enum": ["outgoing", "incoming", "bidirectional"]
           },
           "confidence": {
             "type": "number",
             "description": "Confidence in this relationship (0.0–1.0). Omit if explicit.",
             "minimum": 0.0,
             "maximum": 1.0
+          },
+          "first_seen_turn": {
+            "type": "string",
+            "description": "Turn ID when this relationship was first established.",
+            "pattern": "^turn-[0-9]{3,}$"
+          },
+          "last_updated_turn": {
+            "type": "string",
+            "description": "Turn ID of the most recent change to this relationship.",
+            "pattern": "^turn-[0-9]{3,}$"
           }
         }
       }
