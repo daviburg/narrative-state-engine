@@ -171,6 +171,17 @@ def ensure_evidence_scaffold(derived_dir: str) -> None:
         print(f"  Created: {ev_file}")
 
 
+def ensure_extraction_scaffolds(derived_dir: str) -> None:
+    """Create session-events.json, timeline.json, season-summaries.json if missing."""
+    os.makedirs(derived_dir, exist_ok=True)
+    for filename in ("session-events.json", "timeline.json", "season-summaries.json"):
+        path = os.path.join(derived_dir, filename)
+        if not os.path.exists(path):
+            with open(path, "w", encoding="utf-8") as f:
+                f.write("[]\n")
+            print(f"  Created: {path}")
+
+
 def print_instructions(session_dir: str, turns: list[dict]) -> None:
     latest = get_latest_turn_id(turns)
     print()
@@ -235,6 +246,30 @@ def main() -> None:
     ensure_state_scaffold(derived_dir, latest)
     ensure_objectives_scaffold(derived_dir)
     ensure_evidence_scaffold(derived_dir)
+    ensure_extraction_scaffolds(derived_dir)
+
+    # Run structured data extraction (#21, #27, #28)
+    try:
+        from extract_structured_data import (
+            extract_all,
+            write_extracted_data,
+            update_state_temporal,
+        )
+
+        print("\nExtracting structured data...")
+        data = extract_all(turns)
+        found = (
+            len(data["session_events"])
+            + len(data["timeline"])
+            + len(data["season_summaries"])
+        )
+        if found > 0:
+            write_extracted_data(derived_dir, data)
+            update_state_temporal(derived_dir, data["timeline"])
+        else:
+            print("  No structured data detected.")
+    except ImportError:
+        pass  # extraction module not available; skip silently
 
     print_instructions(session_dir, turns)
 
