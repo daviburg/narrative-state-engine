@@ -118,15 +118,21 @@ Adds --location flag and related schema updates. (#31)
 ### Pull Requests
 
 - Use `gh pr create` with `--title`, `--body-file`, and `--head` flags.
-- Write the PR body to a temporary file (e.g. `/tmp/pr-body.md`) and pass it with `--body-file`. Delete the file after the command succeeds.
+- Write the PR body to a temporary file and pass it with `--body-file`. Delete the file only after the command succeeds.
 - Include `Closes #N` in the PR body for each resolved issue.
 - Structure the PR body with a **Summary** section followed by per-issue subsections when fixing multiple issues.
 - Link the PR to all relevant issues so they close automatically on merge.
 
 Example:
+```bash
+# Bash / sh
+gh pr create --title "fix: correct schema validation" --body-file /tmp/pr-body.md --head fix/issue-19 && rm /tmp/pr-body.md
 ```
-gh pr create --title "fix: correct schema validation" --body-file /tmp/pr-body.md --head fix/issue-19
-rm /tmp/pr-body.md
+```powershell
+# PowerShell
+$tmp = New-TemporaryFile
+gh pr create --title "fix: correct schema validation" --body-file $tmp --head fix/issue-19
+if ($LASTEXITCODE -eq 0) { Remove-Item $tmp }
 ```
 
 Example body structure:
@@ -159,10 +165,15 @@ PowerShell uses the backtick `` ` `` as its escape character during PowerShell p
 - Clean up temporary files after the command succeeds.
 
 Example — creating a GitHub issue safely:
+```bash
+# Bash / sh
+gh issue create --title "Bug: ..." --body-file /tmp/issue-body.md && rm /tmp/issue-body.md
 ```
-# Write body to file first
-gh issue create --title "Bug: ..." --body-file /tmp/issue-body.md
-rm /tmp/issue-body.md
+```powershell
+# PowerShell
+$tmp = New-TemporaryFile
+gh issue create --title "Bug: ..." --body-file $tmp
+if ($LASTEXITCODE -eq 0) { Remove-Item $tmp }
 ```
 
 ### Labels
