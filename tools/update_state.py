@@ -77,11 +77,25 @@ def rebuild_turn_summary(derived_dir: str, turns: list[dict], full: bool = False
 
     selected = dm_turns if full else dm_turns[-3:]
 
+    # Cap full-mode output to stay concise per repo guidelines
+    FULL_MODE_CAP = 50
+    capped = False
+    if full and len(selected) > FULL_MODE_CAP:
+        capped = True
+        selected = selected[:FULL_MODE_CAP]
+
     lines = [f"# Turn Summary (as of {latest})", ""]
     lines.append("_This summary was auto-generated. Review and refine with Copilot._")
     lines.append("")
     if full:
-        lines.append(f"_Full summary mode: {len(selected)} DM turn(s) included._")
+        if capped:
+            lines.append(
+                f"_Full summary mode: showing first {FULL_MODE_CAP} of "
+                f"{len(dm_turns)} DM turn(s). Run a dedicated summarization "
+                f"pass for complete coverage._"
+            )
+        else:
+            lines.append(f"_Full summary mode: {len(selected)} DM turn(s) included._")
         lines.append("")
     for t in selected:
         lines.append(f"## {t['turn_id']} [dm]")

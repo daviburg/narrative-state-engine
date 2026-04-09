@@ -433,7 +433,8 @@ def main() -> None:
     parser.add_argument(
         "--normalize-quotes",
         action="store_true",
-        help="Convert smart quotes and em-dashes to ASCII equivalents.",
+        help="Convert smart quotes and em-dashes in imported transcript content "
+             "to ASCII equivalents.",
     )
     args = parser.parse_args()
 
@@ -443,10 +444,13 @@ def main() -> None:
         sys.exit(1)
 
     # Ensure session directory is under sessions/ (fixes #19)
-    session_dir = args.session
-    # Normalise so both "my-session" and "sessions/my-session" resolve correctly
-    if not session_dir.startswith("sessions" + os.sep) and not session_dir.startswith("sessions/"):
-        session_dir = os.path.join("sessions", session_dir)
+    # Normalize first so equivalent relative paths like "./sessions/foo" are
+    # recognized correctly.  Preserve absolute paths.
+    session_dir = os.path.normpath(args.session)
+    if not os.path.isabs(session_dir):
+        first_component = session_dir.split(os.sep, 1)[0]
+        if first_component != "sessions":
+            session_dir = os.path.join("sessions", session_dir)
     os.makedirs(session_dir, exist_ok=True)
 
     # Read source (fixes #20 — encoding detection with fallback)
