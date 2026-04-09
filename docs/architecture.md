@@ -127,7 +127,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 |---|---|
 | `tools/bootstrap_session.py` | Import an existing transcript into a session |
 | `tools/ingest_turn.py` | Add a new turn to a session |
-| `tools/update_state.py` | Update catalogs, objectives, evidence, and summaries |
+| `tools/update_state.py` | Regenerate session-local derived scaffolds, turn summaries, and structured extraction outputs |
 | `tools/analyze_next_move.py` | Generate next-move analysis and prompt candidates |
 | `tools/validate.py` | Validate all JSON files against schemas |
 | `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |

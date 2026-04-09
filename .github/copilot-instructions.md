@@ -193,6 +193,6 @@ After each DM turn:
 1. Append the turn to `sessions/*/raw/full-transcript.md`
 2. Create a new `sessions/*/transcript/turn-NNN-dm.md`
 3. Run `python tools/update_state.py` or ask Copilot to update derived files
-4. If LLM is configured, run `python tools/ingest_turn.py --extract` to auto-populate catalogs (or `bootstrap_session.py` for batch)
+4. If LLM is configured, pass `--extract` when ingesting turns with `ingest_turn.py` to auto-populate catalogs (or use `bootstrap_session.py` for batch import)
 5. Run `python tools/analyze_next_move.py` or ask Copilot to generate analysis
 6. Review `derived/next-move-analysis.md` and `derived/prompt-candidates.json`

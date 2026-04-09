@@ -106,7 +106,7 @@ examples/
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - No external dependencies required for core tools
 - **Optional** — for LLM-based semantic extraction: `pip install -r requirements-llm.txt`
   - Works with OpenAI API or any OpenAI-compatible endpoint (e.g. Ollama)

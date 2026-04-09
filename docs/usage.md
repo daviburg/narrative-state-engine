@@ -4,7 +4,7 @@
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - No external Python packages required for core tools
 - **Optional** — for LLM-based semantic extraction:
   - `pip install -r requirements-llm.txt`
@@ -142,8 +142,7 @@ The semantic extraction pipeline uses an LLM to automatically extract entities, 
    {
      "provider": "ollama",
      "model": "qwen2.5:3b",
-     "base_url": "http://localhost:11434/v1",
-     "api_key_env": "OLLAMA_API_KEY"
+     "base_url": "http://localhost:11434/v1"
    }
    ```
 
