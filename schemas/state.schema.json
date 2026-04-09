@@ -75,6 +75,28 @@
       "items": {
         "type": "string"
       }
+    },
+    "temporal": {
+      "type": "object",
+      "description": "In-game temporal tracking (season, year, last update).",
+      "properties": {
+        "current_season": {
+          "type": "string",
+          "description": "The current in-game season.",
+          "enum": ["spring", "summer", "fall", "winter"]
+        },
+        "current_year": {
+          "type": "integer",
+          "description": "The current in-game year.",
+          "minimum": 1
+        },
+        "last_temporal_turn": {
+          "type": "string",
+          "description": "Turn ID of the most recent temporal marker.",
+          "pattern": "^turn-[0-9]{3,}$"
+        }
+      },
+      "additionalProperties": false
     }
   }
 }

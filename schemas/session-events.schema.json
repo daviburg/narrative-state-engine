@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "session-events.schema.json",
+  "title": "Session Mechanical Event",
+  "description": "A mechanical game event extracted from inline markers in turn text (HP changes, rests, spell usage, item acquisitions).",
+  "type": "object",
+  "required": ["id", "source_turn", "type", "raw_marker"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'mech-001'.",
+      "pattern": "^mech-[0-9]+$"
+    },
+    "source_turn": {
+      "type": "string",
+      "description": "Turn ID where this marker was found.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "type": {
+      "type": "string",
+      "description": "Category of mechanical event.",
+      "enum": ["hp_change", "long_rest", "spell_use", "item_acquired", "level_up", "other"]
+    },
+    "details": {
+      "type": "object",
+      "description": "Type-specific event details (e.g. amount for HP, spell_name for spells).",
+      "additionalProperties": true
+    },
+    "raw_marker": {
+      "type": "string",
+      "description": "The original marker text as found in the turn."
+    }
+  }
+}

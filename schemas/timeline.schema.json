@@ -1,0 +1,44 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "timeline.schema.json",
+  "title": "Timeline Entry",
+  "description": "A temporal marker indicating progression of in-game time (season transitions, time references).",
+  "type": "object",
+  "required": ["id", "source_turn", "type"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'time-001'.",
+      "pattern": "^time-[0-9]+$"
+    },
+    "source_turn": {
+      "type": "string",
+      "description": "Turn ID where this temporal marker was detected.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "type": {
+      "type": "string",
+      "description": "Category of temporal marker.",
+      "enum": ["season_transition", "time_skip", "explicit_date", "relative_reference"]
+    },
+    "season": {
+      "type": "string",
+      "description": "The season referenced by this marker.",
+      "enum": ["spring", "summer", "fall", "winter"]
+    },
+    "year": {
+      "type": "integer",
+      "description": "The in-game year, if determinable.",
+      "minimum": 1
+    },
+    "description": {
+      "type": "string",
+      "description": "Human-readable description of the temporal transition."
+    },
+    "raw_text": {
+      "type": "string",
+      "description": "The original text that triggered temporal detection."
+    }
+  }
+}

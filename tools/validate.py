@@ -41,6 +41,9 @@ SCHEMA_MAP = {
     "anomalies.json": "schemas/anomaly.schema.json",
     "plot-threads.json": "schemas/plot-thread.schema.json",
     "dm-profile.json": "schemas/dm-profile.schema.json",
+    "session-events.json": "schemas/session-events.schema.json",
+    "timeline.json": "schemas/timeline.schema.json",
+    "season-summaries.json": "schemas/season-summary.schema.json",
 }
 
 

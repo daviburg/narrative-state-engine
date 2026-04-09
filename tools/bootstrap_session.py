@@ -543,6 +543,46 @@ def main() -> None:
     print("\nScaffolding exports directory:")
     ensure_exports_dir(session_dir, dry_run=args.dry_run)
 
+    # Extract structured data from all turns (#21, #27, #28)
+    try:
+        from extract_structured_data import (
+            extract_all,
+            write_extracted_data,
+            update_state_temporal,
+        )
+
+        print("\nExtracting structured data:")
+        turn_dicts = [
+            {"turn_id": _format_turn_id(t.sequence), "speaker": t.speaker, "text": t.text}
+            for t in turns
+        ]
+        data = extract_all(turn_dicts)
+        found = (
+            len(data["session_events"])
+            + len(data["timeline"])
+            + len(data["season_summaries"])
+        )
+        if found > 0:
+            derived_dir = os.path.join(session_dir, "derived")
+            print(
+                f"  {len(data['session_events'])} mechanical event(s), "
+                f"{len(data['timeline'])} temporal marker(s), "
+                f"{len(data['season_summaries'])} season summary/summaries"
+            )
+            write_extracted_data(derived_dir, data, dry_run=args.dry_run)
+            update_state_temporal(derived_dir, data["timeline"], dry_run=args.dry_run)
+        else:
+            print("  No structured data detected.")
+    except ModuleNotFoundError as exc:
+        if exc.name == "extract_structured_data":
+            print(
+                "WARNING: Structured extraction skipped because "
+                "'extract_structured_data' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
+
     print()
     if args.dry_run:
         print("Dry run complete. Re-run without --dry-run to write files.")

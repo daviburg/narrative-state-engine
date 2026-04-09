@@ -1,0 +1,58 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "season-summary.schema.json",
+  "title": "Season Summary",
+  "description": "Structured data extracted from DM season summary blocks (regional changes, faction actions, economics, environment).",
+  "type": "object",
+  "required": ["id", "source_turn"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'ss-001'.",
+      "pattern": "^ss-[0-9]+$"
+    },
+    "source_turn": {
+      "type": "string",
+      "description": "Turn ID where this season summary block was found.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "season": {
+      "type": "string",
+      "description": "The season this summary covers.",
+      "enum": ["spring", "summer", "fall", "winter"]
+    },
+    "year": {
+      "type": "integer",
+      "description": "The in-game year this summary covers.",
+      "minimum": 1
+    },
+    "sections": {
+      "type": "object",
+      "description": "Parsed sections from the season summary block.",
+      "properties": {
+        "regional_changes": {
+          "type": "string",
+          "description": "Weather patterns, resource availability, regional developments."
+        },
+        "faction_actions": {
+          "type": "string",
+          "description": "What each faction did during the season."
+        },
+        "economic_shifts": {
+          "type": "string",
+          "description": "Trade, resource production, shortages."
+        },
+        "environmental_notes": {
+          "type": "string",
+          "description": "Unusual phenomena, crop conditions, environmental changes."
+        }
+      },
+      "additionalProperties": true
+    },
+    "raw_text": {
+      "type": "string",
+      "description": "The full text of the season summary block (truncated if very long)."
+    }
+  }
+}

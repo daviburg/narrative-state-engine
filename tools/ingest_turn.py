@@ -114,6 +114,24 @@ def main() -> None:
 
     print(f"Ingested {turn_id} ({args.speaker}) -> {turn_file}")
     print(f"Appended to {os.path.join(raw_dir, 'full-transcript.md')}")
+
+    # Extract structured data from the new turn (#21, #27, #28)
+    try:
+        from extract_structured_data import extract_and_merge_single_turn
+
+        extract_and_merge_single_turn(
+            session_dir, turn_id, args.speaker, text,
+        )
+    except ModuleNotFoundError as exc:
+        if exc.name == "extract_structured_data":
+            print(
+                "WARNING: Structured extraction skipped because "
+                "'extract_structured_data' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
+
     print()
     print("Next steps:")
     print(f"  python tools/update_state.py --session {session_dir}")
