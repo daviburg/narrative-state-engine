@@ -24,3 +24,13 @@ Thumbs.db
 
 # Local import source files (real session transcripts)
 sessions/_import/
+
+# Private session data — keep examples/demo-session/ and sessions/session-001/
+# (the public example) tracked; everything else is local-only.
+sessions/session-import/
+sessions/test-*/
+
+# Local framework overrides produced by extraction runs.
+# The empty templates in framework/ stay tracked; if you run extraction
+# with --framework pointed elsewhere, those outputs land here instead.
+framework-local/

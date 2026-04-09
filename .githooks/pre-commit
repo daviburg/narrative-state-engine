@@ -1,0 +1,61 @@
+#!/bin/sh
+# Pre-commit hook: prevent accidental commits of private story content.
+#
+# Blocks commits that include files from private session directories or
+# framework catalog files that have grown beyond their empty-template state.
+#
+# Install: git config core.hooksPath .githooks
+
+RED='\033[0;31m'
+NC='\033[0m' # No Color
+
+blocked=0
+
+# 1. Check for private session files being staged
+private_sessions=$(git diff --cached --name-only | grep -E '^sessions/(session-import|test-)/')
+if [ -n "$private_sessions" ]; then
+    echo "${RED}BLOCKED:${NC} Private session files staged for commit:"
+    echo "$private_sessions" | head -20
+    blocked=1
+fi
+
+# 2. Check for framework catalog files that are no longer empty templates
+for f in framework/catalogs/characters.json \
+         framework/catalogs/locations.json \
+         framework/catalogs/factions.json \
+         framework/catalogs/items.json \
+         framework/catalogs/events.json \
+         framework/catalogs/plot-threads.json \
+         framework/catalogs/anomalies.json; do
+    if git diff --cached --name-only | grep -qF "$f"; then
+        # File is staged — check if it still looks like an empty template
+        staged_content=$(git show ":$f" 2>/dev/null)
+        if [ -n "$staged_content" ]; then
+            trimmed=$(echo "$staged_content" | tr -d '[:space:]')
+            if [ "$trimmed" != "[]" ] && [ "$trimmed" != "[" ]; then
+                echo "${RED}BLOCKED:${NC} $f contains story data (not empty template)."
+                blocked=1
+            fi
+        fi
+    fi
+done
+
+# 3. Check for framework story/dm-profile changes with real content
+for f in framework/story/summary.md framework/story/world-state.md framework/dm-profile/dm-profile.json; do
+    if git diff --cached --name-only | grep -qF "$f"; then
+        diff_size=$(git diff --cached -- "$f" | wc -l)
+        if [ "$diff_size" -gt 10 ]; then
+            echo "${RED}BLOCKED:${NC} $f has significant changes — review for story content."
+            blocked=1
+        fi
+    fi
+done
+
+if [ "$blocked" -eq 1 ]; then
+    echo ""
+    echo "To bypass this check (if intentional): git commit --no-verify"
+    echo "To unstage private files: git reset HEAD <file>"
+    exit 1
+fi
+
+exit 0
