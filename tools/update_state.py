@@ -55,7 +55,7 @@ def get_latest_turn_id(turns: list[dict]) -> str | None:
     return turns[-1]["turn_id"]
 
 
-def rebuild_turn_summary(derived_dir: str, turns: list[dict]) -> None:
+def rebuild_turn_summary(derived_dir: str, turns: list[dict], full: bool = False) -> None:
     """Rebuild the turn summary markdown from the transcript."""
     os.makedirs(derived_dir, exist_ok=True)
     latest = get_latest_turn_id(turns)
@@ -65,10 +65,25 @@ def rebuild_turn_summary(derived_dir: str, turns: list[dict]) -> None:
     if not dm_turns:
         return
 
+    # Auto-detect bulk import: warn if most DM turns would be unsummarized (fixes #24)
+    if not full and len(dm_turns) > 3:
+        unsummarized = len(dm_turns) - 3
+        pct = unsummarized / len(dm_turns) * 100
+        if pct >= 90:
+            print(
+                f"  WARNING: Summary covers only last 3 of {len(dm_turns)} DM turns "
+                f"({pct:.0f}% unsummarized). Use --full for complete coverage."
+            )
+
+    selected = dm_turns if full else dm_turns[-3:]
+
     lines = [f"# Turn Summary (as of {latest})", ""]
     lines.append("_This summary was auto-generated. Review and refine with Copilot._")
     lines.append("")
-    for t in dm_turns[-3:]:  # Show last 3 DM turns in summary
+    if full:
+        lines.append(f"_Full summary mode: {len(selected)} DM turn(s) included._")
+        lines.append("")
+    for t in selected:
         lines.append(f"## {t['turn_id']} [dm]")
         lines.append("")
         # Show first 200 chars as a preview
@@ -173,6 +188,12 @@ def main() -> None:
         action="store_true",
         help="Show what would be updated without writing files.",
     )
+    parser.add_argument(
+        "--full",
+        action="store_true",
+        help="Generate summary covering all DM turns instead of only the last 3. "
+             "Recommended for bulk imports.",
+    )
     args = parser.parse_args()
 
     session_dir = args.session
@@ -196,7 +217,7 @@ def main() -> None:
         return
 
     print("Updating derived files...")
-    rebuild_turn_summary(derived_dir, turns)
+    rebuild_turn_summary(derived_dir, turns, full=args.full)
     ensure_state_scaffold(derived_dir, latest)
     ensure_objectives_scaffold(derived_dir)
     ensure_evidence_scaffold(derived_dir)
