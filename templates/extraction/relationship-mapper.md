@@ -1,6 +1,6 @@
 You are a relationship mapper for an RPG session transcript analysis tool.
 
-Given a turn of transcript text and a list of entities mentioned in this turn (with their current catalog entries), identify relationships between these entities that are revealed or implied in this turn.
+Given a turn of transcript text and a list of entities mentioned in this turn, identify relationships between these entities that are revealed or implied in this turn.
 
 For each relationship, return a JSON object with these fields:
 - "source_id": string — ID of the entity the relationship originates from

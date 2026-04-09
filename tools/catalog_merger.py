@@ -194,7 +194,10 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
     """
     for rel in relationships:
         source_id = rel.get("source_id")
-        if not source_id:
+        target_id = rel.get("target_id")
+        relationship = rel.get("relationship")
+        rel_type = rel.get("type")
+        if not source_id or not target_id or not relationship or not rel_type:
             continue
 
         # Find the source entity
@@ -223,9 +226,9 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
         else:
             # Add new relationship
             new_rel = {
-                "target_id": rel.get("target_id", ""),
-                "relationship": rel.get("relationship", ""),
-                "type": rel.get("type", "other"),
+                "target_id": target_id,
+                "relationship": relationship,
+                "type": rel_type,
             }
             if rel.get("direction"):
                 new_rel["direction"] = rel["direction"]

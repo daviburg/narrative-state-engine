@@ -96,6 +96,13 @@ class LLMClient:
 
                 parsed = self._parse_json_response(raw_text)
 
+                # Enforce dict when response_format is json_object
+                if not isinstance(parsed, dict):
+                    raise LLMExtractionError(
+                        f"Expected JSON object but got {type(parsed).__name__}: "
+                        f"{raw_text[:200]}"
+                    )
+
                 if schema:
                     import jsonschema
                     jsonschema.validate(parsed, schema)

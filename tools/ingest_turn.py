@@ -146,12 +146,15 @@ def main() -> None:
             extract_semantic_single(
                 turn_id, args.speaker, text, session_dir, framework_dir="framework"
             )
-        except ImportError:
-            print(
-                "WARNING: Semantic extraction skipped (openai not installed). "
-                "Install with: pip install -r requirements-llm.txt",
-                file=sys.stderr,
-            )
+        except ModuleNotFoundError as exc:
+            if exc.name == "semantic_extraction":
+                print(
+                    "WARNING: Semantic extraction skipped because "
+                    "'semantic_extraction' is not available.",
+                    file=sys.stderr,
+                )
+            else:
+                raise
         except Exception as exc:
             print(f"WARNING: Semantic extraction failed: {exc}", file=sys.stderr)
 

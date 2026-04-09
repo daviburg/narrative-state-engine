@@ -196,6 +196,10 @@ def extract_and_merge(
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
         return catalogs, events_list
 
+    if not isinstance(discovery_result, dict):
+        print(f"  WARNING: Discovery returned non-dict for {turn_id}, skipping", file=sys.stderr)
+        return catalogs, events_list
+
     discovered = discovery_result.get("entities", [])
     if not discovered:
         return catalogs, events_list
