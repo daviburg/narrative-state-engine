@@ -7,11 +7,14 @@ Usage:
     python tools/validate.py --framework framework
     python tools/validate.py --all
     python tools/validate.py --file sessions/session-001/derived/state.json --schema schemas/state.schema.json
+    python tools/validate.py --session sessions/session-001 --strict
 """
 
 import argparse
+import glob
 import json
 import os
+import re
 import sys
 
 try:
@@ -87,10 +90,128 @@ def validate_file(json_path: str, schema_path: str, syntax_only: bool = False) -
     return errors
 
 
-def validate_dir(directory: str, repo_root: str, syntax_only: bool = False) -> tuple[int, int]:
-    """Walk a directory and validate all JSON files with known schema mappings."""
+# ---------------------------------------------------------------------------
+# Strict-mode completeness checks
+# ---------------------------------------------------------------------------
+
+_TODO_PATTERN = re.compile(r"\bTODO\b", re.IGNORECASE)
+
+
+def _count_dm_turns(session_dir: str) -> int:
+    """Count DM turn files in a session's transcript/ directory."""
+    transcript_dir = os.path.join(session_dir, "transcript")
+    if not os.path.isdir(transcript_dir):
+        return 0
+    return len(glob.glob(os.path.join(transcript_dir, "turn-*-dm.md")))
+
+
+def _find_todo_strings(data, path: str = "") -> list[str]:
+    """Recursively find string values containing TODO placeholders."""
+    warnings = []
+    if isinstance(data, dict):
+        for key, value in data.items():
+            child_path = key if not path else f"{path}.{key}"
+            warnings.extend(_find_todo_strings(value, child_path))
+    elif isinstance(data, list):
+        for i, item in enumerate(data):
+            warnings.extend(_find_todo_strings(item, f"{path}[{i}]"))
+    elif isinstance(data, str) and _TODO_PATTERN.search(data):
+        warnings.append(f"TODO placeholder at {path}: {data!r}")
+    return warnings
+
+
+def check_completeness(json_path: str, session_dir: str | None) -> list[str]:
+    """
+    Check a derived file for extraction completeness.
+
+    Returns a list of warning strings. Empty list means the file looks
+    adequately populated.
+    """
+    warnings: list[str] = []
+    fname = os.path.basename(json_path)
+
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, FileNotFoundError):
+        return []  # Schema validation already catches parse errors
+
+    # 1. Check for TODO placeholder values in any derived file
+    todo_hits = _find_todo_strings(data)
+    warnings.extend(todo_hits)
+
+    # 2. Determine DM turn count for coverage checks
+    dm_turns = _count_dm_turns(session_dir) if session_dir else 0
+
+    # 3. File-specific completeness checks
+    if fname == "evidence.json":
+        if isinstance(data, list):
+            if len(data) == 0 and dm_turns > 0:
+                warnings.append(
+                    f"evidence.json is empty but session has {dm_turns} DM turn(s) — "
+                    "expected at least some extracted evidence"
+                )
+            elif dm_turns > 0:
+                coverage = len(data) / dm_turns
+                print(
+                    f"  [INFO]   {json_path}: Evidence coverage: "
+                    f"{len(data)} entries from {dm_turns} DM turns ({coverage:.0%})"
+                )
+
+    elif fname == "objectives.json":
+        if isinstance(data, list) and len(data) == 0 and dm_turns > 0:
+            warnings.append(
+                f"objectives.json is empty but session has {dm_turns} DM turn(s) — "
+                "expected at least one objective after extraction"
+            )
+
+    elif fname == "state.json":
+        if isinstance(data, dict):
+            # Check for scaffold defaults
+            ps = data.get("player_state", {})
+            scaffold_values = {"Unknown", "Not established", "No NPCs contacted yet"}
+            for field in ("location", "condition", "inventory_notes", "relationships_summary"):
+                val = ps.get(field, "")
+                if val in scaffold_values and dm_turns > 0:
+                    warnings.append(
+                        f"state.json player_state.{field} is still scaffold default "
+                        f"({val!r}) after {dm_turns} DM turn(s)"
+                    )
+
+            # Check for empty constraint/opportunity arrays
+            for array_field in ("known_constraints", "active_threads"):
+                arr = data.get(array_field, [])
+                if isinstance(arr, list) and len(arr) == 0 and dm_turns > 0:
+                    warnings.append(
+                        f"state.json {array_field} is empty after {dm_turns} DM turn(s)"
+                    )
+
+    return warnings
+
+
+def _find_session_dir(json_path: str) -> str | None:
+    """Given a path inside a session, walk up to find the session directory."""
+    current = os.path.dirname(os.path.abspath(json_path))
+    for _ in range(5):  # Don't walk too far
+        if os.path.isdir(os.path.join(current, "transcript")) or \
+           os.path.isdir(os.path.join(current, "derived")):
+            return current
+        parent = os.path.dirname(current)
+        if parent == current:
+            break
+        current = parent
+    return None
+
+
+def validate_dir(directory: str, repo_root: str, syntax_only: bool = False,
+                  strict: bool = False) -> tuple[int, int, int]:
+    """Walk a directory and validate all JSON files with known schema mappings.
+
+    Returns (passed, failed, completeness_warnings).
+    """
     passed = 0
     failed = 0
+    completeness_warnings = 0
 
     for root, _dirs, files in os.walk(directory):
         for fname in sorted(files):
@@ -124,7 +245,15 @@ def validate_dir(directory: str, repo_root: str, syntax_only: bool = False) -> t
                 print(f"  [PASS]   {json_path}")
                 passed += 1
 
-    return passed, failed
+                # Strict-mode completeness checks on derived files
+                if strict and "derived" in os.path.normpath(json_path).split(os.sep):
+                    session_dir = _find_session_dir(json_path)
+                    warnings = check_completeness(json_path, session_dir)
+                    for w in warnings:
+                        print(f"  [WARN]   {json_path}: {w}")
+                    completeness_warnings += len(warnings)
+
+    return passed, failed, completeness_warnings
 
 
 def find_repo_root() -> str:
@@ -146,6 +275,12 @@ def main() -> None:
         action="store_true",
         help="Check JSON syntax only; skip schema validation. Use when jsonschema is not installed.",
     )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Enable completeness checks: warn on TODO placeholders, empty arrays, "
+             "and low extraction coverage in derived files.",
+    )
     args = parser.parse_args()
 
     if not any([args.session, args.framework, args.all, args.file]):
@@ -160,6 +295,7 @@ def main() -> None:
     repo_root = find_repo_root()
     total_passed = 0
     total_failed = 0
+    total_warnings = 0
 
     if args.file:
         if not args.schema:
@@ -181,6 +317,15 @@ def main() -> None:
             sys.exit(1)
         else:
             print(f"[PASS] {args.file}")
+
+        if args.strict and "derived" in os.path.normpath(args.file).split(os.sep):
+            session_dir = _find_session_dir(args.file)
+            warnings = check_completeness(args.file, session_dir)
+            for w in warnings:
+                print(f"[WARN] {args.file}: {w}")
+            if warnings:
+                print(f"\nCompleteness: {len(warnings)} warning(s)")
+                sys.exit(2)
         return
 
     directories = []
@@ -196,13 +341,20 @@ def main() -> None:
 
     for directory in directories:
         print(f"\nValidating: {directory}")
-        p, f = validate_dir(directory, repo_root, syntax_only=syntax_only)
+        p, f, w = validate_dir(directory, repo_root, syntax_only=syntax_only,
+                               strict=args.strict)
         total_passed += p
         total_failed += f
+        total_warnings += w
 
-    print(f"\nResults: {total_passed} passed, {total_failed} failed")
+    print(f"\nValidated {total_passed + total_failed} files: "
+          f"{total_passed} passed, {total_failed} failed")
+    if args.strict:
+        print(f"Completeness: {total_warnings} warning(s)")
     if total_failed > 0:
         sys.exit(1)
+    if args.strict and total_warnings > 0:
+        sys.exit(2)
 
 
 if __name__ == "__main__":
