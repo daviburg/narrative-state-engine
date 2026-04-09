@@ -583,6 +583,23 @@ def main() -> None:
         else:
             raise
 
+    # Semantic extraction — LLM-based entity/relationship/event extraction (#43)
+    try:
+        from semantic_extraction import extract_semantic_batch
+
+        print("\nRunning semantic extraction:")
+        extract_semantic_batch(
+            turn_dicts, session_dir, framework_dir="framework", dry_run=args.dry_run
+        )
+    except ImportError:
+        print(
+            "WARNING: Semantic extraction skipped (openai not installed). "
+            "Install with: pip install -r requirements-llm.txt",
+            file=sys.stderr,
+        )
+    except Exception as exc:
+        print(f"WARNING: Semantic extraction failed: {exc}", file=sys.stderr)
+
     print()
     if args.dry_run:
         print("Dry run complete. Re-run without --dry-run to write files.")

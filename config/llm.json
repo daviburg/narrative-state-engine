@@ -1,0 +1,11 @@
+{
+  "provider": "openai",
+  "base_url": "https://api.openai.com/v1",
+  "model": "gpt-4o",
+  "api_key_env": "OPENAI_API_KEY",
+  "temperature": 0.0,
+  "max_tokens": 4096,
+  "timeout_seconds": 60,
+  "retry_attempts": 3,
+  "batch_delay_ms": 200
+}
