@@ -8,7 +8,7 @@
 
 ## 1. Problem Statement
 
-After importing a 344-turn session transcript, all six entity catalog files remain empty arrays. The current tooling (`bootstrap_session.py`, `extract_structured_data.py`) handles structural parsing and regex-based marker extraction but has no ability to comprehend natural language. Entity extraction — identifying characters, locations, factions, items, and their relationships from narrative prose — requires language-level understanding that does not exist in the codebase.
+After importing a 344-turn session transcript, the four entity-schema catalog files in `framework/catalogs/` — `characters.json`, `locations.json`, `factions.json`, and `items.json` — remain empty arrays. The same directory currently also contains three other JSON-array catalogs — `anomalies.json`, `events.json`, and `plot-threads.json` — but Phase 2 catalog population is scoped to the four entity catalogs named above. The current tooling (`bootstrap_session.py`, `extract_structured_data.py`) handles structural parsing and regex-based marker extraction but has no ability to comprehend natural language. Entity extraction — identifying characters, locations, factions, items, and their relationships from narrative prose — requires language-level understanding that does not exist in the codebase.
 
 The `copilot-instructions.md` rules (provenance, fact-vs-inference, catalog updates) were written for an LLM agent, but no mechanism exists to invoke one as part of the extraction pipeline. This document defines the architecture to bridge that gap.
 
@@ -19,7 +19,7 @@ The `copilot-instructions.md` rules (provenance, fact-vs-inference, catalog upda
 1. **Scripts orchestrate, agents comprehend.** Python scripts handle file I/O, sequencing, validation, and merging. LLM agents handle language understanding and return structured JSON.
 2. **Narrow context per agent call.** Each invocation receives only the data it needs — one turn plus relevant existing state — not the full transcript.
 3. **Schema-validated outputs.** Every agent response is validated against the corresponding JSON schema before being written to disk. Invalid responses are rejected and logged.
-4. **Provenance is mandatory.** Every extracted fact must reference its `source_turn`. Agents are instructed to include provenance; the script layer enforces it.
+4. **Provenance is mandatory.** Every extracted fact must reference schema-compliant provenance fields. Catalog/entity updates use `first_seen_turn` and `last_updated_turn`; evidence/event-like records use `source_turns`. Agents are instructed to include provenance; the script layer enforces it.
 5. **Fact vs. inference separation.** Agent prompts explicitly require this distinction. The script layer verifies that `confidence` scores are present on inferred attributes.
 6. **Provider-agnostic.** The LLM integration layer abstracts the provider. The same extraction logic works with OpenAI, Azure OpenAI, local Ollama, or any OpenAI-compatible endpoint.
 7. **Idempotent batch processing.** Running extraction over the same turns twice produces the same catalogs (modulo non-determinism in LLM output, which is mitigated by temperature 0 and validation).
@@ -76,7 +76,7 @@ The API key is read from the environment variable named in `api_key_env`, never 
 
 ### 3.3 Python dependency
 
-A single new dependency: `openai>=1.0.0` (the official Python SDK, which supports custom `base_url` for all compatible providers). This is added to `requirements.txt`.
+A single new optional dependency: `openai>=1.0.0` (the official Python SDK, which supports custom `base_url` for all compatible providers). To keep the base environment and CI requirements minimal, this should be documented in a separate LLM-specific requirements file such as `requirements-llm.txt`, not added to the base `requirements.txt`.
 
 No NLP libraries, no tokenizers, no local ML frameworks. The LLM does the comprehension; the SDK sends HTTP requests.
 
@@ -129,13 +129,13 @@ Rather than one monolithic "understand everything" call per turn, extraction is 
 | Attribute | Value |
 |---|---|
 | **Input** | One turn's text + list of already-known entity IDs/names |
-| **Output** | Array of `{ name, type, is_new, existing_id?, description, confidence }` |
+| **Output** | Array of `{ name, type, is_new, existing_id?, proposed_id?, description, confidence, source_turn }` |
 | **Scope** | One turn |
 | **Why separate** | Discovery is the broadest task — it must read the full turn and recognize any named or described entity. Keeping it separate means the prompt can focus entirely on recognition without being burdened by relationship mapping or attribute updates. |
 
 The discovery agent classifies each mention as one of the entity types in `entity.schema.json`: `character`, `location`, `faction`, `item`, `creature`, `concept`. It also performs **coreference resolution** — matching "the elder" to an existing `char-shaman` entry when the catalog already contains that entity.
 
-For **new** entities, it proposes an `id` following the prefix convention (`char-`, `loc-`, `faction-`, `item-`, `creature-`, `concept-`). For **existing** entities, it returns the `existing_id` from the known-entity list.
+Each discovery result must include `source_turn` for provenance because the agent operates on exactly one turn at a time. For **new** entities, it returns `proposed_id` following the prefix convention (`char-`, `loc-`, `faction-`, `item-`, `creature-`, `concept-`). For **existing** entities, it returns the `existing_id` from the known-entity list. `proposed_id` and `existing_id` are mutually exclusive: exactly one must be present for each result, based on `is_new`.
 
 #### Agent 2: Entity Detail Extractor
 
@@ -157,11 +157,11 @@ This agent runs once per entity discovered in the turn (both new and existing en
 | Attribute | Value |
 |---|---|
 | **Input** | One turn's text + list of entities mentioned in this turn (with their current catalog entries) |
-| **Output** | Array of relationship objects: `{ source_id, target_id, relationship, type, direction, confidence }` |
+| **Output** | Array of intermediate relationship edge objects: `{ source_id, target_id, relationship, type, direction, confidence }` |
 | **Scope** | One turn, cross-entity |
 | **Why separate** | Relationships are cross-cutting — they span pairs of entities. Running this after entity discovery ensures all entities are identified before relationships are mapped. |
 
-Relationships conform to the inline `relationships[]` format in `entity.schema.json`.
+These edge objects do **not** directly match the inline `relationships[]` entries in `entity.schema.json` because they include `source_id`. The merge step deduplicates edges on `(source_id, target_id, relationship)` and then writes schema-compliant per-entity `relationships[]` entries onto the source entity's catalog record.
 
 #### Agent 4: Event Extractor
 
@@ -230,7 +230,7 @@ For a 344-turn session with ~13 major characters, ~5 locations, and ~3 factions:
 | Event Extractor | 1 | 344 |
 | **Total** | | **~2,000** |
 
-At ~$0.002/call with GPT-4o-mini, full batch extraction costs approximately $4. With a local model (Ollama), cost is zero but runtime is longer.
+At ~$0.002/call with GPT-4o-mini (example pricing as of early 2025; check current provider pricing), full batch extraction costs approximately $4. With a local model (Ollama), cost is zero but runtime is longer.
 
 The `batch_delay_ms` configuration prevents rate-limiting. For OpenAI, 200ms delay keeps well within tier-1 rate limits.
 
@@ -319,12 +319,14 @@ The full transcript is **never** sent in a single request. Each call receives at
 
 ### 6.2 Provider-specific considerations
 
-| Provider | Data leaves machine? | Data retention policy |
+| Provider | Data leaves machine? | Data retention / policy notes (examples only; verify current provider docs) |
 |---|---|---|
 | **Ollama (local)** | No | N/A — all processing on localhost |
-| **Azure OpenAI** | Yes, to Azure region | No training on customer data; configurable data residency |
-| **OpenAI API** | Yes, to OpenAI | Not used for training (API TOS as of 2024); 30-day log retention |
+| **Azure OpenAI** | Yes, to Azure region | See Azure OpenAI data, privacy, and residency documentation for current terms and region-specific controls: <https://learn.microsoft.com/azure/ai-services/openai/concepts/data-privacy> |
+| **OpenAI API** | Yes, to OpenAI | Example only, as of 2024: see current API data usage and retention details in OpenAI policy docs: <https://platform.openai.com/docs/guides/your-data> |
 | **vLLM / llama.cpp (local)** | No | N/A |
+
+Provider retention, pricing, and policy details can change. Treat this table as implementation guidance, not a compliance source of truth, and re-check the linked provider documentation before deployment.
 
 ### 6.3 Recommendation
 
@@ -523,7 +525,8 @@ No existing files are deleted. Modifications to existing files:
 |---|---|
 | `tools/bootstrap_session.py` | Add `extract_semantic_batch()` call after `extract_all()` |
 | `tools/ingest_turn.py` | Add `--extract` flag and `extract_semantic_single()` call |
-| `requirements.txt` | Add `openai>=1.0.0` as optional dependency |
+
+A new `requirements-llm.txt` file is added for the optional LLM dependency (`openai>=1.0.0`). The base `requirements.txt` is not modified.
 
 ### 8.1 `tools/semantic_extraction.py` — Core orchestrator
 
