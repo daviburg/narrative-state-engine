@@ -92,11 +92,21 @@ def find_entity_by_id(catalogs: dict, entity_id: str) -> tuple[str, dict] | None
 
 
 def format_known_entities(catalogs: dict) -> str:
-    """Format all known entities as a compact table for the discovery prompt."""
+    """Format all known entities as a compact table for the discovery prompt.
+
+    Includes description and aliases so the LLM can resolve coreferences.
+    """
     lines = []
     for filename, entities in catalogs.items():
         for entity in entities:
-            lines.append(f"{entity['id']} | {entity['name']} | {entity['type']}")
+            desc = entity.get('description', '')
+            aliases = entity.get('attributes', {}).get('aliases', '')
+            extra = ''
+            if desc:
+                extra += f' — {desc}'
+            if aliases:
+                extra += f' (aliases: {aliases})'
+            lines.append(f"{entity['id']} | {entity['name']} | {entity['type']}{extra}")
     if not lines:
         return "(none — empty catalog)"
     return "\n".join(lines)
@@ -108,6 +118,25 @@ def validate_id_prefix(entity_id: str, entity_type: str) -> bool:
     if not expected_prefix:
         return False
     return entity_id.startswith(expected_prefix)
+
+
+def fix_id_prefix(entity_id: str, entity_type: str) -> str:
+    """Return a corrected entity ID with the proper prefix for its type.
+
+    If the ID already starts with the wrong type prefix, strip it and apply
+    the correct one.  Returns the original ID if the type is unknown.
+    """
+    expected_prefix = TYPE_TO_PREFIX.get(entity_type)
+    if not expected_prefix:
+        return entity_id
+    if entity_id.startswith(expected_prefix):
+        return entity_id  # already correct
+    # Strip any existing known prefix
+    for prefix in TYPE_TO_PREFIX.values():
+        if entity_id.startswith(prefix):
+            return expected_prefix + entity_id[len(prefix):]
+    # No known prefix found — just prepend the correct one
+    return expected_prefix + entity_id
 
 
 def merge_entity(catalogs: dict, entity: dict) -> None:

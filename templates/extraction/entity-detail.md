@@ -19,6 +19,7 @@ Rules:
 - If the text reveals a proper name for a previously unnamed entity (e.g. "The elder" is revealed to be "Shaman Kaya"), update "name" and add the old name as an "aliases" attribute.
 - Clearly distinguish fact from inference: append " [inference]" to any attribute value that is inferred rather than explicitly stated in the text.
 - Keep descriptions factual and concise.
+- For the player character (id "char-player", referred to as "you" in DM narration): always extract race, class, abilities (e.g. darkvision), HP changes (use attribute key "hp_change" with value like "-2 (trap injury)" or "+2 (broth)"), active conditions (e.g. "shoulder wound"), and quest information when mentioned. Track these across turns by preserving and extending existing attributes.
 
 Return the result as a JSON object with a single key "entity" containing the entity object.
 Example: {"entity": {"id": "char-elder", "name": "The elder", "type": "character", "description": "An elderly authority figure with gnarled hands.", "attributes": {"role": "tribal leader [inference]", "appearance": "gnarled hands, sharp gaze"}, "first_seen_turn": "turn-019", "last_updated_turn": "turn-019"}}

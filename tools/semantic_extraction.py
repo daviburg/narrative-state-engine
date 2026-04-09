@@ -92,6 +92,25 @@ def _validate_event(event_data: dict) -> bool:
         return False
 
 
+PLAYER_CHARACTER_SEED = {
+    "id": "char-player",
+    "name": "Player Character",
+    "type": "character",
+    "description": "The player character (referred to as 'you' in DM narration).",
+    "attributes": {},
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-001",
+}
+
+
+def _ensure_player_character(catalogs: dict) -> None:
+    """Pre-seed the player character entry if it doesn't already exist."""
+    for entity in catalogs.get("characters.json", []):
+        if entity.get("id") == "char-player":
+            return
+    catalogs.setdefault("characters.json", []).append(dict(PLAYER_CHARACTER_SEED))
+
+
 def load_template(name: str) -> str:
     """Load a prompt template by name (without .md extension)."""
     filepath = os.path.join(TEMPLATES_DIR, f"{name}.md")
@@ -209,11 +228,13 @@ def extract_and_merge(
         # Ensure source_turn is always set (smaller models may omit it)
         if not entity.get("source_turn"):
             entity["source_turn"] = turn_id
-        # Fix proposed_id prefix for factions (models may use "fac-" instead of "faction-")
+        # Fix proposed_id prefix if it doesn't match the declared type
         pid = entity.get("proposed_id", "")
-        if entity.get("type") == "faction" and pid and not pid.startswith("faction-"):
-            suffix = pid.removeprefix("fac-").lstrip("-")
-            entity["proposed_id"] = "faction-" + suffix
+        etype = entity.get("type", "")
+        if pid and etype:
+            from catalog_merger import fix_id_prefix, validate_id_prefix
+            if not validate_id_prefix(pid, etype):
+                entity["proposed_id"] = fix_id_prefix(pid, etype)
 
     # Filter by confidence
     qualified = filter_by_confidence(discovered, min_confidence)
@@ -248,6 +269,29 @@ def extract_and_merge(
 
         llm.delay()
 
+    # --- 2b. Always run detail extraction for the player character ---
+    # The PC is "you" in DM narration, so they won't be "discovered" but are
+    # affected by almost every turn.
+    pc_already_extracted = any(
+        get_entity_id(e) == "char-player" for e in qualified
+    )
+    if not pc_already_extracted:
+        pc_result = find_entity_by_id(catalogs, "char-player")
+        pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
+        pc_ref = {"name": pc_entry["name"], "type": "character",
+                  "existing_id": "char-player", "is_new": False}
+        try:
+            detail_result = llm.extract_json(
+                system_prompt=load_template("entity-detail"),
+                user_prompt=format_detail_prompt(turn, pc_ref, pc_entry),
+            )
+            entity_data = detail_result.get("entity")
+            if entity_data and _validate_entity(entity_data):
+                merge_entity(catalogs, entity_data)
+        except LLMExtractionError as e:
+            print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
+        llm.delay()
+
     # --- 3. Relationship Mapping ---
     mentioned_entities = []
     for entity_ref in qualified:
@@ -258,6 +302,16 @@ def extract_and_merge(
                 "name": entity_ref["name"],
                 "type": entity_ref["type"],
             })
+
+    # Always include the player character in relationships and events
+    if not any(e["id"] == "char-player" for e in mentioned_entities):
+        pc_result = find_entity_by_id(catalogs, "char-player")
+        pc_name = pc_result[1]["name"] if pc_result else "Player Character"
+        mentioned_entities.append({
+            "id": "char-player",
+            "name": pc_name,
+            "type": "character",
+        })
 
     if len(mentioned_entities) >= 2:
         try:
@@ -291,6 +345,78 @@ def extract_and_merge(
     return catalogs, events_list
 
 
+def _dedup_catalogs(catalogs: dict) -> int:
+    """Post-batch deduplication pass.
+
+    Merges entities within each catalog file that share the same lowercased
+    name or have overlapping aliases.  The entry seen earliest
+    (lowest first_seen_turn) is kept as the survivor; later duplicates are
+    merged into it via ``_update_existing_entity`` from catalog_merger.
+    Returns the number of duplicates merged.
+    """
+    from catalog_merger import _update_existing_entity
+
+    merged_count = 0
+
+    for filename, entities in catalogs.items():
+        # Build lookup: normalised name -> list of indices
+        name_map: dict[str, list[int]] = {}
+        for idx, entity in enumerate(entities):
+            # Collect all names this entity is known by
+            names = {entity.get("name", "").strip().lower()}
+            aliases_str = entity.get("attributes", {}).get("aliases", "")
+            if aliases_str:
+                for a in aliases_str.split(","):
+                    a = a.strip().lower()
+                    if a:
+                        names.add(a)
+            for n in names:
+                if n:
+                    name_map.setdefault(n, []).append(idx)
+
+        # Identify groups of indices that should be merged (connected-component)
+        parent: dict[int, int] = {}
+
+        def find(x: int) -> int:
+            while parent.get(x, x) != x:
+                parent[x] = parent.get(parent[x], parent[x])
+                x = parent[x]
+            return x
+
+        def union(a: int, b: int) -> None:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        for _name, idxs in name_map.items():
+            for i in range(1, len(idxs)):
+                union(idxs[0], idxs[i])
+
+        # Group by root
+        groups: dict[int, list[int]] = {}
+        for idx in range(len(entities)):
+            root = find(idx)
+            groups.setdefault(root, []).append(idx)
+
+        # Merge groups with more than one member
+        to_remove: set[int] = set()
+        for _root, members in groups.items():
+            if len(members) < 2:
+                continue
+            # Keep the entry with the earliest first_seen_turn
+            members.sort(key=lambda i: entities[i].get("first_seen_turn", ""))
+            survivor_idx = members[0]
+            for dup_idx in members[1:]:
+                _update_existing_entity(entities[survivor_idx], entities[dup_idx])
+                to_remove.add(dup_idx)
+                merged_count += 1
+
+        if to_remove:
+            catalogs[filename] = [e for i, e in enumerate(entities) if i not in to_remove]
+
+    return merged_count
+
+
 def extract_semantic_batch(
     turn_dicts: list,
     session_dir: str,
@@ -320,6 +446,9 @@ def extract_semantic_batch(
     catalog_dir = os.path.join(framework_dir, "catalogs")
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
+
+    # Pre-seed the player character so it can be tracked every turn
+    _ensure_player_character(catalogs)
 
     # Progress tracking
     progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
@@ -377,6 +506,13 @@ def extract_semantic_batch(
     # Final save
     entities_after = sum(len(v) for v in catalogs.values())
     events_after = len(events_list)
+
+    # Post-batch dedup: merge entities that share the same name/aliases but got separate IDs
+    dupes_merged = _dedup_catalogs(catalogs)
+    if dupes_merged:
+        entities_after = sum(len(v) for v in catalogs.values())
+        print(f"  Post-batch dedup merged {dupes_merged} duplicate(s); {entities_after} entities remain")
+
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
 
     if not dry_run:
@@ -417,6 +553,9 @@ def extract_semantic_single(
     catalog_dir = os.path.join(framework_dir, "catalogs")
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
+
+    # Pre-seed the player character so it can be tracked every turn
+    _ensure_player_character(catalogs)
 
     turn = {"turn_id": turn_id, "speaker": speaker, "text": text}
 

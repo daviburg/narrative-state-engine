@@ -20,10 +20,23 @@ Rules:
 - Groups of unnamed individuals acting as a unit should be typed as "faction" (e.g. "the guards", "the tribal warriors").
 - The player character ("you" in DM turns) should NOT be extracted — they are pre-seeded in the catalog.
 - Confidence below 0.5 means the mention is too vague to catalog.
-- For coreference resolution: if a mention refers to an already-known entity (even by a different name or title), set is_new to false and provide the existing_id.
+- For coreference resolution: if a mention refers to an already-known entity (even by a different name, title, or alias shown in the known-entities list), set is_new to false and provide the existing_id. Use the descriptions and aliases in the known-entities list to identify matches.
 - "proposed_id" and "existing_id" are mutually exclusive: exactly one must be non-null for each result.
 
 Return a JSON object with a single key "entities" containing an array of entity objects.
-Example: {"entities": [{"name": "Kael", "type": "character", "is_new": true, "existing_id": null, "proposed_id": "char-kael", "description": "A young hunter mentioned by the elder.", "confidence": 0.9, "source_turn": "turn-019"}]}
+
+Examples:
+{"entities": [{"name": "Kael", "type": "character", "is_new": true, "existing_id": null, "proposed_id": "char-kael", "description": "A young hunter mentioned by the elder.", "confidence": 0.9, "source_turn": "turn-019"}]}
+
+{"entities": [{"name": "Crude spear", "type": "item", "is_new": true, "existing_id": null, "proposed_id": "item-crude-spear", "description": "A roughly-made spear carried by one of the warriors.", "confidence": 0.85, "source_turn": "turn-007"}]}
+
+{"entities": [{"name": "Tripwire", "type": "item", "is_new": true, "existing_id": null, "proposed_id": "item-tripwire", "description": "A hidden trap mechanism stretched across the path.", "confidence": 0.9, "source_turn": "turn-005"}]}
+
+{"entities": [{"name": "Bowl of dark paste", "type": "item", "is_new": true, "existing_id": null, "proposed_id": "item-dark-paste-bowl", "description": "A clay bowl containing a thick, dark medicinal substance.", "confidence": 0.8, "source_turn": "turn-019"}]}
+
+Item identification tips:
+- Weapons (swords, spears, bows), containers (bowls, chests, bags), substances (potions, pastes, powders), traps/mechanisms (tripwires, snares, pressure plates), and quest objects (artifacts, keys, tokens) are all type "item".
+- If an item is part of a trap or mechanism, extract both the mechanism and any separate components as individual items.
+- Food, drink, and consumables that have narrative significance (e.g. offered as part of a ritual, restore HP) are items.
 
 If no entities are found in the turn, return: {"entities": []}
