@@ -4,8 +4,12 @@
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - No external Python packages required for core tools
+- **Optional** — for LLM-based semantic extraction:
+  - `pip install -r requirements-llm.txt`
+  - An OpenAI-compatible LLM endpoint (OpenAI API, Ollama, etc.)
+  - Configure `config/llm.json` with provider, model, and endpoint
 
 ### Creating a New Session
 
@@ -52,6 +56,16 @@ The script will:
 - Create `sessions/session-001/transcript/turn-NNN-{speaker}.md`
 - Append to `sessions/session-001/raw/full-transcript.md`
 
+To also run LLM-based semantic extraction on the new turn:
+
+```bash
+python tools/ingest_turn.py \
+  --session sessions/session-001 \
+  --speaker dm \
+  --text "..." \
+  --extract
+```
+
 ### Bootstrapping an Existing Transcript
 
 If you already have a large transcript file, bootstrap a session in one pass:
@@ -94,11 +108,75 @@ This regenerates:
 Current `update_state.py` behavior is intentionally limited to session-local derived files.
 
 It does **not** currently update:
-- `framework/catalogs/*.json`
 - `framework/story/*`
 - `framework/dm-profile/dm-profile.json`
 
 Those updates are currently manual/Copilot-assisted.
+
+For automated catalog updates, see Semantic Extraction below.
+
+---
+
+## Semantic Extraction (Optional)
+
+The semantic extraction pipeline uses an LLM to automatically extract entities, relationships, and events from transcript turns and merge them into `framework/catalogs/`.
+
+### Setup
+
+1. Install the optional LLM dependency:
+   ```bash
+   pip install -r requirements-llm.txt
+   ```
+
+2. Configure `config/llm.json`:
+   ```json
+   {
+     "provider": "openai",
+     "model": "gpt-4o",
+     "api_key_env": "OPENAI_API_KEY"
+   }
+   ```
+
+   For a local Ollama instance:
+   ```json
+   {
+     "provider": "ollama",
+     "model": "qwen2.5:3b",
+     "base_url": "http://localhost:11434/v1"
+   }
+   ```
+
+### Batch Mode (Bootstrap)
+
+When bootstrapping a session, semantic extraction runs automatically over all turns if the LLM is configured:
+
+```bash
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt
+```
+
+The pipeline processes each turn through four agents:
+1. **Entity Discovery** — identify entities mentioned in the turn
+2. **Entity Detail Extractor** — extract/update attributes per entity
+3. **Relationship Mapper** — identify cross-entity relationships
+4. **Event Extractor** — identify narrative events
+
+Progress is checkpointed every 50 turns and can resume after interruption.
+
+### Incremental Mode (Ingest)
+
+Pass `--extract` to `ingest_turn.py` to run semantic extraction on a single new turn:
+
+```bash
+python tools/ingest_turn.py \
+  --session sessions/session-001 \
+  --speaker dm \
+  --text "The elder reveals that the crystal was shattered decades ago." \
+  --extract
+```
+
+See [`docs/semantic-extraction-design.md`](semantic-extraction-design.md) for full pipeline design.
 
 ---
 

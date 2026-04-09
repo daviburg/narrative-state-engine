@@ -33,6 +33,9 @@ docs/
   architecture.md
   usage.md
 
+config/
+  llm.json                     # LLM provider settings (model, endpoint)
+
 schemas/
   turn.schema.json
   entity.schema.json
@@ -76,12 +79,22 @@ sessions/
       next-move-analysis.md
       prompt-candidates.json
 
+templates/
+  extraction/
+    entity-discovery.md          # LLM prompt templates for semantic extraction
+    entity-detail.md
+    relationship-mapper.md
+    event-extractor.md
+
 tools/
   bootstrap_session.py
   ingest_turn.py
   update_state.py
   analyze_next_move.py
   validate.py
+  semantic_extraction.py         # LLM-based entity/relationship/event extraction
+  catalog_merger.py              # Merge extracted data into framework catalogs
+  llm_client.py                  # Provider-agnostic LLM client wrapper
 
 examples/
   demo-session/
@@ -93,8 +106,11 @@ examples/
 
 ### Prerequisites
 
-- Python 3.9+
+- Python 3.10+
 - No external dependencies required for core tools
+- **Optional** — for LLM-based semantic extraction: `pip install -r requirements-llm.txt`
+  - Works with OpenAI API or any OpenAI-compatible endpoint (e.g. Ollama)
+  - Configure provider/model in `config/llm.json`
 
 ### Ingesting a Turn
 
@@ -148,12 +164,21 @@ Current automated behavior:
 - Creates scaffold files if missing: `state.json`, `objectives.json`, `evidence.json`
 - Updates only `state.json.as_of_turn`
 
-Not automated yet:
-- Framework catalog updates (`framework/catalogs/*.json`)
-- Framework story updates (`framework/story/*`)
-- Framework DM profile updates (`framework/dm-profile/dm-profile.json`)
+### Semantic Extraction (Optional)
 
-Those updates are currently manual/Copilot-assisted.
+If an LLM is configured (`config/llm.json`), `bootstrap_session.py` automatically runs semantic extraction across all turns to populate `framework/catalogs/` with entities, relationships, and events.
+
+For incremental ingestion, pass `--extract` to `ingest_turn.py`:
+
+```bash
+python tools/ingest_turn.py \
+  --session sessions/session-001 \
+  --speaker dm \
+  --text "..." \
+  --extract
+```
+
+See [`docs/semantic-extraction-design.md`](docs/semantic-extraction-design.md) for pipeline details.
 
 ### Generating Next-Move Analysis
 

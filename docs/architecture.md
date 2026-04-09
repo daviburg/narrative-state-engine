@@ -21,16 +21,18 @@ DM response text
 sessions/*/raw/full-transcript.md        (immutable append)
 sessions/*/transcript/turn-NNN-dm.md     (immutable append)
       |
-      v
-tools/update_state.py
-      |
-      +---> framework/catalogs/           (characters, locations, factions, items, plot-threads)
-      +---> framework/objectives/         (objectives.json)
-      +---> framework/dm-profile/         (dm-profile.json)
-      +---> framework/story/              (summary.md, world-state.md)
-      +---> sessions/*/derived/state.json
-      +---> sessions/*/derived/objectives.json
-      +---> sessions/*/derived/evidence.json
+      +------------------------------------------+
+      |                                          |
+      v                                          v
+tools/update_state.py                  tools/semantic_extraction.py  (optional, LLM)
+      |                                          |
+      +---> sessions/*/derived/state.json        +---> framework/catalogs/characters.json
+      +---> sessions/*/derived/objectives.json   +---> framework/catalogs/locations.json
+      +---> sessions/*/derived/evidence.json     +---> framework/catalogs/factions.json
+      +---> sessions/*/derived/turn-summary.md   +---> framework/catalogs/items.json
+      |                                          +---> framework/catalogs/events.json
+      v                                          |
+      +------------------------------------------+
       |
       v
 tools/analyze_next_move.py
@@ -38,6 +40,10 @@ tools/analyze_next_move.py
       +---> sessions/*/derived/next-move-analysis.md
       +---> sessions/*/derived/prompt-candidates.json
 ```
+
+Semantic extraction is triggered automatically during `bootstrap_session.py` (batch)
+or via the `--extract` flag on `ingest_turn.py` (incremental). It requires an LLM
+endpoint configured in `config/llm.json` and gracefully degrades if unavailable.
 
 ---
 
@@ -82,6 +88,20 @@ A running profile of inferred DM behavior patterns.
 - Includes tone, structure, hint patterns, adversarial level, and formatting preferences
 - All entries include confidence scores
 
+### Semantic Extraction Layer (Optional, LLM-based)
+
+An automated pipeline that uses an LLM to extract structured data from transcript turns.
+
+- **Four-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor
+- Prompt templates in `templates/extraction/` define each agent's behavior
+- `tools/semantic_extraction.py` orchestrates the pipeline
+- `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`
+- `tools/llm_client.py` provides a provider-agnostic LLM wrapper (OpenAI, Ollama, etc.)
+- `config/llm.json` configures the LLM provider, model, and endpoint
+- All extracted entities are validated against `schemas/entity.schema.json` before merging
+- Entities below a confidence threshold are logged but not cataloged
+- Batch mode checkpoints progress every 50 turns for resume after interruption
+
 ---
 
 ## Schemas
@@ -105,10 +125,14 @@ All data structures are defined in `schemas/`. See each schema file for field de
 
 | Script | Purpose |
 |---|---|
+| `tools/bootstrap_session.py` | Import an existing transcript into a session |
 | `tools/ingest_turn.py` | Add a new turn to a session |
-| `tools/update_state.py` | Update catalogs, objectives, evidence, and summaries |
+| `tools/update_state.py` | Regenerate session-local derived scaffolds, turn summaries, and structured extraction outputs |
 | `tools/analyze_next_move.py` | Generate next-move analysis and prompt candidates |
 | `tools/validate.py` | Validate all JSON files against schemas |
+| `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |
+| `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
+| `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, etc.) |
 
 ---
 
