@@ -268,8 +268,15 @@ def main() -> None:
             update_state_temporal(derived_dir, data["timeline"])
         else:
             print("  No structured data detected.")
-    except ImportError:
-        pass  # extraction module not available; skip silently
+    except ModuleNotFoundError as exc:
+        if exc.name == "extract_structured_data":
+            print(
+                "WARNING: Structured extraction skipped because "
+                "'extract_structured_data' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
 
     print_instructions(session_dir, turns)
 

@@ -165,12 +165,6 @@ YEAR_PATTERN_ORDINAL = re.compile(
     r"(?:the\s+)?(" + "|".join(ORDINAL_MAP) + r")\s+year",
     re.IGNORECASE,
 )
-YEAR_PATTERN_NEW = re.compile(
-    r"a\s+(?:new|another)\s+year\s+(?:begins?|passes?)",
-    re.IGNORECASE,
-)
-
-
 def _normalize_season(name: str) -> str:
     """Normalize season name (autumn -> fall)."""
     name = name.lower().strip()
@@ -229,25 +223,23 @@ def extract_temporal_markers(
 # Season summary extraction (#28)
 # ---------------------------------------------------------------------------
 
-SEASON_SUMMARY_SECTION_PATTERNS = {
-    "regional_changes": re.compile(
-        r"\*{0,2}Regional\s+Changes?\*{0,2}\s*:?\s*\n(.*?)(?=\n\*{0,2}[A-Z]|\Z)",
-        re.IGNORECASE | re.DOTALL,
-    ),
-    "faction_actions": re.compile(
-        r"\*{0,2}Faction\s+Actions?\*{0,2}\s*:?\s*\n(.*?)(?=\n\*{0,2}[A-Z]|\Z)",
-        re.IGNORECASE | re.DOTALL,
-    ),
-    "economic_shifts": re.compile(
-        r"\*{0,2}Economic\s+(?:Shifts?|Changes?|Updates?)\*{0,2}\s*:?\s*\n"
-        r"(.*?)(?=\n\*{0,2}[A-Z]|\Z)",
-        re.IGNORECASE | re.DOTALL,
-    ),
-    "environmental_notes": re.compile(
-        r"\*{0,2}Environmental\s+(?:Notes?|Conditions?|Changes?)\*{0,2}\s*:?\s*\n"
-        r"(.*?)(?=\n\*{0,2}[A-Z]|\Z)",
-        re.IGNORECASE | re.DOTALL,
-    ),
+_SECTION_HEADER_RE = re.compile(
+    r"^(\*{0,2})"
+    r"(?P<name>"
+    r"Regional\s+Changes?"
+    r"|Faction\s+Actions?"
+    r"|Economic\s+(?:Shifts?|Changes?|Updates?)"
+    r"|Environmental\s+(?:Notes?|Conditions?|Changes?)"
+    r")"
+    r"\1\s*:?\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+_SECTION_NAME_MAP = {
+    "regional": "regional_changes",
+    "faction": "faction_actions",
+    "economic": "economic_shifts",
+    "environmental": "environmental_notes",
 }
 
 SEASON_SUMMARY_BLOCK_PATTERN = re.compile(
@@ -259,6 +251,49 @@ SEASON_SUMMARY_BLOCK_PATTERN = re.compile(
 
 _MIN_SECTIONS_FOR_SUMMARY = 2
 _RAW_TEXT_LIMIT = 500
+
+
+def _parse_season_sections(text: str) -> tuple[dict[str, str], int, int]:
+    """Parse season summary sections by finding headers and slicing between them.
+
+    Returns (sections_dict, block_start, block_end) where block_start/end
+    mark the span of the detected sections in *text*.
+    """
+    headers = list(_SECTION_HEADER_RE.finditer(text))
+    if not headers:
+        return {}, 0, 0
+
+    sections: dict[str, str] = {}
+    block_start = headers[0].start()
+    block_end = headers[-1].end()
+
+    for i, hdr in enumerate(headers):
+        raw_name = hdr.group("name").strip()
+        key = raw_name.split()[0].lower()
+        section_key = _SECTION_NAME_MAP.get(key)
+        if not section_key:
+            continue
+
+        content_start = hdr.end()
+        if i + 1 < len(headers):
+            content_end = headers[i + 1].start()
+        else:
+            # Last section: content runs to the next blank-line-separated block
+            # or end of text.  Stop at a double newline that is followed by text
+            # that doesn't look like a continuation (not starting with - or *).
+            rest = text[content_start:]
+            double_nl = re.search(r"\n\n(?=[^\s\-\*])", rest)
+            if double_nl:
+                content_end = content_start + double_nl.start()
+            else:
+                content_end = len(text)
+
+        content = text[content_start:content_end].strip()
+        block_end = max(block_end, content_start + len(text[content_start:content_end].rstrip()))
+        if content:
+            sections[section_key] = content
+
+    return sections, block_start, block_end
 
 
 def extract_season_summaries(
@@ -275,13 +310,7 @@ def extract_season_summaries(
     summaries: list[dict] = []
     seq = start_id
 
-    sections: dict[str, str] = {}
-    for section_name, pattern in SEASON_SUMMARY_SECTION_PATTERNS.items():
-        m = pattern.search(text)
-        if m:
-            content = m.group(1).strip()
-            if content:
-                sections[section_name] = content
+    sections, block_start, block_end = _parse_season_sections(text)
 
     has_explicit_header = bool(SEASON_SUMMARY_BLOCK_PATTERN.search(text))
     has_enough_sections = len(sections) >= _MIN_SECTIONS_FOR_SUMMARY
@@ -298,11 +327,18 @@ def extract_season_summaries(
 
     year = _detect_year(text)
 
+    # Include explicit header in block span if present
+    header_match = SEASON_SUMMARY_BLOCK_PATTERN.search(text)
+    if header_match:
+        block_start = min(block_start, header_match.start()) if block_start > 0 else header_match.start()
+    raw_block = text[block_start:block_end].strip() if block_end > block_start else ""
+
     summary: dict = {
         "id": f"ss-{seq:03d}",
         "source_turn": turn_id,
         "sections": sections if sections else {},
-        "raw_text": text[:_RAW_TEXT_LIMIT] + ("..." if len(text) > _RAW_TEXT_LIMIT else ""),
+        "raw_text": raw_block[:_RAW_TEXT_LIMIT]
+        + ("..." if len(raw_block) > _RAW_TEXT_LIMIT else ""),
     }
     if season:
         summary["season"] = season

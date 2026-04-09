@@ -1,8 +1,7 @@
-# Turn Summary (as of turn-002)
+# Turn Summary — session-001 (as of turn-002)
 
-_This summary was auto-generated. Review and refine with Copilot._
-
-## turn-002 [dm]
-
-> You arrive at Thornhaven as dusk settles over the valley. The village is smaller than you expected — a cluster of a dozen stone buildings huddled around a central well. The streets are empty and every...
-
+- Player arrived at Thornhaven village at dusk.
+- Village consists of ~12 stone buildings around a central well.
+- Streets are empty; all shutters closed — unusual and potentially significant.
+- The inn is called *The Broken Wheel* and is the only building showing light.
+- A crow watched the player from the inn sign (possibly notable; flagged for DM bait review).

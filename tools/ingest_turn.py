@@ -122,8 +122,15 @@ def main() -> None:
         extract_and_merge_single_turn(
             session_dir, turn_id, args.speaker, text,
         )
-    except ImportError:
-        pass  # extraction module not available; skip silently
+    except ModuleNotFoundError as exc:
+        if exc.name == "extract_structured_data":
+            print(
+                "WARNING: Structured extraction skipped because "
+                "'extract_structured_data' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
 
     print()
     print("Next steps:")

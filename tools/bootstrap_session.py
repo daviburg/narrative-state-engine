@@ -573,8 +573,15 @@ def main() -> None:
             update_state_temporal(derived_dir, data["timeline"], dry_run=args.dry_run)
         else:
             print("  No structured data detected.")
-    except ImportError:
-        pass  # extraction module not available; skip silently
+    except ModuleNotFoundError as exc:
+        if exc.name == "extract_structured_data":
+            print(
+                "WARNING: Structured extraction skipped because "
+                "'extract_structured_data' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
 
     print()
     if args.dry_run:
