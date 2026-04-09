@@ -37,6 +37,8 @@ SCHEMA_MAP = {
     "locations.json": "schemas/entity.schema.json",
     "factions.json": "schemas/entity.schema.json",
     "items.json": "schemas/entity.schema.json",
+    "events.json": "schemas/event.schema.json",
+    "anomalies.json": "schemas/anomaly.schema.json",
     "plot-threads.json": "schemas/plot-thread.schema.json",
     "dm-profile.json": "schemas/dm-profile.schema.json",
 }

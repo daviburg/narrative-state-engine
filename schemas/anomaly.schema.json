@@ -1,0 +1,59 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "anomaly.schema.json",
+  "title": "Anomaly",
+  "description": "A deviation from expected behavior: supernatural phenomena, environmental shifts, or unexplained patterns.",
+  "type": "object",
+  "required": ["id", "description", "first_seen_turn", "trend"],
+  "additionalProperties": false,
+  "properties": {
+    "id": {
+      "type": "string",
+      "description": "Unique identifier, e.g. 'anomaly-rune-env'.",
+      "pattern": "^anomaly-"
+    },
+    "category": {
+      "type": "string",
+      "description": "Classification of the anomaly.",
+      "enum": ["environmental", "entity-linked", "artifact-linked", "system"]
+    },
+    "related_entities": {
+      "type": "array",
+      "description": "Entity IDs linked to or affected by this anomaly.",
+      "items": {
+        "type": "string"
+      }
+    },
+    "description": {
+      "type": "string",
+      "description": "Factual description of the observed anomaly."
+    },
+    "first_seen_turn": {
+      "type": "string",
+      "description": "Turn ID when the anomaly was first observed.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "last_updated_turn": {
+      "type": "string",
+      "description": "Turn ID of the most recent observation or update.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "observation_turns": {
+      "type": "array",
+      "description": "All turn IDs where this anomaly was observed or referenced.",
+      "items": {
+        "type": "string",
+        "pattern": "^turn-[0-9]{3,}$"
+      }
+    },
+    "trend": {
+      "type": "string",
+      "description": "Observed trajectory of the anomaly.",
+      "enum": ["stable", "expanding", "diminishing", "unknown"]
+    },
+    "notes": {
+      "type": "string",
+      "description": "Optional notes, hypotheses, or open questions about this anomaly."
+    }
+  }
+}
