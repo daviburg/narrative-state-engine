@@ -1,0 +1,13 @@
+{
+  "relationships": [
+    {
+      "source_id": "char-elder",
+      "target_id": "char-younger-woman",
+      "relationship": "provides for",
+      "type": "other",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "source_turn": "turn-019"
+    }
+  ]
+}

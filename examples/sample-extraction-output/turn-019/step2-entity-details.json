@@ -1,0 +1,23 @@
+[
+  {
+    "id": "char-elder",
+    "name": "The elder",
+    "type": "character",
+    "description": "An elderly authority figure with gnarled hands and a sharp gaze, observing the scene critically.",
+    "attributes": {
+      "role": "tribal leader [inference]",
+      "appearance": "gnarled hands, sharp gaze"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019"
+  },
+  {
+    "id": "char-younger-woman",
+    "name": "younger woman",
+    "type": "character",
+    "description": "A young woman with a steaming wooden bowl in her hands, likely assisting the elder.",
+    "attributes": {},
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019"
+  }
+]

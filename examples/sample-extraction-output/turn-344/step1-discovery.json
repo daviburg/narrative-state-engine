@@ -1,0 +1,144 @@
+{
+  "entities": [
+    {
+      "name": "Maelis",
+      "type": "character",
+      "is_new": false,
+      "existing_id": "char-elder",
+      "proposed_id": null,
+      "description": "The elder's name is mentioned.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Gorok",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-gorok",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Maelis",
+      "type": "character",
+      "is_new": false,
+      "existing_id": "char-elder",
+      "proposed_id": null,
+      "description": "The elder's name is mentioned again.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Gorok",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-gorok",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Kael",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-kael",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Gorok",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-gorok",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Maelis",
+      "type": "character",
+      "is_new": false,
+      "existing_id": "char-elder",
+      "proposed_id": null,
+      "description": "The elder's name is mentioned again.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Gorok",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-gorok",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Kael",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-kael",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Gorok",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-gorok",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Tala",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-tala",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Renn",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-renn",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Finn",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-finn",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    },
+    {
+      "name": "Thorne",
+      "type": "character",
+      "is_new": false,
+      "existing_id": null,
+      "proposed_id": "char-thorne",
+      "description": "A character mentioned by the elder.",
+      "confidence": 0.9,
+      "source_turn": "turn-344"
+    }
+  ]
+}

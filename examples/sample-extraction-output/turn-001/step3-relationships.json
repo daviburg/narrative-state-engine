@@ -1,0 +1,13 @@
+{
+  "relationships": [
+    {
+      "source_id": "concept-midwinter-celebration",
+      "target_id": "concept-promised-reward",
+      "relationship": "depends on",
+      "type": "other",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "source_turn": "turn-001"
+    }
+  ]
+}

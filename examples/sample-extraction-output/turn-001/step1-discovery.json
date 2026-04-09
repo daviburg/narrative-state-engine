@@ -1,0 +1,34 @@
+{
+  "entities": [
+    {
+      "name": "the Midwinter celebration",
+      "type": "concept",
+      "is_new": true,
+      "existing_id": null,
+      "proposed_id": "concept-midwinter-celebration",
+      "description": "A traditional event mentioned in the context of a job.",
+      "confidence": 0.85,
+      "source_turn": "turn-001"
+    },
+    {
+      "name": "the promised reward",
+      "type": "concept",
+      "is_new": true,
+      "existing_id": null,
+      "proposed_id": "concept-promised-reward",
+      "description": "A reward mentioned in the context of a job.",
+      "confidence": 0.85,
+      "source_turn": "turn-001"
+    },
+    {
+      "name": "the name",
+      "type": "concept",
+      "is_new": true,
+      "existing_id": null,
+      "proposed_id": "concept-name",
+      "description": "A name that was forgotten before hitting the ground.",
+      "confidence": 0.85,
+      "source_turn": "turn-001"
+    }
+  ]
+}

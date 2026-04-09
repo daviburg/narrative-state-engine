@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "id": "evt-001",
+      "source_turns": [
+        "turn-001"
+      ],
+      "type": "decision",
+      "description": "The player decides what to do next in the snowy environment.",
+      "related_entities": [
+        "concept-midwinter-celebration",
+        "concept-promised-reward"
+      ]
+    }
+  ]
+}

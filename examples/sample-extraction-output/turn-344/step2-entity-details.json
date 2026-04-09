@@ -1,0 +1,191 @@
+[
+  {
+    "id": "char-elder",
+    "name": "Maelis",
+    "type": "character",
+    "description": "An elderly authority figure with gnarled hands and a sharp gaze, observing the scene critically. She provides for younger woman.",
+    "attributes": {
+      "role": "tribal leader [inference]",
+      "appearance": "gnarled hands, sharp gaze"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-344",
+    "notes": "The elder's role and appearance are updated based on the new information."
+  },
+  {
+    "id": "char-gorok",
+    "name": "Gorok",
+    "type": "character",
+    "description": "A forceful and assertive authority figure, known for his immediate and brutal commitment to action. He is also a commander with a commanding presence.",
+    "attributes": {
+      "role": "commander [inference]",
+      "appearance": "assertive stance, commanding presence"
+    },
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-elder",
+    "name": "Maelis",
+    "type": "character",
+    "description": "An elderly authority figure with gnarled hands, a sharp gaze, and a critical observer of the scene.",
+    "attributes": {
+      "role": "tribal leader [inference]",
+      "appearance": "gnarled hands, sharp gaze"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-344",
+    "notes": "The elder's role and appearance are updated based on the new information."
+  },
+  {
+    "id": "char-gorok",
+    "name": "Gorok",
+    "type": "character",
+    "description": "A forceful and assertive authority figure, known for his immediate and brutal commitment to action. He is also a commander with a commanding presence.",
+    "attributes": {
+      "role": "commander [inference]",
+      "appearance": "assertive stance, commanding presence"
+    },
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-kael",
+    "name": "Kael",
+    "type": "character",
+    "description": "A decisive commander known for his direct leadership style, who now acknowledges the importance of building something that holds.",
+    "attributes": {
+      "role": "commander [inference]",
+      "appearance": "[unchanged]",
+      "condition": "[unchanged]",
+      "alignment": "[unchanged]",
+      "race": "[unchanged]",
+      "class": "[unchanged]",
+      "abilities": "[unchanged]",
+      "status": "[unchanged]"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-gorok",
+    "name": "Gorok",
+    "type": "character",
+    "description": "A forceful and assertive authority figure, known for his immediate and brutal commitment to action. He is also a commander with a commanding presence.",
+    "attributes": {
+      "role": "commander [inference]",
+      "appearance": "assertive stance, commanding presence"
+    },
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-elder",
+    "name": "Maelis [inference]",
+    "type": "character",
+    "description": "An elderly authority figure with gnarled hands, a sharp gaze, and a critical observer of the scene. She provides for others in her community.",
+    "attributes": {
+      "role": "tribal leader [inference]",
+      "appearance": "gnarled hands, sharp gaze",
+      "aliases": "The elder"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-344",
+    "notes": "The elder's role and appearance are updated based on the new information. The relationship with 'char-younger-woman' is maintained as it was previously inferred."
+  },
+  {
+    "id": "char-gorok",
+    "name": "Gorok",
+    "type": "character",
+    "description": "A forceful and assertive authority figure, known for his immediate and brutal commitment to action. He is also a commander with a commanding presence.",
+    "attributes": {
+      "role": "commander [inference]",
+      "appearance": "assertive stance, commanding presence"
+    },
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-kael",
+    "name": "Kael",
+    "type": "character",
+    "description": "A decisive commander known for his direct leadership style, who now acknowledges the importance of building something that holds.",
+    "attributes": {
+      "role": "commander [inference]",
+      "condition": "[unchanged]",
+      "alignment": "[unchanged]",
+      "race": "[unchanged]",
+      "class": "[unchanged]",
+      "abilities": "[unchanged]",
+      "status": "[unchanged]"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-gorok",
+    "name": "Gorok",
+    "type": "character",
+    "description": "A forceful and assertive authority figure, known for his immediate and brutal commitment to action. He is also a commander with a commanding presence.",
+    "attributes": {
+      "role": "commander [inference]",
+      "appearance": "assertive stance, commanding presence"
+    },
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-tala",
+    "name": "Tala",
+    "type": "character",
+    "description": "A Healer who observed the subtle hierarchies and unspoken rules within migrating bands.",
+    "attributes": {
+      "role": "observer [inference]",
+      "appearance": "[unknown]",
+      "condition": "observant, curious"
+    },
+    "first_seen_turn": "turn-344",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-renn",
+    "name": "Renn",
+    "type": "character",
+    "description": "A young hunter with a keen eye for detail and an interest in the intricate weaving techniques of his people.",
+    "attributes": {
+      "race": "human [inference]",
+      "class": "hunter [inference]",
+      "abilities": "intricate weaving techniques, new curiosity towards Finn's bow",
+      "status": "curious about learning from Finn"
+    },
+    "first_seen_turn": "turn-344",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-finn",
+    "name": "Finn",
+    "type": "character",
+    "description": "A young hunter with an intrigued and curious demeanor.",
+    "attributes": {},
+    "first_seen_turn": "turn-344",
+    "last_updated_turn": "turn-344"
+  },
+  {
+    "id": "char-thorne",
+    "name": "Thorne [inference]",
+    "type": "character",
+    "description": "A figure who held, a testament to the resilience of the settlement.",
+    "attributes": {
+      "role": "protector and teacher [inference]",
+      "appearance": "[unchanged]",
+      "condition": "resilient and experienced [inference]",
+      "alignment": "loyal to the settlement",
+      "race": "[unchanged]",
+      "class": "[unchanged]",
+      "abilities": "[unchanged]",
+      "status": "active in the settlement"
+    },
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-344"
+  }
+]
