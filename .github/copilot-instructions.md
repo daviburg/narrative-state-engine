@@ -94,23 +94,23 @@ Run `python tools/validate.py` to check compliance before committing.
 
 ### Branch Naming
 
-- Use `ix/` prefix for bug fixes, `eat/` for new features, and `docs/` for documentation-only changes.
-- Include issue numbers when applicable, e.g. `ix/issues-19-20-24` (multiple) or `eat/issues-31-new-catalog-schema` (single).
+- Use `fix/` prefix for bug fixes, `feat/` for new features, and `docs/` for documentation-only changes.
+- Include issue numbers when applicable, e.g. `fix/issues-19-20-24` (multiple) or `feat/issues-31-new-catalog-schema` (single).
 - Keep branch names lowercase and hyphen-separated.
 
 ### Commit Messages
 
-- Use repository-specific commit prefixes: `ix:` for bug fixes, `eat:` for new features, `docs:` for documentation, `chore:` for maintenance tasks. These are repository conventions, not Conventional Commits types.
+- Use conventional commit prefixes: `fix:` for bug fixes, `feat:` for new features, `docs:` for documentation, `chore:` for maintenance tasks.
 - Reference issue numbers in the commit body using `(#N)` or `Fixes #N`.
 
 Examples:
 ```
-ix: correct schema validation for entity catalog entries
+fix: correct schema validation for entity catalog entries
 
 Fixes #19
 ```
 ```
-eat: add location catalog support to bootstrap tool
+feat: add location catalog support to bootstrap tool
 
 Adds --location flag and related schema updates. (#31)
 ```
@@ -142,8 +142,8 @@ Closes #20
 
 ### Labels
 
-- Apply the `bug` label for `ix/` (fix) branches.
-- Apply the `enhancement` label for `eat/` (feature) branches.
+- Apply the `bug` label for `fix/` (fix) branches.
+- Apply the `enhancement` label for `feat/` (feature) branches.
 - Apply the `documentation` label for `docs/` branches.
 
 ---
