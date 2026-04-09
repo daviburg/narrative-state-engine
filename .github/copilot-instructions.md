@@ -100,7 +100,7 @@ Run `python tools/validate.py` to check compliance before committing.
 
 ### Commit Messages
 
-- Use conventional commit prefixes: `ix:` for bug fixes, `eat:` for new features, `docs:` for documentation, `chore:` for maintenance tasks.
+- Use repository-specific commit prefixes: `ix:` for bug fixes, `eat:` for new features, `docs:` for documentation, `chore:` for maintenance tasks. These are repository conventions, not Conventional Commits types.
 - Reference issue numbers in the commit body using `(#N)` or `Fixes #N`.
 
 Examples:
