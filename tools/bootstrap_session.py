@@ -543,6 +543,12 @@ def main() -> None:
     print("\nScaffolding exports directory:")
     ensure_exports_dir(session_dir, dry_run=args.dry_run)
 
+    # Build turn_dicts for use by structured and semantic extraction
+    turn_dicts = [
+        {"turn_id": _format_turn_id(t.sequence), "speaker": t.speaker, "text": t.text}
+        for t in turns
+    ]
+
     # Extract structured data from all turns (#21, #27, #28)
     try:
         from extract_structured_data import (
@@ -552,10 +558,6 @@ def main() -> None:
         )
 
         print("\nExtracting structured data:")
-        turn_dicts = [
-            {"turn_id": _format_turn_id(t.sequence), "speaker": t.speaker, "text": t.text}
-            for t in turns
-        ]
         data = extract_all(turn_dicts)
         found = (
             len(data["session_events"])
@@ -582,6 +584,26 @@ def main() -> None:
             )
         else:
             raise
+
+    # Semantic extraction — LLM-based entity/relationship/event extraction (#43)
+    try:
+        from semantic_extraction import extract_semantic_batch
+
+        print("\nRunning semantic extraction:")
+        extract_semantic_batch(
+            turn_dicts, session_dir, framework_dir="framework", dry_run=args.dry_run
+        )
+    except ModuleNotFoundError as exc:
+        if exc.name == "semantic_extraction":
+            print(
+                "WARNING: Semantic extraction skipped because "
+                "'semantic_extraction' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
+    except Exception as exc:
+        print(f"WARNING: Semantic extraction failed: {exc}", file=sys.stderr)
 
     print()
     if args.dry_run:

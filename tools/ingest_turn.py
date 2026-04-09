@@ -82,6 +82,12 @@ def main() -> None:
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--text", help="Turn text provided inline.")
     group.add_argument("--file", help="Path to a file containing the turn text.")
+    parser.add_argument(
+        "--extract",
+        action="store_true",
+        default=False,
+        help="Run LLM-based semantic extraction after ingesting the turn.",
+    )
     args = parser.parse_args()
 
     session_dir = args.session
@@ -131,6 +137,26 @@ def main() -> None:
             )
         else:
             raise
+
+    # Semantic extraction — LLM-based entity/relationship/event extraction (#43)
+    if args.extract:
+        try:
+            from semantic_extraction import extract_semantic_single
+
+            extract_semantic_single(
+                turn_id, args.speaker, text, session_dir, framework_dir="framework"
+            )
+        except ModuleNotFoundError as exc:
+            if exc.name == "semantic_extraction":
+                print(
+                    "WARNING: Semantic extraction skipped because "
+                    "'semantic_extraction' is not available.",
+                    file=sys.stderr,
+                )
+            else:
+                raise
+        except Exception as exc:
+            print(f"WARNING: Semantic extraction failed: {exc}", file=sys.stderr)
 
     print()
     print("Next steps:")
