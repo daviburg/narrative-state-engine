@@ -21,7 +21,7 @@ def _ids(catalogs, filename):
     return {e["id"] for e in catalogs[filename]}
 
 
-def test_substring_merge_spear():
+def test_token_overlap_merge_spear():
     catalogs = {
         "items.json": [
             _make_entity("item-crude-woodhafted-spear", "Crude wood-hafted spear", "turn-003"),
@@ -83,19 +83,35 @@ def test_no_cross_catalog_merge():
 def test_id_stem_merge():
     catalogs = {
         "items.json": [
-            _make_entity("item-crude-spear", "Pointy stick", "turn-003"),
-            _make_entity("item-crude-spear-broken", "Broken pointy stick", "turn-010"),
+            _make_entity("item-crude-spear", "Ashbrand", "turn-003"),
+            _make_entity("item-crude-spear-broken", "Nightglass", "turn-010"),
         ]
     }
     count, merge_map = _dedup_catalogs(catalogs)
     assert count == 1
     assert len(catalogs["items.json"]) == 1
+    assert "item-crude-spear-broken" in merge_map
+    assert merge_map["item-crude-spear-broken"] == "item-crude-spear"
+
+
+def test_no_partial_word_substring_merge():
+    """'ring' should NOT match 'spring' — only whole-token containment."""
+    catalogs = {
+        "items.json": [
+            _make_entity("item-ring", "Ring", "turn-001"),
+            _make_entity("item-spring", "Spring", "turn-002"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    assert count == 0
+    assert len(catalogs["items.json"]) == 2
 
 
 if __name__ == "__main__":
-    test_substring_merge_spear()
+    test_token_overlap_merge_spear()
     test_substring_merge_bowl_group()
     test_substring_merge_moonpetal()
     test_no_cross_catalog_merge()
     test_id_stem_merge()
+    test_no_partial_word_substring_merge()
     print("All tests passed!")

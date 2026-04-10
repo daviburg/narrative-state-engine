@@ -462,31 +462,34 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 if find(idx_a) == find(idx_b):
                     continue  # already in same group
 
-                # Rule 1: Substring containment
-                if name_a in name_b or name_b in name_a:
+                # Rule 1: Whole-token substring containment
+                tokens_a = set(name_a.replace("-", " ").split()) - STOPWORDS
+                tokens_b = set(name_b.replace("-", " ").split()) - STOPWORDS
+                if tokens_a and tokens_b and (tokens_a <= tokens_b or tokens_b <= tokens_a):
                     union(idx_a, idx_b)
-                    print(f"  DEDUP (substring): merging '{name_a}' into '{name_b}'")
+                    print(f"  DEDUP (substring): linking '{name_a}' and '{name_b}' as duplicates")
                     continue
 
                 # Rule 2: Token overlap >= 50%
-                tokens_a = set(name_a.replace("-", " ").split()) - STOPWORDS
-                tokens_b = set(name_b.replace("-", " ").split()) - STOPWORDS
                 if tokens_a and tokens_b:
                     overlap = tokens_a & tokens_b
                     smaller = min(len(tokens_a), len(tokens_b))
                     if smaller > 0 and len(overlap) / smaller >= 0.5:
                         union(idx_a, idx_b)
-                        print(f"  DEDUP (token-overlap): merging '{name_a}' into '{name_b}'")
+                        print(f"  DEDUP (token-overlap): linking '{name_a}' and '{name_b}' as duplicates")
                         continue
 
-                # Rule 3: ID stem overlap
+                # Rule 3: ID stem overlap (hyphen-segment containment)
                 id_a = entities[idx_a].get("proposed_id", entities[idx_a].get("id", ""))
                 id_b = entities[idx_b].get("proposed_id", entities[idx_b].get("id", ""))
                 stem_a = id_a.split("-", 1)[1] if "-" in id_a else id_a
                 stem_b = id_b.split("-", 1)[1] if "-" in id_b else id_b
-                if stem_a and stem_b and (stem_a in stem_b or stem_b in stem_a):
-                    union(idx_a, idx_b)
-                    print(f"  DEDUP (id-stem): merging '{name_a}' ({id_a}) into '{name_b}' ({id_b})")
+                if stem_a and stem_b:
+                    parts_a = set(stem_a.split("-"))
+                    parts_b = set(stem_b.split("-"))
+                    if parts_a and parts_b and (parts_a <= parts_b or parts_b <= parts_a):
+                        union(idx_a, idx_b)
+                        print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
 
         # Group by root
         groups: dict[int, list[int]] = {}
