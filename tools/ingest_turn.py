@@ -95,6 +95,16 @@ def main() -> None:
              "(default: framework). Use e.g. 'framework-local' to keep "
              "extraction output out of the public repo.",
     )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Override the LLM model name from config/llm.json for this run.",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Override the LLM API base URL from config/llm.json for this run.",
+    )
     args = parser.parse_args()
 
     session_dir = args.session
@@ -150,8 +160,15 @@ def main() -> None:
         try:
             from semantic_extraction import extract_semantic_single
 
+            llm_overrides = {}
+            if args.model:
+                llm_overrides["model"] = args.model
+            if args.base_url:
+                llm_overrides["base_url"] = args.base_url
+
             extract_semantic_single(
-                turn_id, args.speaker, text, session_dir, framework_dir=args.framework
+                turn_id, args.speaker, text, session_dir, framework_dir=args.framework,
+                overrides=llm_overrides or None,
             )
         except ModuleNotFoundError as exc:
             if exc.name == "semantic_extraction":

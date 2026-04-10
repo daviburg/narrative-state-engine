@@ -449,6 +449,49 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
             for i in range(1, len(idxs)):
                 union(idxs[0], idxs[i])
 
+        # --- Fuzzy pass: substring and token overlap (same catalog only) ---
+        STOPWORDS = {"a", "an", "the", "of", "and", "with", "in", "on", "to"}
+        all_names = [(idx, entity.get("name", "").strip().lower()) for idx, entity in enumerate(entities)]
+
+        for i, (idx_a, name_a) in enumerate(all_names):
+            if not name_a:
+                continue
+            for idx_b, name_b in all_names[i + 1:]:
+                if not name_b:
+                    continue
+                if find(idx_a) == find(idx_b):
+                    continue  # already in same group
+
+                # Tokenize once for Rules 1 and 2
+                tokens_a = set(name_a.replace("-", " ").split()) - STOPWORDS
+                tokens_b = set(name_b.replace("-", " ").split()) - STOPWORDS
+                if tokens_a and tokens_b:
+                    # Rule 1: Whole-token subset containment
+                    if tokens_a.issubset(tokens_b) or tokens_b.issubset(tokens_a):
+                        union(idx_a, idx_b)
+                        print(f"  DEDUP (substring): linking '{name_a}' and '{name_b}' as duplicates")
+                        continue
+
+                    # Rule 2: Token overlap >= 50%
+                    overlap = tokens_a & tokens_b
+                    smaller = min(len(tokens_a), len(tokens_b))
+                    if len(overlap) / smaller >= 0.5:
+                        union(idx_a, idx_b)
+                        print(f"  DEDUP (token-overlap): linking '{name_a}' and '{name_b}' as duplicates")
+                        continue
+
+                # Rule 3: ID stem overlap (hyphen-segment containment)
+                id_a = entities[idx_a].get("proposed_id", entities[idx_a].get("id", ""))
+                id_b = entities[idx_b].get("proposed_id", entities[idx_b].get("id", ""))
+                stem_a = id_a.split("-", 1)[1] if "-" in id_a else id_a
+                stem_b = id_b.split("-", 1)[1] if "-" in id_b else id_b
+                if stem_a and stem_b:
+                    parts_a = set(stem_a.split("-"))
+                    parts_b = set(stem_b.split("-"))
+                    if parts_a.issubset(parts_b) or parts_b.issubset(parts_a):
+                        union(idx_a, idx_b)
+                        print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
+
         # Group by root
         groups: dict[int, list[int]] = {}
         for idx in range(len(entities)):
@@ -505,6 +548,7 @@ def extract_semantic_batch(
     config_path: str = "config/llm.json",
     dry_run: bool = False,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    overrides: dict | None = None,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -517,9 +561,14 @@ def extract_semantic_batch(
         config_path: Path to LLM configuration file.
         dry_run: If True, don't write files.
         min_confidence: Minimum confidence to catalog an entity.
+        overrides: Optional runtime overrides for LLM client configuration.
+            Supported keys include provider settings such as ``model`` and
+            ``base_url``. Any keys supplied here take precedence over values
+            loaded from ``config_path``; settings not provided in ``overrides``
+            continue to use the configuration file values.
     """
     try:
-        llm = LLMClient(config_path)
+        llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
         return
@@ -613,6 +662,7 @@ def extract_semantic_single(
     framework_dir: str = "framework",
     config_path: str = "config/llm.json",
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    overrides: dict | None = None,
 ) -> None:
     """Run semantic extraction for a single new turn.
 
@@ -626,9 +676,11 @@ def extract_semantic_single(
         framework_dir: Path to the framework directory containing catalogs.
         config_path: Path to LLM configuration file.
         min_confidence: Minimum confidence to catalog an entity.
+        overrides: Optional dictionary of config key/value overrides passed to
+            ``LLMClient`` to override settings loaded from ``config_path``.
     """
     try:
-        llm = LLMClient(config_path)
+        llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
         return
