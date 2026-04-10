@@ -462,16 +462,17 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 if find(idx_a) == find(idx_b):
                     continue  # already in same group
 
-                # Rule 1: Whole-token substring containment
+                # Tokenize once for Rules 1 and 2
                 tokens_a = set(name_a.replace("-", " ").split()) - STOPWORDS
                 tokens_b = set(name_b.replace("-", " ").split()) - STOPWORDS
-                if tokens_a and tokens_b and (tokens_a <= tokens_b or tokens_b <= tokens_a):
-                    union(idx_a, idx_b)
-                    print(f"  DEDUP (substring): linking '{name_a}' and '{name_b}' as duplicates")
-                    continue
-
-                # Rule 2: Token overlap >= 50%
                 if tokens_a and tokens_b:
+                    # Rule 1: Whole-token subset containment
+                    if tokens_a <= tokens_b or tokens_b <= tokens_a:
+                        union(idx_a, idx_b)
+                        print(f"  DEDUP (substring): linking '{name_a}' and '{name_b}' as duplicates")
+                        continue
+
+                    # Rule 2: Token overlap >= 50%
                     overlap = tokens_a & tokens_b
                     smaller = min(len(tokens_a), len(tokens_b))
                     if smaller > 0 and len(overlap) / smaller >= 0.5:
@@ -487,7 +488,7 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 if stem_a and stem_b:
                     parts_a = set(stem_a.split("-"))
                     parts_b = set(stem_b.split("-"))
-                    if parts_a and parts_b and (parts_a <= parts_b or parts_b <= parts_a):
+                    if parts_a <= parts_b or parts_b <= parts_a:
                         union(idx_a, idx_b)
                         print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
 
