@@ -15,11 +15,15 @@ Return a single JSON object conforming to this structure:
 Rules:
 - Only include information supported by the provided turn text and existing entry.
 - Do NOT invent attributes or details not present in the text.
-- Preserve all existing attributes from the current entry; add new ones revealed in this turn.
+- Preserve all existing attributes from the current entry; add new ones revealed in this turn. Exception: for char-player, only preserve attributes whose keys are in the allowed set listed below — drop any transient action keys that may exist in the current entry.
 - If the text reveals a proper name for a previously unnamed entity (e.g. "The elder" is revealed to be "Shaman Kaya"), update "name" and add the old name as an "aliases" attribute.
 - Clearly distinguish fact from inference: append " [inference]" to any attribute value that is inferred rather than explicitly stated in the text.
 - Keep descriptions factual and concise.
-- For the player character (id "char-player", referred to as "you" in DM narration): always extract race, class, abilities (e.g. darkvision), HP changes (use attribute key "hp_change" with value like "-2 (trap injury)" or "+2 (broth)"), active conditions (e.g. "shoulder wound"), and quest information when mentioned. Track these across turns by preserving and extending existing attributes.
+- Attribute keys should describe persistent properties (role, appearance, condition, equipment, allegiance), not transient narrative actions. If an entity performs an action in this turn, that action is an event — do not record it as an attribute.
+- For the player character (id "char-player", referred to as "you" in DM narration): only extract STABLE traits and state changes, not transient narrative actions.
+  Allowed attribute keys for char-player: "race", "class", "abilities", "appearance", "hp_change", "condition", "equipment", "quest", "allegiance", "status", "aliases".
+  Do NOT create attribute keys for temporary actions (e.g., "carries_wood", "talks_to_elder", "watches_sunset") — those belong in events, not entity attributes.
+  Preserve existing stable attributes across turns. Only add or update attributes that represent lasting character state.
 
 Return the result as a JSON object with a single key "entity" containing the entity object.
 Example: {"entity": {"id": "char-elder", "name": "The elder", "type": "character", "description": "An elderly authority figure with gnarled hands.", "attributes": {"role": "tribal leader [inference]", "appearance": "gnarled hands, sharp gaze"}, "first_seen_turn": "turn-019", "last_updated_turn": "turn-019"}}
