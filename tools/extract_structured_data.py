@@ -243,7 +243,9 @@ _SECTION_NAME_MAP = {
     "economic": "economic_shifts",
     "environmental": "environmental_notes",
     "rumors": "rumors",
+    "rumor": "rumors",
     "consequences": "consequences",
+    "consequence": "consequences",
 }
 
 SEASON_SUMMARY_BLOCK_PATTERN = re.compile(

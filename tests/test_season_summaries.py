@@ -1,5 +1,10 @@
 """Tests for season summary extraction."""
 
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
 from tools.extract_structured_data import extract_season_summaries
 
 
@@ -103,6 +108,42 @@ First frost observed.
     results = extract_season_summaries(text, "turn-020")
     assert len(results) == 1
     assert results[0].get("season") == "fall"
+
+
+def test_economic_or_ecological_section():
+    """'Economic or Ecological Shifts' variant is captured."""
+    text = """\
+**Season Summary**
+
+**Regional Changes:**
+Rivers are rising.
+
+**Economic or Ecological Shifts:**
+Trade caravans grow scarce as wildlife migrates south.
+"""
+    results = extract_season_summaries(text, "turn-030")
+    assert len(results) == 1
+    sections = results[0]["sections"]
+    assert "economic_shifts" in sections
+    assert "caravans" in sections["economic_shifts"]
+
+
+def test_singular_header_forms():
+    """Singular header forms (Rumor, Consequence) are mapped correctly."""
+    text = """\
+**Season Summary**
+
+**Rumor Reaching the Tribe:**
+A dragon was spotted.
+
+**Consequence of Prior Actions:**
+The village was rebuilt.
+"""
+    results = extract_season_summaries(text, "turn-035")
+    assert len(results) == 1
+    sections = results[0]["sections"]
+    assert "rumors" in sections
+    assert "consequences" in sections
 
 
 def test_no_match_on_normal_text():
