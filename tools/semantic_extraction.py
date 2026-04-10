@@ -548,6 +548,7 @@ def extract_semantic_batch(
     config_path: str = "config/llm.json",
     dry_run: bool = False,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    overrides: dict | None = None,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -560,9 +561,14 @@ def extract_semantic_batch(
         config_path: Path to LLM configuration file.
         dry_run: If True, don't write files.
         min_confidence: Minimum confidence to catalog an entity.
+        overrides: Optional runtime overrides for LLM client configuration.
+            Supported keys include provider settings such as ``model`` and
+            ``base_url``. Any keys supplied here take precedence over values
+            loaded from ``config_path``; settings not provided in ``overrides``
+            continue to use the configuration file values.
     """
     try:
-        llm = LLMClient(config_path)
+        llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
         return
@@ -656,6 +662,7 @@ def extract_semantic_single(
     framework_dir: str = "framework",
     config_path: str = "config/llm.json",
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    overrides: dict | None = None,
 ) -> None:
     """Run semantic extraction for a single new turn.
 
@@ -669,9 +676,11 @@ def extract_semantic_single(
         framework_dir: Path to the framework directory containing catalogs.
         config_path: Path to LLM configuration file.
         min_confidence: Minimum confidence to catalog an entity.
+        overrides: Optional dictionary of config key/value overrides passed to
+            ``LLMClient`` to override settings loaded from ``config_path``.
     """
     try:
-        llm = LLMClient(config_path)
+        llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
         return
