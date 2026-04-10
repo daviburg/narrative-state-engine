@@ -286,7 +286,7 @@ def write_full_transcript(
     print(f"  [WRITE]  {transcript_path}")
 
 
-def ensure_metadata(session_dir: str, turns: list[Turn], dry_run: bool) -> None:
+def ensure_metadata(session_dir: str, turns: list[Turn], dry_run: bool, start_date: str | None = None) -> None:
     """Create metadata.json if it does not exist."""
     metadata_path = os.path.join(session_dir, "metadata.json")
     if os.path.exists(metadata_path):
@@ -308,7 +308,7 @@ def ensure_metadata(session_dir: str, turns: list[Turn], dry_run: bool) -> None:
     metadata = {
         "session_id": session_id,
         "title": session_id.replace("-", " ").title(),
-        "start_date": datetime.now(timezone.utc).strftime("%Y-%m-%d"),
+        "start_date": start_date,  # null when unknown
         "description": "Bootstrapped from existing transcript. Update this description.",
         "turn_count": len(turns),
     }
@@ -443,6 +443,22 @@ def main() -> None:
              "(default: framework). Use e.g. 'framework-local' to keep "
              "extraction output out of the public repo.",
     )
+    parser.add_argument(
+        "--start-date",
+        default=None,
+        help="Session start date in YYYY-MM-DD format. "
+             "Defaults to null for imported sessions where the date is unknown.",
+    )
+    parser.add_argument(
+        "--model",
+        default=None,
+        help="Override the LLM model name from config/llm.json for this run.",
+    )
+    parser.add_argument(
+        "--base-url",
+        default=None,
+        help="Override the LLM API base URL from config/llm.json for this run.",
+    )
     args = parser.parse_args()
 
     # Validate inputs
@@ -542,7 +558,7 @@ def main() -> None:
     )
 
     print("\nChecking metadata:")
-    ensure_metadata(session_dir, turns, dry_run=args.dry_run)
+    ensure_metadata(session_dir, turns, dry_run=args.dry_run, start_date=args.start_date)
 
     print("\nScaffolding derived files:")
     ensure_derived_scaffolds(session_dir, latest_turn_id, dry_run=args.dry_run)
@@ -596,9 +612,16 @@ def main() -> None:
     try:
         from semantic_extraction import extract_semantic_batch
 
+        llm_overrides = {}
+        if args.model:
+            llm_overrides["model"] = args.model
+        if args.base_url:
+            llm_overrides["base_url"] = args.base_url
+
         print("\nRunning semantic extraction:")
         extract_semantic_batch(
-            turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run
+            turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run,
+            overrides=llm_overrides or None,
         )
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":

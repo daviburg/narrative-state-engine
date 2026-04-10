@@ -19,9 +19,12 @@ class LLMExtractionError(Exception):
 class LLMClient:
     """Thin wrapper around the OpenAI Chat Completions API."""
 
-    def __init__(self, config_path: str = "config/llm.json"):
+    def __init__(self, config_path: str = "config/llm.json", overrides: dict | None = None):
         with open(config_path, "r", encoding="utf-8") as f:
             self.config = json.load(f)
+
+        if overrides:
+            self.config.update(overrides)
 
         try:
             from openai import OpenAI

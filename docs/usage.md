@@ -31,6 +31,72 @@ EOF
 
 ---
 
+## LLM Model Requirements
+
+Semantic extraction uses an LLM to identify entities, relationships, and events from transcript text. The quality of extraction depends significantly on model size.
+
+### Minimum Requirements
+
+- **Minimum**: 7B parameters — basic entity extraction works but expect some ID format errors and weak coreference resolution
+- **Recommended**: 14B+ parameters — reliable JSON output, good coreference, accurate entity classification
+- **Best**: GPT-4o or equivalent cloud model — highest accuracy but requires API key and costs per token
+
+### Tested Models
+
+| Model | Parameters | Quantization | VRAM | Extraction Quality |
+|---|---|---|---|---|
+| `qwen2.5:3b` | 3B | Q4_K_M | ~2.5 GB | Poor — 0% item recall, frequent hallucinations, ID format violations |
+| `qwen2.5:14b` | 14B | Q4_K_M | ~9 GB | Good — reliable entity classification, items extracted, acceptable coreference |
+| `gpt-4o` (OpenAI) | Unknown | N/A | Cloud | Best — accurate structured JSON, strong coreference, minimal hallucination |
+
+### VRAM Quick Reference
+
+| GPU VRAM | Maximum Model Size (Q4 quantization) |
+|---|---|
+| 8 GB | Up to 7B |
+| 12 GB | Up to 14B |
+| 16 GB | Up to 22B |
+| 24 GB | Up to 32B |
+
+### Known Limitations of Small Models (<7B)
+
+- Entity IDs generated with wrong type prefixes (e.g., `loc-` for an item)
+- Poor coreference resolution — same entity gets multiple catalog entries
+- Items rarely or never extracted
+- Location/character/faction type confusion
+- Hallucinated entities not present in the source text
+
+### Using a Local Model
+
+Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
+
+```json
+{
+  "provider": "ollama",
+  "base_url": "http://localhost:11434/v1",
+  "model": "qwen2.5:14b",
+  "api_key_env": "",
+  "temperature": 0.0,
+  "max_tokens": 4096,
+  "timeout_seconds": 180,
+  "retry_attempts": 3,
+  "batch_delay_ms": 500
+}
+```
+
+Or use CLI overrides for one-off runs:
+
+```bash
+python tools/bootstrap_session.py \
+    --session sessions/my-session \
+    --file transcript.txt \
+    --framework framework-local \
+    --model qwen2.5:14b \
+    --base-url http://localhost:11434/v1
+```
+
+---
+
 ## Ingesting Turns
 
 ### Adding a DM Response

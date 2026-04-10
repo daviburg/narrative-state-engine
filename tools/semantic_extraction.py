@@ -548,6 +548,7 @@ def extract_semantic_batch(
     config_path: str = "config/llm.json",
     dry_run: bool = False,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    overrides: dict | None = None,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -562,7 +563,7 @@ def extract_semantic_batch(
         min_confidence: Minimum confidence to catalog an entity.
     """
     try:
-        llm = LLMClient(config_path)
+        llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
         return
@@ -656,6 +657,7 @@ def extract_semantic_single(
     framework_dir: str = "framework",
     config_path: str = "config/llm.json",
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    overrides: dict | None = None,
 ) -> None:
     """Run semantic extraction for a single new turn.
 
@@ -671,7 +673,7 @@ def extract_semantic_single(
         min_confidence: Minimum confidence to catalog an entity.
     """
     try:
-        llm = LLMClient(config_path)
+        llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
         return
