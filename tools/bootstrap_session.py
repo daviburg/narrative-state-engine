@@ -181,6 +181,21 @@ def parse_alternating_format(content: str, first_speaker: str) -> list[Turn]:
 
 
 # ---------------------------------------------------------------------------
+# Consecutive-speaker warning
+# ---------------------------------------------------------------------------
+
+def _warn_consecutive_speakers(turns: list[Turn]) -> None:
+    """Emit warnings for consecutive turns from the same speaker."""
+    for i in range(1, len(turns)):
+        if turns[i].speaker == turns[i - 1].speaker:
+            print(
+                f"WARNING: turns {turns[i - 1].sequence} and {turns[i].sequence} "
+                f"are both {turns[i].speaker} turns — possible parsing error",
+                file=sys.stderr,
+            )
+
+
+# ---------------------------------------------------------------------------
 # Format detection
 # ---------------------------------------------------------------------------
 
@@ -545,6 +560,8 @@ def main() -> None:
         print("ERROR: No turns could be parsed from the source file.", file=sys.stderr)
         print("Check --format, --dm-label, --player-label, and --first-speaker.", file=sys.stderr)
         sys.exit(1)
+
+    _warn_consecutive_speakers(turns)
 
     dm_count = sum(1 for t in turns if t.speaker == "dm")
     player_count = sum(1 for t in turns if t.speaker == "player")

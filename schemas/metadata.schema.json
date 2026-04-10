@@ -1,0 +1,35 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "metadata.schema.json",
+  "title": "Session Metadata",
+  "description": "Metadata for a single session directory.",
+  "type": "object",
+  "required": ["session_id", "title", "turn_count"],
+  "additionalProperties": false,
+  "properties": {
+    "session_id": {
+      "type": "string",
+      "description": "Unique session identifier matching the directory name.",
+      "minLength": 1
+    },
+    "title": {
+      "type": "string",
+      "description": "Human-readable session title.",
+      "minLength": 1
+    },
+    "start_date": {
+      "type": ["string", "null"],
+      "description": "Session start date in YYYY-MM-DD format, or null if unknown.",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "description": {
+      "type": "string",
+      "description": "Brief session description."
+    },
+    "turn_count": {
+      "type": "integer",
+      "description": "Number of turns in the session.",
+      "minimum": 0
+    }
+  }
+}
