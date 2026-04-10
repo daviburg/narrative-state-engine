@@ -47,21 +47,31 @@ Benefits:
 
 ---
 
-## Phase 3 — Local NPU / LLM Workflows (v3)
+## Phase 3 — Local LLM Workflows (v3)
 
-Replace cloud AI calls with a locally-run LLM running on an NPU (neural processing unit) or GPU.
+Replace cloud AI calls with a locally-run LLM on a GPU.
 
 Goals:
 - Token-free (no cloud cost per session turn)
 - Offline-capable (no internet dependency during play)
 - Faster turnaround for frequent small-context tasks (catalog updates, summary refreshes)
 
-The semantic extraction pipeline (#43) already supports local models via Ollama (tested with `qwen2.5:3b`). The `config/llm.json` design decouples the pipeline from any specific provider.
+**Status:** Partially achieved. The semantic extraction pipeline (#43) already supports local models via Ollama. Tested with `qwen2.5:14b` on RTX 4070 at 60.61 tok/s (acceptable quality) and `qwen2.5:3b` (unusable quality — see #53, #63). The `config/llm.json` design decouples the pipeline from any specific provider.
+
+**NPU investigation (#65):** AMD XDNA1 (Phoenix) NPU cannot run LLM inference — AMD only supports LLMs on Strix Point (XDNA2) and newer. The Radeon 780M iGPU (~10-15 tok/s) is too slow to be useful. A dedicated GPU server (e.g., used RTX 3090 in a separate machine) is the viable path to exceed RTX 4070 performance.
+
+Remaining work:
+- Fallback provider chain in `tools/llm_client.py` (local → cloud)
+- CLI `--provider` override for per-run provider selection
+- Batch processing mode for unattended overnight extraction
+- Provider setup documentation in `docs/usage.md`
+- Quality validation of `qwen2.5:7b` as a faster alternative to 14B
 
 Design implications for earlier phases:
-- Keep context loading modular (catalog-first) so small local models can handle targeted tasks
+- Keep context loading modular (catalog-first) so smaller local models can handle targeted tasks
 - Keep prompt templates well-structured so they work with less capable models
 - Avoid tight coupling to any single cloud provider API
+- Minimum model size: 7B+ parameters for structured extraction (see #53)
 
 ---
 
