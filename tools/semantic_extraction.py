@@ -58,6 +58,26 @@ def _filter_pc_attributes(entity_data: dict) -> dict:
         entity_data["attributes"] = {k: v for k, v in attrs.items() if k in PC_ALLOWED_ATTRS}
     return entity_data
 
+
+def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
+    """Purge non-allowed attribute keys from the stored char-player catalog entry.
+
+    Ensures historical action-sprawl attributes are cleaned up even if they
+    were merged before the filter was in place.
+    """
+    for entity in catalogs.get("characters.json", []):
+        if entity.get("id") != "char-player":
+            continue
+        attrs = entity.get("attributes", {})
+        disallowed = {k for k in attrs if k not in PC_ALLOWED_ATTRS}
+        if disallowed:
+            print(
+                f"  WARNING: Purging stale char-player catalog attributes: {sorted(disallowed)}",
+                file=sys.stderr,
+            )
+            entity["attributes"] = {k: v for k, v in attrs.items() if k in PC_ALLOWED_ATTRS}
+        break
+
 # Directory containing prompt templates (relative to repo root)
 TEMPLATES_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -292,6 +312,9 @@ def extract_and_merge(
         if entity_data and _validate_entity(entity_data):
             _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
+            # If this was char-player, also purge stale keys from catalog
+            if entity_data.get("id") == "char-player":
+                _sanitize_pc_catalog_entry(catalogs)
 
         llm.delay()
 
@@ -304,6 +327,9 @@ def extract_and_merge(
     if not pc_already_extracted:
         pc_result = find_entity_by_id(catalogs, "char-player")
         pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
+        # Sanitize existing entry before sending to LLM so stale keys
+        # don't appear in the prompt and get echoed back.
+        _sanitize_pc_catalog_entry(catalogs)
         pc_ref = {"name": pc_entry["name"], "type": "character",
                   "existing_id": "char-player", "is_new": False}
         try:
@@ -315,6 +341,8 @@ def extract_and_merge(
             if entity_data and _validate_entity(entity_data):
                 _filter_pc_attributes(entity_data)
                 merge_entity(catalogs, entity_data)
+                # Purge any stale keys that survived the merge
+                _sanitize_pc_catalog_entry(catalogs)
         except LLMExtractionError as e:
             print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
         llm.delay()

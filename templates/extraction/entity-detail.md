@@ -15,7 +15,7 @@ Return a single JSON object conforming to this structure:
 Rules:
 - Only include information supported by the provided turn text and existing entry.
 - Do NOT invent attributes or details not present in the text.
-- Preserve all existing attributes from the current entry; add new ones revealed in this turn.
+- Preserve all existing attributes from the current entry; add new ones revealed in this turn. Exception: for char-player, only preserve attributes whose keys are in the allowed set listed below — drop any transient action keys that may exist in the current entry.
 - If the text reveals a proper name for a previously unnamed entity (e.g. "The elder" is revealed to be "Shaman Kaya"), update "name" and add the old name as an "aliases" attribute.
 - Clearly distinguish fact from inference: append " [inference]" to any attribute value that is inferred rather than explicitly stated in the text.
 - Keep descriptions factual and concise.
