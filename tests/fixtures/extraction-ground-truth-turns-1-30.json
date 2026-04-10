@@ -1,5 +1,4 @@
 {
-  "$schema": "../extraction-ground-truth.schema.json",
   "description": "Ground truth for extraction validation — session-import turns 1-30. Entity descriptions use abstract role labels to avoid leaking story content. Match on count, type distribution, and structural completeness.",
   "source_session": "session-import",
   "numbering_note": "Turn numbers correspond to the session-import transcript as produced by bootstrap_session.py. All turns have a DM file (turn-NNN-dm.md); even-numbered turns additionally have a separate player file (turn-NNN-player.md). Each DM file includes the player action as the final lines.",
