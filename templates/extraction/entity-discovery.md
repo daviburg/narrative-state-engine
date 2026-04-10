@@ -21,6 +21,7 @@ Rules:
 - The player character ("you" in DM turns) should NOT be extracted — they are pre-seeded in the catalog.
 - Confidence below 0.5 means the mention is too vague to catalog.
 - For coreference resolution: if a mention refers to an already-known entity (even by a different name, title, or alias shown in the known-entities list), set is_new to false and provide the existing_id. Use the descriptions and aliases in the known-entities list to identify matches.
+- For items: if a previously cataloged item is referenced by a shorter name, partial description, or with/without adjectives (e.g., "the spear" referring to a previously seen "crude wood-hafted spear"), set is_new to false and provide the existing_id. Do not create a new entry for a name variant of the same physical object.
 - "proposed_id" and "existing_id" are mutually exclusive: exactly one must be non-null for each result.
 
 Return a JSON object with a single key "entities" containing an array of entity objects.
