@@ -1,0 +1,196 @@
+{
+  "description": "Ground truth for extraction validation — session-import turns 1-30. Entity descriptions use abstract role labels to avoid leaking story content. Match on count, type distribution, and structural completeness.",
+  "source_session": "session-import",
+  "numbering_note": "Turn numbers correspond to the session-import transcript as produced by bootstrap_session.py. All turns have a DM file (turn-NNN-dm.md); even-numbered turns additionally have a separate player file (turn-NNN-player.md). Each DM file includes the player action as the final lines.",
+  "turn_range": [1, 30],
+  "expected_characters": {
+    "count": 5,
+    "entries": [
+      {
+        "role_label": "authority-leader",
+        "type": "character",
+        "expected_attributes": ["appearance", "role"],
+        "first_seen_turn_range": [8, 10],
+        "notes": "Senior authority figure; commands others; makes decisions about PC"
+      },
+      {
+        "role_label": "captor-broad",
+        "type": "character",
+        "expected_attributes": ["appearance"],
+        "first_seen_turn_range": [4, 5],
+        "notes": "Distinct physical build from captor-slight; carries weapon"
+      },
+      {
+        "role_label": "captor-slight",
+        "type": "character",
+        "expected_attributes": ["appearance"],
+        "first_seen_turn_range": [4, 5],
+        "notes": "Smaller build than captor-broad; same role; should not be merged with captor-broad"
+      },
+      {
+        "role_label": "service-woman",
+        "type": "character",
+        "expected_attributes": ["appearance", "role"],
+        "first_seen_turn_range": [10, 11],
+        "notes": "Serves authority-leader; interacts with PC; younger individual"
+      },
+      {
+        "role_label": "background-group",
+        "type": "character",
+        "expected_attributes": ["appearance"],
+        "first_seen_turn_range": [7, 8],
+        "notes": "Multiple unnamed observers; may be typed as faction instead"
+      }
+    ]
+  },
+  "expected_locations": {
+    "count_min": 4,
+    "count_max": 5,
+    "entries": [
+      {
+        "role_label": "origin-settlement",
+        "type": "location",
+        "first_seen_turn_range": [1, 1],
+        "notes": "Mentioned in backstory; PC departed from here"
+      },
+      {
+        "role_label": "forest-path",
+        "type": "location",
+        "first_seen_turn_range": [1, 2],
+        "notes": "Transition area; where PC regains consciousness"
+      },
+      {
+        "role_label": "dense-forest",
+        "type": "location",
+        "first_seen_turn_range": [2, 3],
+        "notes": "Hostile environment containing trap; main traversal area"
+      },
+      {
+        "role_label": "encampment",
+        "type": "location",
+        "first_seen_turn_range": [7, 8],
+        "notes": "Destination settlement with structures and central fire"
+      },
+      {
+        "role_label": "fire-gathering",
+        "type": "location",
+        "first_seen_turn_range": [7, 8],
+        "notes": "Sub-area within encampment; may be merged with encampment"
+      }
+    ]
+  },
+  "expected_factions": {
+    "count": 2,
+    "entries": [
+      {
+        "role_label": "origin-community",
+        "type": "faction",
+        "first_seen_turn_range": [1, 1],
+        "notes": "Mentioned in backstory; hired PC for quest"
+      },
+      {
+        "role_label": "wilderness-tribe",
+        "type": "faction",
+        "first_seen_turn_range": [7, 8],
+        "notes": "Group that captured PC; should be ONE entry, not duplicated"
+      }
+    ]
+  },
+  "expected_items": {
+    "count_min": 8,
+    "entries": [
+      {
+        "role_label": "quest-artifact",
+        "type": "item",
+        "first_seen_turn_range": [1, 1],
+        "notes": "Central quest object; name deliberately unknown to PC"
+      },
+      {
+        "role_label": "trap-trigger",
+        "type": "item",
+        "first_seen_turn_range": [3, 3],
+        "notes": "Hidden mechanism that initiates capture"
+      },
+      {
+        "role_label": "trap-snare",
+        "type": "item",
+        "first_seen_turn_range": [3, 3],
+        "notes": "Entanglement device; causes injury"
+      },
+      {
+        "role_label": "weapon-spear",
+        "type": "item",
+        "first_seen_turn_range": [4, 5],
+        "notes": "Carried by captors; crude construction"
+      },
+      {
+        "role_label": "binding-rope",
+        "type": "item",
+        "first_seen_turn_range": [5, 5],
+        "notes": "Used to restrain PC"
+      },
+      {
+        "role_label": "ritual-substance",
+        "type": "item",
+        "first_seen_turn_range": [10, 13],
+        "notes": "Damp, sticky, medicinal; central to acceptance scene"
+      },
+      {
+        "role_label": "container-bowl-substance",
+        "type": "item",
+        "first_seen_turn_range": [10, 10],
+        "notes": "Holds ritual-substance"
+      },
+      {
+        "role_label": "consumable-broth",
+        "type": "item",
+        "first_seen_turn_range": [15, 16],
+        "notes": "Restorative; restores HP"
+      }
+    ]
+  },
+  "expected_player_character": {
+    "should_exist": true,
+    "expected_attributes": {
+      "race": "present",
+      "class": "present",
+      "abilities": ["darkvision"],
+      "hp_changes": [
+        {"turn": 3, "delta": -2, "cause": "trap-snare"},
+        {"turn": 15, "delta": 2, "cause": "consumable-broth"}
+      ],
+      "conditions": ["shoulder-wound"],
+      "quest": "retrieve quest-artifact for origin-community"
+    }
+  },
+  "expected_events": {
+    "count_min": 10,
+    "count_max": 15,
+    "significant_beats": [
+      {"turn_range": [1, 1], "type": "arrival", "label": "PC regains consciousness"},
+      {"turn_range": [3, 3], "type": "trap", "label": "trap triggered, PC injured"},
+      {"turn_range": [3, 4], "type": "decision", "label": "PC surrenders"},
+      {"turn_range": [4, 5], "type": "capture", "label": "PC bound by captors"},
+      {"turn_range": [7, 8], "type": "arrival", "label": "arrive at encampment"},
+      {"turn_range": [8, 10], "type": "encounter", "label": "presented to authority"},
+      {"turn_range": [10, 11], "type": "offering", "label": "ritual substance offered"},
+      {"turn_range": [13, 15], "type": "release", "label": "bonds removed"},
+      {"turn_range": [14, 15], "type": "ritual", "label": "PC performs acceptance ritual"},
+      {"turn_range": [15, 16], "type": "healing", "label": "broth offered, HP restored"}
+    ]
+  },
+  "coreference_checks": [
+    {
+      "description": "Both captors should share faction membership, not be separate factions",
+      "expected_faction_count_for_captors": 1
+    },
+    {
+      "description": "Authority-leader mentioned by different descriptions across turns should be ONE character entry",
+      "expected_character_entries": 1
+    },
+    {
+      "description": "Encampment/fire-gathering may be 1 or 2 locations but NOT typed as character or faction",
+      "expected_type": "location"
+    }
+  ]
+}

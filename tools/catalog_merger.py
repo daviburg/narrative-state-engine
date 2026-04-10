@@ -220,6 +220,20 @@ def _update_existing_entity(current: dict, update: dict) -> None:
     if update.get("notes"):
         current["notes"] = update["notes"]
 
+    # Merge relationships (dedup by target_id + relationship)
+    if update.get("relationships"):
+        if "relationships" not in current:
+            current["relationships"] = []
+        existing_keys = {
+            (r.get("target_id"), r.get("relationship"))
+            for r in current["relationships"]
+        }
+        for rel in update["relationships"]:
+            key = (rel.get("target_id"), rel.get("relationship"))
+            if key not in existing_keys:
+                current["relationships"].append(rel)
+                existing_keys.add(key)
+
 
 # Public alias for cross-module use (e.g. post-batch dedup in semantic_extraction)
 dedup_merge_entity = _update_existing_entity
