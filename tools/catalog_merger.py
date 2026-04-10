@@ -92,11 +92,21 @@ def find_entity_by_id(catalogs: dict, entity_id: str) -> tuple[str, dict] | None
 
 
 def format_known_entities(catalogs: dict) -> str:
-    """Format all known entities as a compact table for the discovery prompt."""
+    """Format all known entities as a compact table for the discovery prompt.
+
+    Includes description and aliases so the LLM can resolve coreferences.
+    """
     lines = []
     for filename, entities in catalogs.items():
         for entity in entities:
-            lines.append(f"{entity['id']} | {entity['name']} | {entity['type']}")
+            desc = entity.get('description', '')
+            aliases = entity.get('attributes', {}).get('aliases', '')
+            extra = ''
+            if desc:
+                extra += f' — {desc}'
+            if aliases:
+                extra += f' (aliases: {aliases})'
+            lines.append(f"{entity['id']} | {entity['name']} | {entity['type']}{extra}")
     if not lines:
         return "(none — empty catalog)"
     return "\n".join(lines)
@@ -108,6 +118,30 @@ def validate_id_prefix(entity_id: str, entity_type: str) -> bool:
     if not expected_prefix:
         return False
     return entity_id.startswith(expected_prefix)
+
+
+def fix_id_prefix(entity_id: str, entity_type: str) -> str:
+    """Return a corrected entity ID with the proper prefix for its type.
+
+    If the ID already starts with the wrong type prefix, strip it and apply
+    the correct one.  Also handles common model abbreviations like ``fac-``
+    for ``faction-``.  Returns the original ID if the type is unknown.
+    """
+    expected_prefix = TYPE_TO_PREFIX.get(entity_type)
+    if not expected_prefix:
+        return entity_id
+    if entity_id.startswith(expected_prefix):
+        return entity_id  # already correct
+    # Strip any existing known prefix (canonical or abbreviated)
+    for prefix in TYPE_TO_PREFIX.values():
+        if entity_id.startswith(prefix):
+            return expected_prefix + entity_id[len(prefix):]
+    # Strip common model-generated abbreviation prefixes (e.g. "fac-", "char-")
+    m = re.match(r'^[a-z]+-', entity_id)
+    if m:
+        return expected_prefix + entity_id[m.end():]
+    # No prefix found at all — just prepend the correct one
+    return expected_prefix + entity_id
 
 
 def merge_entity(catalogs: dict, entity: dict) -> None:
@@ -185,6 +219,10 @@ def _update_existing_entity(current: dict, update: dict) -> None:
     # Update notes
     if update.get("notes"):
         current["notes"] = update["notes"]
+
+
+# Public alias for cross-module use (e.g. post-batch dedup in semantic_extraction)
+dedup_merge_entity = _update_existing_entity
 
 
 def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> None:

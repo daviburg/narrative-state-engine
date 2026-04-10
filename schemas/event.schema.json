@@ -24,7 +24,7 @@
     "type": {
       "type": "string",
       "description": "Category of event.",
-      "enum": ["birth", "death", "arrival", "departure", "construction", "decision", "encounter", "recruitment", "discovery", "anomaly", "other"]
+      "enum": ["birth", "death", "arrival", "departure", "construction", "decision", "encounter", "recruitment", "discovery", "anomaly", "capture", "trap", "ritual", "healing", "communication", "examination", "release", "offering", "other"]
     },
     "related_entities": {
       "type": "array",
