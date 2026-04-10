@@ -14,6 +14,14 @@ Rules:
 - Only extract events that are directly described or clearly implied in the provided turn text.
 - Do NOT invent events not supported by the text.
 - Focus on significant narrative events, not routine actions or minor dialogue.
+- An event is significant ONLY if it does at least one of:
+  (a) Changes game state (HP, conditions, inventory, location)
+  (b) Advances the plot or reveals new information
+  (c) Alters a relationship between entities
+  (d) Introduces a new entity or removes one from play
+- Do NOT extract: routine dialogue exchanges, minor observations, flavor descriptions, repeated actions, or emotional reactions that don't change anything.
+- When in doubt, omit the event. Fewer high-quality events are better than many trivial ones.
+- Aim for 0-2 events per turn. Most turns should produce 0-1 events.
 - If a turn contains no significant events, return an empty array.
 - Each event should be atomic — one discrete occurrence, not a compound summary.
 - Use the entity IDs provided in the context to populate related_entities.
@@ -30,5 +38,10 @@ Additional examples by type:
 {"events": [{"id": "evt-007", "source_turns": ["turn-017"], "type": "examination", "description": "The elder closely inspected the player's elven features and warlock attire.", "related_entities": ["char-elder", "char-player"]}]}
 {"events": [{"id": "evt-008", "source_turns": ["turn-025"], "type": "release", "description": "The warrior cut the ropes binding the player's wrists.", "related_entities": ["char-player"]}]}
 {"events": [{"id": "evt-009", "source_turns": ["turn-019"], "type": "offering", "description": "The woman presented a bowl of dark paste to the player.", "related_entities": ["char-service-woman", "char-player", "item-dark-paste-bowl"]}]}
+
+Negative examples — do NOT extract events like these:
+NOT an event (too minor): "The player looks around the campfire" — observation, no state change.
+NOT an event (routine dialogue): "The elder grunts dismissively" — minor reaction, no plot advancement.
+NOT an event (flavor): "Snow continues to fall on the lean-tos" — atmospheric, no game impact.
 
 If no significant events are found in the turn, return: {"events": []}

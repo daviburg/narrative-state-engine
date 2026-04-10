@@ -37,6 +37,27 @@ except ImportError:
 # Default confidence threshold — entities below this are logged but not cataloged
 DEFAULT_MIN_CONFIDENCE = 0.6
 
+# Allowed attribute keys for the player character — safety net for prompt discipline
+PC_ALLOWED_ATTRS = {
+    "race", "class", "abilities", "appearance", "hp_change",
+    "condition", "equipment", "quest", "allegiance", "status", "aliases",
+}
+
+
+def _filter_pc_attributes(entity_data: dict) -> dict:
+    """Strip non-allowed attribute keys from char-player entities."""
+    if entity_data.get("id") != "char-player":
+        return entity_data
+    attrs = entity_data.get("attributes", {})
+    disallowed = {k for k in attrs if k not in PC_ALLOWED_ATTRS}
+    if disallowed:
+        print(
+            f"  WARNING: Dropping non-allowed char-player attributes: {sorted(disallowed)}",
+            file=sys.stderr,
+        )
+        entity_data["attributes"] = {k: v for k, v in attrs.items() if k in PC_ALLOWED_ATTRS}
+    return entity_data
+
 # Directory containing prompt templates (relative to repo root)
 TEMPLATES_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
@@ -269,6 +290,7 @@ def extract_and_merge(
 
         entity_data = detail_result.get("entity")
         if entity_data and _validate_entity(entity_data):
+            _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
 
         llm.delay()
@@ -291,6 +313,7 @@ def extract_and_merge(
             )
             entity_data = detail_result.get("entity")
             if entity_data and _validate_entity(entity_data):
+                _filter_pc_attributes(entity_data)
                 merge_entity(catalogs, entity_data)
         except LLMExtractionError as e:
             print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
