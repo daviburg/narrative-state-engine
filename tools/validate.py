@@ -47,6 +47,7 @@ SCHEMA_MAP = {
     "session-events.json": "schemas/session-events.schema.json",
     "timeline.json": "schemas/timeline.schema.json",
     "season-summaries.json": "schemas/season-summary.schema.json",
+    "metadata.json": "schemas/metadata.schema.json",
 }
 
 
