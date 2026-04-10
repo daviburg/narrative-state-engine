@@ -461,6 +461,18 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    # Validate --start-date format if provided
+    if args.start_date is not None:
+        try:
+            datetime.strptime(args.start_date, "%Y-%m-%d")
+        except ValueError:
+            print(
+                f"ERROR: Invalid --start-date '{args.start_date}'. "
+                "Expected format: YYYY-MM-DD (e.g. 2026-01-15).",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
     # Validate inputs
     if not os.path.isfile(args.file):
         print(f"ERROR: Source file not found: {args.file}", file=sys.stderr)

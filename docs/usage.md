@@ -95,6 +95,8 @@ python tools/bootstrap_session.py \
     --base-url http://localhost:11434/v1
 ```
 
+**Note:** `--model` and `--base-url` override only those settings. The current implementation still reads `api_key_env` from `config/llm.json` (by default this is often `OPENAI_API_KEY`). If your local OpenAI-compatible server does not require an API key, either set the expected environment variable anyway or set `"api_key_env": ""` in `config/llm.json` before running the command.
+
 ---
 
 ## Ingesting Turns
