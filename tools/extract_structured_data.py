@@ -228,10 +228,12 @@ _SECTION_HEADER_RE = re.compile(
     r"(?P<name>"
     r"Regional\s+Changes?"
     r"|Faction\s+Actions?"
-    r"|Economic\s+(?:Shifts?|Changes?|Updates?)"
+    r"|Economic\s+(?:(?:or\s+)?Ecological\s+)?(?:Shifts?|Changes?|Updates?)"
     r"|Environmental\s+(?:Notes?|Conditions?|Changes?)"
+    r"|Rumors?\s+(?:Reaching|and\s+).*"
+    r"|Consequences?\s+(?:of\s+).*"
     r")"
-    r"\1\s*:?\s*$",
+    r":?\s*\1\s*:?\s*$",
     re.IGNORECASE | re.MULTILINE,
 )
 
@@ -240,12 +242,20 @@ _SECTION_NAME_MAP = {
     "faction": "faction_actions",
     "economic": "economic_shifts",
     "environmental": "environmental_notes",
+    "rumors": "rumors",
+    "consequences": "consequences",
 }
 
 SEASON_SUMMARY_BLOCK_PATTERN = re.compile(
-    r"(?:^|\n)(?:\*{0,2})?(?:Season\s+Summary|(?:"
-    + _SEASON_ALT
-    + r")\s+(?:Summary|Overview|Report|Update))(?:\*{0,2})?\s*:?\s*\n",
+    r"(?:^|\n)(?:\*{0,2})?(?:"
+    r"Season\s+(?:\d+\s+)?Summary"
+    r"|(?:" + _SEASON_ALT + r")\s+(?:Summary|Overview|Report|Update)"
+    r")(?:\*{0,2})?\s*(?::\s*(?:\*{0,2})?(?:" + _SEASON_ALT + r")?(?:\*{0,2})?)?\s*\n",
+    re.IGNORECASE,
+)
+
+_HEADER_SEASON_RE = re.compile(
+    r"Season\s+(?:\d+\s+)?Summary\s*:\s*(?:\*{0,2})?(?P<season>" + _SEASON_ALT + r")",
     re.IGNORECASE,
 )
 
@@ -318,12 +328,16 @@ def extract_season_summaries(
     if not has_explicit_header and not has_enough_sections:
         return []
 
-    # Detect which season this summary covers
+    # Detect which season this summary covers — first try the header line
     season = None
-    for sn in SEASON_NAMES:
-        if re.search(r"\b" + sn + r"\b", text[:300], re.IGNORECASE):
-            season = _normalize_season(sn)
-            break
+    hdr_season_match = _HEADER_SEASON_RE.search(text)
+    if hdr_season_match:
+        season = _normalize_season(hdr_season_match.group("season"))
+    else:
+        for sn in SEASON_NAMES:
+            if re.search(r"\b" + sn + r"\b", text[:300], re.IGNORECASE):
+                season = _normalize_season(sn)
+                break
 
     year = _detect_year(text)
 
