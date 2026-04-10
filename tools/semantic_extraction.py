@@ -349,18 +349,20 @@ def extract_and_merge(
     return catalogs, events_list
 
 
-def _dedup_catalogs(catalogs: dict) -> int:
+def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
     """Post-batch deduplication pass.
 
     Merges entities within each catalog file that share the same lowercased
     name or have overlapping aliases.  The entry seen earliest
     (lowest first_seen_turn) is kept as the survivor; later duplicates are
     merged into it via ``dedup_merge_entity`` from catalog_merger.
-    Returns the number of duplicates merged.
+    Returns (merge_count, merge_map) where merge_map maps each removed
+    entity ID to its survivor ID.
     """
     from catalog_merger import dedup_merge_entity
 
     merged_count = 0
+    merge_map: dict[str, str] = {}
 
     for filename, entities in catalogs.items():
         # Build lookup: normalised name -> list of indices
@@ -410,15 +412,39 @@ def _dedup_catalogs(catalogs: dict) -> int:
             # Keep the entry with the earliest first_seen_turn
             members.sort(key=lambda i: entities[i].get("first_seen_turn", ""))
             survivor_idx = members[0]
+            survivor_id = entities[survivor_idx].get("id", "")
             for dup_idx in members[1:]:
+                removed_id = entities[dup_idx].get("id", "")
                 dedup_merge_entity(entities[survivor_idx], entities[dup_idx])
                 to_remove.add(dup_idx)
+                if removed_id and survivor_id:
+                    merge_map[removed_id] = survivor_id
                 merged_count += 1
 
         if to_remove:
             catalogs[filename] = [e for i, e in enumerate(entities) if i not in to_remove]
 
-    return merged_count
+    return merged_count, merge_map
+
+
+def _rewrite_stale_ids(catalogs: dict, events_list: list, merge_map: dict[str, str]) -> None:
+    """Replace dangling entity IDs left by dedup with their survivor IDs."""
+    if not merge_map:
+        return
+
+    # Rewrite event related_entities
+    for event in events_list:
+        related = event.get("related_entities", [])
+        event["related_entities"] = [merge_map.get(eid, eid) for eid in related]
+
+    # Rewrite relationship source_id and target_id in catalog entries
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            for rel in entity.get("relationships", []):
+                if rel.get("source_id") in merge_map:
+                    rel["source_id"] = merge_map[rel["source_id"]]
+                if rel.get("target_id") in merge_map:
+                    rel["target_id"] = merge_map[rel["target_id"]]
 
 
 def extract_semantic_batch(
@@ -513,8 +539,9 @@ def extract_semantic_batch(
     events_after = len(events_list)
 
     # Post-batch dedup: merge entities that share the same name/aliases but got separate IDs
-    dupes_merged = _dedup_catalogs(catalogs)
+    dupes_merged, merge_map = _dedup_catalogs(catalogs)
     if dupes_merged:
+        _rewrite_stale_ids(catalogs, events_list, merge_map)
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch dedup merged {dupes_merged} duplicate(s); {entities_after} entities remain")
 
