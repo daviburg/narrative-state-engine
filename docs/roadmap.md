@@ -61,7 +61,7 @@ Goals:
 **NPU investigation (#65):** AMD XDNA1 (Phoenix) NPU cannot run LLM inference — AMD only supports LLMs on Strix Point (XDNA2) and newer. The Radeon 780M iGPU (~10-15 tok/s) is too slow to be useful. A dedicated GPU server (e.g., used RTX 3090 in a separate machine) is the viable path to exceed RTX 4070 performance.
 
 Remaining work:
-- Fallback provider chain in `llm_client.py` (local → cloud)
+- Fallback provider chain in `tools/llm_client.py` (local → cloud)
 - CLI `--provider` override for per-run provider selection
 - Batch processing mode for unattended overnight extraction
 - Provider setup documentation in `docs/usage.md`
