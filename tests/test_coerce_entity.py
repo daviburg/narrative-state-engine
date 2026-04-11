@@ -100,6 +100,37 @@ def test_coerces_numeric_attribute_to_string():
     assert result["attributes"]["value"] == "3.5"
 
 
+def test_splits_comma_separated_proposed_id():
+    entity = {
+        "name": "two figures",
+        "type": "faction",
+        "proposed_id": "char-broad-figure,char-companion-of-broad-figure,faction-two-figures",
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["proposed_id"] == "faction-two-figures"
+
+
+def test_splits_comma_id_takes_first_when_no_type_match():
+    entity = {
+        "name": "something",
+        "type": "creature",
+        "proposed_id": "char-a,loc-b,faction-c",
+    }
+    result = _coerce_entity_fields(entity)
+    # No creature- prefix match, takes first
+    assert result["proposed_id"] == "char-a"
+
+
+def test_leaves_non_comma_proposed_id_unchanged():
+    entity = {
+        "name": "elder",
+        "type": "character",
+        "proposed_id": "char-elder",
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["proposed_id"] == "char-elder"
+
+
 def test_coerces_none_attribute_to_empty_string():
     entity = {
         "name": "Herb",

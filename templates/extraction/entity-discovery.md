@@ -21,8 +21,12 @@ Rules:
 - The player character ("you" in DM turns) should NOT be extracted — they are pre-seeded in the catalog.
 - Confidence below 0.5 means the mention is too vague to catalog.
 - For coreference resolution: if a mention refers to an already-known entity (even by a different name, title, or alias shown in the known-entities list), set is_new to false and provide the existing_id. Use the descriptions and aliases in the known-entities list to identify matches.
+- NEVER create a new entity whose name is a pronoun (he, she, they, it, him, her, them, this one, that one, the figure, etc. when used as a pure anaphoric reference). Instead, resolve the pronoun to an already-known entity and set is_new to false. If the referent cannot be determined, skip the mention entirely — do not create a placeholder entity.
 - For items: if a previously cataloged item is referenced by a shorter name, partial description, or with/without adjectives (e.g., "the spear" referring to a previously seen "crude wood-hafted spear"), set is_new to false and provide the existing_id. Do not create a new entry for a name variant of the same physical object.
 - "proposed_id" and "existing_id" are mutually exclusive: exactly one must be non-null for each result.
+- Extract entities from ALL parts of the turn text, including: backstory narration, environmental descriptions, recalled memories, quest briefings, and scene-setting passages. A location where a scene takes place should be extracted even if it is unnamed — use the descriptive phrase (e.g., "a dense forest", "the winding path").
+- Abstract or distant references count: if the text mentions a village the PC departed from, a artifact they are seeking, or a council that sent them on a mission, extract those as entities with the appropriate type.
+- Environmental and transitional locations (forests, paths, clearings, rivers) should be extracted as locations when the narrative establishes them as distinct settings where action occurs.
 
 Return a JSON object with a single key "entities" containing an array of entity objects.
 
@@ -39,5 +43,12 @@ Item identification tips:
 - Weapons (swords, spears, bows), containers (bowls, chests, bags), substances (potions, pastes, powders), traps/mechanisms (tripwires, snares, pressure plates), and quest objects (artifacts, keys, tokens) are all type "item".
 - If an item is part of a trap or mechanism, extract both the mechanism and any separate components as individual items.
 - Food, drink, and consumables that have narrative significance (e.g. offered as part of a ritual, restore HP) are items.
+
+Location identification tips:
+- Named places (cities, temples, inns) are locations.
+- Unnamed but distinct settings where scenes occur are locations — use the descriptive phrase as the name (e.g., "dense forest", "snow-covered clearing", "narrow mountain path").
+- Environmental features that serve as landmarks or scene boundaries are locations (rivers, bridges, cave entrances).
+- Backstory locations (where the PC came from, places mentioned in quest briefings) should be extracted even if the PC is not currently there.
+- Do NOT extract vague directional references ("to the north", "ahead") as locations unless they describe a specific place.
 
 If no entities are found in the turn, return: {"entities": []}
