@@ -136,6 +136,19 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 entity_data[field] = ""
             print(f"  COERCE: {field} array → string: {val!r}", file=sys.stderr)
 
+    # If proposed_id or id contains commas, the LLM crammed multiple IDs into
+    # one field.  Pick the one whose prefix matches the declared entity type.
+    etype = entity_data.get("type", "")
+    for id_field in ("proposed_id", "id"):
+        pid = entity_data.get(id_field, "")
+        if isinstance(pid, str) and "," in pid:
+            from catalog_merger import validate_id_prefix
+            parts = [p.strip() for p in pid.split(",") if p.strip()]
+            matched = [p for p in parts if etype and validate_id_prefix(p, etype)]
+            chosen = matched[0] if matched else parts[0] if parts else pid
+            print(f"  COERCE: {id_field} comma-split: {pid!r} → {chosen!r}", file=sys.stderr)
+            entity_data[id_field] = chosen
+
     # Attributes: values must be strings per schema
     attrs = entity_data.get("attributes", {})
     if isinstance(attrs, dict):
