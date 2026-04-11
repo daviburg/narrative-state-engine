@@ -107,6 +107,60 @@ def _load_schema(name: str) -> dict | None:
     return _schema_cache.get(name)
 
 
+def _coerce_entity_fields(entity_data) -> dict | None:
+    """Auto-coerce common LLM output quirks before schema validation.
+
+    Fixes:
+    - Non-dict entity → return None with warning
+    - Single-element arrays → unwrap to string
+    - Multi-element arrays → join with ', '
+    - Empty arrays → empty string
+    - Dict/list/numeric/bool/None values in attributes → stringify
+    """
+    if not isinstance(entity_data, dict):
+        print(f"  WARNING: entity_data is {type(entity_data).__name__}, expected dict — skipping",
+              file=sys.stderr)
+        return None
+
+    # Top-level string fields that the LLM sometimes wraps in arrays
+    string_fields = ["name", "description", "type", "proposed_id",
+                     "first_seen_turn", "last_updated_turn"]
+    for field in string_fields:
+        val = entity_data.get(field)
+        if isinstance(val, list):
+            if len(val) == 1:
+                entity_data[field] = str(val[0])
+            elif len(val) > 1:
+                entity_data[field] = ", ".join(str(v) for v in val)
+            else:
+                entity_data[field] = ""
+            print(f"  COERCE: {field} array → string: {val!r}", file=sys.stderr)
+
+    # Attributes: values must be strings per schema
+    attrs = entity_data.get("attributes", {})
+    if isinstance(attrs, dict):
+        for key, val in list(attrs.items()):
+            if isinstance(val, str):
+                continue
+            if isinstance(val, list):
+                attrs[key] = ", ".join(str(v) for v in val)
+            elif isinstance(val, dict):
+                attrs[key] = json.dumps(val)
+            elif val is None:
+                attrs[key] = ""
+            else:
+                attrs[key] = str(val)
+            print(f"  COERCE: attributes.{key} {type(val).__name__} → string", file=sys.stderr)
+
+    # Relationships: should be an array of objects, but sometimes a single dict
+    rels = entity_data.get("relationships")
+    if isinstance(rels, dict):
+        entity_data["relationships"] = [rels]
+        print("  COERCE: relationships dict → single-element array", file=sys.stderr)
+
+    return entity_data
+
+
 def _validate_entity(entity_data: dict) -> bool:
     """Validate an entity dict against entity.schema.json. Returns True if valid."""
     schema = _load_schema("entity.schema.json")
@@ -309,6 +363,8 @@ def extract_and_merge(
             continue
 
         entity_data = detail_result.get("entity")
+        if entity_data:
+            entity_data = _coerce_entity_fields(entity_data)
         if entity_data and _validate_entity(entity_data):
             _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
@@ -338,6 +394,8 @@ def extract_and_merge(
                 user_prompt=format_detail_prompt(turn, pc_ref, pc_entry),
             )
             entity_data = detail_result.get("entity")
+            if entity_data:
+                entity_data = _coerce_entity_fields(entity_data)
             if entity_data and _validate_entity(entity_data):
                 _filter_pc_attributes(entity_data)
                 merge_entity(catalogs, entity_data)

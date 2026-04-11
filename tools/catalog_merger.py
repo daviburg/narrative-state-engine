@@ -41,7 +41,7 @@ def load_catalogs(catalog_dir: str) -> dict:
     for filename in ["characters.json", "locations.json", "factions.json", "items.json"]:
         filepath = os.path.join(catalog_dir, filename)
         if os.path.exists(filepath):
-            with open(filepath, "r", encoding="utf-8") as f:
+            with open(filepath, "r", encoding="utf-8-sig") as f:
                 catalogs[filename] = json.load(f)
         else:
             catalogs[filename] = []
@@ -52,7 +52,7 @@ def load_events(catalog_dir: str) -> list:
     """Load the events catalog."""
     filepath = os.path.join(catalog_dir, "events.json")
     if os.path.exists(filepath):
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, "r", encoding="utf-8-sig") as f:
             return json.load(f)
     return []
 
