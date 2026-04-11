@@ -25,7 +25,7 @@ Rules:
 - For items: if a previously cataloged item is referenced by a shorter name, partial description, or with/without adjectives (e.g., "the spear" referring to a previously seen "crude wood-hafted spear"), set is_new to false and provide the existing_id. Do not create a new entry for a name variant of the same physical object.
 - "proposed_id" and "existing_id" are mutually exclusive: exactly one must be non-null for each result.
 - Extract entities from ALL parts of the turn text, including: backstory narration, environmental descriptions, recalled memories, quest briefings, and scene-setting passages. A location where a scene takes place should be extracted even if it is unnamed — use the descriptive phrase (e.g., "a dense forest", "the winding path").
-- Abstract or distant references count: if the text mentions a village the PC departed from, a artifact they are seeking, or a council that sent them on a mission, extract those as entities with the appropriate type.
+- Abstract or distant references count: if the text mentions a village the PC departed from, an artifact they are seeking, or a council that sent them on a mission, extract those as entities with the appropriate type.
 - Environmental and transitional locations (forests, paths, clearings, rivers) should be extracted as locations when the narrative establishes them as distinct settings where action occurs.
 
 Return a JSON object with a single key "entities" containing an array of entity objects.
