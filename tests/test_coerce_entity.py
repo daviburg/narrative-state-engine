@@ -74,3 +74,37 @@ def test_logs_coercions_to_stderr():
     finally:
         sys.stderr = old
     assert "COERCE" in buf.getvalue()
+
+
+def test_returns_none_for_non_dict():
+    assert _coerce_entity_fields(["not", "a", "dict"]) is None
+    assert _coerce_entity_fields("just a string") is None
+    assert _coerce_entity_fields(42) is None
+
+
+def test_empty_array_becomes_empty_string():
+    entity = {"name": [], "type": "character"}
+    result = _coerce_entity_fields(entity)
+    assert result["name"] == ""
+
+
+def test_coerces_numeric_attribute_to_string():
+    entity = {
+        "name": "Herb",
+        "type": "item",
+        "attributes": {"weight": 5, "magical": True, "value": 3.5},
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["attributes"]["weight"] == "5"
+    assert result["attributes"]["magical"] == "True"
+    assert result["attributes"]["value"] == "3.5"
+
+
+def test_coerces_none_attribute_to_empty_string():
+    entity = {
+        "name": "Herb",
+        "type": "item",
+        "attributes": {"notes": None},
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["attributes"]["notes"] == ""
