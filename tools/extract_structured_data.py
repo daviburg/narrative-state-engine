@@ -6,6 +6,7 @@ Handles three types of extraction:
   1. Inline game markers (#21): HP changes, long rests, spell usage, item acquisitions
   2. Temporal markers (#27): Season transitions, time progression
   3. Season summary blocks (#28): Structured season summary data from DM turns
+  4. Structured mechanical state (#86): HP, inventory, status effects for player_state
 
 Can be run standalone or imported by ingest_turn.py / bootstrap_session.py.
 
@@ -418,6 +419,367 @@ def extract_all(turns: list[dict]) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Structured mechanical state extraction (#86)
+# ---------------------------------------------------------------------------
+
+# HP patterns
+_HP_NUMERIC_RE = re.compile(
+    r"HP\s*[:=]\s*(\d+)\s*/\s*(\d+)",
+    re.IGNORECASE,
+)
+_HP_TAKES_DAMAGE_RE = re.compile(
+    r"takes?\s+(\d+)\s+(?:points?\s+(?:of\s+)?)?damage",
+    re.IGNORECASE,
+)
+_HP_HEALS_RE = re.compile(
+    r"heals?\s+(\d+)\s*(?:HP|hit\s+points?)?",
+    re.IGNORECASE,
+)
+_HP_LOSES_RE = re.compile(
+    r"loses?\s+(\d+)\s*(?:HP|hit\s+points?)",
+    re.IGNORECASE,
+)
+_HP_RESTORES_RE = re.compile(
+    r"restores?\s+(\d+)\s*(?:HP|hit\s+points?)",
+    re.IGNORECASE,
+)
+_HP_NARRATIVE_PATTERNS = [
+    re.compile(r"\b(slight(?:ly)?\s+wounded)\b", re.IGNORECASE),
+    re.compile(r"\b(badly\s+wounded|grievously\s+wounded)\b", re.IGNORECASE),
+    re.compile(r"\b(barely\s+conscious|near\s+death)\b", re.IGNORECASE),
+    re.compile(r"\b(unhurt|uninjured|healthy|fully?\s+healed?)\b", re.IGNORECASE),
+    re.compile(r"\b(wounded|injured|hurt)\b", re.IGNORECASE),
+]
+
+# Status effect patterns
+_STATUS_EFFECT_PATTERNS = [
+    re.compile(r"\b(poisoned)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(exhausted|fatigued)\b(?:\s+from\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(stunned)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(frightened|afraid)\b(?:\s+(?:of|by)\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(charmed)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(blinded)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(paralyzed|paralysed)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(inspired)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(blessed)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(cursed)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+    re.compile(r"\b(invisible)\b", re.IGNORECASE),
+    re.compile(r"\b(prone)\b", re.IGNORECASE),
+    re.compile(r"\b(restrained)\b(?:\s+by\s+(.+?)(?:\.|,|$))?", re.IGNORECASE),
+]
+
+# Inventory patterns
+_ITEM_ACQUIRED_RE = re.compile(
+    r"(?:picks?\s+up|receives?|obtains?|finds?|gains?|acquires?|takes?|is\s+given)\s+(?:a\s+|an\s+|the\s+)?(.+?)(?:\.|,|$)",
+    re.IGNORECASE | re.MULTILINE,
+)
+_ITEM_MARKER_RE = re.compile(
+    r"New\s+item\s+acquired:\s*(.+?)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def extract_hp(text: str, turn_id: str) -> dict | None:
+    """Extract structured HP information from turn text.
+
+    Returns an hp dict matching state.schema.json player_state.hp, or None.
+    """
+    hp: dict = {}
+
+    # Try numeric HP first (e.g., "HP: 15/20")
+    m = _HP_NUMERIC_RE.search(text)
+    if m:
+        hp["numeric"] = int(m.group(1))
+        hp["max_hp"] = int(m.group(2))
+    else:
+        hp["numeric"] = None
+        hp["max_hp"] = None
+
+    # Check for damage/healing to build last_change
+    last_change = None
+    damage_m = _HP_TAKES_DAMAGE_RE.search(text)
+    heal_m = _HP_HEALS_RE.search(text)
+    lose_m = _HP_LOSES_RE.search(text)
+    restore_m = _HP_RESTORES_RE.search(text)
+
+    if damage_m:
+        # Try to extract source from surrounding context
+        source = _extract_change_source(text, damage_m.start())
+        last_change = {
+            "delta": f"-{damage_m.group(1)}",
+            "source": source,
+            "turn": turn_id,
+        }
+    elif lose_m:
+        source = _extract_change_source(text, lose_m.start())
+        last_change = {
+            "delta": f"-{lose_m.group(1)}",
+            "source": source,
+            "turn": turn_id,
+        }
+    elif heal_m:
+        source = _extract_change_source(text, heal_m.start())
+        last_change = {
+            "delta": f"+{heal_m.group(1)}",
+            "source": source,
+            "turn": turn_id,
+        }
+    elif restore_m:
+        source = _extract_change_source(text, restore_m.start())
+        last_change = {
+            "delta": f"+{restore_m.group(1)}",
+            "source": source,
+            "turn": turn_id,
+        }
+
+    # Also check marker-based HP changes
+    for marker_m in MARKER_PATTERNS["hp_loss"].finditer(text):
+        last_change = {
+            "delta": f"-{marker_m.group(1)}",
+            "source": "marker",
+            "turn": turn_id,
+        }
+    for marker_m in MARKER_PATTERNS["hp_restore"].finditer(text):
+        last_change = {
+            "delta": f"+{marker_m.group(1)}",
+            "source": "marker",
+            "turn": turn_id,
+        }
+
+    if last_change:
+        hp["last_change"] = last_change
+
+    # Narrative HP description
+    narrative = None
+    for pattern in _HP_NARRATIVE_PATTERNS:
+        nm = pattern.search(text)
+        if nm:
+            narrative = nm.group(1).strip().lower()
+            break
+
+    if narrative:
+        hp["narrative"] = narrative
+    elif hp.get("numeric") is not None:
+        hp["narrative"] = f"HP {hp['numeric']}/{hp['max_hp']}"
+
+    # Only return if we found something meaningful
+    if hp.get("narrative") or hp.get("numeric") is not None or last_change:
+        if "narrative" not in hp:
+            hp["narrative"] = "unknown"
+        return hp
+    return None
+
+
+def _extract_change_source(text: str, match_pos: int) -> str:
+    """Try to extract the source/cause from nearby text around an HP change."""
+    # Look at the sentence containing the match
+    start = text.rfind(".", 0, match_pos)
+    start = start + 1 if start >= 0 else 0
+    end = text.find(".", match_pos)
+    end = end if end >= 0 else len(text)
+    sentence = text[start:end].strip()
+
+    # Look for "from X", "by X" patterns
+    source_m = re.search(r"\b(?:from|by)\s+(?:the\s+|a\s+|an\s+)?(.+?)(?:\.|,|$)", sentence, re.IGNORECASE)
+    if source_m:
+        return source_m.group(1).strip()[:50]
+    return "unknown"
+
+
+def extract_inventory_changes(
+    text: str,
+    items_catalog: list[dict] | None = None,
+) -> list[dict]:
+    """Extract inventory changes from turn text.
+
+    Returns a list of inventory entry dicts matching state.schema.json player_state.inventory.
+    """
+    items: list[dict] = []
+    seen_names: set[str] = set()
+
+    # Build catalog name lookup
+    catalog_lookup: dict[str, str] = {}
+    if items_catalog:
+        for item in items_catalog:
+            name = item.get("name", "").lower()
+            catalog_lookup[name] = item.get("id", "")
+
+    # Check explicit markers first
+    for m in _ITEM_MARKER_RE.finditer(text):
+        name = m.group(1).strip()
+        name_lower = name.lower()
+        if name_lower in seen_names:
+            continue
+        seen_names.add(name_lower)
+        item_id = catalog_lookup.get(name_lower)
+        items.append({
+            "item_id": item_id,
+            "name": name,
+            "carried": True,
+            "quantity": 1,
+            "notes": None,
+        })
+
+    # Check narrative acquisition patterns
+    for m in _ITEM_ACQUIRED_RE.finditer(text):
+        name = m.group(1).strip()
+        # Filter out overly long matches (likely not item names)
+        if len(name.split()) > 5:
+            continue
+        name_lower = name.lower()
+        if name_lower in seen_names:
+            continue
+        seen_names.add(name_lower)
+        item_id = catalog_lookup.get(name_lower)
+        items.append({
+            "item_id": item_id,
+            "name": name,
+            "carried": True,
+            "quantity": 1,
+            "notes": None,
+        })
+
+    return items
+
+
+def extract_status_effects(text: str, turn_id: str) -> list[dict]:
+    """Extract status effects from turn text.
+
+    Returns a list of status effect dicts matching state.schema.json player_state.status_effects.
+    """
+    effects: list[dict] = []
+    seen: set[str] = set()
+
+    for pattern in _STATUS_EFFECT_PATTERNS:
+        for m in pattern.finditer(text):
+            effect = m.group(1).strip().lower()
+            if effect in seen:
+                continue
+            seen.add(effect)
+            entry: dict = {"effect": effect}
+            if m.lastindex and m.lastindex >= 2 and m.group(2):
+                entry["source"] = m.group(2).strip()
+            entry["since_turn"] = turn_id
+            effects.append(entry)
+
+    return effects
+
+
+def extract_mechanical_state(
+    text: str,
+    turn_id: str,
+    items_catalog: list[dict] | None = None,
+) -> dict:
+    """Extract all structured mechanical state fields from turn text.
+
+    Returns a dict with keys hp, inventory, status_effects — only populated
+    fields are included. Caller should merge into existing player_state.
+    """
+    result: dict = {}
+
+    hp = extract_hp(text, turn_id)
+    if hp is not None:
+        result["hp"] = hp
+
+    inventory = extract_inventory_changes(text, items_catalog)
+    if inventory:
+        result["inventory"] = inventory
+
+    effects = extract_status_effects(text, turn_id)
+    if effects:
+        result["status_effects"] = effects
+
+    return result
+
+
+def merge_mechanical_state(
+    existing_state: dict,
+    new_mechanical: dict,
+    turn_id: str,
+) -> dict:
+    """Merge newly extracted mechanical state into existing player_state.
+
+    - HP: replaces existing hp entirely (latest turn wins)
+    - Inventory: merges by name (updates existing, adds new)
+    - Status effects: merges by effect name (adds new, updates since_turn)
+
+    Returns updated player_state dict. Does not mutate *existing_state*.
+    """
+    player_state = dict(existing_state)
+
+    if "hp" in new_mechanical:
+        player_state["hp"] = new_mechanical["hp"]
+
+    if "inventory" in new_mechanical:
+        # Defensive copy so the original list/dicts are not mutated
+        existing_inv: list[dict] = [dict(item) for item in player_state.get("inventory", [])]
+        existing_by_name = {item["name"].lower(): item for item in existing_inv}
+        for new_item in new_mechanical["inventory"]:
+            key = new_item["name"].lower()
+            if key in existing_by_name:
+                existing_by_name[key].update(new_item)
+            else:
+                existing_inv.append(new_item)
+        player_state["inventory"] = existing_inv
+
+    if "status_effects" in new_mechanical:
+        # Defensive copy so the original list/dicts are not mutated
+        existing_effects: list[dict] = [dict(e) for e in player_state.get("status_effects", [])]
+        existing_by_effect = {e["effect"].lower(): e for e in existing_effects}
+        for new_effect in new_mechanical["status_effects"]:
+            key = new_effect["effect"].lower()
+            if key in existing_by_effect:
+                # Preserve the original since_turn (earliest occurrence)
+                original_since = existing_by_effect[key].get("since_turn")
+                existing_by_effect[key].update(new_effect)
+                if original_since:
+                    existing_by_effect[key]["since_turn"] = original_since
+            else:
+                existing_effects.append(new_effect)
+        player_state["status_effects"] = existing_effects
+
+    return player_state
+
+
+def update_state_mechanical(
+    derived_dir: str,
+    text: str,
+    turn_id: str,
+    items_catalog: list[dict] | None = None,
+    dry_run: bool = False,
+) -> dict:
+    """Extract mechanical state from turn text and merge into state.json.
+
+    Returns the extracted mechanical state dict.
+    """
+    mechanical = extract_mechanical_state(text, turn_id, items_catalog)
+    if not mechanical:
+        return {}
+
+    state_file = os.path.join(derived_dir, "state.json")
+    if not os.path.exists(state_file):
+        return mechanical
+
+    with open(state_file, "r", encoding="utf-8") as f:
+        state = json.load(f)
+
+    player_state = state.get("player_state", {})
+    updated = merge_mechanical_state(player_state, mechanical, turn_id)
+
+    if dry_run:
+        print(f"  [DRY]    would update mechanical state in {state_file}")
+    else:
+        state["player_state"] = updated
+        with open(state_file, "w", encoding="utf-8") as f:
+            json.dump(state, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+        fields = list(mechanical.keys())
+        print(f"  [UPDATE] {state_file} mechanical state: {fields}")
+
+    return mechanical
+
+
+# ---------------------------------------------------------------------------
 # File I/O helpers
 # ---------------------------------------------------------------------------
 
@@ -505,6 +867,7 @@ def extract_and_merge_single_turn(
     speaker: str,
     text: str,
     dry_run: bool = False,
+    items_catalog: list[dict] | None = None,
 ) -> dict:
     """Extract structured data from a single new turn and merge into existing
     derived files.  Used by ingest_turn.py for incremental updates.
@@ -552,10 +915,16 @@ def extract_and_merge_single_turn(
         if new_timeline:
             update_state_temporal(derived_dir, merged["timeline"], dry_run=dry_run)
 
+    # Extract and merge mechanical state (#86)
+    mechanical = update_state_mechanical(
+        derived_dir, text, turn_id, items_catalog=items_catalog, dry_run=dry_run,
+    )
+
     return {
         "session_events": new_events,
         "timeline": new_timeline,
         "season_summaries": new_summaries,
+        "mechanical_state": mechanical,
     }
 
 

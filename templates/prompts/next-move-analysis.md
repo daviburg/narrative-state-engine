@@ -13,6 +13,7 @@ asking Copilot to ingest and update state for the latest turn.
 - `sessions/{session_id}/derived/state.json`
 - `sessions/{session_id}/derived/evidence.json`
 - `sessions/{session_id}/derived/objectives.json`
+- `sessions/{session_id}/derived/turn-context.json` _(optional — enables entity-aware analysis)_
 - `framework/strategy/heuristics.md`
 - `framework/strategy/manipulation-patterns.md`
 - `framework/strategy/risk-model.md`
@@ -27,6 +28,7 @@ asking Copilot to ingest and update state for the latest turn.
 Generate a next-move analysis for sessions/{session_id} as of turn-{NNN}.
 
 Use the current state.json, evidence.json, objectives.json, and framework strategy files.
+If turn-context.json is available, use it for entity-aware analysis.
 
 Produce:
 
@@ -35,9 +37,14 @@ Produce:
    a. What changed since the last analysis?
    b. What is known (explicit_evidence) vs. inferred (inference)?
    c. What evidence is classified as dm_bait? Why?
-   d. What opportunities are currently available?
-   e. What risks have increased?
-   f. Which objectives (from objectives.json) are most affected?
+   d. Entity context (if turn-context.json available):
+      - Who is in the scene? Reference entity IDs when discussing characters/locations.
+      - What are their active relationships? Consider social dynamics.
+      - What is their volatile state? Use for tactical awareness (equipment, condition, location).
+      - Who is nearby but not in the scene? Note entities that might become relevant.
+   e. What opportunities are currently available?
+   f. What risks have increased?
+   g. Which objectives (from objectives.json) are most affected?
 
 2. sessions/{session_id}/derived/prompt-candidates.json
    Generate at least 3 candidate prompts with different strategies.

@@ -3,17 +3,22 @@
 analyze_next_move.py — Generate next-move analysis and prompt candidates.
 
 This script reads the current session state and produces a next-move analysis
-markdown file and a prompt-candidates JSON file.
+markdown file and a prompt-candidates JSON file. When turn-context.json is
+available (#87), entity context is injected for entity-aware analysis.
 
 Usage:
     python tools/analyze_next_move.py --session sessions/session-001
     python tools/analyze_next_move.py --session sessions/session-001 --mode all_options
+    python tools/analyze_next_move.py --session sessions/session-001 --rebuild-context --framework framework/
 """
 
 import argparse
 import json
 import os
+import re
+import subprocess
 import sys
+import warnings
 
 
 ANALYSIS_TEMPLATE = """# Next-Move Analysis — {session_id} (as of {as_of_turn})
@@ -42,19 +47,32 @@ ANALYSIS_TEMPLATE = """# Next-Move Analysis — {session_id} (as of {as_of_turn}
 
 ---
 
-## 4. Opportunities
+## 4. Entity Context
+
+### Scene Entities
+{scene_entities}
+
+### Scene Locations
+{scene_locations}
+
+### Nearby Entities (background)
+{nearby_entities_summary}
+
+---
+
+## 5. Opportunities
 
 {opportunities}
 
 ---
 
-## 5. Risks
+## 6. Risks
 
 {risks}
 
 ---
 
-## 6. Objectives Affected
+## 7. Objectives Affected
 
 {objectives}
 
@@ -104,13 +122,168 @@ def format_objectives(objectives: list) -> str:
     return "\n".join(lines)
 
 
-def generate_analysis(session_dir: str, mode: str, force_regen: bool = True) -> None:
+# ---------------------------------------------------------------------------
+# Entity context formatting (#87)
+# ---------------------------------------------------------------------------
+
+def format_scene_entities(entities: list[dict]) -> str:
+    """Format scene entities for the analysis template."""
+    if not entities:
+        return "_No entity context available._"
+    lines = []
+    for e in entities:
+        eid = e.get("id", "?")
+        name = e.get("name", "Unknown")
+        identity = e.get("identity", "")
+        status = e.get("current_status", "")
+        line = f"- **{name}** (`{eid}`)"
+        if identity:
+            line += f": {identity}"
+        if status:
+            line += f" — _{status}_"
+        lines.append(line)
+        # Active relationships
+        for rel in e.get("active_relationships", []):
+            target_name = rel.get("target_name", rel.get("target_id", "?"))
+            rel_text = rel.get("relationship", "related to")
+            lines.append(f"  - → {target_name}: {rel_text}")
+        # Volatile state
+        vol = e.get("volatile_state", {})
+        if vol:
+            vol_parts = []
+            if vol.get("condition"):
+                vol_parts.append(f"condition: {vol['condition']}")
+            if vol.get("location"):
+                vol_parts.append(f"at: {vol['location']}")
+            if vol.get("equipment"):
+                vol_parts.append(f"equipment: {vol['equipment']}")
+            if vol_parts:
+                lines.append(f"  - _Volatile: {', '.join(vol_parts)}_")
+    return "\n".join(lines)
+
+
+def format_scene_locations(locations: list[dict]) -> str:
+    """Format scene locations for the analysis template."""
+    if not locations:
+        return "_No location context available._"
+    lines = []
+    for loc in locations:
+        lid = loc.get("id", "?")
+        name = loc.get("name", "Unknown")
+        identity = loc.get("identity", "")
+        status = loc.get("current_status", "")
+        line = f"- **{name}** (`{lid}`)"
+        if identity:
+            line += f": {identity}"
+        if status:
+            line += f" — _{status}_"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def format_nearby_summary(nearby: list[dict]) -> str:
+    """Format nearby entity summary for the analysis template."""
+    if not nearby:
+        return "_No nearby entities detected._"
+    lines = []
+    for n in nearby:
+        name = n.get("name", "Unknown")
+        nid = n.get("id", "?")
+        summary = n.get("status_summary", "")
+        line = f"- {name} (`{nid}`)"
+        if summary:
+            line += f": {summary}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
+def _get_latest_turn_id(session_dir: str) -> str | None:
+    """Determine the latest turn ID from transcript files."""
+    transcript_dir = os.path.join(session_dir, "transcript")
+    if not os.path.isdir(transcript_dir):
+        return None
+    pattern = re.compile(r"^turn-(\d+)-(player|dm)\.md$")
+    max_seq = 0
+    for fname in os.listdir(transcript_dir):
+        m = pattern.match(fname)
+        if m:
+            max_seq = max(max_seq, int(m.group(1)))
+    return f"turn-{max_seq:03d}" if max_seq > 0 else None
+
+
+def load_turn_context(
+    session_dir: str,
+    rebuild: bool = False,
+    framework_dir: str | None = None,
+) -> tuple[dict | None, bool]:
+    """Load turn-context.json, optionally rebuilding it first.
+
+    Returns (context_dict_or_None, is_stale).
+    """
+    derived_dir = os.path.join(session_dir, "derived")
+    context_path = os.path.join(derived_dir, "turn-context.json")
+
+    if rebuild and framework_dir:
+        latest_turn = _get_latest_turn_id(session_dir)
+        if latest_turn:
+            print(f"  Rebuilding turn-context.json for {latest_turn}...")
+            try:
+                subprocess.run(
+                    [
+                        sys.executable,
+                        os.path.join(os.path.dirname(__file__), "build_context.py"),
+                        "--session", session_dir,
+                        "--turn", latest_turn,
+                        "--framework", framework_dir,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+            except subprocess.CalledProcessError as exc:
+                warnings.warn(f"Failed to rebuild turn-context.json: {exc.stderr}")
+            except FileNotFoundError:
+                warnings.warn("build_context.py not found, skipping rebuild.")
+
+    context = load_json(context_path)
+    if context is None:
+        return None, False
+
+    # Stale detection: compare context as_of_turn vs latest turn
+    latest_turn = _get_latest_turn_id(session_dir)
+    context_turn = context.get("as_of_turn", "")
+    is_stale = False
+    if latest_turn and context_turn and context_turn != latest_turn:
+        is_stale = True
+
+    return context, is_stale
+
+
+def generate_analysis(
+    session_dir: str,
+    mode: str,
+    force_regen: bool = True,
+    rebuild_context: bool = False,
+    framework_dir: str | None = None,
+) -> None:
     session_id = os.path.basename(session_dir)
     derived_dir = os.path.join(session_dir, "derived")
 
     state = load_json(os.path.join(derived_dir, "state.json"), default={})
     evidence = load_json(os.path.join(derived_dir, "evidence.json"), default=[])
     objectives = load_json(os.path.join(derived_dir, "objectives.json"), default=[])
+
+    # Load turn-context.json (#87)
+    turn_context, is_stale = load_turn_context(
+        session_dir, rebuild=rebuild_context, framework_dir=framework_dir,
+    )
+    if is_stale:
+        ctx_turn = turn_context.get("as_of_turn", "?") if turn_context else "?"
+        latest = _get_latest_turn_id(session_dir) or "?"
+        warnings.warn(
+            f"turn-context.json is stale (as_of_turn={ctx_turn}, "
+            f"latest={latest}). Use --rebuild-context to refresh."
+        )
 
     as_of_turn = state.get("as_of_turn", "unknown")
     world_state = state.get("current_world_state", "_Not yet described._")
@@ -131,6 +304,16 @@ def generate_analysis(session_dir: str, mode: str, force_regen: bool = True) -> 
     risks = format_list(state.get("risks", []))
     objectives_text = format_objectives(objectives)
 
+    # Format entity context
+    if turn_context:
+        scene_entities_text = format_scene_entities(turn_context.get("scene_entities", []))
+        scene_locations_text = format_scene_locations(turn_context.get("scene_locations", []))
+        nearby_text = format_nearby_summary(turn_context.get("nearby_entities_summary", []))
+    else:
+        scene_entities_text = "_No turn-context.json available. Run build_context.py to enable entity-aware analysis._"
+        scene_locations_text = "_No location context available._"
+        nearby_text = "_No nearby entities detected._"
+
     analysis = ANALYSIS_TEMPLATE.format(
         session_id=session_id,
         as_of_turn=as_of_turn,
@@ -138,6 +321,9 @@ def generate_analysis(session_dir: str, mode: str, force_regen: bool = True) -> 
         explicit_evidence=explicit,
         inferences=inferences,
         dm_bait=bait_text,
+        scene_entities=scene_entities_text,
+        scene_locations=scene_locations_text,
+        nearby_entities_summary=nearby_text,
         opportunities=opportunities,
         risks=risks,
         objectives=objectives_text,
@@ -233,7 +419,19 @@ def main() -> None:
         action="store_true",
         help="Keep existing prompt-candidates.json instead of regenerating it.",
     )
+    parser.add_argument(
+        "--rebuild-context",
+        action="store_true",
+        help="Re-run build_context.py before analysis to refresh turn-context.json.",
+    )
+    parser.add_argument(
+        "--framework",
+        help="Path to framework directory (required with --rebuild-context).",
+    )
     args = parser.parse_args()
+
+    if args.rebuild_context and not args.framework:
+        parser.error("--rebuild-context requires --framework")
 
     session_dir = args.session
     if not os.path.isdir(session_dir):
@@ -248,7 +446,13 @@ def main() -> None:
         sys.exit(1)
 
     print(f"Generating next-move analysis for: {session_dir}")
-    generate_analysis(session_dir, args.mode, force_regen=not args.no_regen)
+    generate_analysis(
+        session_dir,
+        args.mode,
+        force_regen=not args.no_regen,
+        rebuild_context=args.rebuild_context,
+        framework_dir=args.framework,
+    )
 
     print()
     print("Done. Review:")
