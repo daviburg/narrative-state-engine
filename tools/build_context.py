@@ -1,0 +1,507 @@
+#!/usr/bin/env python3
+"""
+build_context.py — Build focused entity context for a specific turn.
+
+Scans turn transcripts for entity mentions, expands via one-hop active
+relationships, loads full entity detail for scene entities, and produces
+turn-context.json for the analysis agent.
+
+Usage:
+    python tools/build_context.py --session sessions/session-001 --turn turn-345 --framework framework/
+    python tools/build_context.py --session sessions/session-001 --turn turn-345 --framework framework-local/
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import os
+import re
+import sys
+import warnings
+
+# V2 per-entity directory names
+_V2_DIRNAMES = ["characters", "locations", "factions", "items"]
+
+# V1 flat file names (deprecated fallback)
+_V1_FILENAMES = ["characters.json", "locations.json", "factions.json", "items.json"]
+
+
+# ---------------------------------------------------------------------------
+# Format detection (mirrors catalog_merger.py logic)
+# ---------------------------------------------------------------------------
+
+def detect_format(catalog_dir: str) -> str:
+    """Detect whether catalog_dir uses V2 (per-entity dirs) or V1 (flat files)."""
+    existing_v2_dirs = [
+        d for d in _V2_DIRNAMES
+        if os.path.isdir(os.path.join(catalog_dir, d))
+    ]
+    existing_v1_files = [
+        f for f in _V1_FILENAMES
+        if os.path.isfile(os.path.join(catalog_dir, f))
+    ]
+    if len(existing_v2_dirs) == len(_V2_DIRNAMES):
+        return "v2"
+    if existing_v2_dirs and not existing_v1_files:
+        return "v2"
+    return "v1"
+
+
+# ---------------------------------------------------------------------------
+# Step A: Read turn transcript
+# ---------------------------------------------------------------------------
+
+def read_turn_text(session_dir: str, turn_id: str) -> str:
+    """Load DM and player turn files, return combined text.
+
+    Raises FileNotFoundError if neither file exists.
+    """
+    transcript_dir = os.path.join(session_dir, "transcript")
+    dm_path = os.path.join(transcript_dir, f"{turn_id}-dm.md")
+    player_path = os.path.join(transcript_dir, f"{turn_id}-player.md")
+
+    parts: list[str] = []
+    for path in (dm_path, player_path):
+        if os.path.isfile(path):
+            with open(path, "r", encoding="utf-8-sig") as f:
+                parts.append(f.read())
+
+    if not parts:
+        raise FileNotFoundError(
+            f"No transcript files found for {turn_id} in {transcript_dir}. "
+            f"Looked for {dm_path} and {player_path}"
+        )
+    return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Step B: Entity mention detection
+# ---------------------------------------------------------------------------
+
+def load_indexes(catalog_dir: str) -> tuple[dict[str, dict], dict[str, dict]]:
+    """Load all index.json files and build name/ID lookup dictionaries.
+
+    Returns (name_lookup, id_lookup) where:
+    - name_lookup maps lowercased name -> list of index entries
+    - id_lookup maps entity id -> index entry
+    """
+    name_lookup: dict[str, list[dict]] = {}
+    id_lookup: dict[str, dict] = {}
+
+    for dirname in _V2_DIRNAMES:
+        index_path = os.path.join(catalog_dir, dirname, "index.json")
+        if not os.path.isfile(index_path):
+            continue
+        with open(index_path, "r", encoding="utf-8-sig") as f:
+            entries = json.load(f)
+        for entry in entries:
+            eid = entry["id"]
+            id_lookup[eid] = entry
+            name_lower = entry["name"].lower()
+            name_lookup.setdefault(name_lower, []).append(entry)
+
+    return name_lookup, id_lookup
+
+
+def load_indexes_v1(catalog_dir: str) -> tuple[dict[str, list[dict]], dict[str, dict]]:
+    """Fallback: build index-like lookups from V1 flat files."""
+    warnings.warn(
+        "Using V1 flat file fallback. Migrate to V2 per-entity layout.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    name_lookup: dict[str, list[dict]] = {}
+    id_lookup: dict[str, dict] = {}
+
+    for filename in _V1_FILENAMES:
+        fpath = os.path.join(catalog_dir, filename)
+        if not os.path.isfile(fpath):
+            continue
+        with open(fpath, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        entities = data if isinstance(data, list) else data.get("entities", [])
+        for entity in entities:
+            eid = entity.get("id", "")
+            name = entity.get("name", "")
+            etype = entity.get("type", "character")
+            entry = {
+                "id": eid,
+                "name": name,
+                "type": etype,
+                "first_seen_turn": entity.get("first_seen_turn", "turn-000"),
+                "last_updated_turn": entity.get("last_updated_turn", "turn-000"),
+                "status_summary": entity.get("current_status", entity.get("identity", ""))[:80],
+            }
+            id_lookup[eid] = entry
+            name_lookup.setdefault(name.lower(), []).append(entry)
+
+    return name_lookup, id_lookup
+
+
+def find_mentions(
+    turn_text: str,
+    name_lookup: dict[str, list[dict]],
+    id_lookup: dict[str, dict],
+) -> set[str]:
+    """Scan turn text for entity names and IDs. Return set of matched entity IDs."""
+    mentioned_ids: set[str] = set()
+    text_lower = turn_text.lower()
+
+    # Check entity IDs in text
+    for eid in id_lookup:
+        if eid in text_lower:
+            mentioned_ids.add(eid)
+
+    # Check entity names with word boundary matching
+    # Sort by name length descending so longer names match first
+    sorted_names = sorted(name_lookup.keys(), key=len, reverse=True)
+    for name in sorted_names:
+        if len(name) < 3:
+            # Skip very short names to avoid false positives
+            continue
+        # Use word boundary for single-word names, plain match for multi-word
+        if " " in name:
+            # Multi-word: match the full phrase
+            if name in text_lower:
+                for entry in name_lookup[name]:
+                    mentioned_ids.add(entry["id"])
+        else:
+            # Single-word (3+ chars): use word boundary
+            pattern = r"\b" + re.escape(name) + r"\b"
+            if re.search(pattern, text_lower):
+                for entry in name_lookup[name]:
+                    mentioned_ids.add(entry["id"])
+
+    return mentioned_ids
+
+
+# ---------------------------------------------------------------------------
+# Step C: One-hop relationship expansion
+# ---------------------------------------------------------------------------
+
+def load_entity_file(catalog_dir: str, entity_id: str, id_lookup: dict[str, dict]) -> dict | None:
+    """Load a per-entity JSON file by ID. Returns None if not found."""
+    entry = id_lookup.get(entity_id)
+    if not entry:
+        return None
+
+    etype = entry.get("type", "")
+    # Map type to directory name
+    type_to_dir = {
+        "character": "characters",
+        "creature": "characters",
+        "location": "locations",
+        "faction": "factions",
+        "item": "items",
+        "concept": "items",
+    }
+    dirname = type_to_dir.get(etype)
+    if not dirname:
+        return None
+
+    fpath = os.path.join(catalog_dir, dirname, f"{entity_id}.json")
+    if not os.path.isfile(fpath):
+        warnings.warn(f"Per-entity file not found: {fpath}", stacklevel=2)
+        return None
+
+    with open(fpath, "r", encoding="utf-8-sig") as f:
+        return json.load(f)
+
+
+def load_entity_v1(catalog_dir: str, entity_id: str) -> dict | None:
+    """Fallback: load entity from V1 flat files."""
+    for filename in _V1_FILENAMES:
+        fpath = os.path.join(catalog_dir, filename)
+        if not os.path.isfile(fpath):
+            continue
+        with open(fpath, "r", encoding="utf-8-sig") as f:
+            data = json.load(f)
+        entities = data if isinstance(data, list) else data.get("entities", [])
+        for entity in entities:
+            if entity.get("id") == entity_id:
+                return entity
+    return None
+
+
+def expand_one_hop(
+    mentioned_ids: set[str],
+    catalog_dir: str,
+    id_lookup: dict[str, dict],
+    fmt: str,
+) -> set[str]:
+    """For each mentioned entity, find active relationship targets.
+
+    Returns entity IDs that are relationship-expanded (not directly mentioned).
+    """
+    expanded_ids: set[str] = set()
+    for eid in list(mentioned_ids):
+        if fmt == "v2":
+            entity = load_entity_file(catalog_dir, eid, id_lookup)
+        else:
+            entity = load_entity_v1(catalog_dir, eid)
+        if not entity:
+            continue
+        for rel in entity.get("relationships", []):
+            if rel.get("status", "active") == "active":
+                target_id = rel["target_id"]
+                if target_id not in mentioned_ids:
+                    expanded_ids.add(target_id)
+    return expanded_ids
+
+
+# ---------------------------------------------------------------------------
+# Step D: Load full entity detail
+# ---------------------------------------------------------------------------
+
+def build_scene_entity(
+    entity: dict,
+    id_lookup: dict[str, dict],
+) -> dict:
+    """Build a scene entity record from a full entity dict."""
+    result: dict = {
+        "id": entity["id"],
+        "name": entity["name"],
+        "identity": entity.get("identity", ""),
+    }
+    if entity.get("current_status"):
+        result["current_status"] = entity["current_status"]
+    if entity.get("volatile_state"):
+        result["volatile_state"] = entity["volatile_state"]
+
+    # Filter to active relationships and resolve target names
+    active_rels = []
+    for rel in entity.get("relationships", []):
+        if rel.get("status", "active") == "active":
+            rel_record: dict = {
+                "target_id": rel["target_id"],
+                "relationship": rel.get("current_relationship", ""),
+            }
+            # Resolve target name from index
+            target_entry = id_lookup.get(rel["target_id"])
+            if target_entry:
+                rel_record["target_name"] = target_entry["name"]
+            if rel.get("type"):
+                rel_record["type"] = rel["type"]
+            if rel.get("status"):
+                rel_record["status"] = rel["status"]
+            active_rels.append(rel_record)
+    if active_rels:
+        result["active_relationships"] = active_rels
+
+    return result
+
+
+def build_scene_location(entity: dict) -> dict:
+    """Build a scene location record from a full entity dict."""
+    result: dict = {
+        "id": entity["id"],
+        "name": entity["name"],
+    }
+    if entity.get("identity"):
+        result["identity"] = entity["identity"]
+    if entity.get("current_status"):
+        result["current_status"] = entity["current_status"]
+    return result
+
+
+def parse_turn_number(turn_id: str) -> int:
+    """Extract numeric turn number from a turn ID like 'turn-345'."""
+    m = re.match(r"^turn-(\d+)$", turn_id)
+    if m:
+        return int(m.group(1))
+    return 0
+
+
+def build_nearby_summary(
+    id_lookup: dict[str, dict],
+    scene_ids: set[str],
+    current_turn: str,
+    nearby_turns: int,
+) -> list[dict]:
+    """Build nearby_entities_summary for entities not in scene but recently updated."""
+    current_num = parse_turn_number(current_turn)
+    if current_num == 0:
+        return []
+
+    nearby = []
+    for eid, entry in id_lookup.items():
+        if eid in scene_ids:
+            continue
+        last_updated = entry.get("last_updated_turn", "")
+        last_num = parse_turn_number(last_updated)
+        if last_num == 0:
+            continue
+        if current_num - last_num <= nearby_turns:
+            record: dict = {
+                "id": entry["id"],
+                "name": entry["name"],
+            }
+            if entry.get("status_summary"):
+                record["status_summary"] = entry["status_summary"]
+            nearby.append(record)
+
+    # Sort by ID for deterministic output
+    nearby.sort(key=lambda x: x["id"])
+    return nearby
+
+
+# ---------------------------------------------------------------------------
+# Step E: Assemble and write turn-context.json
+# ---------------------------------------------------------------------------
+
+def build_context(
+    session_dir: str,
+    turn_id: str,
+    framework_dir: str,
+    nearby_turns: int = 10,
+    output_path: str | None = None,
+) -> dict:
+    """Main context-building pipeline. Returns the turn-context dict."""
+    catalog_dir = os.path.join(framework_dir, "catalogs")
+
+    # Detect format
+    fmt = detect_format(catalog_dir)
+
+    # Step A: Read turn transcript
+    turn_text = read_turn_text(session_dir, turn_id)
+
+    # Step B: Load indexes and find mentions
+    if fmt == "v2":
+        name_lookup, id_lookup = load_indexes(catalog_dir)
+    else:
+        name_lookup, id_lookup = load_indexes_v1(catalog_dir)
+
+    if not id_lookup:
+        warnings.warn("No entity catalogs found. Producing empty context.")
+        context: dict = {
+            "as_of_turn": turn_id,
+            "scene_entities": [],
+            "scene_locations": [],
+            "nearby_entities_summary": [],
+        }
+        _write_output(context, session_dir, output_path)
+        return context
+
+    mentioned_ids = find_mentions(turn_text, name_lookup, id_lookup)
+
+    # Step C: One-hop expansion
+    expanded_ids = expand_one_hop(mentioned_ids, catalog_dir, id_lookup, fmt)
+    all_scene_ids = mentioned_ids | expanded_ids
+
+    # Step D: Load full detail
+    scene_entities: list[dict] = []
+    scene_locations: list[dict] = []
+    location_ids_from_volatile: set[str] = set()
+
+    for eid in sorted(all_scene_ids):
+        if fmt == "v2":
+            entity = load_entity_file(catalog_dir, eid, id_lookup)
+        else:
+            entity = load_entity_v1(catalog_dir, eid)
+        if not entity:
+            continue
+
+        entry = id_lookup.get(eid, {})
+        etype = entry.get("type", entity.get("type", ""))
+
+        if etype == "location":
+            scene_locations.append(build_scene_location(entity))
+        else:
+            scene_entities.append(build_scene_entity(entity, id_lookup))
+
+        # Check volatile_state.location for location references
+        vol_loc = entity.get("volatile_state", {}).get("location", "")
+        if vol_loc and vol_loc.startswith("loc-") and vol_loc not in all_scene_ids:
+            location_ids_from_volatile.add(vol_loc)
+
+    # Load locations referenced by volatile_state
+    for loc_id in sorted(location_ids_from_volatile):
+        if fmt == "v2":
+            loc_entity = load_entity_file(catalog_dir, loc_id, id_lookup)
+        else:
+            loc_entity = load_entity_v1(catalog_dir, loc_id)
+        if loc_entity:
+            scene_locations.append(build_scene_location(loc_entity))
+            all_scene_ids.add(loc_id)
+
+    # Step D (nearby): entities not in scene but recently updated
+    nearby = build_nearby_summary(id_lookup, all_scene_ids, turn_id, nearby_turns)
+
+    # Step E: Assemble output
+    context = {
+        "as_of_turn": turn_id,
+        "scene_entities": scene_entities,
+    }
+    if scene_locations:
+        context["scene_locations"] = scene_locations
+    if nearby:
+        context["nearby_entities_summary"] = nearby
+
+    _write_output(context, session_dir, output_path)
+    return context
+
+
+def _write_output(context: dict, session_dir: str, output_path: str | None) -> None:
+    """Write turn-context.json to disk."""
+    if output_path is None:
+        derived_dir = os.path.join(session_dir, "derived")
+        os.makedirs(derived_dir, exist_ok=True)
+        output_path = os.path.join(derived_dir, "turn-context.json")
+
+    out_dir = os.path.dirname(output_path)
+    if out_dir:
+        os.makedirs(out_dir, exist_ok=True)
+
+    with open(output_path, "w", encoding="utf-8") as f:
+        json.dump(context, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+    print(f"Wrote {output_path}")
+
+
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Build focused entity context for a specific turn.",
+    )
+    parser.add_argument(
+        "--session", required=True,
+        help="Path to session directory, e.g. sessions/session-001",
+    )
+    parser.add_argument(
+        "--turn", required=True,
+        help="Turn ID, e.g. turn-345",
+    )
+    parser.add_argument(
+        "--framework", required=True,
+        help="Path to framework directory, e.g. framework/ or framework-local/",
+    )
+    parser.add_argument(
+        "--nearby-turns", type=int, default=10,
+        help="Recency threshold for nearby entities (default: 10)",
+    )
+    parser.add_argument(
+        "--output",
+        help="Override output path (default: {session}/derived/turn-context.json)",
+    )
+    args = parser.parse_args()
+
+    try:
+        build_context(
+            session_dir=args.session,
+            turn_id=args.turn,
+            framework_dir=args.framework,
+            nearby_turns=args.nearby_turns,
+            output_path=args.output,
+        )
+    except FileNotFoundError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
