@@ -14,6 +14,7 @@ For each relationship, return a JSON object with these fields:
 - "last_updated_turn": string — set to the current turn ID
 - "resolved_turn": string (optional) — set to the turn ID if the relationship has ended
 - "resolution_note": string (optional) — explanation of how/why the relationship ended
+- "history": array (optional) — append-only log of significant relationship changes. Each entry is {"turn": "turn-NNN", "description": "previous state"}. Add the OLD current_relationship here when updating to a new one.
 
 RELATIONSHIP RULES:
 - ONE record per (source_entity, target_entity) pair. Update existing, don't create duplicates.
@@ -32,7 +33,7 @@ Rules:
 - Avoid duplicate relationships — if A "leads" B and B "follows" A, only include one (the more natural framing).
 - The player character entity may appear as source or target if their ID is provided in the entities list.
 - Confidence below 0.5 means the relationship is speculative.
-- When updating an existing relationship, preserve "first_seen_turn" from the existing entry. Only change "current_relationship", "type", "status", and "last_updated_turn".
+- When updating an existing relationship, preserve "first_seen_turn" from the existing entry. Only change "current_relationship", "type", "status", "last_updated_turn", and "history" (append only).
 
 Return a JSON object with a single key "relationships" containing an array of relationship objects.
 Example: {"relationships": [{"source_id": "char-elder", "target_id": "char-guards", "current_relationship": "commands", "type": "social", "direction": "outgoing", "status": "active", "confidence": 0.8, "first_seen_turn": "turn-019", "last_updated_turn": "turn-019"}]}

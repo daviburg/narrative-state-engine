@@ -202,12 +202,12 @@ def test_v1_description_fallback_coercion():
     result = _coerce_entity_fields(entity)
     assert "identity" in result
     assert result["identity"] == "An elderly authority figure in the tribal community."
-    assert "description" not in result
+    assert "description" not in result  # stripped for V2 schema compliance
     assert result["current_status"] == ""
 
 
 def test_v1_description_not_overwritten_when_identity_present():
-    """If both description and identity exist, identity takes precedence."""
+    """If both description and identity exist, identity stays and description is stripped."""
     entity = {
         "id": "char-elder",
         "name": "The Elder",
@@ -219,8 +219,8 @@ def test_v1_description_not_overwritten_when_identity_present():
     }
     result = _coerce_entity_fields(entity)
     assert result["identity"] == "New V2 identity text."
-    # description is untouched when identity already present
-    assert result.get("description") == "Old text."
+    # description is stripped to avoid V2 schema validation failure
+    assert "description" not in result
 
 
 def test_v1_flat_attributes_coerced_to_stable_volatile():
@@ -460,7 +460,7 @@ def test_relationship_context_assembly():
 
 
 def test_relationship_context_empty():
-    """No existing relationships returns placeholder text."""
+    """No existing relationships returns empty string."""
     catalogs = {
         "characters.json": [
             {
@@ -473,7 +473,7 @@ def test_relationship_context_empty():
         ],
     }
     result = _collect_existing_relationships(catalogs, ["char-player"])
-    assert result == "(none — no existing relationships)"
+    assert result == ""
 
 
 def test_relationship_prompt_includes_existing():

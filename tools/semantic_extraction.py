@@ -199,22 +199,31 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         print("  COERCE: relationships dict → single-element array", file=sys.stderr)
 
     # --- V1 → V2 coercion ---
-    # If LLM returned "description" but not "identity", map description → identity
-    if "description" in entity_data and "identity" not in entity_data:
-        entity_data["identity"] = entity_data.pop("description")
-        if "current_status" not in entity_data:
-            entity_data["current_status"] = ""
-        print("  COERCE: description → identity (V1→V2 fallback)", file=sys.stderr)
+    # If LLM returned "description" but not "identity", map description → identity.
+    # Always strip the V1-only "description" field afterward so mixed V1/V2
+    # payloads still validate against the V2 schema (additionalProperties: false).
+    if "description" in entity_data:
+        if "identity" not in entity_data:
+            entity_data["identity"] = entity_data["description"]
+            if "current_status" not in entity_data:
+                entity_data["current_status"] = ""
+            print("  COERCE: description → identity (V1→V2 fallback)", file=sys.stderr)
+        entity_data.pop("description", None)
 
-    # If LLM returned flat "attributes" but not "stable_attributes", classify them
-    if "attributes" in entity_data and "stable_attributes" not in entity_data:
+    # If LLM returned flat "attributes" but not "stable_attributes", classify them.
+    # Always strip the V1-only "attributes" field afterward so mixed V1/V2
+    # payloads still validate against the V2 schema.
+    if "attributes" in entity_data:
         attrs = entity_data.pop("attributes")
-        if isinstance(attrs, dict) and attrs:
+        if "stable_attributes" not in entity_data and isinstance(attrs, dict) and attrs:
             # Keys that represent volatile state
             volatile_keys = {"condition", "equipment", "location", "hp_change"}
             stable = {}
             volatile = {}
             turn_id = entity_data.get("last_updated_turn", "")
+            # Only include source_turn / last_updated_turn when a valid
+            # turn ID is available (schema requires pattern ^turn-[0-9]{3,}$).
+            has_valid_turn = bool(turn_id and turn_id.startswith("turn-"))
             for key, val in attrs.items():
                 if key in volatile_keys:
                     if key == "equipment" and isinstance(val, str):
@@ -227,16 +236,19 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                     if isinstance(val, str) and val.endswith(" [inference]"):
                         val = val[: -len(" [inference]")]
                         inference = True
-                    stable[key] = {
+                    entry = {
                         "value": val,
                         "inference": inference,
                         "confidence": 0.7 if inference else 1.0,
-                        "source_turn": turn_id,
                     }
+                    if has_valid_turn:
+                        entry["source_turn"] = turn_id
+                    stable[key] = entry
             if stable:
                 entity_data["stable_attributes"] = stable
             if volatile:
-                volatile["last_updated_turn"] = turn_id
+                if has_valid_turn:
+                    volatile["last_updated_turn"] = turn_id
                 entity_data["volatile_state"] = volatile
             print("  COERCE: flat attributes → stable_attributes/volatile_state (V1→V2)", file=sys.stderr)
 
@@ -244,12 +256,15 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     for rel in entity_data.get("relationships", []):
         if "relationship" in rel and "current_relationship" not in rel:
             rel["current_relationship"] = rel.pop("relationship")
-        if "source_turn" in rel and "first_seen_turn" not in rel:
-            rel["first_seen_turn"] = rel["source_turn"]
+        # Always remove source_turn (not in V2 schema which has
+        # additionalProperties: false on relationships), mapping it
+        # into first_seen_turn / last_updated_turn as needed.
+        if "source_turn" in rel:
+            source_turn = rel.pop("source_turn")
+            if "first_seen_turn" not in rel:
+                rel["first_seen_turn"] = source_turn
             if "last_updated_turn" not in rel:
-                rel["last_updated_turn"] = rel.pop("source_turn")
-            else:
-                del rel["source_turn"]
+                rel["last_updated_turn"] = source_turn
 
     return entity_data
 
@@ -258,8 +273,7 @@ def _filter_concept_prefix_from_items(entity_data: dict) -> bool:
     """Return False (reject) if the entity has a concept- prefix but type=item.
 
     Concept-prefix entities should not be routed to the items catalog.
-    Also rejects any entity whose type is 'concept' from being treated as an
-    item.  Returns True if the entity should be kept.
+    Returns True if the entity should be kept.
     """
     eid = entity_data.get("id") or entity_data.get("proposed_id") or ""
     etype = entity_data.get("type", "")
@@ -400,7 +414,7 @@ def _collect_existing_relationships(catalogs: dict, entity_ids: list[str]) -> st
             if rels:
                 result[eid] = rels
     if not result:
-        return "(none — no existing relationships)"
+        return ""
     return json.dumps(result, indent=2)
 
 
