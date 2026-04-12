@@ -473,10 +473,6 @@ _ITEM_ACQUIRED_RE = re.compile(
     r"(?:picks?\s+up|receives?|obtains?|finds?|gains?|acquires?|takes?|is\s+given)\s+(?:a\s+|an\s+|the\s+)?(.+?)(?:\.|,|$)",
     re.IGNORECASE | re.MULTILINE,
 )
-_ITEM_LOST_RE = re.compile(
-    r"(?:drops?|loses?|gives?\s+away|discards?|hands?\s+over)\s+(?:a\s+|an\s+|the\s+)?(.+?)(?:\.|,|$)",
-    re.IGNORECASE | re.MULTILINE,
-)
 _ITEM_MARKER_RE = re.compile(
     r"New\s+item\s+acquired:\s*(.+?)$",
     re.IGNORECASE | re.MULTILINE,
