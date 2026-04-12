@@ -1,0 +1,128 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "turn-context.schema.json",
+  "title": "Turn Context",
+  "description": "Focused entity context for a specific turn, consumed by the analysis agent.",
+  "type": "object",
+  "required": ["as_of_turn", "scene_entities"],
+  "additionalProperties": false,
+  "properties": {
+    "as_of_turn": {
+      "type": "string",
+      "description": "The turn this context was built for.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "scene_entities": {
+      "type": "array",
+      "description": "Entities directly involved in the current turn. Full detail.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "identity"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Entity ID."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "identity": {
+            "type": "string",
+            "description": "Stable identity summary."
+          },
+          "current_status": {
+            "type": "string",
+            "description": "Volatile status."
+          },
+          "volatile_state": {
+            "type": "object",
+            "description": "Current state snapshot."
+          },
+          "active_relationships": {
+            "type": "array",
+            "description": "Active relationships for this entity.",
+            "items": {
+              "type": "object",
+              "required": ["target_id", "relationship"],
+              "additionalProperties": false,
+              "properties": {
+                "target_id": {
+                  "type": "string",
+                  "description": "ID of the related entity."
+                },
+                "target_name": {
+                  "type": "string",
+                  "description": "Display name of the related entity."
+                },
+                "relationship": {
+                  "type": "string",
+                  "description": "Current relationship description."
+                },
+                "type": {
+                  "type": "string",
+                  "description": "Relationship category."
+                },
+                "status": {
+                  "type": "string",
+                  "description": "Relationship status."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "scene_locations": {
+      "type": "array",
+      "description": "Locations relevant to the current turn.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Location entity ID."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "identity": {
+            "type": "string",
+            "description": "Stable identity summary."
+          },
+          "current_status": {
+            "type": "string",
+            "description": "Volatile status."
+          }
+        }
+      }
+    },
+    "nearby_entities_summary": {
+      "type": "array",
+      "description": "Related entities not directly in the scene. Index-level detail only.",
+      "items": {
+        "type": "object",
+        "required": ["id", "name"],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Entity ID."
+          },
+          "name": {
+            "type": "string",
+            "description": "Display name."
+          },
+          "status_summary": {
+            "type": "string",
+            "description": "One-line status summary."
+          }
+        }
+      }
+    }
+  }
+}

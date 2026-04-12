@@ -23,7 +23,83 @@
         "location": { "type": "string" },
         "condition": { "type": "string" },
         "inventory_notes": { "type": "string" },
-        "relationships_summary": { "type": "string" }
+        "relationships_summary": { "type": "string" },
+        "hp": {
+          "type": "object",
+          "description": "Structured HP tracking. Optional.",
+          "properties": {
+            "narrative": {
+              "type": "string",
+              "description": "Prose description of health state."
+            },
+            "numeric": {
+              "oneOf": [
+                { "type": "integer" },
+                { "type": "null" }
+              ],
+              "description": "Numeric HP value. Null for non-numeric games."
+            },
+            "max_hp": {
+              "oneOf": [
+                { "type": "integer" },
+                { "type": "null" }
+              ],
+              "description": "Maximum HP. Null for non-numeric games."
+            },
+            "last_change": {
+              "type": "object",
+              "description": "Most recent HP change.",
+              "properties": {
+                "delta": { "type": "string" },
+                "source": { "type": "string" },
+                "turn": { "type": "string", "pattern": "^turn-[0-9]{3,}$" }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        },
+        "inventory": {
+          "type": "array",
+          "description": "Structured inventory. Optional.",
+          "items": {
+            "type": "object",
+            "required": ["name"],
+            "additionalProperties": false,
+            "properties": {
+              "item_id": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "null" }
+                ],
+                "description": "Reference to items catalog. Null if not cataloged."
+              },
+              "name": { "type": "string" },
+              "carried": { "type": "boolean", "default": true },
+              "quantity": { "type": "integer", "minimum": 1, "default": 1 },
+              "notes": {
+                "oneOf": [
+                  { "type": "string" },
+                  { "type": "null" }
+                ]
+              }
+            }
+          }
+        },
+        "status_effects": {
+          "type": "array",
+          "description": "Active status effects on the player. Optional.",
+          "items": {
+            "type": "object",
+            "required": ["effect"],
+            "additionalProperties": false,
+            "properties": {
+              "effect": { "type": "string" },
+              "source": { "type": "string" },
+              "since_turn": { "type": "string", "pattern": "^turn-[0-9]{3,}$" }
+            }
+          }
+        }
       },
       "additionalProperties": true
     },
