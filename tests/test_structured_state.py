@@ -211,6 +211,33 @@ class TestMergeMechanicalState:
         merged = merge_mechanical_state(existing, new, "turn-050")
         assert len(merged["status_effects"]) == 2
 
+    def test_merge_does_not_mutate_input(self):
+        """merge_mechanical_state must not mutate the original existing_state"""
+        existing = {
+            "inventory": [{"item_id": None, "name": "rope", "carried": True, "quantity": 1, "notes": None}],
+            "status_effects": [{"effect": "fatigued", "since_turn": "turn-040"}],
+        }
+        new = {
+            "inventory": [{"item_id": None, "name": "torch", "carried": True, "quantity": 1, "notes": None}],
+            "status_effects": [{"effect": "poisoned", "source": "snake", "since_turn": "turn-050"}],
+        }
+        # Snapshot original lengths
+        orig_inv_len = len(existing["inventory"])
+        orig_eff_len = len(existing["status_effects"])
+        merge_mechanical_state(existing, new, "turn-050")
+        # Originals must be unchanged
+        assert len(existing["inventory"]) == orig_inv_len
+        assert len(existing["status_effects"]) == orig_eff_len
+
+    def test_merge_preserves_since_turn(self):
+        """Re-seeing an effect must keep the original since_turn"""
+        existing = {"status_effects": [{"effect": "poisoned", "source": "snake", "since_turn": "turn-040"}]}
+        new = {"status_effects": [{"effect": "poisoned", "source": "snake", "since_turn": "turn-060"}]}
+        merged = merge_mechanical_state(existing, new, "turn-060")
+        poisoned = [e for e in merged["status_effects"] if e["effect"] == "poisoned"]
+        assert len(poisoned) == 1
+        assert poisoned[0]["since_turn"] == "turn-040"
+
 
 # ---------------------------------------------------------------------------
 # Backward compatibility

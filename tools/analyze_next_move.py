@@ -430,6 +430,9 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if args.rebuild_context and not args.framework:
+        parser.error("--rebuild-context requires --framework")
+
     session_dir = args.session
     if not os.path.isdir(session_dir):
         print(f"ERROR: Session directory not found: {session_dir}", file=sys.stderr)

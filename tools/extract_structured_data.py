@@ -703,7 +703,7 @@ def merge_mechanical_state(
     - Inventory: merges by name (updates existing, adds new)
     - Status effects: merges by effect name (adds new, updates since_turn)
 
-    Returns updated player_state dict.
+    Returns updated player_state dict. Does not mutate *existing_state*.
     """
     player_state = dict(existing_state)
 
@@ -711,24 +711,29 @@ def merge_mechanical_state(
         player_state["hp"] = new_mechanical["hp"]
 
     if "inventory" in new_mechanical:
-        existing_inv: list[dict] = player_state.get("inventory", [])
+        # Defensive copy so the original list/dicts are not mutated
+        existing_inv: list[dict] = [dict(item) for item in player_state.get("inventory", [])]
         existing_by_name = {item["name"].lower(): item for item in existing_inv}
         for new_item in new_mechanical["inventory"]:
             key = new_item["name"].lower()
             if key in existing_by_name:
-                # Update existing entry
                 existing_by_name[key].update(new_item)
             else:
                 existing_inv.append(new_item)
         player_state["inventory"] = existing_inv
 
     if "status_effects" in new_mechanical:
-        existing_effects: list[dict] = player_state.get("status_effects", [])
+        # Defensive copy so the original list/dicts are not mutated
+        existing_effects: list[dict] = [dict(e) for e in player_state.get("status_effects", [])]
         existing_by_effect = {e["effect"].lower(): e for e in existing_effects}
         for new_effect in new_mechanical["status_effects"]:
             key = new_effect["effect"].lower()
             if key in existing_by_effect:
+                # Preserve the original since_turn (earliest occurrence)
+                original_since = existing_by_effect[key].get("since_turn")
                 existing_by_effect[key].update(new_effect)
+                if original_since:
+                    existing_by_effect[key]["since_turn"] = original_since
             else:
                 existing_effects.append(new_effect)
         player_state["status_effects"] = existing_effects
