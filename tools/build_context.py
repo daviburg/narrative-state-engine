@@ -79,7 +79,7 @@ def read_turn_text(session_dir: str, turn_id: str) -> str:
 # Step B: Entity mention detection
 # ---------------------------------------------------------------------------
 
-def load_indexes(catalog_dir: str) -> tuple[dict[str, dict], dict[str, dict]]:
+def load_indexes(catalog_dir: str) -> tuple[dict[str, list[dict]], dict[str, dict]]:
     """Load all index.json files and build name/ID lookup dictionaries.
 
     Returns (name_lookup, id_lookup) where:
@@ -148,30 +148,31 @@ def find_mentions(
     mentioned_ids: set[str] = set()
     text_lower = turn_text.lower()
 
-    # Check entity IDs in text
+    # Check entity IDs in text using identifier boundaries so one ID does not
+    # falsely match inside another (e.g. "char-player" inside "char-player2").
     for eid in id_lookup:
-        if eid in text_lower:
+        pattern = r"(?<![a-z0-9-])" + re.escape(eid) + r"(?![a-z0-9-])"
+        if re.search(pattern, text_lower):
             mentioned_ids.add(eid)
 
-    # Check entity names with word boundary matching
+    # Check entity names with boundary-aware matching
     # Sort by name length descending so longer names match first
     sorted_names = sorted(name_lookup.keys(), key=len, reverse=True)
     for name in sorted_names:
         if len(name) < 3:
             # Skip very short names to avoid false positives
             continue
-        # Use word boundary for single-word names, plain match for multi-word
         if " " in name:
-            # Multi-word: match the full phrase
-            if name in text_lower:
-                for entry in name_lookup[name]:
-                    mentioned_ids.add(entry["id"])
+            # Multi-word: require non-word boundaries at both ends so
+            # phrases do not match inside larger words (e.g. "the campfire")
+            pattern = r"(?<!\w)" + re.escape(name) + r"(?!\w)"
         else:
             # Single-word (3+ chars): use word boundary
             pattern = r"\b" + re.escape(name) + r"\b"
-            if re.search(pattern, text_lower):
-                for entry in name_lookup[name]:
-                    mentioned_ids.add(entry["id"])
+
+        if re.search(pattern, text_lower):
+            for entry in name_lookup[name]:
+                mentioned_ids.add(entry["id"])
 
     return mentioned_ids
 
@@ -258,11 +259,17 @@ def build_scene_entity(
     entity: dict,
     id_lookup: dict[str, dict],
 ) -> dict:
-    """Build a scene entity record from a full entity dict."""
+    """Build a scene entity record from a full entity dict.
+
+    Handles both V2 (identity/current_relationship) and V1 (description/relationship)
+    field names for best-effort backward compatibility.
+    """
+    # V1 entities use 'description' instead of 'identity'
+    identity = entity.get("identity") or entity.get("description", "")
     result: dict = {
         "id": entity["id"],
         "name": entity["name"],
-        "identity": entity.get("identity", ""),
+        "identity": identity,
     }
     if entity.get("current_status"):
         result["current_status"] = entity["current_status"]
@@ -273,9 +280,11 @@ def build_scene_entity(
     active_rels = []
     for rel in entity.get("relationships", []):
         if rel.get("status", "active") == "active":
+            # V1 uses 'relationship', V2 uses 'current_relationship'
+            rel_text = rel.get("current_relationship") or rel.get("relationship", "")
             rel_record: dict = {
                 "target_id": rel["target_id"],
-                "relationship": rel.get("current_relationship", ""),
+                "relationship": rel_text,
             }
             # Resolve target name from index
             target_entry = id_lookup.get(rel["target_id"])
@@ -358,6 +367,12 @@ def build_context(
     output_path: str | None = None,
 ) -> dict:
     """Main context-building pipeline. Returns the turn-context dict."""
+    # Validate turn_id format early to avoid producing schema-invalid output
+    if not re.match(r"^turn-[0-9]{3,}$", turn_id):
+        raise ValueError(
+            f"Invalid turn ID '{turn_id}'. Expected format: turn-NNN (e.g. turn-078)"
+        )
+
     catalog_dir = os.path.join(framework_dir, "catalogs")
 
     # Detect format
@@ -498,7 +513,7 @@ def main() -> None:
             nearby_turns=args.nearby_turns,
             output_path=args.output,
         )
-    except FileNotFoundError as exc:
+    except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         sys.exit(1)
 

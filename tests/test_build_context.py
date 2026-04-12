@@ -468,6 +468,46 @@ class TestWordBoundary:
         mentions = find_mentions("The elder spoke softly.", name_lookup, id_lookup)
         assert "char-test-elder2" in mentions
 
+    def test_id_substring_no_false_positive(self, v2_fixture):
+        """'char-player' should NOT match inside 'char-player2'."""
+        # Add char-player2 to the index
+        chars_dir = os.path.join(v2_fixture["catalogs"], "characters")
+        index_path = os.path.join(chars_dir, "index.json")
+        with open(index_path, "r", encoding="utf-8-sig") as f:
+            index_data = json.load(f)
+        index_data.append({
+            "id": "char-player2",
+            "name": "Second Player",
+            "type": "character",
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+        })
+        with open(index_path, "w", encoding="utf-8") as f:
+            json.dump(index_data, f, indent=2)
+
+        name_lookup, id_lookup = load_indexes(v2_fixture["catalogs"])
+        # Text mentions only char-player2 — char-player should NOT match
+        mentions = find_mentions("See char-player2 for details.", name_lookup, id_lookup)
+        assert "char-player2" in mentions
+        assert "char-player" not in mentions
+
+    def test_multiword_no_false_positive_in_compound(self, v2_fixture):
+        """'the camp' should NOT match inside 'the campfire'."""
+        name_lookup, id_lookup = load_indexes(v2_fixture["catalogs"])
+        # "the camp" is a location name in the fixture
+        mentions = find_mentions("They gathered around the campfire.", name_lookup, id_lookup)
+        assert "loc-camp" not in mentions
+
+    def test_invalid_turn_id_raises(self, v2_fixture):
+        """Invalid turn ID format raises ValueError."""
+        _write_turn(v2_fixture["transcript"], "turn-078", "Hello.")
+        with pytest.raises(ValueError, match="Invalid turn ID"):
+            build_context(
+                session_dir=v2_fixture["session"],
+                turn_id="bad-id",
+                framework_dir=v2_fixture["framework"],
+            )
+
 
 # Need the import for empty catalogs test
 from build_context import _V2_DIRNAMES
