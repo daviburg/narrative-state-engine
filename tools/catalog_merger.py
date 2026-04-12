@@ -30,21 +30,9 @@ from __future__ import annotations
 import json
 import os
 import re
-import sys
 import warnings
-from pathlib import Path
 
-# Map entity type to catalog filename/directory and ID prefix
-TYPE_TO_CATALOG = {
-    "character": "characters",
-    "location": "locations",
-    "faction": "factions",
-    "item": "items",
-    "creature": "characters",  # creatures go to characters catalog
-    "concept": "items",  # concepts go to items catalog
-}
-
-# V1 flat file mapping (for backward compat)
+# V1 flat file mapping (for backward compatibility)
 TYPE_TO_CATALOG_V1 = {
     "character": "characters.json",
     "location": "locations.json",
@@ -79,11 +67,23 @@ DEFAULT_DORMANCY_THRESHOLD = 10
 def detect_format(catalog_dir: str) -> str:
     """Detect whether catalog_dir uses V2 (per-entity dirs) or V1 (flat files).
 
-    Returns ``"v2"`` if any entity-type subdirectory exists, ``"v1"`` otherwise.
+    Returns ``"v2"`` only when the layout is unambiguously V2: either all
+    expected entity-type subdirectories exist, or at least one V2 directory
+    exists and no legacy V1 flat files remain.  Mixed layouts fall back to
+    ``"v1"`` so legacy flat files are still loaded during migration.
     """
-    for dirname in _V2_DIRNAMES:
-        if os.path.isdir(os.path.join(catalog_dir, dirname)):
-            return "v2"
+    existing_v2_dirs = [
+        d for d in _V2_DIRNAMES
+        if os.path.isdir(os.path.join(catalog_dir, d))
+    ]
+    existing_v1_files = [
+        f for f in _V1_FILENAMES
+        if os.path.isfile(os.path.join(catalog_dir, f))
+    ]
+    if len(existing_v2_dirs) == len(_V2_DIRNAMES):
+        return "v2"
+    if existing_v2_dirs and not existing_v1_files:
+        return "v2"
     return "v1"
 
 
@@ -193,6 +193,15 @@ def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False) -> No
                 print(f"  [DRY RUN] Would write {len(entities)} entities to {entity_dir}/")
                 continue
             os.makedirs(entity_dir, exist_ok=True)
+            # Remove stale per-entity files for entities no longer in memory
+            # (e.g. after dedup merges)
+            live_ids = {e["id"] for e in entities}
+            for fname in os.listdir(entity_dir):
+                if fname == "index.json" or not fname.endswith(".json"):
+                    continue
+                stem = fname[:-5]  # strip .json
+                if stem not in live_ids:
+                    os.remove(os.path.join(entity_dir, fname))
             for entity in entities:
                 _write_v2_entity(entity_dir, entity)
             _generate_index(entity_dir, entities)
@@ -427,11 +436,17 @@ def _update_existing_entity(current: dict, update: dict) -> None:
                     val = [a.strip() for a in val.split(",") if a.strip()]
                 if old_name not in val:
                     val.append(old_name)
+                alias_turn = (update.get("last_updated_turn")
+                              or current.get("last_updated_turn")
+                              or current.get("first_seen_turn", ""))
                 sa["aliases"] = {"value": val, "inference": False,
-                                 "source_turn": update.get("last_updated_turn", "")}
+                                 "source_turn": alias_turn}
             else:
+                alias_turn = (update.get("last_updated_turn")
+                              or current.get("last_updated_turn")
+                              or current.get("first_seen_turn", ""))
                 sa["aliases"] = {"value": [old_name], "inference": False,
-                                 "source_turn": update.get("last_updated_turn", "")}
+                                 "source_turn": alias_turn}
         else:
             # V1 path
             if "attributes" not in current:

@@ -5,8 +5,6 @@ import os
 import sys
 import warnings
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from catalog_merger import (
@@ -62,20 +60,34 @@ def _make_v1_entity(id_, name, etype="character", turn="turn-001"):
 # ---------------------------------------------------------------------------
 
 class TestFormatDetection:
-    def test_v2_detected_when_directory_exists(self, tmp_path):
-        (tmp_path / "characters").mkdir()
+    def test_v2_detected_when_all_directories_exist(self, tmp_path):
+        for d in ["characters", "locations", "factions", "items"]:
+            (tmp_path / d).mkdir()
         assert detect_format(str(tmp_path)) == "v2"
 
     def test_v1_detected_when_no_directories(self, tmp_path):
         (tmp_path / "characters.json").write_text("[]")
         assert detect_format(str(tmp_path)) == "v1"
 
-    def test_v2_detected_with_any_type_dir(self, tmp_path):
+    def test_v2_detected_with_partial_dirs_no_v1_files(self, tmp_path):
         (tmp_path / "locations").mkdir()
         assert detect_format(str(tmp_path)) == "v2"
 
     def test_v1_on_empty_dir(self, tmp_path):
         assert detect_format(str(tmp_path)) == "v1"
+
+    def test_mixed_layout_falls_back_to_v1(self, tmp_path):
+        """If some V2 dirs exist but V1 flat files also remain, use V1."""
+        (tmp_path / "characters").mkdir()
+        (tmp_path / "locations.json").write_text("[]")
+        assert detect_format(str(tmp_path)) == "v1"
+
+    def test_all_dirs_overrides_v1_files(self, tmp_path):
+        """If all V2 dirs exist, use V2 even if stale flat files remain."""
+        for d in ["characters", "locations", "factions", "items"]:
+            (tmp_path / d).mkdir()
+        (tmp_path / "characters.json").write_text("[]")  # stale leftover
+        assert detect_format(str(tmp_path)) == "v2"
 
 
 # ---------------------------------------------------------------------------
@@ -204,6 +216,31 @@ class TestV2LoadSaveRoundTrip:
         # Reload and verify
         catalogs2 = load_catalogs(str(tmp_path))
         assert len(catalogs2["characters.json"]) == 2
+
+    def test_stale_file_removed_on_save(self, tmp_path):
+        """After dedup removes an entity, its file should be deleted on save."""
+        cdir = tmp_path / "characters"
+        cdir.mkdir()
+        for d in ["locations", "factions", "items"]:
+            (tmp_path / d).mkdir()
+
+        e1 = _make_v2_entity("char-alpha", "Alpha")
+        e2 = _make_v2_entity("char-beta", "Beta")
+        (cdir / "char-alpha.json").write_text(json.dumps(e1), encoding="utf-8")
+        (cdir / "char-beta.json").write_text(json.dumps(e2), encoding="utf-8")
+
+        # Load, then remove one entity (simulating dedup)
+        catalogs = load_catalogs(str(tmp_path))
+        catalogs["characters.json"] = [
+            e for e in catalogs["characters.json"] if e["id"] != "char-beta"
+        ]
+        save_catalogs(str(tmp_path), catalogs)
+
+        assert (cdir / "char-alpha.json").exists()
+        assert not (cdir / "char-beta.json").exists()  # stale file removed
+        # Reload confirms only one entity
+        catalogs2 = load_catalogs(str(tmp_path))
+        assert len(catalogs2["characters.json"]) == 1
 
 
 # ---------------------------------------------------------------------------

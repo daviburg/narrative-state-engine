@@ -26,6 +26,7 @@ from catalog_merger import (
     merge_relationships,
     merge_events,
     get_next_event_id,
+    mark_dormant_relationships,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -123,8 +124,8 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         return None
 
     # Top-level string fields that the LLM sometimes wraps in arrays
-    string_fields = ["name", "description", "type", "proposed_id",
-                     "first_seen_turn", "last_updated_turn"]
+    string_fields = ["name", "description", "identity", "current_status",
+                     "type", "proposed_id", "first_seen_turn", "last_updated_turn"]
     for field in string_fields:
         val = entity_data.get(field)
         if isinstance(val, list):
@@ -733,6 +734,12 @@ def extract_semantic_batch(
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
 
     if not dry_run:
+        # Post-merge dormancy pass
+        last_turn = turn_dicts[-1]["turn_id"] if turn_dicts else ""
+        dormant_count = mark_dormant_relationships(catalogs, last_turn)
+        if dormant_count:
+            print(f"  Marked {dormant_count} relationship(s) as dormant")
+
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
@@ -786,6 +793,11 @@ def extract_semantic_single(
 
     entities_total = sum(len(v) for v in catalogs.values())
     print(f"  Catalog now has {entities_total} entities, {len(events_list)} events")
+
+    # Post-merge dormancy pass
+    dormant_count = mark_dormant_relationships(catalogs, turn_id)
+    if dormant_count:
+        print(f"  Marked {dormant_count} relationship(s) as dormant")
 
     save_catalogs(catalog_dir, catalogs)
     save_events(catalog_dir, events_list)
