@@ -6,8 +6,6 @@ import sys
 import tempfile
 import shutil
 
-import pytest
-
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from validate import validate_file, validate_dir, _is_v1_entity
@@ -17,6 +15,22 @@ ENTITY_SCHEMA = os.path.join(REPO_ROOT, "schemas", "entity.schema.json")
 ENTITY_INDEX_SCHEMA = os.path.join(REPO_ROOT, "schemas", "entity-index.schema.json")
 TURN_CONTEXT_SCHEMA = os.path.join(REPO_ROOT, "schemas", "turn-context.schema.json")
 STATE_SCHEMA = os.path.join(REPO_ROOT, "schemas", "state.schema.json")
+
+
+def _write_and_validate(data, schema_path):
+    """Write data to a temp file, close it, validate, then clean up.
+
+    Closes the file handle before calling validate_file to avoid
+    Windows file-locking issues with NamedTemporaryFile.
+    """
+    tmpdir = tempfile.mkdtemp()
+    try:
+        path = os.path.join(tmpdir, "test.json")
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(data, f)
+        return validate_file(path, schema_path)
+    finally:
+        shutil.rmtree(tmpdir)
 
 
 # ---------------------------------------------------------------------------
@@ -36,11 +50,7 @@ def _minimal_v2_entity():
 def test_v2_entity_validates_minimal():
     """Minimal V2 entity with only required fields validates."""
     entity = _minimal_v2_entity()
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -99,11 +109,7 @@ def test_v2_entity_validates_full():
         "last_updated_turn": "turn-010",
         "notes": "Key protagonist. Track development carefully.",
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -117,11 +123,7 @@ def test_v1_entity_fails_v2_validation():
         "attributes": {"role": "protagonist"},
         "first_seen_turn": "turn-001",
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(v1_entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(v1_entity, ENTITY_SCHEMA)
     assert len(errors) == 1
     assert "V1 entity format detected" in errors[0]
 
@@ -137,11 +139,7 @@ def test_v1_entity_array_detected():
             "first_seen_turn": "turn-001",
         }
     ]
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(v1_catalog, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(v1_catalog, ENTITY_SCHEMA)
     assert any("V1 entity format detected" in e for e in errors)
 
 
@@ -153,11 +151,7 @@ def test_v2_entity_missing_identity_fails():
         "type": "character",
         "first_seen_turn": "turn-001",
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert len(errors) > 0
     assert any("identity" in e for e in errors)
 
@@ -174,11 +168,7 @@ def test_v2_entity_new_relationship_types():
                 "first_seen_turn": "turn-002",
             }
         ]
-        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-            json.dump(entity, f)
-            f.flush()
-            errors = validate_file(f.name, ENTITY_SCHEMA)
-        os.unlink(f.name)
+        errors = _write_and_validate(entity, ENTITY_SCHEMA)
         assert errors == [], f"Failed for type '{rel_type}': {errors}"
 
 
@@ -193,11 +183,7 @@ def test_v2_entity_rejects_tribal_role():
             "first_seen_turn": "turn-002",
         }
     ]
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert len(errors) > 0
 
 
@@ -205,11 +191,7 @@ def test_v2_entity_id_pattern_enforced():
     """V2 entity ID pattern enforces lowercase kebab-case after prefix."""
     entity = _minimal_v2_entity()
     entity["id"] = "char-Bad_Name"  # uppercase and underscore should fail
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert len(errors) > 0
 
 
@@ -222,11 +204,7 @@ def test_v2_location_entity_validates():
         "identity": "Main tribal campsite.",
         "first_seen_turn": "turn-005",
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(entity, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -253,32 +231,20 @@ def test_entity_index_validates():
             "first_seen_turn": "turn-002",
         },
     ]
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(index, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_INDEX_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(index, ENTITY_INDEX_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
 def test_entity_index_empty_validates():
     """Empty entity index validates."""
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump([], f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_INDEX_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate([], ENTITY_INDEX_SCHEMA)
     assert errors == []
 
 
 def test_entity_index_missing_required_fails():
     """Index entry missing required fields fails."""
     index = [{"id": "char-x", "name": "X"}]  # missing type and first_seen_turn
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(index, f)
-        f.flush()
-        errors = validate_file(f.name, ENTITY_INDEX_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(index, ENTITY_INDEX_SCHEMA)
     assert len(errors) > 0
 
 
@@ -298,11 +264,7 @@ def test_turn_context_validates_minimal():
             }
         ],
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(ctx, f)
-        f.flush()
-        errors = validate_file(f.name, TURN_CONTEXT_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(ctx, TURN_CONTEXT_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -344,22 +306,14 @@ def test_turn_context_validates_full():
             }
         ],
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(ctx, f)
-        f.flush()
-        errors = validate_file(f.name, TURN_CONTEXT_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(ctx, TURN_CONTEXT_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
 def test_turn_context_missing_scene_entities_fails():
     """Turn context without required scene_entities fails."""
     ctx = {"as_of_turn": "turn-010"}
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(ctx, f)
-        f.flush()
-        errors = validate_file(f.name, TURN_CONTEXT_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(ctx, TURN_CONTEXT_SCHEMA)
     assert len(errors) > 0
 
 
@@ -382,11 +336,7 @@ def _minimal_state():
 def test_state_without_new_fields_validates():
     """State.json without hp, inventory, status_effects still validates."""
     state = _minimal_state()
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(state, f)
-        f.flush()
-        errors = validate_file(f.name, STATE_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(state, STATE_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -399,11 +349,7 @@ def test_state_with_hp_validates():
         "max_hp": 30,
         "last_change": {"delta": "+5", "source": "healing potion", "turn": "turn-005"},
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(state, f)
-        f.flush()
-        errors = validate_file(f.name, STATE_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(state, STATE_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -415,11 +361,7 @@ def test_state_with_null_hp_validates():
         "numeric": None,
         "max_hp": None,
     }
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(state, f)
-        f.flush()
-        errors = validate_file(f.name, STATE_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(state, STATE_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -430,11 +372,7 @@ def test_state_with_inventory_validates():
         {"item_id": "item-sword", "name": "Iron Sword", "carried": True, "quantity": 1, "notes": None},
         {"item_id": None, "name": "Herbal Pouches", "carried": True, "quantity": 3, "notes": "various herbs"},
     ]
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(state, f)
-        f.flush()
-        errors = validate_file(f.name, STATE_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(state, STATE_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 
@@ -445,11 +383,7 @@ def test_state_with_status_effects_validates():
         {"effect": "fatigued", "source": "long march", "since_turn": "turn-004"},
         {"effect": "blessed"},
     ]
-    with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as f:
-        json.dump(state, f)
-        f.flush()
-        errors = validate_file(f.name, STATE_SCHEMA)
-    os.unlink(f.name)
+    errors = _write_and_validate(state, STATE_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
 
 

@@ -35,7 +35,7 @@ Add a `status` field to each relationship and track temporal validity explicitly
 // Relationship object — proposed
 {
   "target_id": "char-two-figures",
-  "relationship": "captured by",
+  "current_relationship": "captured by",
   "type": "political",
   "direction": "incoming",
   "status": "resolved",           // NEW: active | dormant | resolved
@@ -625,7 +625,7 @@ Changes from the current `entity.schema.json`:
           },
           "type": {
             "type": "string",
-            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "tribal_role", "other"]
+            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"]
           },
           "direction": {
             "type": "string",
