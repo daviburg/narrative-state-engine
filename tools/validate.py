@@ -48,7 +48,23 @@ SCHEMA_MAP = {
     "timeline.json": "schemas/timeline.schema.json",
     "season-summaries.json": "schemas/season-summary.schema.json",
     "metadata.json": "schemas/metadata.schema.json",
+    "turn-context.json": "schemas/turn-context.schema.json",
 }
+
+# Entity catalog directory names that contain per-entity JSON files
+ENTITY_CATALOG_DIRS = {"characters", "locations", "factions", "items", "creatures", "concepts"}
+
+
+def _is_v1_entity(data) -> bool:
+    """Check if data looks like a V1 entity (has 'description' or 'attributes' field)."""
+    if isinstance(data, dict):
+        return "description" in data or "attributes" in data
+    if isinstance(data, list):
+        return any(
+            isinstance(item, dict) and ("description" in item or "attributes" in item)
+            for item in data
+        )
+    return False
 
 
 def load_schema(schema_path: str) -> dict:
@@ -70,6 +86,14 @@ def validate_file(json_path: str, schema_path: str, syntax_only: bool = False) -
     if syntax_only:
         return []  # Caller explicitly requested syntax-only checks
 
+    # V1 entity format detection
+    if "entity.schema.json" in schema_path and _is_v1_entity(data):
+        errors.append(
+            "V1 entity format detected (has 'description' or 'attributes' field). "
+            "Run migration to convert to V2 format (identity/stable_attributes)."
+        )
+        return errors
+
     try:
         schema = load_schema(schema_path)
     except (json.JSONDecodeError, FileNotFoundError) as e:
@@ -77,8 +101,9 @@ def validate_file(json_path: str, schema_path: str, syntax_only: bool = False) -
 
     try:
         validator = jsonschema.Draft7Validator(schema)
-        # Files can be arrays (catalogs) or objects; validate each item in arrays
-        if isinstance(data, list):
+        # For array-typed schemas (e.g., entity-index), validate the whole file.
+        # For entity catalogs (object-typed schema with array data), validate each item.
+        if isinstance(data, list) and schema.get("type") != "array":
             for i, item in enumerate(data):
                 for error in validator.iter_errors(item):
                     errors.append(f"[{i}] {error.message} (path: {list(error.path)})")
@@ -208,13 +233,26 @@ def validate_dir(directory: str, repo_root: str, syntax_only: bool = False,
                   strict: bool = False) -> tuple[int, int, int]:
     """Walk a directory and validate all JSON files with known schema mappings.
 
+    Supports per-entity catalog directories (e.g., catalogs/characters/)
+    where each .json file is validated against the entity schema and
+    index.json is validated against the entity-index schema.
+
     Returns (passed, failed, completeness_warnings).
     """
     passed = 0
     failed = 0
     completeness_warnings = 0
 
-    for root, _dirs, files in os.walk(directory):
+    for root, dirs, files in os.walk(directory):
+        # Check if this is a per-entity catalog directory
+        dir_basename = os.path.basename(root)
+        parent_basename = os.path.basename(os.path.dirname(root))
+
+        is_entity_dir = (
+            dir_basename in ENTITY_CATALOG_DIRS
+            and parent_basename == "catalogs"
+        )
+
         for fname in sorted(files):
             if not fname.endswith(".json"):
                 continue
@@ -226,7 +264,15 @@ def validate_dir(directory: str, repo_root: str, syntax_only: bool = False,
             ):
                 continue
 
-            schema_rel = SCHEMA_MAP.get(fname)
+            # Determine schema to use
+            if is_entity_dir:
+                if fname == "index.json":
+                    schema_rel = "schemas/entity-index.schema.json"
+                else:
+                    schema_rel = "schemas/entity.schema.json"
+            else:
+                schema_rel = SCHEMA_MAP.get(fname)
+
             if not schema_rel:
                 print(f"  [SKIP]   {json_path} (no schema mapping)")
                 continue

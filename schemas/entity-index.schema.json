@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "entity-index.schema.json",
+  "title": "Entity Index",
+  "description": "Lightweight entity roster for context building. Array of index entries, one per entity.",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id", "name", "type", "first_seen_turn"],
+    "additionalProperties": false,
+    "properties": {
+      "id": {
+        "type": "string",
+        "description": "Entity ID matching the per-entity detail file."
+      },
+      "name": {
+        "type": "string",
+        "description": "Display name of the entity."
+      },
+      "type": {
+        "type": "string",
+        "description": "Entity category.",
+        "enum": ["character", "location", "faction", "item", "creature", "concept"]
+      },
+      "status_summary": {
+        "type": "string",
+        "description": "One-line summary of current status. Derived from entity current_status."
+      },
+      "first_seen_turn": {
+        "type": "string",
+        "description": "Turn ID when this entity was first mentioned.",
+        "pattern": "^turn-[0-9]{3,}$"
+      },
+      "last_updated_turn": {
+        "type": "string",
+        "description": "Turn ID of the most recent update.",
+        "pattern": "^turn-[0-9]{3,}$"
+      },
+      "active_relationship_count": {
+        "type": "integer",
+        "description": "Number of relationships with status=active.",
+        "minimum": 0
+      }
+    }
+  }
+}

@@ -1,10 +1,10 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "entity.schema.json",
-  "title": "Entity",
-  "description": "A named entity in the game world: character, location, faction, or item.",
+  "title": "Entity (V2)",
+  "description": "A named entity in the game world: character, location, faction, item, creature, or concept. V2 schema with identity/status split, stable/volatile attributes, and consolidated relationships.",
   "type": "object",
-  "required": ["id", "name", "type", "description", "first_seen_turn"],
+  "required": ["id", "name", "type", "identity", "first_seen_turn"],
   "additionalProperties": false,
   "allOf": [
     { "if": { "properties": { "type": { "const": "character" } } },  "then": { "properties": { "id": { "pattern": "^char-" } } } },
@@ -18,7 +18,7 @@
     "id": {
       "type": "string",
       "description": "Unique identifier with type prefix, e.g. 'char-innkeeper', 'loc-thornhaven', 'faction-iron-ridge'.",
-      "pattern": "^(char|loc|faction|item|creature|concept)-"
+      "pattern": "^(char|loc|faction|item|creature|concept)-[a-z0-9]+(-[a-z0-9]+)*$"
     },
     "name": {
       "type": "string",
@@ -30,46 +30,85 @@
       "description": "Entity category.",
       "enum": ["character", "location", "faction", "item", "creature", "concept"]
     },
-    "description": {
+    "identity": {
       "type": "string",
-      "description": "Factual description based on transcript evidence."
+      "description": "Stable identity summary: who/what the entity is. 2-3 sentences."
     },
-    "attributes": {
+    "current_status": {
+      "type": "string",
+      "description": "Volatile status: what the entity is doing/experiencing now. 1-3 sentences."
+    },
+    "status_updated_turn": {
+      "type": "string",
+      "description": "Turn when current_status was last updated.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "stable_attributes": {
       "type": "object",
-      "description": "Key-value attributes (e.g. role, alignment, condition). Values may be tagged as inference.",
+      "description": "Persistent traits (race, class, appearance, role). Rarely change.",
       "additionalProperties": {
-        "type": "string"
+        "type": "object",
+        "required": ["value"],
+        "properties": {
+          "value": {
+            "oneOf": [
+              { "type": "string" },
+              { "type": "array", "items": { "type": "string" } }
+            ]
+          },
+          "inference": { "type": "boolean", "default": false },
+          "confidence": { "type": "number", "minimum": 0.0, "maximum": 1.0 },
+          "source_turn": { "type": "string", "pattern": "^turn-[0-9]{3,}$" }
+        },
+        "additionalProperties": false
       }
+    },
+    "volatile_state": {
+      "type": "object",
+      "description": "Current state: condition, equipment, location. Updated each turn entity appears.",
+      "properties": {
+        "condition": { "type": "string" },
+        "equipment": { "type": "array", "items": { "type": "string" } },
+        "location": { "type": "string" },
+        "last_updated_turn": { "type": "string", "pattern": "^turn-[0-9]{3,}$" }
+      },
+      "additionalProperties": true
     },
     "relationships": {
       "type": "array",
-      "description": "Known relationships to other entities.",
+      "description": "Consolidated per-pair relationships to other entities.",
       "items": {
         "type": "object",
-        "required": ["target_id", "relationship", "type"],
+        "required": ["target_id", "current_relationship", "type", "first_seen_turn"],
         "additionalProperties": false,
         "properties": {
           "target_id": {
             "type": "string",
             "description": "ID of the related entity."
           },
-          "relationship": {
+          "current_relationship": {
             "type": "string",
-            "description": "Description of the relationship (e.g. 'parent', 'partner', 'leader')."
+            "description": "Current state of the relationship."
           },
           "type": {
             "type": "string",
             "description": "Category of relationship.",
-            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "tribal_role", "other"]
+            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"]
           },
           "direction": {
             "type": "string",
             "description": "Directionality of the relationship from this entity's perspective.",
             "enum": ["outgoing", "incoming", "bidirectional"]
           },
+          "status": {
+            "type": "string",
+            "description": "Temporal status of the relationship.",
+            "enum": ["active", "dormant", "resolved"],
+            "default": "active"
+          },
           "confidence": {
             "type": "number",
-            "description": "Confidence in this relationship (0.0–1.0). Omit if explicit.",
+            "description": "Confidence in this relationship (0.0-1.0). Omit if explicit.",
             "minimum": 0.0,
             "maximum": 1.0
           },
@@ -82,6 +121,28 @@
             "type": "string",
             "description": "Turn ID of the most recent change to this relationship.",
             "pattern": "^turn-[0-9]{3,}$"
+          },
+          "resolved_turn": {
+            "type": "string",
+            "description": "Turn ID when the relationship was resolved.",
+            "pattern": "^turn-[0-9]{3,}$"
+          },
+          "resolution_note": {
+            "type": "string",
+            "description": "Explanation of how/why the relationship ended."
+          },
+          "history": {
+            "type": "array",
+            "description": "Append-only log of significant relationship changes.",
+            "items": {
+              "type": "object",
+              "required": ["turn", "description"],
+              "properties": {
+                "turn": { "type": "string", "pattern": "^turn-[0-9]{3,}$" },
+                "description": { "type": "string" }
+              },
+              "additionalProperties": false
+            }
           }
         }
       }
