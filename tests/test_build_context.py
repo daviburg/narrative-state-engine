@@ -3,7 +3,6 @@ location resolution, nearby entity filtering, and schema validation."""
 import json
 import os
 import sys
-import warnings
 
 import pytest
 
@@ -12,12 +11,9 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 from build_context import (
     build_context,
     build_nearby_summary,
-    build_scene_entity,
-    detect_format,
     expand_one_hop,
     find_mentions,
     load_indexes,
-    parse_turn_number,
     read_turn_text,
 )
 
@@ -362,10 +358,7 @@ class TestSchemaValidation:
         if not os.path.isfile(schema_path):
             pytest.skip("turn-context.schema.json not found")
 
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
+        jsonschema = pytest.importorskip("jsonschema")
 
         with open(schema_path, "r", encoding="utf-8-sig") as f:
             schema = json.load(f)
