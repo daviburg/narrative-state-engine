@@ -46,9 +46,23 @@ PC_ALLOWED_ATTRS = {
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
-    """Strip non-allowed attribute keys from char-player entities."""
+    """Strip non-allowed attribute keys from char-player entities.
+
+    Handles both V2 (stable_attributes) and V1 (attributes) formats.
+    """
     if entity_data.get("id") != "char-player":
         return entity_data
+    # V2: stable_attributes
+    sa = entity_data.get("stable_attributes", {})
+    if sa:
+        disallowed = {k for k in sa if k not in PC_ALLOWED_ATTRS}
+        if disallowed:
+            print(
+                f"  WARNING: Dropping non-allowed char-player stable_attributes: {sorted(disallowed)}",
+                file=sys.stderr,
+            )
+            entity_data["stable_attributes"] = {k: v for k, v in sa.items() if k in PC_ALLOWED_ATTRS}
+    # V1: attributes (backward compat)
     attrs = entity_data.get("attributes", {})
     disallowed = {k for k in attrs if k not in PC_ALLOWED_ATTRS}
     if disallowed:
@@ -64,11 +78,23 @@ def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
     """Purge non-allowed attribute keys from the stored char-player catalog entry.
 
     Ensures historical action-sprawl attributes are cleaned up even if they
-    were merged before the filter was in place.
+    were merged before the filter was in place.  Handles both V2
+    (stable_attributes) and V1 (attributes) formats.
     """
     for entity in catalogs.get("characters.json", []):
         if entity.get("id") != "char-player":
             continue
+        # V2: stable_attributes
+        sa = entity.get("stable_attributes", {})
+        if sa:
+            disallowed = {k for k in sa if k not in PC_ALLOWED_ATTRS}
+            if disallowed:
+                print(
+                    f"  WARNING: Purging stale char-player catalog stable_attributes: {sorted(disallowed)}",
+                    file=sys.stderr,
+                )
+                entity["stable_attributes"] = {k: v for k, v in sa.items() if k in PC_ALLOWED_ATTRS}
+        # V1: attributes
         attrs = entity.get("attributes", {})
         disallowed = {k for k in attrs if k not in PC_ALLOWED_ATTRS}
         if disallowed:
@@ -172,7 +198,89 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         entity_data["relationships"] = [rels]
         print("  COERCE: relationships dict → single-element array", file=sys.stderr)
 
+    # --- V1 → V2 coercion ---
+    # If LLM returned "description" but not "identity", map description → identity.
+    # Always strip the V1-only "description" field afterward so mixed V1/V2
+    # payloads still validate against the V2 schema (additionalProperties: false).
+    if "description" in entity_data:
+        if "identity" not in entity_data:
+            entity_data["identity"] = entity_data["description"]
+            if "current_status" not in entity_data:
+                entity_data["current_status"] = ""
+            print("  COERCE: description → identity (V1→V2 fallback)", file=sys.stderr)
+        entity_data.pop("description", None)
+
+    # If LLM returned flat "attributes" but not "stable_attributes", classify them.
+    # Always strip the V1-only "attributes" field afterward so mixed V1/V2
+    # payloads still validate against the V2 schema.
+    if "attributes" in entity_data:
+        attrs = entity_data.pop("attributes")
+        if "stable_attributes" not in entity_data and isinstance(attrs, dict) and attrs:
+            # Keys that represent volatile state
+            volatile_keys = {"condition", "equipment", "location", "hp_change"}
+            stable = {}
+            volatile = {}
+            turn_id = entity_data.get("last_updated_turn", "")
+            # Only include source_turn / last_updated_turn when a valid
+            # turn ID is available (schema requires pattern ^turn-[0-9]{3,}$).
+            has_valid_turn = bool(turn_id and turn_id.startswith("turn-"))
+            for key, val in attrs.items():
+                if key in volatile_keys:
+                    if key == "equipment" and isinstance(val, str):
+                        volatile[key] = [v.strip() for v in val.split(",")]
+                    else:
+                        volatile[key] = val
+                else:
+                    # Detect [inference] suffix from V1 format
+                    inference = False
+                    if isinstance(val, str) and val.endswith(" [inference]"):
+                        val = val[: -len(" [inference]")]
+                        inference = True
+                    entry = {
+                        "value": val,
+                        "inference": inference,
+                        "confidence": 0.7 if inference else 1.0,
+                    }
+                    if has_valid_turn:
+                        entry["source_turn"] = turn_id
+                    stable[key] = entry
+            if stable:
+                entity_data["stable_attributes"] = stable
+            if volatile:
+                if has_valid_turn:
+                    volatile["last_updated_turn"] = turn_id
+                entity_data["volatile_state"] = volatile
+            print("  COERCE: flat attributes → stable_attributes/volatile_state (V1→V2)", file=sys.stderr)
+
+    # Coerce V1 relationship fields to V2 format
+    for rel in entity_data.get("relationships", []):
+        if "relationship" in rel and "current_relationship" not in rel:
+            rel["current_relationship"] = rel.pop("relationship")
+        # Always remove source_turn (not in V2 schema which has
+        # additionalProperties: false on relationships), mapping it
+        # into first_seen_turn / last_updated_turn as needed.
+        if "source_turn" in rel:
+            source_turn = rel.pop("source_turn")
+            if "first_seen_turn" not in rel:
+                rel["first_seen_turn"] = source_turn
+            if "last_updated_turn" not in rel:
+                rel["last_updated_turn"] = source_turn
+
     return entity_data
+
+
+def _filter_concept_prefix_from_items(entity_data: dict) -> bool:
+    """Return False (reject) if the entity has a concept- prefix but type=item.
+
+    Concept-prefix entities should not be routed to the items catalog.
+    Returns True if the entity should be kept.
+    """
+    eid = entity_data.get("id") or entity_data.get("proposed_id") or ""
+    etype = entity_data.get("type", "")
+    if eid.startswith("concept-") and etype == "item":
+        print(f"  FILTER: dropping concept-prefix entity from items: {eid}", file=sys.stderr)
+        return False
+    return True
 
 
 def _validate_entity(entity_data: dict) -> bool:
@@ -245,9 +353,37 @@ def format_discovery_prompt(turn: dict, known_entities: str) -> str:
     )
 
 
+def _format_prior_entity_context(current_entry: dict | None) -> str:
+    """Format the prior entity state for injection into the detail prompt.
+
+    Extracts identity, current_status, stable_attributes, and volatile_state
+    from the existing entity (V2 fields).  Falls back to V1 description and
+    attributes when V2 fields are absent.
+    """
+    if not current_entry:
+        return "{}"
+    prior: dict = {}
+    # V2 fields
+    for key in ("identity", "current_status", "status_updated_turn",
+                "stable_attributes", "volatile_state"):
+        if key in current_entry:
+            prior[key] = current_entry[key]
+    # V1 fallback: keep description/attributes if no V2 counterparts
+    if "identity" not in prior and "description" in current_entry:
+        prior["description"] = current_entry["description"]
+    if "stable_attributes" not in prior and "attributes" in current_entry:
+        prior["attributes"] = current_entry["attributes"]
+    # Always include basic metadata
+    for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn", "notes"):
+        if key in current_entry:
+            prior[key] = current_entry[key]
+    return json.dumps(prior, indent=2)
+
+
 def format_detail_prompt(turn: dict, entity_ref: dict, current_entry: dict | None) -> str:
     """Format the user prompt for entity detail extraction."""
     entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
+    prior_json = _format_prior_entity_context(current_entry)
     return (
         f"## Current Turn\n"
         f"Turn ID: {turn['turn_id']}\n"
@@ -257,23 +393,51 @@ def format_detail_prompt(turn: dict, entity_ref: dict, current_entry: dict | Non
         f"Entity ID: {entity_ref.get('existing_id') or entity_ref.get('proposed_id')}\n"
         f"Entity Name: {entity_ref['name']}\n"
         f"Entity Type: {entity_ref['type']}\n\n"
+        f"## Prior entity state (for reference, update as needed):\n"
+        f"```json\n{prior_json}\n```\n\n"
         f"## Current Catalog Entry\n```json\n{entry_json}\n```"
     )
 
 
-def format_relationship_prompt(turn: dict, mentioned_entities: list) -> str:
+def _collect_existing_relationships(catalogs: dict, entity_ids: list[str]) -> str:
+    """Gather existing relationships for the given entities and format as JSON.
+
+    Returns a compact JSON string containing per-entity relationships so the
+    relationship-mapper LLM can update rather than duplicate them.
+    """
+    result: dict[str, list] = {}
+    for eid in entity_ids:
+        found = find_entity_by_id(catalogs, eid)
+        if found:
+            _, entity = found
+            rels = entity.get("relationships", [])
+            if rels:
+                result[eid] = rels
+    if not result:
+        return ""
+    return json.dumps(result, indent=2)
+
+
+def format_relationship_prompt(turn: dict, mentioned_entities: list,
+                               existing_relationships_json: str = "") -> str:
     """Format the user prompt for relationship mapping."""
     entities_text = "\n".join(
         f"- {e['id']}: {e['name']} ({e['type']})"
         for e in mentioned_entities
     )
-    return (
+    prompt = (
         f"## Current Turn\n"
         f"Turn ID: {turn['turn_id']}\n"
         f"Speaker: {turn['speaker']}\n"
         f"Text:\n{turn['text']}\n\n"
         f"## Entities Mentioned in This Turn\n{entities_text}"
     )
+    if existing_relationships_json:
+        prompt += (
+            f"\n\n## Existing relationships for these entities:\n"
+            f"```json\n{existing_relationships_json}\n```"
+        )
+    return prompt
 
 
 def format_event_prompt(turn: dict, next_event_id: int, entity_ids: list) -> str:
@@ -378,6 +542,8 @@ def extract_and_merge(
         entity_data = detail_result.get("entity")
         if entity_data:
             entity_data = _coerce_entity_fields(entity_data)
+        if entity_data and not _filter_concept_prefix_from_items(entity_data):
+            continue
         if entity_data and _validate_entity(entity_data):
             _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
@@ -440,10 +606,14 @@ def extract_and_merge(
         })
 
     if len(mentioned_entities) >= 2:
+        # Collect existing relationships for context injection
+        entity_id_list = [e["id"] for e in mentioned_entities]
+        existing_rels_json = _collect_existing_relationships(catalogs, entity_id_list)
         try:
             rel_result = llm.extract_json(
                 system_prompt=load_template("relationship-mapper"),
-                user_prompt=format_relationship_prompt(turn, mentioned_entities),
+                user_prompt=format_relationship_prompt(turn, mentioned_entities,
+                                                       existing_rels_json),
             )
             relationships = rel_result.get("relationships", [])
             if relationships:
