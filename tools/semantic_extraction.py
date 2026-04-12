@@ -204,8 +204,7 @@ PLAYER_CHARACTER_SEED = {
     "id": "char-player",
     "name": "Player Character",
     "type": "character",
-    "description": "The player character (referred to as 'you' in DM narration).",
-    "attributes": {},
+    "identity": "The player character (referred to as 'you' in DM narration).",
     "first_seen_turn": "turn-001",
     "last_updated_turn": "turn-001",
 }
@@ -492,12 +491,27 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
         for idx, entity in enumerate(entities):
             # Collect all names this entity is known by
             names = {entity.get("name", "").strip().lower()}
+            # V1: attributes.aliases (string)
             aliases_str = entity.get("attributes", {}).get("aliases", "")
             if aliases_str:
                 for a in aliases_str.split(","):
                     a = a.strip().lower()
                     if a:
                         names.add(a)
+            # V2: stable_attributes.aliases.value (list or string)
+            sa_aliases = entity.get("stable_attributes", {}).get("aliases")
+            if isinstance(sa_aliases, dict):
+                val = sa_aliases.get("value", "")
+                if isinstance(val, list):
+                    for a in val:
+                        a = a.strip().lower()
+                        if a:
+                            names.add(a)
+                elif isinstance(val, str) and val:
+                    for a in val.split(","):
+                        a = a.strip().lower()
+                        if a:
+                            names.add(a)
             for n in names:
                 if n:
                     name_map.setdefault(n, []).append(idx)
