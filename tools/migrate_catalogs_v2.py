@@ -9,7 +9,6 @@ Usage:
 
 import argparse
 import json
-import os
 import re
 import sys
 from pathlib import Path
@@ -29,11 +28,6 @@ CATALOG_TYPES = {
 VALID_RELATIONSHIP_TYPES = {
     "kinship", "partnership", "mentorship", "political",
     "factional", "social", "adversarial", "romantic", "other",
-}
-
-STABLE_KEYS = {
-    "race", "class", "appearance", "role", "aliases", "species",
-    "age", "gender", "title", "affiliation",
 }
 
 VOLATILE_KEYS = {
@@ -210,6 +204,7 @@ def consolidate_relationships(
     relationships: list[dict],
     entity_first_seen: str | None,
     max_turn: int,
+    entity_last_updated_turns: dict[str, str] | None = None,
 ) -> list[dict]:
     """Group V1 relationships by (source, target) pair into consolidated V2 relationships."""
     if not relationships:
@@ -236,10 +231,13 @@ def consolidate_relationships(
         # Build history from all but the most recent
         history = []
         for r in sorted_rels[:-1]:
-            entry = {"description": r.get("relationship", "")}
             turn = r.get("last_updated_turn") or r.get("first_seen_turn")
-            if turn:
-                entry["turn"] = turn
+            if not turn:
+                continue
+            entry = {
+                "description": r.get("relationship", ""),
+                "turn": turn,
+            }
             history.append(entry)
 
         # Determine first_seen and last_updated across all rels in the group
@@ -253,7 +251,9 @@ def consolidate_relationships(
         all_last = [t for t in all_last if t is not None]
 
         first_turn_num = min(all_first) if all_first else None
-        last_turn_num = max(all_last) if all_last else None
+        last_turn_num = max(all_last) if all_last else (
+            max(all_first) if all_first else None
+        )
 
         first_turn_id = (
             entity_first_seen
@@ -264,10 +264,24 @@ def consolidate_relationships(
             f"turn-{last_turn_num:03d}" if last_turn_num is not None else None
         )
 
-        # Determine dormancy status
+        # Determine dormancy status — dormant if either the relationship
+        # or the target entity hasn't been updated within the threshold.
         status = "active"
-        if last_turn_num is not None and max_turn > 0:
-            if max_turn - last_turn_num > DEFAULT_DORMANCY_THRESHOLD:
+        if max_turn > 0:
+            rel_stale = (
+                last_turn_num is not None
+                and max_turn - last_turn_num > DEFAULT_DORMANCY_THRESHOLD
+            )
+            target_stale = False
+            if entity_last_updated_turns:
+                target_turn = parse_turn_number(
+                    entity_last_updated_turns.get(target_id, "")
+                )
+                if target_turn is not None:
+                    target_stale = (
+                        max_turn - target_turn > DEFAULT_DORMANCY_THRESHOLD
+                    )
+            if rel_stale or target_stale:
                 status = "dormant"
 
         v2_rel = {
@@ -293,7 +307,11 @@ def consolidate_relationships(
     return consolidated
 
 
-def convert_entity(entity: dict, max_turn: int) -> dict:
+def convert_entity(
+    entity: dict,
+    max_turn: int,
+    entity_last_updated_turns: dict[str, str] | None = None,
+) -> dict:
     """Convert a V1 entity dict to V2 per-entity format."""
     first_seen = entity.get("first_seen_turn")
     last_updated = entity.get("last_updated_turn")
@@ -313,7 +331,9 @@ def convert_entity(entity: dict, max_turn: int) -> dict:
 
     # Relationships
     raw_rels = entity.get("relationships", [])
-    relationships = consolidate_relationships(raw_rels, first_seen, max_turn)
+    relationships = consolidate_relationships(
+        raw_rels, first_seen, max_turn, entity_last_updated_turns
+    )
 
     # Build V2 entity
     v2 = {
@@ -344,8 +364,10 @@ def convert_entity(entity: dict, max_turn: int) -> dict:
 
 def build_index_entry(v2_entity: dict) -> dict:
     """Build a lightweight index entry from a V2 entity."""
+    current_status = v2_entity.get("current_status", "")
     identity = v2_entity.get("identity", "")
-    status_summary = identity[:80] if identity else ""
+    status_source = current_status if current_status else identity
+    status_summary = status_source[:80] if status_source else ""
 
     active_count = sum(
         1
@@ -414,12 +436,27 @@ def migrate_catalog(
     warnings = []
     index_entries = []
 
+    # Build entity_id → last_updated_turn map for two-sided dormancy checks
+    entity_last_updated_turns = {}
+    for e in entities:
+        if isinstance(e, dict) and "id" in e:
+            lut = e.get("last_updated_turn") or e.get("first_seen_turn", "")
+            if lut:
+                entity_last_updated_turns[e["id"]] = lut
+
     for entity in entities:
-        if not isinstance(entity, dict) or "id" not in entity:
+        if not isinstance(entity, dict):
             warnings.append(f"Skipped malformed entity in {catalog_name}")
             continue
+        missing_keys = [k for k in ("id", "name", "type") if k not in entity]
+        if missing_keys:
+            warnings.append(
+                f"Skipped malformed entity in {catalog_name}: "
+                f"missing {', '.join(missing_keys)}"
+            )
+            continue
 
-        v2 = convert_entity(entity, max_turn)
+        v2 = convert_entity(entity, max_turn, entity_last_updated_turns)
         entity_file = entity_dir / f"{v2['id']}.json"
         write_json(entity_file, v2)
 
@@ -467,9 +504,22 @@ def main() -> int:
     max_turn = find_max_turn(framework_dir)
     print(f"Max turn detected: turn-{max_turn:03d}")
 
+    # Preflight: check all target directories before migrating any
+    if not args.force:
+        blockers = []
+        for catalog_name in CATALOG_TYPES:
+            entity_dir = catalogs_dir / catalog_name
+            if entity_dir.exists() and any(entity_dir.iterdir()):
+                blockers.append(str(entity_dir))
+        if blockers:
+            print("ABORT: the following directories already exist and are not empty:")
+            for b in blockers:
+                print(f"  - {b}")
+            print("Use --force to overwrite.")
+            return 1
+
     total_entities = 0
     all_warnings = []
-    abort = False
 
     for catalog_name in CATALOG_TYPES:
         count, warnings = migrate_catalog(
@@ -478,11 +528,6 @@ def main() -> int:
         total_entities += count
         all_warnings.extend(warnings)
 
-        # Check for abort condition
-        for w in warnings:
-            if w.startswith("ABORT:"):
-                abort = True
-
         if count > 0:
             print(f"  {catalog_name}: migrated {count} entities")
 
@@ -490,10 +535,6 @@ def main() -> int:
         print("\nWarnings:")
         for w in all_warnings:
             print(f"  - {w}")
-
-    if abort:
-        print("\nMigration aborted due to existing directories. Use --force to overwrite.")
-        return 1
 
     print(f"\nMigration complete: {total_entities} entities migrated.")
     return 0

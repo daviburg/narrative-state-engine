@@ -1,7 +1,5 @@
 """Tests for tools/migrate_catalogs_v2.py"""
 
-import json
-import shutil
 from pathlib import Path
 
 import pytest
@@ -19,10 +17,8 @@ from migrate_catalogs_v2 import (
     migrate_catalog,
     strip_inference_tag,
     wrap_stable_attribute,
-    find_max_turn,
     write_json,
     read_json,
-    CATALOG_TYPES,
 )
 
 
@@ -309,8 +305,8 @@ def test_index_generation():
     assert entry["first_seen_turn"] == "turn-001"
     assert entry["last_updated_turn"] == "turn-050"
     assert entry["active_relationship_count"] == 1
-    assert len(entry["status_summary"]) <= 80
-    assert entry["status_summary"].startswith("A legendary hero")
+    # status_summary derives from current_status (per schema), not identity
+    assert entry["status_summary"] == "Resting."
 
 
 # ---------------------------------------------------------------------------
