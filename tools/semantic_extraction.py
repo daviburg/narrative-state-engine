@@ -26,6 +26,7 @@ from catalog_merger import (
     merge_relationships,
     merge_events,
     get_next_event_id,
+    mark_dormant_relationships,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -123,8 +124,8 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         return None
 
     # Top-level string fields that the LLM sometimes wraps in arrays
-    string_fields = ["name", "description", "type", "proposed_id",
-                     "first_seen_turn", "last_updated_turn"]
+    string_fields = ["name", "description", "identity", "current_status",
+                     "type", "proposed_id", "first_seen_turn", "last_updated_turn"]
     for field in string_fields:
         val = entity_data.get(field)
         if isinstance(val, list):
@@ -204,8 +205,7 @@ PLAYER_CHARACTER_SEED = {
     "id": "char-player",
     "name": "Player Character",
     "type": "character",
-    "description": "The player character (referred to as 'you' in DM narration).",
-    "attributes": {},
+    "identity": "The player character (referred to as 'you' in DM narration).",
     "first_seen_turn": "turn-001",
     "last_updated_turn": "turn-001",
 }
@@ -492,12 +492,27 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
         for idx, entity in enumerate(entities):
             # Collect all names this entity is known by
             names = {entity.get("name", "").strip().lower()}
+            # V1: attributes.aliases (string)
             aliases_str = entity.get("attributes", {}).get("aliases", "")
             if aliases_str:
                 for a in aliases_str.split(","):
                     a = a.strip().lower()
                     if a:
                         names.add(a)
+            # V2: stable_attributes.aliases.value (list or string)
+            sa_aliases = entity.get("stable_attributes", {}).get("aliases")
+            if isinstance(sa_aliases, dict):
+                val = sa_aliases.get("value", "")
+                if isinstance(val, list):
+                    for a in val:
+                        a = a.strip().lower()
+                        if a:
+                            names.add(a)
+                elif isinstance(val, str) and val:
+                    for a in val.split(","):
+                        a = a.strip().lower()
+                        if a:
+                            names.add(a)
             for n in names:
                 if n:
                     name_map.setdefault(n, []).append(idx)
@@ -719,6 +734,12 @@ def extract_semantic_batch(
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
 
     if not dry_run:
+        # Post-merge dormancy pass
+        last_turn = turn_dicts[-1]["turn_id"] if turn_dicts else ""
+        dormant_count = mark_dormant_relationships(catalogs, last_turn)
+        if dormant_count:
+            print(f"  Marked {dormant_count} relationship(s) as dormant")
+
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
@@ -772,6 +793,11 @@ def extract_semantic_single(
 
     entities_total = sum(len(v) for v in catalogs.values())
     print(f"  Catalog now has {entities_total} entities, {len(events_list)} events")
+
+    # Post-merge dormancy pass
+    dormant_count = mark_dormant_relationships(catalogs, turn_id)
+    if dormant_count:
+        print(f"  Marked {dormant_count} relationship(s) as dormant")
 
     save_catalogs(catalog_dir, catalogs)
     save_events(catalog_dir, events_list)
