@@ -177,13 +177,46 @@ def load_catalogs(catalog_dir: str) -> dict:
     return catalogs
 
 
-def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False) -> None:
+def _has_real_v1_data(catalog_dir: str) -> bool:
+    """Return True if any V1 flat file contains meaningful data (not just ``[]``)."""
+    for fname in _V1_FILENAMES:
+        fpath = os.path.join(catalog_dir, fname)
+        if not os.path.isfile(fpath):
+            continue
+        try:
+            size = os.path.getsize(fpath)
+        except OSError:
+            continue
+        if size <= 3:
+            # File is empty or just "[]" / "[]\n"
+            continue
+        # Read and check for non-empty array
+        try:
+            with open(fpath, "r", encoding="utf-8-sig") as f:
+                data = json.load(f)
+            if isinstance(data, list) and len(data) > 0:
+                return True
+        except (json.JSONDecodeError, OSError):
+            continue
+    return False
+
+
+def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False, prefer_v2: bool = True) -> None:
     """Write all catalogs back to disk.
 
     V2 mode: writes per-entity files and regenerates index.json.
     V1 mode: writes flat JSON files.
+
+    When *prefer_v2* is True (default) and ``detect_format()`` returns
+    ``"v1"`` but no flat file contains real data (all empty or just ``[]``),
+    the output format is upgraded to V2 automatically.  This prevents a clean
+    extraction start from defaulting to the deprecated V1 layout.
     """
     fmt = detect_format(catalog_dir)
+
+    # On a clean start (neither V1 nor V2 exist), default to V2 if preferred
+    if fmt == "v1" and prefer_v2 and not _has_real_v1_data(catalog_dir):
+        fmt = "v2"
 
     if fmt == "v2":
         for dirname, filename in zip(_V2_DIRNAMES, _V1_FILENAMES):

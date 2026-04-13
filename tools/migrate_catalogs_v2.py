@@ -312,21 +312,46 @@ def convert_entity(
     max_turn: int,
     entity_last_updated_turns: dict[str, str] | None = None,
 ) -> dict:
-    """Convert a V1 entity dict to V2 per-entity format."""
+    """Convert a V1 entity dict to V2 per-entity format.
+
+    If the entity already carries V2 fields (identity, current_status,
+    stable_attributes, volatile_state), those fields are preserved so that
+    LLM-populated data is not overwritten with migration placeholders.
+    """
     first_seen = entity.get("first_seen_turn")
     last_updated = entity.get("last_updated_turn")
 
-    # Identity / status split
-    description = entity.get("description", "")
-    identity = description if description else entity.get("name", "Unknown entity")
-    current_status = "Status unknown \u2014 migrated from V1 catalog."
+    # Detect existing V2 fields
+    has_v2_identity = bool(entity.get("identity"))
+    has_v2_status = (
+        bool(entity.get("current_status"))
+        and "migrated from V1" not in entity.get("current_status", "")
+    )
+    has_v2_stable = bool(entity.get("stable_attributes"))
+    has_v2_volatile = bool(entity.get("volatile_state"))
 
-    # Attributes
-    raw_attrs = entity.get("attributes", {})
-    stable_attrs, volatile_state = classify_attributes(raw_attrs, first_seen)
+    # Identity / status split — only convert from description when V2 fields absent
+    if has_v2_identity:
+        identity = entity["identity"]
+    else:
+        description = entity.get("description", "")
+        identity = description if description else entity.get("name", "Unknown entity")
+
+    if has_v2_status:
+        current_status = entity["current_status"]
+    else:
+        current_status = "Status unknown \u2014 migrated from V1 catalog."
+
+    # Attributes — only classify from V1 attributes when V2 fields absent
+    if has_v2_stable or has_v2_volatile:
+        stable_attrs = entity.get("stable_attributes", {})
+        volatile_state = entity.get("volatile_state", {})
+    else:
+        raw_attrs = entity.get("attributes", {})
+        stable_attrs, volatile_state = classify_attributes(raw_attrs, first_seen)
 
     # Add last_updated_turn to volatile_state if we have volatile keys
-    if volatile_state and last_updated:
+    if volatile_state and last_updated and not has_v2_volatile:
         volatile_state["last_updated_turn"] = last_updated
 
     # Relationships
@@ -346,7 +371,7 @@ def convert_entity(
     }
 
     if last_updated:
-        v2["status_updated_turn"] = last_updated
+        v2["status_updated_turn"] = entity.get("status_updated_turn") or last_updated
         v2["last_updated_turn"] = last_updated
 
     if stable_attrs:

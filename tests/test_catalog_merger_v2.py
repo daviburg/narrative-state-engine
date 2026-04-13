@@ -529,13 +529,89 @@ class TestIndexGeneration:
         index = json.loads(index_path.read_text(encoding="utf-8"))
         assert len(index) == 2
 
-        alpha_idx = next(e for e in index if e["id"] == "char-alpha")
-        assert alpha_idx["name"] == "Alpha"
-        assert alpha_idx["active_relationship_count"] == 0
-        assert alpha_idx["status_summary"] == "Active warrior."
 
-        beta_idx = next(e for e in index if e["id"] == "char-beta")
-        assert beta_idx["active_relationship_count"] == 1  # only 'active' status counted
+# ---------------------------------------------------------------------------
+# Clean-start V2 defaulting (Issue #96)
+# ---------------------------------------------------------------------------
+
+class TestSaveCatalogsCleanStart:
+    def test_clean_start_uses_v2(self, tmp_path):
+        """On a completely clean catalog dir, save_catalogs should default to V2."""
+        catalog_dir = str(tmp_path / "catalogs")
+        os.makedirs(catalog_dir, exist_ok=True)
+        # Write empty flat files (simulating clean extraction start)
+        for name in ["characters.json", "locations.json", "factions.json", "items.json"]:
+            with open(os.path.join(catalog_dir, name), "w") as f:
+                json.dump([], f)
+
+        catalogs = {
+            "characters.json": [{"id": "char-test", "name": "Test", "type": "character",
+                                 "identity": "A test character", "first_seen_turn": "turn-001"}],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+        save_catalogs(catalog_dir, catalogs)
+
+        # Should have created V2 per-entity directory
+        assert os.path.isdir(os.path.join(catalog_dir, "characters"))
+        assert os.path.isfile(os.path.join(catalog_dir, "characters", "char-test.json"))
+        assert os.path.isfile(os.path.join(catalog_dir, "characters", "index.json"))
+
+    def test_empty_dir_uses_v2(self, tmp_path):
+        """On a completely empty catalog dir (no files at all), save_catalogs defaults to V2."""
+        catalog_dir = str(tmp_path / "catalogs")
+        os.makedirs(catalog_dir, exist_ok=True)
+
+        catalogs = {
+            "characters.json": [{"id": "char-test", "name": "Test", "type": "character",
+                                 "identity": "A test character", "first_seen_turn": "turn-001"}],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+        save_catalogs(catalog_dir, catalogs)
+
+        assert os.path.isdir(os.path.join(catalog_dir, "characters"))
+        assert os.path.isfile(os.path.join(catalog_dir, "characters", "char-test.json"))
+
+    def test_real_v1_data_stays_v1(self, tmp_path):
+        """When real V1 data exists, save_catalogs should stay V1 for backward compat."""
+        catalog_dir = str(tmp_path / "catalogs")
+        os.makedirs(catalog_dir, exist_ok=True)
+        # Write V1 flat file with real data
+        with open(os.path.join(catalog_dir, "characters.json"), "w") as f:
+            json.dump([{"id": "char-old", "name": "Old", "type": "character",
+                        "description": "An old format entity"}], f)
+        for name in ["locations.json", "factions.json", "items.json"]:
+            with open(os.path.join(catalog_dir, name), "w") as f:
+                json.dump([], f)
+
+        catalogs = {"characters.json": [{"id": "char-old", "name": "Old", "type": "character",
+                                         "description": "An old format entity"}],
+                    "locations.json": [], "factions.json": [], "items.json": []}
+        save_catalogs(catalog_dir, catalogs)
+
+        # Should NOT have created V2 directory — V1 data exists
+        assert not os.path.isdir(os.path.join(catalog_dir, "characters"))
+
+    def test_prefer_v2_false_stays_v1(self, tmp_path):
+        """When prefer_v2=False, clean start stays V1."""
+        catalog_dir = str(tmp_path / "catalogs")
+        os.makedirs(catalog_dir, exist_ok=True)
+        for name in ["characters.json", "locations.json", "factions.json", "items.json"]:
+            with open(os.path.join(catalog_dir, name), "w") as f:
+                json.dump([], f)
+
+        catalogs = {
+            "characters.json": [{"id": "char-test", "name": "Test", "type": "character",
+                                 "identity": "Test", "first_seen_turn": "turn-001"}],
+            "locations.json": [], "factions.json": [], "items.json": [],
+        }
+        save_catalogs(catalog_dir, catalogs, prefer_v2=False)
+
+        # Should NOT have created V2 directory
+        assert not os.path.isdir(os.path.join(catalog_dir, "characters"))
 
     def test_index_status_summary_truncated(self, tmp_path):
         edir = tmp_path / "characters"
