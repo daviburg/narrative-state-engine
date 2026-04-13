@@ -529,6 +529,14 @@ class TestIndexGeneration:
         index = json.loads(index_path.read_text(encoding="utf-8"))
         assert len(index) == 2
 
+        alpha_idx = next(e for e in index if e["id"] == "char-alpha")
+        assert alpha_idx["name"] == "Alpha"
+        assert alpha_idx["active_relationship_count"] == 0
+        assert alpha_idx["status_summary"] == "Active warrior."
+
+        beta_idx = next(e for e in index if e["id"] == "char-beta")
+        assert beta_idx["active_relationship_count"] == 1  # only 'active' status counted
+
 
 # ---------------------------------------------------------------------------
 # Clean-start V2 defaulting (Issue #96)

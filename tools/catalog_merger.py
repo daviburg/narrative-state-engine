@@ -217,6 +217,12 @@ def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False, prefe
     # On a clean start (neither V1 nor V2 exist), default to V2 if preferred
     if fmt == "v1" and prefer_v2 and not _has_real_v1_data(catalog_dir):
         fmt = "v2"
+        # Remove empty V1 flat files to avoid a mixed layout
+        if not dry_run:
+            for fname in _V1_FILENAMES:
+                fpath = os.path.join(catalog_dir, fname)
+                if os.path.isfile(fpath):
+                    os.remove(fpath)
 
     if fmt == "v2":
         for dirname, filename in zip(_V2_DIRNAMES, _V1_FILENAMES):

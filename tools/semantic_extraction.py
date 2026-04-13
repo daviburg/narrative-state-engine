@@ -746,6 +746,7 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                         continue
 
                 # Rule 3: ID stem overlap (hyphen-segment containment)
+                # Guard: require smaller stem set to have at least 2 segments
                 id_a = entities[idx_a].get("proposed_id", entities[idx_a].get("id", ""))
                 id_b = entities[idx_b].get("proposed_id", entities[idx_b].get("id", ""))
                 stem_a = id_a.split("-", 1)[1] if "-" in id_a else id_a
@@ -753,7 +754,8 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 if stem_a and stem_b:
                     parts_a = set(stem_a.split("-"))
                     parts_b = set(stem_b.split("-"))
-                    if parts_a.issubset(parts_b) or parts_b.issubset(parts_a):
+                    smaller_parts = parts_a if len(parts_a) <= len(parts_b) else parts_b
+                    if len(smaller_parts) >= 2 and (parts_a.issubset(parts_b) or parts_b.issubset(parts_a)):
                         union(idx_a, idx_b)
                         print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
 

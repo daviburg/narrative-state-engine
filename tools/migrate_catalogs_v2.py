@@ -321,14 +321,15 @@ def convert_entity(
     first_seen = entity.get("first_seen_turn")
     last_updated = entity.get("last_updated_turn")
 
-    # Detect existing V2 fields
-    has_v2_identity = bool(entity.get("identity"))
+    # Detect existing V2 fields (use key presence, not truthiness,
+    # so explicitly-present empty dicts/strings are still preserved)
+    has_v2_identity = "identity" in entity
     has_v2_status = (
-        bool(entity.get("current_status"))
+        "current_status" in entity
         and "migrated from V1" not in entity.get("current_status", "")
     )
-    has_v2_stable = bool(entity.get("stable_attributes"))
-    has_v2_volatile = bool(entity.get("volatile_state"))
+    has_v2_stable = "stable_attributes" in entity
+    has_v2_volatile = "volatile_state" in entity
 
     # Identity / status split — only convert from description when V2 fields absent
     if has_v2_identity:
