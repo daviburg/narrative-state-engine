@@ -6,7 +6,6 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from semantic_extraction import _check_pc_duplicate, _merge_into_pc
-from catalog_merger import find_entity_by_id
 
 
 def test_self_intro_entity_detected_as_pc():

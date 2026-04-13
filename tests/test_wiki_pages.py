@@ -14,7 +14,6 @@ from generate_wiki_pages import (
     generate_item_page,
     generate_index_page,
     generate_wiki_pages,
-    _build_name_index,
 )
 
 
