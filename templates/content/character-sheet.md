@@ -1,7 +1,11 @@
 # Character Sheet Template
 
-Use this as a reference for catalog entries in `framework/catalogs/characters.json`.
-Each character entry should conform to `schemas/entity.schema.json`.
+Use this as a reference for catalog entries in `framework/catalogs/characters/`.
+Each character entry should conform to `schemas/entity.schema.json` (V2 format).
+
+> **Note:** Human-readable wiki-style markdown pages are generated automatically
+> by `tools/generate_wiki_pages.py` alongside each per-entity JSON file.
+> Do not edit `.md` files in catalog directories manually.
 
 ---
 

@@ -24,6 +24,11 @@ Return a single JSON object conforming to this V2 structure:
 - "last_updated_turn": string — set to the current turn ID
 - "notes": string (optional) — any open questions or ambiguities about this entity
 
+PLAYER CHARACTER NAME:
+- If the turn reveals the player character's name, add it to `char-player`'s 
+  `stable_attributes.aliases` and optionally update `char-player.name` to the revealed name.
+- Do NOT create a separate entity for the player character's name.
+
 MERGE RULES:
 - Update "identity" ONLY for fundamental changes: name change, role change, species reveal, major transformation. Otherwise preserve the prior identity exactly.
 - ALWAYS update "current_status" with what the entity is doing/experiencing in this turn.

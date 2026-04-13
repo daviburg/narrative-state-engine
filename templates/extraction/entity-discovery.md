@@ -12,6 +12,15 @@ For each entity, return a JSON object with these fields:
 - "confidence": 0.0-1.0 confidence that this is a distinct, nameable entity worth cataloging
 - "source_turn": the turn ID provided in the input
 
+PLAYER CHARACTER RULE:
+- The player character is ALWAYS referred to as "you" in DM narration.
+- The player character's entity ID is ALWAYS `char-player`.
+- When the player character reveals their name (e.g., "you introduce yourself as [Name]"), 
+  do NOT create a new entity. Instead, note this as an alias update for `char-player`.
+- ANY entity whose description indicates it IS the player character (e.g., "introduces 
+  themselves", "points to self", first-person actions) must be mapped to `char-player`, 
+  not given a new ID.
+
 Rules:
 - Only extract entities that appear in or are directly referenced in the provided turn text.
 - Do NOT invent entities not mentioned in the text.

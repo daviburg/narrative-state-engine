@@ -283,6 +283,79 @@ def _filter_concept_prefix_from_items(entity_data: dict) -> bool:
     return True
 
 
+def _check_pc_duplicate(entity: dict, catalogs: dict) -> str | None:
+    """Check if an entity is actually the player character under a different name.
+
+    Returns 'char-player' if this entity should be merged into the PC, else None.
+    """
+    eid = entity.get("id", entity.get("proposed_id", ""))
+    if eid == "char-player":
+        return None  # Already the PC
+
+    # Check if identity/description mentions self-introduction
+    identity = (entity.get("identity") or entity.get("description") or "").lower()
+
+    pc_indicators = [
+        "introduces themselves",
+        "introducing themselves",
+        "points to self",
+        "pointing to self",
+        "points to oneself",
+        "pointing to oneself",
+        "the player character",
+        "player character",
+    ]
+
+    if any(indicator in identity for indicator in pc_indicators):
+        return "char-player"
+
+    return None
+
+
+def _merge_into_pc(catalogs: dict, duplicate: dict) -> None:
+    """Merge a duplicate entity's data into char-player."""
+    pc_result = find_entity_by_id(catalogs, "char-player")
+    if not pc_result:
+        return
+    _, pc_entity = pc_result
+
+    dup_name = duplicate.get("name", "")
+
+    # Add duplicate's name as alias of char-player
+    sa = pc_entity.setdefault("stable_attributes", {})
+    existing_aliases = sa.get("aliases", {})
+    if isinstance(existing_aliases, dict):
+        val = existing_aliases.get("value", [])
+        if isinstance(val, str):
+            val = [a.strip() for a in val.split(",") if a.strip()]
+    else:
+        val = []
+    if dup_name and dup_name not in val:
+        val.append(dup_name)
+    alias_turn = duplicate.get("last_updated_turn", pc_entity.get("last_updated_turn", ""))
+    sa["aliases"] = {"value": val, "inference": False, "confidence": 1.0,
+                     "source_turn": alias_turn}
+
+    # Update PC name if still generic
+    if pc_entity.get("name") in ("Player Character", "player character") and dup_name:
+        pc_entity["name"] = dup_name
+
+    # Merge stable attributes (except aliases which we handled above)
+    for key, attr in duplicate.get("stable_attributes", {}).items():
+        if key == "aliases":
+            continue
+        if key not in sa:
+            sa[key] = attr
+
+    # Update last_updated_turn
+    dup_turn = duplicate.get("last_updated_turn")
+    if dup_turn:
+        pc_entity["last_updated_turn"] = dup_turn
+
+    print(f"  PC-DEDUP: merged '{dup_name}' ({duplicate.get('id')}) into char-player",
+          file=sys.stderr)
+
+
 def _validate_entity(entity_data: dict) -> bool:
     """Validate an entity dict against entity.schema.json. Returns True if valid."""
     schema = _load_schema("entity.schema.json")
@@ -545,6 +618,12 @@ def extract_and_merge(
         if entity_data and not _filter_concept_prefix_from_items(entity_data):
             continue
         if entity_data and _validate_entity(entity_data):
+            # Check if this entity is actually the player character
+            pc_target = _check_pc_duplicate(entity_data, catalogs)
+            if pc_target:
+                _merge_into_pc(catalogs, entity_data)
+                llm.delay()
+                continue
             _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
             # If this was char-player, also purge stale keys from catalog
