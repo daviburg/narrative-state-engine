@@ -1,6 +1,7 @@
 """Tests for fuzzy dedup matching in _dedup_catalogs()."""
 import sys
 import os
+from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -36,6 +37,7 @@ def test_token_overlap_merge_spear():
 
 
 def test_substring_merge_bowl_group():
+    """With tighter dedup rules, only closely-related bowls merge."""
     catalogs = {
         "items.json": [
             _make_entity("item-bowl", "Bowl", "turn-002"),
@@ -45,11 +47,15 @@ def test_substring_merge_bowl_group():
         ]
     }
     count, merge_map = _dedup_catalogs(catalogs)
-    # All should merge into the earliest entry
-    assert len(catalogs["items.json"]) == 1
-    survivor = catalogs["items.json"][0]
-    assert survivor["id"] == "item-bowl"
-    assert count == 3
+    # 'bowl' is a stopword → item-bowl has no tokens and 1-segment ID stem → stays separate.
+    # 'steaming bowl' and 'steaming broth bowl' share enough overlap → merge.
+    # 'warm wooden bowl' has no token/stem overlap with steaming variants → stays separate.
+    assert count == 1
+    assert len(catalogs["items.json"]) == 3
+    surviving_ids = {e["id"] for e in catalogs["items.json"]}
+    assert "item-bowl" in surviving_ids
+    assert "item-steaming-bowl" in surviving_ids  # survivor of steaming pair
+    assert "item-warm-wooden-bowl" in surviving_ids
 
 
 def test_substring_merge_moonpetal():
@@ -107,11 +113,109 @@ def test_no_partial_word_substring_merge():
     assert len(catalogs["items.json"]) == 2
 
 
-if __name__ == "__main__":
-    test_token_overlap_merge_spear()
-    test_substring_merge_bowl_group()
-    test_substring_merge_moonpetal()
-    test_no_cross_catalog_merge()
-    test_id_stem_merge()
-    test_no_partial_word_substring_merge()
-    print("All tests passed!")
+def test_no_false_merge_crude_weapons_vs_buckets():
+    """'crude weapons' and 'crude wooden buckets' should NOT merge."""
+    catalogs = {
+        "items.json": [
+            _make_entity("item-crude-weapons", "crude weapons", "turn-001"),
+            _make_entity("item-crude-wooden-buckets", "crude wooden buckets", "turn-002"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    assert count == 0
+    assert len(catalogs["items.json"]) == 2
+
+
+def test_no_false_merge_herb_party_vs_hunting_party():
+    """'herb gathering party' and 'hunting party' should NOT merge."""
+    catalogs = {
+        "factions.json": [
+            _make_entity("faction-herb-gathering-party", "herb gathering party", "turn-001"),
+            _make_entity("faction-hunting-party", "hunting party", "turn-002"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    assert count == 0
+    assert len(catalogs["factions.json"]) == 2
+
+
+def test_no_false_merge_broad_figure_vs_lone_figure():
+    """'broad figure' and 'a lone figure' should NOT merge."""
+    catalogs = {
+        "characters.json": [
+            _make_entity("char-broad-figure", "broad figure", "turn-001"),
+            _make_entity("char-lone-figure", "a lone figure", "turn-002"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    assert count == 0
+    assert len(catalogs["characters.json"]) == 2
+
+
+def test_correct_merge_snow_laden_pines_woods():
+    """'snow-laden pines' and 'snow-laden woods' SHOULD merge (2-token overlap, 100%)."""
+    catalogs = {
+        "locations.json": [
+            _make_entity("loc-snow-laden-pines", "snow-laden pines", "turn-001"),
+            _make_entity("loc-snow-laden-woods", "snow-laden woods", "turn-005"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    # Both have tokens {snow, laden, pines/woods}; after stopword removal,
+    # smaller has 3 tokens, overlap is {snow, laden} = 2/3 = 67% > 50% → merge
+    # Wait — "snow-laden" splits to {snow, laden} and then + pines/woods = 3 tokens each.
+    # overlap = {snow, laden} = 2; smaller = 3; 2/3 < 1.0 threshold for <=2
+    # But smaller is 3, so threshold is 0.5, and 2/3 >= 0.5 → merge!
+    assert count == 1
+    assert len(catalogs["locations.json"]) == 1
+
+
+def test_single_token_bowl_no_merge():
+    """'bowl' should NOT merge with 'steaming bowl' — single-segment ID stem blocked."""
+    catalogs = {
+        "items.json": [
+            _make_entity("item-bowl", "Bowl", "turn-002"),
+            _make_entity("item-steaming-bowl", "Steaming bowl", "turn-005"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    # 'bowl' is a stopword so token rules won't fire,
+    # and the ID-stem guard now requires 2+ segments in the smaller set.
+    assert count == 0
+    assert len(catalogs["items.json"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# Batch dormancy skip (Issue #99)
+# ---------------------------------------------------------------------------
+
+def test_batch_extraction_does_not_call_dormancy():
+    """extract_semantic_batch should NOT invoke mark_dormant_relationships."""
+    with patch("semantic_extraction.mark_dormant_relationships") as mock_dormancy, \
+         patch("semantic_extraction.LLMClient") as mock_llm_cls, \
+         patch("semantic_extraction.load_catalogs", return_value={f: [] for f in ["characters.json","locations.json","factions.json","items.json"]}), \
+         patch("semantic_extraction.load_events", return_value=[]), \
+         patch("semantic_extraction.save_catalogs"), \
+         patch("semantic_extraction.save_events"), \
+         patch("semantic_extraction._save_progress"), \
+         patch("semantic_extraction._ensure_player_character"):
+        mock_llm_cls.return_value = MagicMock()
+        from semantic_extraction import extract_semantic_batch
+        extract_semantic_batch([], "session-test", "framework-test")
+        mock_dormancy.assert_not_called()
+
+
+def test_single_turn_extraction_calls_dormancy():
+    """extract_semantic_single should invoke mark_dormant_relationships."""
+    with patch("semantic_extraction.mark_dormant_relationships", return_value=0) as mock_dormancy, \
+         patch("semantic_extraction.LLMClient") as mock_llm_cls, \
+         patch("semantic_extraction.load_catalogs", return_value={f: [] for f in ["characters.json","locations.json","factions.json","items.json"]}), \
+         patch("semantic_extraction.load_events", return_value=[]), \
+         patch("semantic_extraction.save_catalogs"), \
+         patch("semantic_extraction.save_events"), \
+         patch("semantic_extraction._ensure_player_character"), \
+         patch("semantic_extraction.extract_and_merge", return_value=({f: [] for f in ["characters.json","locations.json","factions.json","items.json"]}, [])):
+        mock_llm_cls.return_value = MagicMock()
+        from semantic_extraction import extract_semantic_single
+        extract_semantic_single("turn-001", "dm", "Test text", "session-test", "framework-test")
+        mock_dormancy.assert_called_once()

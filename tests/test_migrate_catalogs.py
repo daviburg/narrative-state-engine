@@ -499,3 +499,62 @@ def test_full_migration_roundtrip(tmp_framework):
     assert len(index) == 1
     assert index[0]["id"] == "char-hero"
     assert index[0]["active_relationship_count"] == 1
+
+
+# ---------------------------------------------------------------------------
+# V2 field preservation (Issue #97)
+# ---------------------------------------------------------------------------
+
+
+def test_preserves_existing_v2_identity():
+    """Migration should not overwrite LLM-generated identity."""
+    entity = {
+        "id": "char-test",
+        "name": "Test Character",
+        "type": "character",
+        "identity": "A skilled hunter from the northern tribe",
+        "current_status": "Currently resting at camp after a long hunt",
+        "stable_attributes": {"role": {"value": "hunter", "inference": False}},
+        "volatile_state": {"condition": "tired", "last_updated_turn": "turn-050"},
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-050",
+    }
+    result = convert_entity(entity, max_turn=100)
+    assert result["identity"] == "A skilled hunter from the northern tribe"
+    assert result["current_status"] == "Currently resting at camp after a long hunt"
+    assert result["stable_attributes"]["role"]["value"] == "hunter"
+    assert result["volatile_state"]["condition"] == "tired"
+
+
+def test_converts_v1_only_entity():
+    """Migration should convert a pure V1 entity normally."""
+    entity = {
+        "id": "char-old",
+        "name": "Old Character",
+        "type": "character",
+        "description": "An elder of the tribe",
+        "attributes": {"role": "elder", "condition": "healthy"},
+        "first_seen_turn": "turn-005",
+        "last_updated_turn": "turn-020",
+    }
+    result = convert_entity(entity, max_turn=100)
+    assert result["identity"] == "An elder of the tribe"
+    assert "migrated from V1" in result["current_status"]
+    assert "role" in result["stable_attributes"]
+    assert "condition" in result["volatile_state"]
+
+
+def test_preserves_status_updated_turn_for_v2():
+    """When V2 current_status is preserved, status_updated_turn should be kept."""
+    entity = {
+        "id": "char-test",
+        "name": "Test",
+        "type": "character",
+        "identity": "A hunter",
+        "current_status": "Resting at camp",
+        "status_updated_turn": "turn-045",
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-050",
+    }
+    result = convert_entity(entity, max_turn=100)
+    assert result["status_updated_turn"] == "turn-045"

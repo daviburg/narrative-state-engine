@@ -706,7 +706,12 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 union(idxs[0], idxs[i])
 
         # --- Fuzzy pass: substring and token overlap (same catalog only) ---
-        STOPWORDS = {"a", "an", "the", "of", "and", "with", "in", "on", "to"}
+        STOPWORDS = {
+            "a", "an", "the", "of", "and", "with", "in", "on", "to",
+            # RPG-context generic words that cause false dedup
+            "figure", "material", "party", "bowl", "tool", "small", "large",
+            "old", "new", "dark", "light", "some", "other",
+        }
         all_names = [(idx, entity.get("name", "").strip().lower()) for idx, entity in enumerate(entities)]
 
         for i, (idx_a, name_a) in enumerate(all_names):
@@ -723,20 +728,25 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 tokens_b = set(name_b.replace("-", " ").split()) - STOPWORDS
                 if tokens_a and tokens_b:
                     # Rule 1: Whole-token subset containment
-                    if tokens_a.issubset(tokens_b) or tokens_b.issubset(tokens_a):
+                    # Guard: require smaller set to have at least 2 tokens
+                    smaller_set = tokens_a if len(tokens_a) <= len(tokens_b) else tokens_b
+                    if len(smaller_set) >= 2 and (tokens_a.issubset(tokens_b) or tokens_b.issubset(tokens_a)):
                         union(idx_a, idx_b)
                         print(f"  DEDUP (substring): linking '{name_a}' and '{name_b}' as duplicates")
                         continue
 
-                    # Rule 2: Token overlap >= 50%
+                    # Rule 2: Token overlap
+                    # Guard: require 100% overlap when smaller set has <= 2 tokens
                     overlap = tokens_a & tokens_b
                     smaller = min(len(tokens_a), len(tokens_b))
-                    if len(overlap) / smaller >= 0.5:
+                    threshold = 1.0 if smaller <= 2 else 0.5
+                    if smaller > 0 and len(overlap) / smaller >= threshold:
                         union(idx_a, idx_b)
                         print(f"  DEDUP (token-overlap): linking '{name_a}' and '{name_b}' as duplicates")
                         continue
 
                 # Rule 3: ID stem overlap (hyphen-segment containment)
+                # Guard: require smaller stem set to have at least 2 segments
                 id_a = entities[idx_a].get("proposed_id", entities[idx_a].get("id", ""))
                 id_b = entities[idx_b].get("proposed_id", entities[idx_b].get("id", ""))
                 stem_a = id_a.split("-", 1)[1] if "-" in id_a else id_a
@@ -744,7 +754,8 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                 if stem_a and stem_b:
                     parts_a = set(stem_a.split("-"))
                     parts_b = set(stem_b.split("-"))
-                    if parts_a.issubset(parts_b) or parts_b.issubset(parts_a):
+                    smaller_parts = parts_a if len(parts_a) <= len(parts_b) else parts_b
+                    if len(smaller_parts) >= 2 and (parts_a.issubset(parts_b) or parts_b.issubset(parts_a)):
                         union(idx_a, idx_b)
                         print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
 
@@ -904,12 +915,9 @@ def extract_semantic_batch(
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
 
     if not dry_run:
-        # Post-merge dormancy pass
-        last_turn = turn_dicts[-1]["turn_id"] if turn_dicts else ""
-        dormant_count = mark_dormant_relationships(catalogs, last_turn)
-        if dormant_count:
-            print(f"  Marked {dormant_count} relationship(s) as dormant")
-
+        # Skip dormancy pass in batch mode — the threshold is too small relative
+        # to a full transcript and would mark all relationships dormant.  Dormancy
+        # is only meaningful during incremental single-turn extraction.
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
