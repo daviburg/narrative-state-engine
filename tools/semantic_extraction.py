@@ -13,6 +13,7 @@ Works in both batch (bootstrap) and incremental (ingest) modes.
 
 import json
 import os
+import re
 import sys
 
 from catalog_merger import (
@@ -292,31 +293,45 @@ def _check_pc_duplicate(entity: dict, catalogs: dict) -> str | None:
     if eid == "char-player":
         return None  # Already the PC
 
-    # Check if identity/description mentions self-introduction
+    # Check if identity/description explicitly identifies this as the PC.
+    # Only match phrases that unambiguously refer to the player character;
+    # generic self-introduction language ("introduces themselves") is too
+    # broad because NPCs introduce themselves too.
     identity = (entity.get("identity") or entity.get("description") or "").lower()
 
     pc_indicators = [
-        "introduces themselves",
-        "introducing themselves",
-        "points to self",
-        "pointing to self",
-        "points to oneself",
-        "pointing to oneself",
         "the player character",
         "player character",
+        "you introduce yourself",
+        "you point to yourself",
+        "you state your name",
+        "you give your name",
+        "you reveal your name",
     ]
 
     if any(indicator in identity for indicator in pc_indicators):
         return "char-player"
 
+    # Also match second-person self-introduction patterns
+    second_person_intro = re.search(
+        r"\byou\b.*\b(?:introduc|point(?:s|ing)?\s+to\s+(?:your)?self|stat(?:e|ing)\s+(?:your|their)\s+name)",
+        identity,
+    )
+    if second_person_intro:
+        return "char-player"
+
     return None
 
 
-def _merge_into_pc(catalogs: dict, duplicate: dict) -> None:
-    """Merge a duplicate entity's data into char-player."""
+def _merge_into_pc(catalogs: dict, duplicate: dict) -> str | None:
+    """Merge a duplicate entity's data into char-player.
+
+    Returns the duplicate entity ID if the merge succeeded (so the caller
+    can remove it from catalogs), or None if char-player was not found.
+    """
     pc_result = find_entity_by_id(catalogs, "char-player")
     if not pc_result:
-        return
+        return None
     _, pc_entity = pc_result
 
     dup_name = duplicate.get("name", "")
@@ -332,9 +347,12 @@ def _merge_into_pc(catalogs: dict, duplicate: dict) -> None:
         val = []
     if dup_name and dup_name not in val:
         val.append(dup_name)
-    alias_turn = duplicate.get("last_updated_turn", pc_entity.get("last_updated_turn", ""))
-    sa["aliases"] = {"value": val, "inference": False, "confidence": 1.0,
-                     "source_turn": alias_turn}
+    # Only include source_turn when we have a valid turn-NNN value
+    alias_turn = duplicate.get("last_updated_turn") or duplicate.get("first_seen_turn") or ""
+    alias_entry: dict = {"value": val, "inference": False, "confidence": 1.0}
+    if re.match(r"^turn-\d+$", alias_turn):
+        alias_entry["source_turn"] = alias_turn
+    sa["aliases"] = alias_entry
 
     # Update PC name if still generic
     if pc_entity.get("name") in ("Player Character", "player character") and dup_name:
@@ -354,6 +372,7 @@ def _merge_into_pc(catalogs: dict, duplicate: dict) -> None:
 
     print(f"  PC-DEDUP: merged '{dup_name}' ({duplicate.get('id')}) into char-player",
           file=sys.stderr)
+    return duplicate.get("id", "")
 
 
 def _validate_entity(entity_data: dict) -> bool:
@@ -621,7 +640,15 @@ def extract_and_merge(
             # Check if this entity is actually the player character
             pc_target = _check_pc_duplicate(entity_data, catalogs)
             if pc_target:
-                _merge_into_pc(catalogs, entity_data)
+                dup_id = _merge_into_pc(catalogs, entity_data)
+                # Remove the duplicate entity from catalogs so it isn't
+                # written back to disk by save_catalogs().
+                if dup_id:
+                    for cat_key, cat_list in catalogs.items():
+                        catalogs[cat_key] = [
+                            e for e in cat_list
+                            if e.get("id") != dup_id
+                        ]
                 llm.delay()
                 continue
             _filter_pc_attributes(entity_data)

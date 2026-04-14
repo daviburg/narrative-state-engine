@@ -229,7 +229,7 @@ def test_index_page_links():
         "last_updated_turn": "turn-054",
         "current_status": "Leaning against the warrior.",
     }]
-    md = generate_index_page("characters", entities, NAME_INDEX)
+    md = generate_index_page("characters", entities)
     assert "# Characters" in md
     assert "[The Elder](char-elder.md)" in md
     assert "[Player Character](char-player.md)" in md
@@ -249,7 +249,7 @@ def test_index_page_truncates_status():
         "last_updated_turn": "turn-001",
         "current_status": "A" * 100,
     }
-    md = generate_index_page("characters", [entity], {})
+    md = generate_index_page("characters", [entity])
     # Should contain truncated status with ...
     assert "..." in md
     # Full 100-char string should NOT appear
@@ -288,7 +288,7 @@ def test_missing_target_graceful():
 
 def test_empty_catalog_graceful():
     """Empty entity type directory produces empty index page."""
-    md = generate_index_page("characters", [], {})
+    md = generate_index_page("characters", [])
     assert "# Characters" in md
     assert "No entities cataloged yet" in md
 
@@ -348,3 +348,88 @@ def test_generate_wiki_pages_index_only():
         assert os.path.exists(os.path.join(char_dir, "README.md"))
         assert not os.path.exists(os.path.join(char_dir, "char-elder.md"))
         assert stats["characters"] == 1  # Only README
+
+
+# ---------------------------------------------------------------------------
+# Table escaping tests
+# ---------------------------------------------------------------------------
+
+def test_pipe_in_value_escaped():
+    """Pipe characters in attribute values are escaped in table output."""
+    entity = dict(SAMPLE_CHARACTER)
+    entity["stable_attributes"] = {
+        "catch_phrase": {
+            "value": "yes | no | maybe",
+            "inference": False,
+            "confidence": 1.0,
+            "source_turn": "turn-020",
+        }
+    }
+    md = generate_character_page(entity, NAME_INDEX)
+    # Pipes in the value should be escaped
+    assert "yes \\| no \\| maybe" in md
+    # Should not break the table (no bare | inside cell content)
+
+
+def test_newline_in_value_escaped():
+    """Newlines in attribute values are replaced with spaces."""
+    entity = dict(SAMPLE_CHARACTER)
+    entity["stable_attributes"] = {
+        "bio": {
+            "value": "Line one\nLine two",
+            "inference": False,
+            "confidence": 1.0,
+            "source_turn": "turn-020",
+        }
+    }
+    md = generate_character_page(entity, NAME_INDEX)
+    assert "Line one Line two" in md
+    assert "Line one\nLine two" not in md
+
+
+# ---------------------------------------------------------------------------
+# Entity type label tests
+# ---------------------------------------------------------------------------
+
+def test_creature_type_label():
+    """Creature entities in characters catalog show 'Creature' not 'Character'."""
+    entity = dict(SAMPLE_CHARACTER)
+    entity["type"] = "creature"
+    entity["id"] = "creature-wolf"
+    md = generate_character_page(entity, NAME_INDEX)
+    assert "| **Type** | Creature |" in md
+
+
+def test_concept_type_label():
+    """Concept entities in items catalog show 'Concept' not 'Item'."""
+    entity = dict(SAMPLE_ITEM)
+    entity["type"] = "concept"
+    entity["id"] = "concept-fate"
+    md = generate_item_page(entity, NAME_INDEX)
+    assert "| **Type** | Concept |" in md
+
+
+# ---------------------------------------------------------------------------
+# Stale page pruning tests
+# ---------------------------------------------------------------------------
+
+def test_stale_md_pruned():
+    """Wiki generation removes .md files for entities no longer in JSON catalog."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        char_dir = os.path.join(tmpdir, "characters")
+        os.makedirs(char_dir)
+
+        # Write one entity JSON
+        with open(os.path.join(char_dir, "char-elder.json"), "w") as f:
+            json.dump(SAMPLE_CHARACTER, f)
+        # Write a stale .md for a deleted entity
+        stale_md = os.path.join(char_dir, "char-deleted-npc.md")
+        with open(stale_md, "w") as f:
+            f.write("# Old NPC\n")
+
+        generate_wiki_pages(tmpdir, entity_types=["characters"])
+
+        # Stale page should be removed
+        assert not os.path.exists(stale_md)
+        # Valid page should exist
+        assert os.path.exists(os.path.join(char_dir, "char-elder.md"))

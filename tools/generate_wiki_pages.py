@@ -104,16 +104,38 @@ def _infer_type_from_id(entity_id: str) -> str:
 
 
 def _format_attr_value(value) -> str:
-    """Format an attribute value for display."""
+    """Format an attribute value for display in a markdown table cell."""
     if isinstance(value, list):
-        return ", ".join(str(v) for v in value)
-    return str(value)
+        raw = ", ".join(str(v) for v in value)
+    else:
+        raw = str(value)
+    return _escape_table_cell(raw)
+
+
+def _escape_table_cell(text: str) -> str:
+    """Escape text for safe inclusion in a markdown table cell."""
+    text = str(text)
+    text = text.replace("|", "\\|")
+    text = text.replace("\n", " ")
+    text = text.replace("\r", "")
+    return text
 
 
 def _parse_turn_number(turn_id: str) -> int:
     """Extract numeric part from turn ID for sorting."""
     m = re.match(r"^turn-(\d+)$", turn_id or "")
     return int(m.group(1)) if m else 0
+
+
+def _type_label(entity: dict, fallback: str) -> str:
+    """Return a display label for the entity type.
+
+    Uses the entity's own ``type`` field so that creature-* and concept-*
+    entries get the correct label instead of always showing the catalog
+    directory name.
+    """
+    raw = entity.get("type", fallback).lower()
+    return raw.replace("_", " ").title()
 
 
 # ---------------------------------------------------------------------------
@@ -141,7 +163,7 @@ def generate_character_page(entity: dict, name_index: dict[str, tuple[str, str]]
     # Infobox
     lines.append("| | |")
     lines.append("|---|---|")
-    lines.append(f"| **Type** | Character |")
+    lines.append(f"| **Type** | {_type_label(entity, 'Character')} |")
     lines.append(f"| **First Seen** | {first_seen} |")
     lines.append(f"| **Last Updated** | {last_updated} |")
     # Add simple stable attributes to infobox
@@ -208,9 +230,9 @@ def generate_character_page(entity: dict, name_index: dict[str, tuple[str, str]]
         for rel in relationships:
             target_id = rel.get("target_id", "")
             target_display = _resolve_target(target_id, name_index, "characters")
-            cur_rel = rel.get("current_relationship", "")
-            rel_type = rel.get("type", "")
-            status = rel.get("status", "")
+            cur_rel = _escape_table_cell(rel.get("current_relationship", ""))
+            rel_type = _escape_table_cell(rel.get("type", ""))
+            status = _escape_table_cell(rel.get("status", ""))
             lines.append(f"| {target_display} | {cur_rel} | {rel_type} | {status} |")
         lines.append("")
 
@@ -258,7 +280,7 @@ def generate_location_page(entity: dict, name_index: dict[str, tuple[str, str]])
     # Infobox
     lines.append("| | |")
     lines.append("|---|---|")
-    lines.append(f"| **Type** | Location |")
+    lines.append(f"| **Type** | {_type_label(entity, 'Location')} |")
     lines.append(f"| **First Seen** | {first_seen} |")
     lines.append(f"| **Last Updated** | {last_updated} |")
     for key, attr in stable_attrs.items():
@@ -307,8 +329,8 @@ def generate_location_page(entity: dict, name_index: dict[str, tuple[str, str]])
         for rel in relationships:
             target_id = rel.get("target_id", "")
             target_display = _resolve_target(target_id, name_index, "locations")
-            cur_rel = rel.get("current_relationship", "")
-            rel_type = rel.get("type", "")
+            cur_rel = _escape_table_cell(rel.get("current_relationship", ""))
+            rel_type = _escape_table_cell(rel.get("type", ""))
             lines.append(f"| {target_display} | {cur_rel} | {rel_type} |")
         lines.append("")
 
@@ -341,7 +363,7 @@ def generate_faction_page(entity: dict, name_index: dict[str, tuple[str, str]]) 
     # Infobox
     lines.append("| | |")
     lines.append("|---|---|")
-    lines.append(f"| **Type** | Faction |")
+    lines.append(f"| **Type** | {_type_label(entity, 'Faction')} |")
     lines.append(f"| **First Seen** | {first_seen} |")
     lines.append(f"| **Last Updated** | {last_updated} |")
     for key, attr in stable_attrs.items():
@@ -390,9 +412,9 @@ def generate_faction_page(entity: dict, name_index: dict[str, tuple[str, str]]) 
         for rel in relationships:
             target_id = rel.get("target_id", "")
             target_display = _resolve_target(target_id, name_index, "factions")
-            cur_rel = rel.get("current_relationship", "")
-            rel_type = rel.get("type", "")
-            status = rel.get("status", "")
+            cur_rel = _escape_table_cell(rel.get("current_relationship", ""))
+            rel_type = _escape_table_cell(rel.get("type", ""))
+            status = _escape_table_cell(rel.get("status", ""))
             lines.append(f"| {target_display} | {cur_rel} | {rel_type} | {status} |")
         lines.append("")
 
@@ -426,7 +448,7 @@ def generate_item_page(entity: dict, name_index: dict[str, tuple[str, str]]) -> 
     # Infobox
     lines.append("| | |")
     lines.append("|---|---|")
-    lines.append(f"| **Type** | Item |")
+    lines.append(f"| **Type** | {_type_label(entity, 'Item')} |")
     lines.append(f"| **First Seen** | {first_seen} |")
     lines.append(f"| **Last Updated** | {last_updated} |")
     for key, attr in stable_attrs.items():
@@ -489,8 +511,8 @@ def generate_item_page(entity: dict, name_index: dict[str, tuple[str, str]]) -> 
         for rel in relationships:
             target_id = rel.get("target_id", "")
             target_display = _resolve_target(target_id, name_index, "items")
-            cur_rel = rel.get("current_relationship", "")
-            rel_type = rel.get("type", "")
+            cur_rel = _escape_table_cell(rel.get("current_relationship", ""))
+            rel_type = _escape_table_cell(rel.get("type", ""))
             lines.append(f"| {target_display} | {cur_rel} | {rel_type} |")
         lines.append("")
 
@@ -516,8 +538,7 @@ PAGE_GENERATORS = {
 # Index page
 # ---------------------------------------------------------------------------
 
-def generate_index_page(entity_type: str, entities: list[dict],
-                        name_index: dict[str, tuple[str, str]]) -> str:
+def generate_index_page(entity_type: str, entities: list[dict]) -> str:
     """Generate a README.md index page for an entity type directory."""
     label = TYPE_LABELS.get(entity_type, entity_type.title())
     title = f"{label}s" if not label.endswith("s") else label
@@ -537,8 +558,8 @@ def generate_index_page(entity_type: str, entities: list[dict],
 
     for entity in sorted_entities:
         eid = entity.get("id", "")
-        name = entity.get("name", eid)
-        status = entity.get("current_status", "")
+        name = _escape_table_cell(entity.get("name", eid))
+        status = _escape_table_cell(entity.get("current_status", ""))
         # Truncate status to 60 chars
         if len(status) > 60:
             status = status[:57] + "..."
@@ -584,6 +605,7 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
             continue
 
         entities = all_entities.get(entity_type, [])
+        live_ids = {e.get("id") for e in entities if e.get("id")}
         page_count = 0
 
         # Generate individual entity pages
@@ -600,8 +622,18 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
                         f.write(md_content)
                     page_count += 1
 
+            # Prune stale .md files whose entity JSON no longer exists
+            for fname in os.listdir(type_dir):
+                if fname == "README.md" or not fname.endswith(".md"):
+                    continue
+                stem = fname[:-3]  # strip .md
+                if stem not in live_ids:
+                    stale_path = os.path.join(type_dir, fname)
+                    os.remove(stale_path)
+                    print(f"  Pruned stale wiki page: {fname}", file=sys.stderr)
+
         # Generate index page
-        index_content = generate_index_page(entity_type, entities, name_index)
+        index_content = generate_index_page(entity_type, entities)
         readme_path = os.path.join(type_dir, "README.md")
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(index_content)

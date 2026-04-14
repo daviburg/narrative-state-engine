@@ -17,9 +17,12 @@ PLAYER CHARACTER RULE:
 - The player character's entity ID is ALWAYS `char-player`.
 - When the player character reveals their name (e.g., "you introduce yourself as [Name]"), 
   do NOT create a new entity. Instead, note this as an alias update for `char-player`.
-- ANY entity whose description indicates it IS the player character (e.g., "introduces 
-  themselves", "points to self", first-person actions) must be mapped to `char-player`, 
-  not given a new ID.
+- ONLY map a mention to `char-player` when the text explicitly indicates the player
+  character, such as second-person references ("you", "yourself", "you introduce
+  yourself") or explicit PC labels ("the player character").
+- Do NOT use generic self-introduction language ("introduces themselves", "points to self")
+  as a PC signal — NPCs introduce themselves too. The key differentiator is second-person
+  narration ("you") vs third-person narration ("he/she/they").
 
 Rules:
 - Only extract entities that appear in or are directly referenced in the provided turn text.
