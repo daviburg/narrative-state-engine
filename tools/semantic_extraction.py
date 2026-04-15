@@ -284,95 +284,6 @@ def _filter_concept_prefix_from_items(entity_data: dict) -> bool:
     return True
 
 
-def _check_pc_duplicate(entity: dict, catalogs: dict) -> str | None:
-    """Check if an entity is actually the player character under a different name.
-
-    Returns 'char-player' if this entity should be merged into the PC, else None.
-    """
-    eid = entity.get("id", entity.get("proposed_id", ""))
-    if eid == "char-player":
-        return None  # Already the PC
-
-    # Check if identity/description explicitly identifies this as the PC.
-    # Only match phrases that unambiguously refer to the player character;
-    # generic self-introduction language ("introduces themselves") is too
-    # broad because NPCs introduce themselves too.
-    identity = (entity.get("identity") or entity.get("description") or "").lower()
-
-    pc_indicators = [
-        "the player character",
-        "player character",
-        "you introduce yourself",
-        "you point to yourself",
-        "you state your name",
-        "you give your name",
-        "you reveal your name",
-    ]
-
-    if any(indicator in identity for indicator in pc_indicators):
-        return "char-player"
-
-    # Also match second-person self-introduction patterns
-    second_person_intro = re.search(
-        r"\byou\b.*\b(?:introduc|point(?:s|ing)?\s+to\s+(?:your)?self|stat(?:e|ing)\s+(?:your|their)\s+name)",
-        identity,
-    )
-    if second_person_intro:
-        return "char-player"
-
-    return None
-
-
-def _merge_into_pc(catalogs: dict, duplicate: dict) -> str | None:
-    """Merge a duplicate entity's data into char-player.
-
-    Returns the duplicate entity ID if the merge succeeded (so the caller
-    can remove it from catalogs), or None if char-player was not found.
-    """
-    pc_result = find_entity_by_id(catalogs, "char-player")
-    if not pc_result:
-        return None
-    _, pc_entity = pc_result
-
-    dup_name = duplicate.get("name", "")
-
-    # Add duplicate's name as alias of char-player
-    sa = pc_entity.setdefault("stable_attributes", {})
-    existing_aliases = sa.get("aliases", {})
-    if isinstance(existing_aliases, dict):
-        val = existing_aliases.get("value", [])
-        if isinstance(val, str):
-            val = [a.strip() for a in val.split(",") if a.strip()]
-    else:
-        val = []
-    if dup_name and dup_name not in val:
-        val.append(dup_name)
-    # Only include source_turn when we have a valid turn-NNN value
-    alias_turn = duplicate.get("last_updated_turn") or duplicate.get("first_seen_turn") or ""
-    alias_entry: dict = {"value": val, "inference": False, "confidence": 1.0}
-    if re.match(r"^turn-\d+$", alias_turn):
-        alias_entry["source_turn"] = alias_turn
-    sa["aliases"] = alias_entry
-
-    # Update PC name if still generic
-    if pc_entity.get("name") in ("Player Character", "player character") and dup_name:
-        pc_entity["name"] = dup_name
-
-    # Merge stable attributes (except aliases which we handled above)
-    for key, attr in duplicate.get("stable_attributes", {}).items():
-        if key == "aliases":
-            continue
-        if key not in sa:
-            sa[key] = attr
-
-    # Update last_updated_turn
-    dup_turn = duplicate.get("last_updated_turn")
-    if dup_turn:
-        pc_entity["last_updated_turn"] = dup_turn
-
-    print(f"  PC-DEDUP: merged '{dup_name}' ({duplicate.get('id')}) into char-player",
-          file=sys.stderr)
-    return duplicate.get("id", "")
 
 
 def _validate_entity(entity_data: dict) -> bool:
@@ -637,20 +548,6 @@ def extract_and_merge(
         if entity_data and not _filter_concept_prefix_from_items(entity_data):
             continue
         if entity_data and _validate_entity(entity_data):
-            # Check if this entity is actually the player character
-            pc_target = _check_pc_duplicate(entity_data, catalogs)
-            if pc_target:
-                dup_id = _merge_into_pc(catalogs, entity_data)
-                # Remove the duplicate entity from catalogs so it isn't
-                # written back to disk by save_catalogs().
-                if dup_id:
-                    for cat_key, cat_list in catalogs.items():
-                        catalogs[cat_key] = [
-                            e for e in cat_list
-                            if e.get("id") != dup_id
-                        ]
-                llm.delay()
-                continue
             _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
             # If this was char-player, also purge stale keys from catalog
