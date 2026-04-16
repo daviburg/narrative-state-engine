@@ -196,21 +196,23 @@ The semantic extraction pipeline uses an LLM to automatically extract entities, 
    pip install -r requirements-llm.txt
    ```
 
-2. Configure `config/llm.json`:
+2. Configure `config/llm.json` (defaults to local Ollama):
    ```json
    {
      "provider": "openai",
-     "model": "gpt-4o",
-     "api_key_env": "OPENAI_API_KEY"
+     "base_url": "http://localhost:11434/v1",
+     "model": "qwen2.5:14b",
+     "api_key_env": ""
    }
    ```
 
-   For a local Ollama instance:
+   For a cloud provider (e.g. OpenAI):
    ```json
    {
-     "provider": "ollama",
-     "model": "qwen2.5:3b",
-     "base_url": "http://localhost:11434/v1"
+     "provider": "openai",
+     "base_url": "https://api.openai.com/v1",
+     "model": "gpt-4o",
+     "api_key_env": "OPENAI_API_KEY"
    }
    ```
 
