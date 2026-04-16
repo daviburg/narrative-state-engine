@@ -54,12 +54,14 @@ class LLMClient:
         self.max_tokens = self.config.get("max_tokens", 4096)
         self.retry_attempts = self.config.get("retry_attempts", 3)
         self.batch_delay_ms = self.config.get("batch_delay_ms", 200)
+        self.default_timeout = self.config.get("timeout_seconds", 60)
 
     def extract_json(
         self,
         system_prompt: str,
         user_prompt: str,
         schema: dict | None = None,
+        timeout: int | None = None,
     ) -> dict | list:
         """Send a chat completion request and parse the JSON response.
 
@@ -67,6 +69,8 @@ class LLMClient:
             system_prompt: Role instructions for the model.
             user_prompt: The turn text and context.
             schema: Optional JSON schema for response_format (structured outputs).
+            timeout: Optional per-call timeout in seconds. Overrides the
+                default timeout from config for this call only.
 
         Returns:
             Parsed JSON object/array.
@@ -90,6 +94,8 @@ class LLMClient:
                     "max_tokens": self.max_tokens,
                     "response_format": {"type": "json_object"},
                 }
+                if timeout is not None:
+                    kwargs["timeout"] = timeout
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content

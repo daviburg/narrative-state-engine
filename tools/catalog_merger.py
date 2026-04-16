@@ -360,6 +360,127 @@ def fix_id_prefix(entity_id: str, entity_type: str) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Entity ID normalization
+# ---------------------------------------------------------------------------
+
+# Known type prefixes in canonical order for stripping during normalization
+_ALL_PREFIXES = sorted(TYPE_TO_PREFIX.values(), key=len, reverse=True)
+
+
+def _strip_any_prefix(entity_id: str) -> str:
+    """Strip any known type prefix from an entity ID, returning the name stem."""
+    for prefix in _ALL_PREFIXES:
+        if entity_id.startswith(prefix):
+            return entity_id[len(prefix):]
+    # Also strip unknown single-word prefixes (e.g. "entity-", "npc-")
+    m = re.match(r'^[a-z]+-', entity_id)
+    if m:
+        return entity_id[m.end():]
+    return entity_id
+
+
+def _infer_type_from_prefix(entity_id: str) -> str:
+    """Infer the entity type from the prefix of an ID string."""
+    for etype, prefix in TYPE_TO_PREFIX.items():
+        if entity_id.startswith(prefix):
+            return etype
+    return "character"  # default assumption for unknown prefixes
+
+
+def _levenshtein(s1: str, s2: str) -> int:
+    """Compute Levenshtein edit distance between two strings."""
+    if len(s1) < len(s2):
+        return _levenshtein(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
+    prev_row = list(range(len(s2) + 1))
+    for i, c1 in enumerate(s1):
+        curr_row = [i + 1]
+        for j, c2 in enumerate(s2):
+            cost = 0 if c1 == c2 else 1
+            curr_row.append(min(
+                curr_row[j] + 1,
+                prev_row[j + 1] + 1,
+                prev_row[j] + cost,
+            ))
+        prev_row = curr_row
+    return prev_row[-1]
+
+
+def normalize_entity_id(raw_id: str, known_ids: set[str]) -> str:
+    """Normalize a raw entity ID against a set of known catalog IDs.
+
+    Steps:
+    1. Lowercase the ID.
+    2. Validate/fix the type prefix using ``fix_id_prefix()`` logic.
+    3. Attempt exact match against known IDs.
+    4. Fuzzy-match against known IDs (Levenshtein distance ≤ 2 OR token overlap).
+    5. Return the canonical ID if a match is found, the normalized ID otherwise.
+    """
+    if not raw_id:
+        return raw_id
+
+    # Step 1: lowercase
+    normalized = raw_id.lower()
+
+    # Step 2: fix prefix — infer type from the prefix, then validate
+    inferred_type = _infer_type_from_prefix(normalized)
+    if not validate_id_prefix(normalized, inferred_type):
+        normalized = fix_id_prefix(normalized, inferred_type)
+
+    # Step 3: exact match after lowercasing
+    if normalized in known_ids:
+        return normalized
+
+    # Also check if any known ID matches case-insensitively (handles
+    # known_ids that were already lowercased differently)
+    known_lower = {kid.lower(): kid for kid in known_ids}
+    if normalized in known_lower:
+        return known_lower[normalized]
+
+    # Step 4: fuzzy match against known IDs
+    norm_stem = _strip_any_prefix(normalized)
+    if not norm_stem:
+        return normalized
+
+    best_match: str | None = None
+    best_distance = 999
+
+    for kid in known_ids:
+        kid_stem = _strip_any_prefix(kid.lower())
+        if not kid_stem:
+            continue
+
+        # 4a: Levenshtein distance on name stems
+        dist = _levenshtein(norm_stem, kid_stem)
+        if dist <= 2 and dist < best_distance:
+            # Additional guard: require stems to share the same first character
+            # and be similar length to avoid false positives
+            if norm_stem[0] == kid_stem[0] and abs(len(norm_stem) - len(kid_stem)) <= 2:
+                best_distance = dist
+                best_match = kid
+
+        # 4b: Token overlap — if the normalized stem's tokens are a superset
+        # or subset of a known ID's tokens, it's likely the same entity
+        norm_tokens = set(norm_stem.split("-"))
+        kid_tokens = set(kid_stem.split("-"))
+        if norm_tokens and kid_tokens:
+            overlap = norm_tokens & kid_tokens
+            smaller = min(len(norm_tokens), len(kid_tokens))
+            # Require full overlap of the smaller set, and smaller set >= 1 token
+            if smaller >= 1 and len(overlap) == smaller:
+                # Prefer the shorter (simpler) known ID
+                if best_match is None or len(kid) < len(best_match):
+                    best_match = kid
+                    best_distance = 0  # token match is high confidence
+
+    if best_match is not None:
+        return best_match
+
+    return normalized
+
+
+# ---------------------------------------------------------------------------
 # Turn number helpers
 # ---------------------------------------------------------------------------
 
