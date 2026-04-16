@@ -10,9 +10,6 @@ from semantic_extraction import (
     _pc_partial_merge,
     _format_prior_entity_context,
     _post_batch_orphan_sweep,
-    _collect_all_entity_ids,
-    find_entity_by_id,
-    PC_ALLOWED_ATTRS,
 )
 
 
@@ -39,7 +36,7 @@ class TestOrphanStubCreation:
         stub = next(e for e in catalogs["characters.json"] if e["id"] == "char-kael")
         assert stub["name"] == "Kael"
         assert stub["type"] == "character"
-        assert stub["source"] == "event-stub"
+        assert "Auto-created" in stub["notes"]
 
     def test_skips_char_player(self):
         catalogs = {

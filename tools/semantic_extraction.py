@@ -544,14 +544,21 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
         merged_fields.append("volatile_state")
 
     # Merge individual stable_attributes that are in the allowed set
+    # and conform to the expected entity schema shape.
     sa = entity_data.get("stable_attributes")
     if isinstance(sa, dict) and sa:
-        if "stable_attributes" not in pc_entry:
-            pc_entry["stable_attributes"] = {}
+        stable_attr_merged = False
         for k, v in sa.items():
-            if k in PC_ALLOWED_ATTRS:
-                pc_entry["stable_attributes"][k] = v
-        merged_fields.append("stable_attributes")
+            if k not in PC_ALLOWED_ATTRS:
+                continue
+            if not isinstance(v, dict) or "value" not in v:
+                continue
+            if "stable_attributes" not in pc_entry:
+                pc_entry["stable_attributes"] = {}
+            pc_entry["stable_attributes"][k] = v
+            stable_attr_merged = True
+        if stable_attr_merged:
+            merged_fields.append("stable_attributes")
 
     # Update last_updated_turn if we merged anything
     if merged_fields:
@@ -621,7 +628,7 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str) -> None:
             "identity": f"Entity referenced in events (stub — auto-created from event data).",
             "first_seen_turn": turn_id,
             "last_updated_turn": turn_id,
-            "source": "event-stub",
+            "notes": "Auto-created by event-stub.",
         }
         catalogs.setdefault(catalog_file, []).append(stub)
         print(f"  STUB: Created stub entity '{eid}' ({inferred_name}) from event data at {turn_id}")
@@ -1026,7 +1033,12 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
         inferred_name = stem.replace("-", " ").title()
         catalog_file = TYPE_TO_CATALOG_V1.get(inferred_type, "characters.json")
 
-        first_turn = min(turn_ids) if turn_ids else ""
+        # Sort turn IDs numerically to get the true first turn
+        valid_turns = [t for t in turn_ids if t]
+        if valid_turns:
+            first_turn = min(valid_turns, key=lambda t: int(t.split("-")[1]) if "-" in t and t.split("-")[1].isdigit() else 0)
+        else:
+            first_turn = ""
         stub = {
             "id": eid,
             "name": inferred_name,
@@ -1034,7 +1046,7 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             "identity": f"Entity referenced in {len(turn_ids)} events (stub — auto-created post-batch).",
             "first_seen_turn": first_turn,
             "last_updated_turn": first_turn,
-            "source": "post-batch-orphan-sweep",
+            "notes": "Auto-created by post-batch-orphan-sweep.",
         }
         catalogs.setdefault(catalog_file, []).append(stub)
         stubs_created += 1
