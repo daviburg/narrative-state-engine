@@ -367,8 +367,132 @@ _PC_KEY_STABLE_ATTRS = {"species", "race", "class", "aliases"}
 # Maximum number of volatile_state snapshots to include for PC
 _PC_MAX_VOLATILE_SNAPSHOTS = 3
 
+# Number of turns beyond which volatile state entries are digested (#121)
+_DIGEST_WINDOW = 50
 
-def _format_prior_entity_context(current_entry: dict | None) -> str:
+
+def _parse_turn_number(turn_id: str | None) -> int | None:
+    """Parse turn number from a turn ID string like 'turn-042'."""
+    if not turn_id or not isinstance(turn_id, str):
+        return None
+    m = re.search(r'turn-(\d+)', turn_id)
+    if m:
+        return int(m.group(1))
+    return None
+
+
+def _extract_turn_number(item) -> int | None:
+    """Try to extract a turn number from a volatile state entry."""
+    if isinstance(item, dict):
+        turn = item.get("turn") or item.get("source_turn") or item.get("turn_id")
+        if turn:
+            return _parse_turn_number(str(turn)) if not isinstance(turn, int) else turn
+    elif isinstance(item, str):
+        m = re.search(r'turn-(\d+)', item)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+def _extract_themes(items: list) -> list[str]:
+    """Extract key themes from a list of volatile state entries for digest."""
+    _THEME_KEYWORDS = [
+        "pregnancy", "birth", "construction", "harvest",
+        "defense", "ritual", "expedition", "council",
+        "illness", "healing", "teaching", "craft",
+    ]
+    themes = set()
+    for item in items:
+        text = str(item) if not isinstance(item, str) else item
+        text_lower = text[:200].lower()
+        for keyword in _THEME_KEYWORDS:
+            if keyword in text_lower:
+                themes.add(keyword)
+            if len(themes) >= 5:
+                break
+        if len(themes) >= 5:
+            break
+    if not themes:
+        themes.add(f"{len(items)} observations")
+    return sorted(themes)
+
+
+def _build_volatile_digest(volatile_state: dict, current_turn_num: int) -> dict:
+    """Compress old volatile state entries into a rolling summary (#121).
+
+    Entries older than ``_DIGEST_WINDOW`` turns are replaced with a count +
+    theme summary.  Recent entries are kept verbatim.
+    """
+    if not volatile_state:
+        return volatile_state
+
+    result = {}
+    for key, value in volatile_state.items():
+        if not isinstance(value, list):
+            result[key] = value
+            continue
+
+        recent_items = []
+        old_items = []
+        for item in value:
+            turn_num = _extract_turn_number(item)
+            if turn_num is not None and current_turn_num - turn_num > _DIGEST_WINDOW:
+                old_items.append(item)
+            else:
+                recent_items.append(item)
+
+        if old_items:
+            cutoff = current_turn_num - _DIGEST_WINDOW
+            themes = _extract_themes(old_items)
+            summary = (
+                f"[{len(old_items)} earlier entries through ~turn-{cutoff}"
+                f", including: {', '.join(themes[:5])}]"
+            )
+            result[key] = [summary] + recent_items
+        else:
+            result[key] = recent_items
+
+    return result
+
+
+def _compact_relationships_with_arcs(
+    relationships: list, arcs_data: dict
+) -> list:
+    """Replace raw relationship histories with arc summaries (#120).
+
+    When ``arcs_data`` contains arc summaries for a relationship target,
+    the raw history is replaced with a compact representation.  Otherwise
+    the history is trimmed to the last 3 entries.
+    """
+    compact_rels = []
+    arcs_map = arcs_data.get("arcs", {})
+    for rel in relationships:
+        target_id = rel.get("target_id", "")
+        arc_info = arcs_map.get(target_id)
+        if arc_info and arc_info.get("arc_summary"):
+            compact_rel = {
+                "target_id": target_id,
+                "type": rel.get("type", ""),
+                "status": rel.get("status", "active"),
+                "arc_phases": len(arc_info["arc_summary"]),
+                "current": arc_info.get("current_relationship", ""),
+                "summary": " → ".join(
+                    p.get("phase", "") for p in arc_info["arc_summary"]
+                ),
+            }
+            compact_rels.append(compact_rel)
+        else:
+            trimmed = dict(rel)
+            if "history" in trimmed and isinstance(trimmed["history"], list):
+                trimmed["history"] = trimmed["history"][-3:]
+            compact_rels.append(trimmed)
+    return compact_rels
+
+
+def _format_prior_entity_context(
+    current_entry: dict | None,
+    arcs_data: dict | None = None,
+) -> str:
     """Format the prior entity state for injection into the detail prompt.
 
     Extracts identity, current_status, stable_attributes, and volatile_state
@@ -379,6 +503,8 @@ def _format_prior_entity_context(current_entry: dict | None) -> str:
     - Always includes identity and current_status
     - Only key stable_attributes (species, class, aliases)
     - Last 3 volatile_state snapshots only
+    - Relationship histories replaced with arc summaries when available (#120)
+    - Old volatile state entries digested into count + themes (#121)
     """
     if not current_entry:
         return "{}"
@@ -404,21 +530,48 @@ def _format_prior_entity_context(current_entry: dict | None) -> str:
         else:
             prior["stable_attributes"] = sa
 
-    # volatile_state — trimmed for PC (last N snapshots)
+    # volatile_state — digest first, then cap recent entries for PC (#121)
     vs = current_entry.get("volatile_state")
     if vs:
         if is_pc and isinstance(vs, dict):
-            # Keep only the most recent entries if the volatile state is large
-            # For dict-based volatile_state, keep all keys but trim list values
+            current_turn_num = _parse_turn_number(
+                current_entry.get("last_updated_turn", "")
+            )
+            # Digest old entries BEFORE trimming so history is compressed
+            # rather than silently dropped.
+            if current_turn_num:
+                digested_vs = _build_volatile_digest(vs, current_turn_num)
+            else:
+                digested_vs = dict(vs)
+            # Cap recent list-valued entries to keep prompt size bounded
             trimmed_vs = {}
-            for k, v in vs.items():
+            for k, v in digested_vs.items():
                 if isinstance(v, list) and len(v) > _PC_MAX_VOLATILE_SNAPSHOTS:
-                    trimmed_vs[k] = v[-_PC_MAX_VOLATILE_SNAPSHOTS:]
+                    # If the digest produced a summary at index 0 (a string),
+                    # preserve it and cap the rest to last N entries.
+                    if v and isinstance(v[0], str) and v[0].startswith("["):
+                        trimmed_vs[k] = v[:1] + v[-(  _PC_MAX_VOLATILE_SNAPSHOTS):]
+                    else:
+                        trimmed_vs[k] = v[-_PC_MAX_VOLATILE_SNAPSHOTS:]
                 else:
                     trimmed_vs[k] = v
             prior["volatile_state"] = trimmed_vs
         else:
             prior["volatile_state"] = vs
+
+    # Relationships — compact with arc summaries for PC (#120)
+    rels = current_entry.get("relationships")
+    if rels and is_pc and arcs_data:
+        prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
+    elif rels and is_pc:
+        # No arc data — trim history to last 3 entries
+        compact_rels = []
+        for rel in rels:
+            trimmed = dict(rel)
+            if "history" in trimmed and isinstance(trimmed["history"], list):
+                trimmed["history"] = trimmed["history"][-3:]
+            compact_rels.append(trimmed)
+        prior["relationships"] = compact_rels
 
     # V1 fallback: keep description/attributes if no V2 counterparts
     if "identity" not in prior and "description" in current_entry:
@@ -432,9 +585,14 @@ def _format_prior_entity_context(current_entry: dict | None) -> str:
     return json.dumps(prior, indent=2)
 
 
-def format_detail_prompt(turn: dict, entity_ref: dict, current_entry: dict | None) -> str:
+def format_detail_prompt(
+    turn: dict,
+    entity_ref: dict,
+    current_entry: dict | None,
+    arcs_data: dict | None = None,
+) -> str:
     """Format the user prompt for entity detail extraction."""
-    prior_json = _format_prior_entity_context(current_entry)
+    prior_json = _format_prior_entity_context(current_entry, arcs_data=arcs_data)
     entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
     is_pc = (entity_id == "char-player")
     prompt = (
@@ -652,6 +810,7 @@ def extract_and_merge(
     events_list: list,
     llm: LLMClient,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    catalog_dir: str | None = None,
 ) -> tuple[dict, list]:
     """Process one turn through all extraction agents.
 
@@ -661,11 +820,31 @@ def extract_and_merge(
         events_list: Current list of events.
         llm: LLM client instance.
         min_confidence: Minimum confidence to catalog an entity.
+        catalog_dir: Optional path to the catalog directory, used to load
+            arc sidecar files for relationship compaction (#120).
 
     Returns:
         Updated (catalogs, events_list) tuple.
     """
     turn_id = turn["turn_id"]
+
+    # Load arc sidecar for PC relationship compaction (#120)
+    # V2 layout stores per-entity files under <catalog_dir>/characters/;
+    # fall back to catalog root for legacy/V1 layouts.
+    pc_arcs_data = None
+    if catalog_dir:
+        arcs_candidates = [
+            os.path.join(catalog_dir, "characters", "char-player.arcs.json"),
+            os.path.join(catalog_dir, "char-player.arcs.json"),
+        ]
+        for arcs_path in arcs_candidates:
+            if os.path.isfile(arcs_path):
+                try:
+                    with open(arcs_path, "r", encoding="utf-8-sig") as f:
+                        pc_arcs_data = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    pass  # Ignore corrupt/unreadable arcs file
+                break
 
     # --- 1. Entity Discovery ---
     known = format_known_entities(catalogs)
@@ -719,9 +898,11 @@ def extract_and_merge(
                 _, current_entry = result
 
         try:
+            entity_arcs = pc_arcs_data if entity_id == "char-player" else None
             detail_result = llm.extract_json(
                 system_prompt=load_template("entity-detail"),
-                user_prompt=format_detail_prompt(turn, entity_ref, current_entry),
+                user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
+                                                 arcs_data=entity_arcs),
             )
         except LLMExtractionError as e:
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
@@ -760,7 +941,8 @@ def extract_and_merge(
         try:
             detail_result = llm.extract_json(
                 system_prompt=load_template("entity-detail"),
-                user_prompt=format_detail_prompt(turn, pc_ref, pc_entry),
+                user_prompt=format_detail_prompt(turn, pc_ref, pc_entry,
+                                                 arcs_data=pc_arcs_data),
                 timeout=pc_timeout,
             )
             entity_data = detail_result.get("entity")
@@ -1152,7 +1334,8 @@ def extract_semantic_batch(
 
         try:
             catalogs, events_list = extract_and_merge(
-                turn, catalogs, events_list, llm, min_confidence
+                turn, catalogs, events_list, llm, min_confidence,
+                catalog_dir=catalog_dir,
             )
         except Exception as e:
             print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
@@ -1239,7 +1422,8 @@ def extract_semantic_single(
 
     print(f"  Running semantic extraction for {turn_id}...")
     catalogs, events_list = extract_and_merge(
-        turn, catalogs, events_list, llm, min_confidence
+        turn, catalogs, events_list, llm, min_confidence,
+        catalog_dir=catalog_dir,
     )
 
     entities_total = sum(len(v) for v in catalogs.values())

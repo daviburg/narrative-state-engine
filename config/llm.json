@@ -7,5 +7,6 @@
   "max_tokens": 4096,
   "timeout_seconds": 120,
   "retry_attempts": 3,
-  "batch_delay_ms": 200
+  "batch_delay_ms": 200,
+  "context_length": 32768
 }
