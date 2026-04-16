@@ -45,9 +45,9 @@ A new configuration file `config/llm.json` controls provider settings:
 ```json
 {
   "provider": "openai",
-  "base_url": "https://api.openai.com/v1",
-  "model": "gpt-4o",
-  "api_key_env": "OPENAI_API_KEY",
+  "base_url": "http://localhost:11434/v1",
+  "model": "qwen2.5:14b",
+  "api_key_env": "",
   "temperature": 0.0,
   "max_tokens": 4096,
   "timeout_seconds": 60,

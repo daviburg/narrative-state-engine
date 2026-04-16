@@ -10,6 +10,7 @@ from semantic_extraction import (
     _pc_partial_merge,
     _format_prior_entity_context,
     _post_batch_orphan_sweep,
+    format_detail_prompt,
 )
 
 
@@ -337,3 +338,144 @@ class TestPostBatchOrphanSweep:
         ]
         count = _post_batch_orphan_sweep(catalogs, events)
         assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Pronoun entity filter tests (#116)
+# ---------------------------------------------------------------------------
+
+class TestPronounFilter:
+    """Pronouns in _GENERIC_STEMS are rejected by stub creation."""
+
+    def _empty_catalogs(self):
+        return {
+            "characters.json": [],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+
+    def test_skips_pronoun_char_she(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["char-she"], "turn_id": "turn-100"}]
+        _create_orphan_stubs(catalogs, events, "turn-100")
+        assert len(catalogs["characters.json"]) == 0
+
+    def test_skips_pronoun_char_he(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["char-he"], "turn_id": "turn-100"}]
+        _create_orphan_stubs(catalogs, events, "turn-100")
+        assert len(catalogs["characters.json"]) == 0
+
+    def test_skips_pronoun_char_they(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["char-they"], "turn_id": "turn-100"}]
+        _create_orphan_stubs(catalogs, events, "turn-100")
+        assert len(catalogs["characters.json"]) == 0
+
+    def test_skips_pronoun_char_it(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["char-it"], "turn_id": "turn-100"}]
+        _create_orphan_stubs(catalogs, events, "turn-100")
+        assert len(catalogs["characters.json"]) == 0
+
+    def test_existing_generic_stems_still_work(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["char-stranger"], "turn_id": "turn-100"}]
+        _create_orphan_stubs(catalogs, events, "turn-100")
+        assert len(catalogs["characters.json"]) == 0
+
+    def test_real_entity_still_created(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["char-kael"], "turn_id": "turn-100"}]
+        _create_orphan_stubs(catalogs, events, "turn-100")
+        assert len(catalogs["characters.json"]) == 1
+        assert catalogs["characters.json"][0]["id"] == "char-kael"
+
+
+# ---------------------------------------------------------------------------
+# Concept-prefix in stub creation tests (#117)
+# ---------------------------------------------------------------------------
+
+class TestConceptPrefixStubFilter:
+    """Concept-prefix entities are rejected by stub creation."""
+
+    def _empty_catalogs(self):
+        return {
+            "characters.json": [],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+
+    def test_skips_concept_midwinter_celebration(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["concept-midwinter-celebration"], "turn_id": "turn-200"}]
+        _create_orphan_stubs(catalogs, events, "turn-200")
+        all_ids = {e["id"] for cat in catalogs.values() for e in cat}
+        assert "concept-midwinter-celebration" not in all_ids
+
+    def test_skips_concept_anything(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["concept-honor"], "turn_id": "turn-200"}]
+        _create_orphan_stubs(catalogs, events, "turn-200")
+        all_ids = {e["id"] for cat in catalogs.values() for e in cat}
+        assert "concept-honor" not in all_ids
+
+    def test_non_concept_still_creates_stub(self):
+        catalogs = self._empty_catalogs()
+        events = [{"id": "evt-1", "related_entities": ["item-magic-sword"], "turn_id": "turn-200"}]
+        _create_orphan_stubs(catalogs, events, "turn-200")
+        all_ids = {e["id"] for cat in catalogs.values() for e in cat}
+        assert "item-magic-sword" in all_ids
+
+
+# ---------------------------------------------------------------------------
+# PC detail prompt double-context tests (#119)
+# ---------------------------------------------------------------------------
+
+class TestPCDetailPromptContext:
+    """format_detail_prompt omits full entry_json for char-player."""
+
+    def _make_turn(self):
+        return {"turn_id": "turn-100", "speaker": "DM", "text": "The forest grows dark."}
+
+    def _make_entry(self, entity_id="char-player"):
+        return {
+            "id": entity_id,
+            "name": "Player Character" if entity_id == "char-player" else "Kael",
+            "type": "character",
+            "identity": "A brave adventurer.",
+            "current_status": "Exploring the forest.",
+            "stable_attributes": {"race": {"value": "Human"}},
+            "volatile_state": {"condition": "healthy"},
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-099",
+        }
+
+    def test_pc_prompt_omits_current_catalog_entry(self):
+        turn = self._make_turn()
+        ref = {"name": "Player Character", "type": "character", "existing_id": "char-player"}
+        entry = self._make_entry("char-player")
+        prompt = format_detail_prompt(turn, ref, entry)
+        assert "## Current Catalog Entry" not in prompt
+
+    def test_non_pc_prompt_includes_current_catalog_entry(self):
+        turn = self._make_turn()
+        ref = {"name": "Kael", "type": "character", "existing_id": "char-kael"}
+        entry = self._make_entry("char-kael")
+        prompt = format_detail_prompt(turn, ref, entry)
+        assert "## Current Catalog Entry" in prompt
+
+    def test_pc_prompt_shorter_than_non_pc(self):
+        turn = self._make_turn()
+        pc_ref = {"name": "Player Character", "type": "character", "existing_id": "char-player"}
+        pc_entry = self._make_entry("char-player")
+        pc_prompt = format_detail_prompt(turn, pc_ref, pc_entry)
+
+        npc_ref = {"name": "Player Character", "type": "character", "existing_id": "char-npc"}
+        npc_entry = self._make_entry("char-player")
+        npc_entry["id"] = "char-npc"
+        npc_prompt = format_detail_prompt(turn, npc_ref, npc_entry)
+
+        assert len(pc_prompt) < len(npc_prompt)
