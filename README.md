@@ -137,7 +137,8 @@ tools/
   extract_structured_data.py     # Extract inline game markers and temporal events
   generate_wiki_pages.py         # Generate markdown wiki pages from V2 entity files
   migrate_catalogs_v2.py         # One-time V1→V2 catalog layout migration
-  synthesis.py                   # Data assembly layer for wiki narrative synthesis
+  synthesis.py                   # Data foundation for wiki synthesis: event grouping, phase segmentation, relationship arc summarization
+  narrative_synthesis.py         # LLM-powered narrative wiki page generation (LLM calls and page assembly)
   export_book_skeleton.py        # Generate book/fiction outline (placeholder)
 
 examples/
@@ -263,6 +264,15 @@ Generate human-readable markdown wiki pages from V2 per-entity catalog files:
 python tools/generate_wiki_pages.py --framework framework/
 # Or limit to one entity type:
 python tools/generate_wiki_pages.py --framework framework/ --type characters
+```
+
+For LLM-powered narrative synthesis (requires LLM config):
+
+```bash
+# LLM-powered narrative synthesis (requires LLM config):
+python tools/generate_wiki_pages.py --framework framework/ --synthesize
+# Force full regeneration:
+python tools/generate_wiki_pages.py --framework framework/ --synthesize --force
 ```
 
 Produces individual `.md` pages alongside each entity JSON file and `README.md` index pages per entity type directory.
