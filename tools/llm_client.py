@@ -55,6 +55,7 @@ class LLMClient:
         self.retry_attempts = self.config.get("retry_attempts", 3)
         self.batch_delay_ms = self.config.get("batch_delay_ms", 200)
         self.default_timeout = self.config.get("timeout_seconds", 60)
+        self.context_length = self.config.get("context_length", None)
 
     def extract_json(
         self,
@@ -96,6 +97,8 @@ class LLMClient:
                 }
                 if timeout is not None:
                     kwargs["timeout"] = timeout
+                if self.context_length:
+                    kwargs["extra_body"] = {"num_ctx": self.context_length}
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
@@ -185,6 +188,8 @@ class LLMClient:
                 }
                 if timeout is not None:
                     kwargs["timeout"] = timeout
+                if self.context_length:
+                    kwargs["extra_body"] = {"num_ctx": self.context_length}
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content

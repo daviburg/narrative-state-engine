@@ -11,6 +11,10 @@ from semantic_extraction import (
     _format_prior_entity_context,
     _post_batch_orphan_sweep,
     format_detail_prompt,
+    _compact_relationships_with_arcs,
+    _build_volatile_digest,
+    _extract_turn_number,
+    _extract_themes,
 )
 
 
@@ -479,3 +483,429 @@ class TestPCDetailPromptContext:
         npc_prompt = format_detail_prompt(turn, npc_ref, npc_entry)
 
         assert len(pc_prompt) < len(npc_prompt)
+
+
+# ---------------------------------------------------------------------------
+# num_ctx / context_length support tests (#118)
+# ---------------------------------------------------------------------------
+
+class TestContextLengthPassthrough:
+    """LLMClient passes extra_body with num_ctx when context_length is set."""
+
+    def test_extract_json_includes_num_ctx(self, tmp_path):
+        config = {
+            "provider": "openai",
+            "base_url": "http://localhost:11434/v1",
+            "model": "test-model",
+            "api_key_env": "",
+            "temperature": 0.0,
+            "max_tokens": 100,
+            "timeout_seconds": 10,
+            "retry_attempts": 1,
+            "batch_delay_ms": 0,
+            "context_length": 32768,
+        }
+        config_path = tmp_path / "llm.json"
+        config_path.write_text(json.dumps(config))
+
+        from unittest.mock import MagicMock, patch
+        from llm_client import LLMClient
+
+        with patch("openai.OpenAI") as mock_openai_cls:
+            mock_client = MagicMock()
+            mock_openai_cls.return_value = mock_client
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = '{"result": "ok"}'
+            mock_client.chat.completions.create.return_value = mock_response
+
+            client = LLMClient(str(config_path))
+            client.extract_json("system", "user")
+
+            call_kwargs = mock_client.chat.completions.create.call_args[1]
+            assert "extra_body" in call_kwargs
+            assert call_kwargs["extra_body"] == {"num_ctx": 32768}
+
+    def test_extract_json_no_extra_body_when_unset(self, tmp_path):
+        config = {
+            "provider": "openai",
+            "base_url": "http://localhost:11434/v1",
+            "model": "test-model",
+            "api_key_env": "",
+            "temperature": 0.0,
+            "max_tokens": 100,
+            "timeout_seconds": 10,
+            "retry_attempts": 1,
+            "batch_delay_ms": 0,
+        }
+        config_path = tmp_path / "llm.json"
+        config_path.write_text(json.dumps(config))
+
+        from unittest.mock import MagicMock, patch
+        from llm_client import LLMClient
+
+        with patch("openai.OpenAI") as mock_openai_cls:
+            mock_client = MagicMock()
+            mock_openai_cls.return_value = mock_client
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = '{"result": "ok"}'
+            mock_client.chat.completions.create.return_value = mock_response
+
+            client = LLMClient(str(config_path))
+            client.extract_json("system", "user")
+
+            call_kwargs = mock_client.chat.completions.create.call_args[1]
+            assert "extra_body" not in call_kwargs
+
+    def test_generate_text_includes_num_ctx(self, tmp_path):
+        config = {
+            "provider": "openai",
+            "base_url": "http://localhost:11434/v1",
+            "model": "test-model",
+            "api_key_env": "",
+            "temperature": 0.0,
+            "max_tokens": 100,
+            "timeout_seconds": 10,
+            "retry_attempts": 1,
+            "batch_delay_ms": 0,
+            "context_length": 16384,
+        }
+        config_path = tmp_path / "llm.json"
+        config_path.write_text(json.dumps(config))
+
+        from unittest.mock import MagicMock, patch
+        from llm_client import LLMClient
+
+        with patch("openai.OpenAI") as mock_openai_cls:
+            mock_client = MagicMock()
+            mock_openai_cls.return_value = mock_client
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = "Hello world"
+            mock_client.chat.completions.create.return_value = mock_response
+
+            client = LLMClient(str(config_path))
+            client.generate_text("system", "user")
+
+            call_kwargs = mock_client.chat.completions.create.call_args[1]
+            assert "extra_body" in call_kwargs
+            assert call_kwargs["extra_body"] == {"num_ctx": 16384}
+
+
+# ---------------------------------------------------------------------------
+# Relationship arc compaction tests (#120)
+# ---------------------------------------------------------------------------
+
+class TestRelationshipArcCompaction:
+    """_compact_relationships_with_arcs replaces history with arc summaries."""
+
+    def test_compacts_with_arc_data(self):
+        from semantic_extraction import _compact_relationships_with_arcs
+
+        relationships = [
+            {
+                "target_id": "char-kael",
+                "type": "ally",
+                "status": "active",
+                "history": [
+                    {"turn": "turn-010", "detail": "Met in forest"},
+                    {"turn": "turn-050", "detail": "Fought together"},
+                    {"turn": "turn-100", "detail": "Disagreement"},
+                    {"turn": "turn-150", "detail": "Reconciled"},
+                ],
+            },
+            {
+                "target_id": "char-lyra",
+                "type": "friend",
+                "status": "active",
+                "history": [
+                    {"turn": "turn-020", "detail": "Traded goods"},
+                ],
+            },
+        ]
+        arcs_data = {
+            "arcs": {
+                "char-kael": {
+                    "arc_summary": [
+                        {"phase": "alliance"},
+                        {"phase": "conflict"},
+                        {"phase": "reconciliation"},
+                    ],
+                    "current_relationship": "trusted ally",
+                },
+            },
+        }
+        result = _compact_relationships_with_arcs(relationships, arcs_data)
+        assert len(result) == 2
+        # char-kael should be compacted
+        kael = result[0]
+        assert kael["target_id"] == "char-kael"
+        assert "history" not in kael
+        assert kael["arc_phases"] == 3
+        assert kael["current"] == "trusted ally"
+        assert "alliance" in kael["summary"]
+        # char-lyra has no arc data — history trimmed to last 3
+        lyra = result[1]
+        assert lyra["target_id"] == "char-lyra"
+        assert len(lyra["history"]) == 1  # only 1 entry, all kept
+
+    def test_trims_history_without_arcs(self):
+        from semantic_extraction import _compact_relationships_with_arcs
+
+        relationships = [
+            {
+                "target_id": "char-unknown",
+                "type": "rival",
+                "status": "active",
+                "history": [{"turn": f"turn-{i:03d}", "detail": f"event {i}"} for i in range(10)],
+            },
+        ]
+        arcs_data = {"arcs": {}}
+        result = _compact_relationships_with_arcs(relationships, arcs_data)
+        assert len(result[0]["history"]) == 3
+
+    def test_fallback_when_no_arcs_data(self):
+        """_format_prior_entity_context falls back when arcs_data is None."""
+        entry = {
+            "id": "char-player",
+            "name": "Player Character",
+            "type": "character",
+            "identity": "The PC.",
+            "relationships": [
+                {"target_id": "char-kael", "type": "ally", "history": [{"turn": "turn-001"}]},
+            ],
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-100",
+        }
+        result = json.loads(_format_prior_entity_context(entry, arcs_data=None))
+        # Should still have relationships (trimmed, not compacted)
+        rels = result.get("relationships", [])
+        assert len(rels) == 1
+        assert rels[0]["target_id"] == "char-kael"
+
+    def test_token_savings_with_arcs(self):
+        """Arc compaction should produce a shorter context than raw history."""
+        relationships = [
+            {
+                "target_id": f"char-npc-{i}",
+                "type": "ally",
+                "status": "active",
+                "history": [{"turn": f"turn-{j:03d}", "detail": f"interaction {j}"}
+                            for j in range(10)],
+            }
+            for i in range(20)
+        ]
+        arcs_data = {
+            "arcs": {
+                f"char-npc-{i}": {
+                    "arc_summary": [{"phase": "meeting"}, {"phase": "bonding"}],
+                    "current_relationship": "friend",
+                }
+                for i in range(20)
+            }
+        }
+        entry_with_arcs = {
+            "id": "char-player", "name": "PC", "type": "character",
+            "identity": "The PC.", "relationships": relationships,
+            "first_seen_turn": "turn-001", "last_updated_turn": "turn-200",
+        }
+        with_arcs = _format_prior_entity_context(entry_with_arcs, arcs_data=arcs_data)
+        without_arcs = _format_prior_entity_context(entry_with_arcs, arcs_data=None)
+        assert len(with_arcs) < len(without_arcs)
+
+
+# ---------------------------------------------------------------------------
+# Volatile state digest tests (#121)
+# ---------------------------------------------------------------------------
+
+class TestVolatileStateDigest:
+    """_build_volatile_digest compresses old entries."""
+
+    def test_digests_old_entries(self):
+        from semantic_extraction import _build_volatile_digest
+
+        volatile = {
+            "observations": [
+                {"turn": "turn-010", "detail": "pregnancy signs noticed"},
+                {"turn": "turn-020", "detail": "harvest preparations"},
+                {"turn": "turn-030", "detail": "ritual performed"},
+                {"turn": "turn-180", "detail": "council meeting held"},
+                {"turn": "turn-190", "detail": "defense planned"},
+            ],
+        }
+        result = _build_volatile_digest(volatile, current_turn_num=200)
+        obs = result["observations"]
+        # Old entries (turn-010..030) digested, recent (180, 190) kept
+        assert isinstance(obs[0], str)
+        assert "3 earlier entries" in obs[0]
+        assert len(obs) == 3  # 1 summary + 2 recent
+
+    def test_empty_volatile_state(self):
+        from semantic_extraction import _build_volatile_digest
+
+        assert _build_volatile_digest({}, 200) == {}
+
+    def test_non_list_values_pass_through(self):
+        from semantic_extraction import _build_volatile_digest
+
+        volatile = {"condition": "healthy", "location": "forest"}
+        result = _build_volatile_digest(volatile, 200)
+        assert result["condition"] == "healthy"
+        assert result["location"] == "forest"
+
+    def test_all_recent_entries_no_digest(self):
+        from semantic_extraction import _build_volatile_digest
+
+        volatile = {
+            "notes": [
+                {"turn": "turn-180", "detail": "something"},
+                {"turn": "turn-190", "detail": "something else"},
+            ],
+        }
+        result = _build_volatile_digest(volatile, current_turn_num=200)
+        assert len(result["notes"]) == 2
+        assert isinstance(result["notes"][0], dict)
+
+    def test_digest_includes_themes(self):
+        from semantic_extraction import _build_volatile_digest
+
+        volatile = {
+            "events": [
+                {"turn": "turn-010", "detail": "pregnancy confirmed"},
+                {"turn": "turn-020", "detail": "construction of walls began"},
+                {"turn": "turn-030", "detail": "healing ritual success"},
+            ],
+        }
+        result = _build_volatile_digest(volatile, current_turn_num=200)
+        summary = result["events"][0]
+        assert "pregnancy" in summary or "construction" in summary or "healing" in summary
+
+    def test_none_volatile_returns_none(self):
+        from semantic_extraction import _build_volatile_digest
+
+        assert _build_volatile_digest(None, 200) is None
+
+
+class TestExtractTurnNumber:
+    """_extract_turn_number handles various formats."""
+
+    def test_dict_with_turn_key(self):
+        from semantic_extraction import _extract_turn_number
+
+        assert _extract_turn_number({"turn": "turn-042"}) == 42
+
+    def test_dict_with_source_turn(self):
+        from semantic_extraction import _extract_turn_number
+
+        assert _extract_turn_number({"source_turn": "turn-100"}) == 100
+
+    def test_string_with_turn_pattern(self):
+        from semantic_extraction import _extract_turn_number
+
+        assert _extract_turn_number("something at turn-055 happened") == 55
+
+    def test_no_turn_info(self):
+        from semantic_extraction import _extract_turn_number
+
+        assert _extract_turn_number({"detail": "no turn"}) is None
+
+    def test_integer_value(self):
+        from semantic_extraction import _extract_turn_number
+
+        assert _extract_turn_number(42) is None
+
+
+class TestExtractThemes:
+    """_extract_themes identifies keyword themes from entries."""
+
+    def test_finds_keywords(self):
+        from semantic_extraction import _extract_themes
+
+        items = [
+            {"detail": "pregnancy confirmed"},
+            {"detail": "harvest completed"},
+        ]
+        themes = _extract_themes(items)
+        assert "pregnancy" in themes
+        assert "harvest" in themes
+
+    def test_caps_at_five(self):
+        from semantic_extraction import _extract_themes
+
+        items = [
+            "pregnancy text", "birth text", "construction text",
+            "harvest text", "defense text", "ritual text",
+        ]
+        themes = _extract_themes(items)
+        assert len(themes) <= 5
+
+    def test_fallback_count(self):
+        from semantic_extraction import _extract_themes
+
+        items = [{"detail": "unrecognized content"}]
+        themes = _extract_themes(items)
+        assert any("1 observations" in t for t in themes)
+
+
+# ---------------------------------------------------------------------------
+# Integration: PC prompt with all compacting features active (#118, #120, #121)
+# ---------------------------------------------------------------------------
+
+class TestPCCompactingIntegration:
+    """format_detail_prompt for char-player is shorter with all compacting."""
+
+    def test_compact_prompt_shorter(self):
+        turn = {"turn_id": "turn-300", "speaker": "DM", "text": "The storm rages on."}
+        pc_ref = {"name": "Player Character", "type": "character",
+                  "existing_id": "char-player", "is_new": False}
+
+        # Large PC entry with relationships and volatile state
+        relationships = [
+            {
+                "target_id": f"char-npc-{i}",
+                "type": "ally",
+                "status": "active",
+                "history": [{"turn": f"turn-{j:03d}", "detail": f"met {j}"}
+                            for j in range(1, 11)],
+            }
+            for i in range(15)
+        ]
+        volatile = {
+            "observations": [
+                {"turn": f"turn-{t:03d}", "detail": f"harvest event at turn {t}"}
+                for t in range(10, 300, 5)
+            ],
+            "condition": "healthy",
+        }
+        pc_entry = {
+            "id": "char-player",
+            "name": "Player Character",
+            "type": "character",
+            "identity": "A brave adventurer in the northern wastes.",
+            "current_status": "Weathering the storm.",
+            "stable_attributes": {
+                "race": {"value": "Human"},
+                "class": {"value": "Ranger"},
+                "aliases": {"value": ["PC"]},
+                "backstory": {"value": "Long backstory " * 20},
+            },
+            "volatile_state": volatile,
+            "relationships": relationships,
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-299",
+        }
+        arcs_data = {
+            "arcs": {
+                f"char-npc-{i}": {
+                    "arc_summary": [{"phase": "meeting"}, {"phase": "trust"}],
+                    "current_relationship": "ally",
+                }
+                for i in range(15)
+            }
+        }
+
+        prompt_compact = format_detail_prompt(turn, pc_ref, pc_entry, arcs_data=arcs_data)
+        prompt_raw = format_detail_prompt(turn, pc_ref, pc_entry, arcs_data=None)
+
+        assert len(prompt_compact) < len(prompt_raw)
