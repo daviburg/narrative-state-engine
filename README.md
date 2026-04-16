@@ -32,6 +32,11 @@ LICENSE
 docs/
   architecture.md
   usage.md
+  roadmap.md
+  semantic-extraction-design.md
+  design-catalog-v2.md
+  Extraction-Lessons.md
+  idea-discussion.md
 
 config/
   llm.json                     # LLM provider settings (model, endpoint)
@@ -39,19 +44,29 @@ config/
 schemas/
   turn.schema.json
   entity.schema.json
+  entity-index.schema.json
   plot-thread.schema.json
   state.schema.json
   objective.schema.json
   evidence.schema.json
   prompt-candidate.schema.json
   dm-profile.schema.json
+  event.schema.json
+  session-events.schema.json
+  timeline.schema.json
+  season-summary.schema.json
+  metadata.schema.json
+  anomaly.schema.json
+  turn-context.schema.json
 
 framework/
   catalogs/
-    characters.json
+    characters.json              # V1 flat files (legacy; V2 uses per-entity subdirs)
     locations.json
     factions.json
     items.json
+    events.json
+    anomalies.json
     plot-threads.json
   objectives/
     objectives.json
@@ -60,8 +75,12 @@ framework/
   story/
     summary.md
     world-state.md
+    session-index.json           # Index of all sessions for cross-session queries
   strategy/
     heuristics.md
+    hint-interpretation.md
+    manipulation-patterns.md
+    risk-model.md
 
 sessions/
   session-001/
@@ -78,6 +97,11 @@ sessions/
       evidence.json
       next-move-analysis.md
       prompt-candidates.json
+      session-events.json        # Mechanical events (HP, items, spells, level-ups)
+      timeline.json              # Temporal markers and season transitions
+      season-summaries.json      # Structured season summary blocks
+    exports/
+      book-skeleton.md           # Fiction/book outline placeholder (scaffolded by bootstrap_session.py; intended for future export_book_skeleton.py output)
 
 templates/
   extraction/
@@ -85,16 +109,37 @@ templates/
     entity-detail.md
     relationship-mapper.md
     event-extractor.md
+  content/
+    character-sheet.md           # Copilot-assisted content authoring templates
+    faction-sheet.md
+    location-sheet.md
+    storyline-sheet.md
+  dm/
+    adversarial-dm.md            # DM-style prompt templates for testing
+    generic-rpg.md
+    generic-freeform.md
+  prompts/
+    ingest-session-turn.md       # Copilot prompt templates for common tasks
+    next-move-analysis.md
+    resume-analysis.md
+    rpg-to-book-outline.md
 
 tools/
-  bootstrap_session.py
-  ingest_turn.py
-  update_state.py
-  analyze_next_move.py
-  validate.py
+  bootstrap_session.py           # Import an existing transcript into a session
+  ingest_turn.py                 # Add a new turn to a session
+  update_state.py                # Regenerate derived scaffolds and turn summary
+  analyze_next_move.py           # Generate next-move analysis and prompt candidates
+  validate.py                    # Validate JSON files against schemas
   semantic_extraction.py         # LLM-based entity/relationship/event extraction
   catalog_merger.py              # Merge extracted data into framework catalogs
   llm_client.py                  # Provider-agnostic LLM client wrapper
+  build_context.py               # Build focused per-turn entity context
+  extract_structured_data.py     # Extract inline game markers and temporal events
+  generate_wiki_pages.py         # Generate markdown wiki pages from V2 entity files
+  migrate_catalogs_v2.py         # One-time V1→V2 catalog layout migration
+  synthesis.py                   # Data foundation for wiki synthesis: event grouping, phase segmentation, relationship arc summarization
+  narrative_synthesis.py         # LLM-powered narrative wiki page generation (LLM calls and page assembly)
+  export_book_skeleton.py        # Generate book/fiction outline (placeholder)
 
 examples/
   demo-session/
@@ -162,7 +207,10 @@ python tools/update_state.py --session sessions/session-001
 Current automated behavior:
 - Rebuilds `sessions/session-001/derived/turn-summary.md` from transcript files
 - Creates scaffold files if missing: `state.json`, `objectives.json`, `evidence.json`
-- Updates only `state.json.as_of_turn`
+- Updates `state.json.as_of_turn`
+- Extracts inline game markers into `session-events.json` (HP changes, item acquisitions, spell use, level-ups)
+- Extracts temporal markers into `timeline.json` (season transitions, time progression)
+- Extracts season summary blocks into `season-summaries.json`
 
 ### Semantic Extraction (Optional)
 
@@ -179,6 +227,55 @@ python tools/ingest_turn.py \
 ```
 
 See [`docs/semantic-extraction-design.md`](docs/semantic-extraction-design.md) for pipeline details.
+
+### Building Per-Turn Entity Context
+
+Build a focused entity snapshot for a specific turn (prefers the V2 catalog layout, but falls back to V1 flat files via format detection):
+
+```bash
+python tools/build_context.py \
+  --session sessions/session-001 \
+  --turn turn-003 \
+  --framework framework/
+```
+
+Produces `sessions/session-001/derived/turn-context.json` containing the entities mentioned in the turn, their one-hop active relationships, and a summary of recently updated nearby entities.
+
+### Migrating Catalogs to V2 Layout
+
+The catalog system supports two layouts:
+
+- **V1** — flat JSON files (`characters.json`, `locations.json`, etc.) — original format
+- **V2** — per-entity subdirectories (`catalogs/characters/<id>.json`, etc.) with `index.json` per type — enables efficient per-turn context loading and wiki page generation
+
+To migrate an existing V1 framework to V2:
+
+```bash
+python tools/migrate_catalogs_v2.py --framework framework/
+```
+
+Use `--force` to overwrite an existing V2 layout. Most catalog-reading tools support both layouts with automatic format detection, but some tools are intentionally V2-only or strict about V2 input. In particular, `tools/generate_wiki_pages.py` requires the V2 per-entity layout, and `tools/validate.py` will flag V1 entity catalogs as errors rather than validating them against the V2 entity schema.
+
+### Generating Wiki Pages (V2 only)
+
+Generate human-readable markdown wiki pages from V2 per-entity catalog files:
+
+```bash
+python tools/generate_wiki_pages.py --framework framework/
+# Or limit to one entity type:
+python tools/generate_wiki_pages.py --framework framework/ --type characters
+```
+
+For LLM-powered narrative synthesis (requires LLM config):
+
+```bash
+# LLM-powered narrative synthesis (requires LLM config):
+python tools/generate_wiki_pages.py --framework framework/ --synthesize
+# Force full regeneration:
+python tools/generate_wiki_pages.py --framework framework/ --synthesize --force
+```
+
+Produces individual `.md` pages alongside each entity JSON file and `README.md` index pages per entity type directory.
 
 ### Generating Next-Move Analysis
 
@@ -210,7 +307,7 @@ This repository is configured for GitHub Copilot via `.github/copilot-instructio
 3. Run `tools/update_state.py` to regenerate `turn-summary.md` and ensure derived scaffolds exist.
 4. Ask Copilot to update `derived/state.json`, `derived/objectives.json`, and `derived/evidence.json`.
 5. Run `tools/analyze_next_move.py` and refine prompt candidates as needed.
-5. Copilot will follow the instructions in `.github/copilot-instructions.md` to ensure consistency.
+6. Copilot will follow the instructions in `.github/copilot-instructions.md` to ensure consistency.
 
 **Example Copilot prompts:**
 
@@ -260,4 +357,8 @@ All analysis distinguishes:
 
 - [`docs/architecture.md`](docs/architecture.md) — system design and data flow
 - [`docs/usage.md`](docs/usage.md) — detailed usage guide
+- [`docs/roadmap.md`](docs/roadmap.md) — development phases and status
+- [`docs/semantic-extraction-design.md`](docs/semantic-extraction-design.md) — LLM extraction pipeline design
+- [`docs/design-catalog-v2.md`](docs/design-catalog-v2.md) — V2 catalog entity state model and context builder design
+- [`docs/Extraction-Lessons.md`](docs/Extraction-Lessons.md) — lessons learned from large extraction runs
 - [`examples/demo-session/`](examples/demo-session/) — a worked example session
