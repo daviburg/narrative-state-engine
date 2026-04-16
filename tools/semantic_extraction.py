@@ -434,21 +434,27 @@ def _format_prior_entity_context(current_entry: dict | None) -> str:
 
 def format_detail_prompt(turn: dict, entity_ref: dict, current_entry: dict | None) -> str:
     """Format the user prompt for entity detail extraction."""
-    entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
     prior_json = _format_prior_entity_context(current_entry)
-    return (
+    entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
+    is_pc = (entity_id == "char-player")
+    prompt = (
         f"## Current Turn\n"
         f"Turn ID: {turn['turn_id']}\n"
         f"Speaker: {turn['speaker']}\n"
         f"Text:\n{turn['text']}\n\n"
         f"## Entity to Extract/Update\n"
-        f"Entity ID: {entity_ref.get('existing_id') or entity_ref.get('proposed_id')}\n"
+        f"Entity ID: {entity_id}\n"
         f"Entity Name: {entity_ref['name']}\n"
         f"Entity Type: {entity_ref['type']}\n\n"
         f"## Prior entity state (for reference, update as needed):\n"
-        f"```json\n{prior_json}\n```\n\n"
-        f"## Current Catalog Entry\n```json\n{entry_json}\n```"
+        f"```json\n{prior_json}\n```"
     )
+    # For PC, skip the full catalog entry to avoid context bloat (#119).
+    # The trimmed prior_json already contains all essential entity context.
+    if not is_pc:
+        entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
+        prompt += f"\n\n## Current Catalog Entry\n```json\n{entry_json}\n```"
+    return prompt
 
 
 def _collect_existing_relationships(catalogs: dict, entity_ids: list[str]) -> str:
@@ -589,6 +595,9 @@ _GENERIC_STEMS = {
     "stranger", "figure", "someone", "person", "creature", "thing",
     "guard", "villager", "traveler", "merchant", "soldier", "voice",
     "shadow", "spirit", "beast", "animal",
+    # Pronouns — should never become entity IDs
+    "she", "he", "they", "it", "her", "him", "them",
+    "his", "hers", "its", "their", "theirs",
 }
 
 
@@ -607,6 +616,9 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str) -> None:
                 orphan_ids.add(eid)
 
     for eid in sorted(orphan_ids):
+        # Skip concept-prefix entities — abstract concepts, not catalogue entities
+        if eid.startswith("concept-"):
+            continue
         # Skip generic/unnamed entity references
         stem = _strip_any_prefix(eid)
         if stem in _GENERIC_STEMS:
@@ -692,6 +704,11 @@ def extract_and_merge(
     for entity_ref in qualified:
         entity_id = get_entity_id(entity_ref)
         if not entity_id:
+            continue
+
+        # Skip pronoun / generic-stem IDs that slipped through discovery
+        stem = _strip_any_prefix(entity_id)
+        if stem.lower() in _GENERIC_STEMS:
             continue
 
         # Look up current entry for existing entities
@@ -1025,6 +1042,9 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
         if len(turn_ids) < _POST_BATCH_ORPHAN_MIN_REFS:
             continue
 
+        # Skip concept-prefix entities
+        if eid.startswith("concept-"):
+            continue
         stem = _strip_any_prefix(eid)
         if stem in _GENERIC_STEMS:
             continue
