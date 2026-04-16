@@ -530,24 +530,31 @@ def _format_prior_entity_context(
         else:
             prior["stable_attributes"] = sa
 
-    # volatile_state — trimmed for PC (last N snapshots), then digested (#121)
+    # volatile_state — digest first, then cap recent entries for PC (#121)
     vs = current_entry.get("volatile_state")
     if vs:
         if is_pc and isinstance(vs, dict):
-            # Keep only the most recent entries if the volatile state is large
-            # For dict-based volatile_state, keep all keys but trim list values
-            trimmed_vs = {}
-            for k, v in vs.items():
-                if isinstance(v, list) and len(v) > _PC_MAX_VOLATILE_SNAPSHOTS:
-                    trimmed_vs[k] = v[-_PC_MAX_VOLATILE_SNAPSHOTS:]
-                else:
-                    trimmed_vs[k] = v
-            # Apply rolling digest to compress old entries (#121)
             current_turn_num = _parse_turn_number(
                 current_entry.get("last_updated_turn", "")
             )
+            # Digest old entries BEFORE trimming so history is compressed
+            # rather than silently dropped.
             if current_turn_num:
-                trimmed_vs = _build_volatile_digest(trimmed_vs, current_turn_num)
+                digested_vs = _build_volatile_digest(vs, current_turn_num)
+            else:
+                digested_vs = dict(vs)
+            # Cap recent list-valued entries to keep prompt size bounded
+            trimmed_vs = {}
+            for k, v in digested_vs.items():
+                if isinstance(v, list) and len(v) > _PC_MAX_VOLATILE_SNAPSHOTS:
+                    # If the digest produced a summary at index 0 (a string),
+                    # preserve it and cap the rest to last N entries.
+                    if v and isinstance(v[0], str) and v[0].startswith("["):
+                        trimmed_vs[k] = v[:1] + v[-(  _PC_MAX_VOLATILE_SNAPSHOTS):]
+                    else:
+                        trimmed_vs[k] = v[-_PC_MAX_VOLATILE_SNAPSHOTS:]
+                else:
+                    trimmed_vs[k] = v
             prior["volatile_state"] = trimmed_vs
         else:
             prior["volatile_state"] = vs
@@ -822,15 +829,22 @@ def extract_and_merge(
     turn_id = turn["turn_id"]
 
     # Load arc sidecar for PC relationship compaction (#120)
+    # V2 layout stores per-entity files under <catalog_dir>/characters/;
+    # fall back to catalog root for legacy/V1 layouts.
     pc_arcs_data = None
     if catalog_dir:
-        arcs_path = os.path.join(catalog_dir, "char-player.arcs.json")
-        if os.path.isfile(arcs_path):
-            try:
-                with open(arcs_path, "r", encoding="utf-8") as f:
-                    pc_arcs_data = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                pass  # Ignore corrupt/unreadable arcs file
+        arcs_candidates = [
+            os.path.join(catalog_dir, "characters", "char-player.arcs.json"),
+            os.path.join(catalog_dir, "char-player.arcs.json"),
+        ]
+        for arcs_path in arcs_candidates:
+            if os.path.isfile(arcs_path):
+                try:
+                    with open(arcs_path, "r", encoding="utf-8-sig") as f:
+                        pc_arcs_data = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    pass  # Ignore corrupt/unreadable arcs file
+                break
 
     # --- 1. Entity Discovery ---
     known = format_known_entities(catalogs)
