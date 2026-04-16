@@ -434,7 +434,6 @@ def _format_prior_entity_context(current_entry: dict | None) -> str:
 
 def format_detail_prompt(turn: dict, entity_ref: dict, current_entry: dict | None) -> str:
     """Format the user prompt for entity detail extraction."""
-    entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
     prior_json = _format_prior_entity_context(current_entry)
     entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
     is_pc = (entity_id == "char-player")
@@ -453,6 +452,7 @@ def format_detail_prompt(turn: dict, entity_ref: dict, current_entry: dict | Non
     # For PC, skip the full catalog entry to avoid context bloat (#119).
     # The trimmed prior_json already contains all essential entity context.
     if not is_pc:
+        entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
         prompt += f"\n\n## Current Catalog Entry\n```json\n{entry_json}\n```"
     return prompt
 
