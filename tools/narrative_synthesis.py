@@ -153,7 +153,7 @@ def _format_catalog_section(catalog_data: dict | None) -> str:
     return "\n\n".join(parts) if parts else "Catalog entry exists but contains no data."
 
 
-def _format_arc_section(arc_summaries: dict | None, entity_id: str,
+def _format_arc_section(arc_summaries: dict | None,
                         max_arcs: int = 5) -> str:
     """Format relationship arc summaries for the LLM prompt."""
     if not arc_summaries:
@@ -190,8 +190,7 @@ def _format_arc_section(arc_summaries: dict | None, entity_id: str,
 
 def assemble_synthesis_input(entity_id: str, phase: dict,
                              catalog_data: dict | None,
-                             arc_summaries: dict | None,
-                             id_aliases: dict) -> dict:
+                             arc_summaries: dict | None) -> dict:
     """Assemble structured input for the narrative LLM.
 
     Args:
@@ -199,7 +198,6 @@ def assemble_synthesis_input(entity_id: str, phase: dict,
         phase: Phase dict with ``name``, ``turn_range``, ``events``.
         catalog_data: Entity catalog JSON or None.
         arc_summaries: Arc sidecar data or None.
-        id_aliases: ID alias mapping dict.
 
     Returns:
         Dict with ``system_prompt``, ``user_prompt``, ``events_used``,
@@ -234,7 +232,7 @@ def assemble_synthesis_input(entity_id: str, phase: dict,
         _format_events_for_prompt(events),
         "",
         "## Relationship Arcs",
-        _format_arc_section(arc_summaries, entity_id),
+        _format_arc_section(arc_summaries),
         "",
         "## Task",
         (f"Write the \"{phase_name}\" section of this entity's biography, "
@@ -432,6 +430,23 @@ def generate_item_summary(llm_client, item_input: dict) -> str:
 def _estimate_tokens(prompt: str, response: str) -> int:
     """Rough token estimate (~4 chars per token)."""
     return (len(prompt) + len(response)) // 4
+
+
+# Critical event types that should be cited in the biography
+_CRITICAL_EVENT_TYPES = frozenset({
+    "birth", "death", "arrival", "departure", "decision", "ritual",
+    "discovery", "recruitment", "combat",
+})
+
+
+def _collect_critical_turns(events: list[dict]) -> list[str]:
+    """Collect source turns from critical events for omission checking."""
+    turns: list[str] = []
+    for evt in events:
+        if evt.get("type", "") in _CRITICAL_EVENT_TYPES:
+            for t in evt.get("source_turns", []):
+                turns.append(t)
+    return sorted(set(turns), key=_parse_turn_number)
 
 
 # ---------------------------------------------------------------------------
@@ -896,7 +911,7 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
 
     for phase in phases:
         synth_input = assemble_synthesis_input(
-            entity_id, phase, catalog_data, arc_summaries, ID_ALIASES)
+            entity_id, phase, catalog_data, arc_summaries)
         for t in synth_input["available_turns"]:
             all_available_turns.add(t)
 
@@ -917,7 +932,9 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
 
     # Provenance validation across all phases
     available = sorted(all_available_turns, key=_parse_turn_number)
-    provenance = validate_provenance(page, available)
+    # Identify critical events (births, deaths, arrivals) for omission checking
+    critical_turns = _collect_critical_turns(events)
+    provenance = validate_provenance(page, available, critical_turns)
 
     if provenance["hallucination_flags"]:
         page = add_provenance_warning(page, entity_id)

@@ -623,11 +623,15 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
                     page_count += 1
 
             # Prune stale .md files whose entity JSON no longer exists
+            # Preserve event-only synthesized pages (have .synthesis.json sidecar)
             for fname in os.listdir(type_dir):
                 if fname == "README.md" or not fname.endswith(".md"):
                     continue
                 stem = fname[:-3]  # strip .md
                 if stem not in live_ids:
+                    sidecar = os.path.join(type_dir, f"{stem}.synthesis.json")
+                    if os.path.isfile(sidecar):
+                        continue  # Event-only synthesized page; keep it
                     stale_path = os.path.join(type_dir, fname)
                     os.remove(stale_path)
                     print(f"  Pruned stale wiki page: {fname}", file=sys.stderr)
@@ -676,6 +680,11 @@ def main():
     )
     args = parser.parse_args()
 
+    if args.force and not args.synthesize:
+        parser.error("--force requires --synthesize")
+    if args.index_only and args.synthesize:
+        parser.error("--index-only cannot be used with --synthesize")
+
     catalog_dir = os.path.join(args.framework, "catalogs")
     if not os.path.isdir(catalog_dir):
         print(f"ERROR: Catalog directory not found: {catalog_dir}", file=sys.stderr)
@@ -720,7 +729,6 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
         summarize_relationship_arcs,
         write_arc_sidecar,
         _infer_type_from_id,
-        _infer_name_from_id,
     )
     from llm_client import LLMClient
 
@@ -734,15 +742,6 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
     grouped = group_events_by_entity(events)
     all_entities = _load_all_entities(catalog_dir)
     name_index = _build_name_index(all_entities)
-
-    # Build catalog lookup: entity_id → catalog dict
-    catalog_lookup: dict[str, dict] = {}
-    entity_type_lookup: dict[str, str] = {}
-    for etype, elist in all_entities.items():
-        for entity in elist:
-            eid = entity.get("id", "")
-            catalog_lookup[eid] = entity
-            entity_type_lookup[eid] = etype
 
     # Initialise LLM client
     config_path = os.path.join(framework_dir, "..", "config", "llm.json")
@@ -782,7 +781,6 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
                 if not needs_regeneration(eid, len(entity_events),
                                           sidecar_path, force=force):
                     print(f"  Skipping {eid} (no new events)", file=sys.stderr)
-                    page_count += 1
                     continue
 
                 # Load arc summaries if available
@@ -841,7 +839,6 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
                                               sidecar_path, force=force):
                         print(f"  Skipping {eid} (no new events)",
                               file=sys.stderr)
-                        page_count += 1
                         continue
 
                     print(f"  Synthesizing {eid} "
@@ -858,8 +855,26 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
                     page_count += 1
                     processed_ids.add(eid)
 
-        # Generate index page
-        index_content = generate_index_page(entity_type, entities)
+        # Generate index page — include event-only entities alongside catalog ones
+        index_entities = list(entities)
+        if entity_type == "characters":
+            from synthesis import build_event_derived_profile as _build_profile
+            for eid in sorted(processed_ids):
+                if any(e.get("id") == eid for e in entities):
+                    continue  # Already in catalog entities
+                entity_events = grouped.get(eid, [])
+                if not entity_events:
+                    continue
+                profile = _build_profile(eid, entity_events)
+                index_entities.append({
+                    "id": eid,
+                    "name": profile.get("name", eid),
+                    "current_status": f"Events-only ({profile.get('event_count', 0)} events)",
+                    "first_seen_turn": profile.get("first_event_turn", ""),
+                    "last_updated_turn": profile.get("last_event_turn", ""),
+                    "relationships": [],
+                })
+        index_content = generate_index_page(entity_type, index_entities)
         readme_path = os.path.join(type_dir, "README.md")
         with open(readme_path, "w", encoding="utf-8") as f:
             f.write(index_content)

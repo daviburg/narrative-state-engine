@@ -36,7 +36,7 @@ from narrative_synthesis import (
     _build_current_status,
 )
 
-from synthesis import ID_ALIASES
+from narrative_synthesis import _collect_critical_turns
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -179,7 +179,7 @@ class TestInputAssembly:
 
         result = assemble_synthesis_input(
             "char-player", phase, SAMPLE_CATALOG,
-            SAMPLE_ARC_SUMMARIES, ID_ALIASES)
+            SAMPLE_ARC_SUMMARIES)
 
         assert "system_prompt" in result
         assert "user_prompt" in result
@@ -208,7 +208,7 @@ class TestInputAssembly:
         }
 
         result = assemble_synthesis_input(
-            "char-kael", phase, None, None, ID_ALIASES)
+            "char-kael", phase, None, None)
 
         prompt = result["user_prompt"]
         assert "No catalog entry exists" in prompt
@@ -226,7 +226,7 @@ class TestInputAssembly:
         }
 
         result = assemble_synthesis_input(
-            "char-elder", phase, None, None, ID_ALIASES)
+            "char-elder", phase, None, None)
 
         assert len(result["events_used"]) == 5
 
@@ -240,7 +240,7 @@ class TestInputAssembly:
         }
 
         result = assemble_synthesis_input(
-            "char-player", phase, SAMPLE_CATALOG, None, ID_ALIASES)
+            "char-player", phase, SAMPLE_CATALOG, None)
 
         assert "turn-001" in result["available_turns"]
         assert "turn-005" in result["available_turns"]
@@ -293,13 +293,13 @@ class TestFormatHelpers:
         assert "No catalog entry exists" in text
 
     def test_format_arc_section_present(self):
-        text = _format_arc_section(SAMPLE_ARC_SUMMARIES, "char-player")
+        text = _format_arc_section(SAMPLE_ARC_SUMMARIES)
         assert "Kael" in text
         assert "Early Bond" in text
         assert "Partner" in text
 
     def test_format_arc_section_absent(self):
-        text = _format_arc_section(None, "char-player")
+        text = _format_arc_section(None)
         assert "No relationship arc summaries" in text
 
 
@@ -351,6 +351,27 @@ class TestProvenanceValidation:
         assert "⚠️" in result
         assert "char-test.synthesis.json" in result
         assert result.endswith("Content.")
+
+    def test_collect_critical_turns(self):
+        """Critical turns extracted from birth/decision/ritual events."""
+        events = [
+            _make_event("e1", ["turn-001"], ["char-player"], "encounter", "Walk"),
+            _make_event("e2", ["turn-015"], ["char-player"], "ritual", "Accepted"),
+            _make_event("e3", ["turn-050"], ["char-player"], "encounter", "Chat"),
+            _make_event("e4", ["turn-141"], ["char-player"], "birth", "Baby born"),
+        ]
+        turns = _collect_critical_turns(events)
+        assert "turn-015" in turns  # ritual is critical
+        assert "turn-141" in turns  # birth is critical
+        assert "turn-001" not in turns  # encounter is not critical
+        assert "turn-050" not in turns  # encounter is not critical
+
+    def test_collect_critical_turns_empty(self):
+        """No critical turns when all events are non-critical type."""
+        events = [
+            _make_event("e1", ["turn-001"], ["char-player"], "encounter", "Walk"),
+        ]
+        assert _collect_critical_turns(events) == []
 
 
 # ---------------------------------------------------------------------------
@@ -541,7 +562,7 @@ class TestBiographyGeneration:
             "event_count": 3,
         }
         synth_input = assemble_synthesis_input(
-            "char-player", phase, SAMPLE_CATALOG, None, ID_ALIASES)
+            "char-player", phase, SAMPLE_CATALOG, None)
 
         text, meta = generate_phase_biography(llm, synth_input)
 
