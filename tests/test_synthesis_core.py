@@ -66,56 +66,63 @@ SAMPLE_EVENTS = [
 ]
 
 
-# Relationships modeled on char-player's data: multiple entries for same target
+# Relationships modeled on char-player's data: multiple entries for same target.
+# V2 schema: history items are {turn, description} only — no per-entry type.
+# The parent relationship object carries the type.
 SAMPLE_RELATIONSHIPS = [
     {
         "target_id": "char-broad-figure",
         "current_relationship": "communicating with",
         "type": "social",
+        "last_updated_turn": "turn-035",
         "history": [
-            {"turn": "turn-012", "type": "social", "description": "communicating with"},
-            {"turn": "turn-035", "type": "social", "description": "working alongside"},
+            {"turn": "turn-012", "description": "communicating with"},
+            {"turn": "turn-035", "description": "working alongside"},
         ],
     },
     {
         "target_id": "char-Kael",
         "current_relationship": "Life partner",
         "type": "romantic",
+        "last_updated_turn": "turn-108",
         "history": [
-            {"turn": "turn-051", "type": "social", "description": "helping maintain fire with"},
-            {"turn": "turn-056", "type": "social", "description": "friendship with"},
-            {"turn": "turn-078", "type": "romantic", "description": "laying a good luck kiss"},
-            {"turn": "turn-108", "type": "romantic", "description": "seeking alliance"},
+            {"turn": "turn-051", "description": "helping maintain fire with"},
+            {"turn": "turn-056", "description": "friendship with"},
+            {"turn": "turn-078", "description": "laying a good luck kiss"},
+            {"turn": "turn-108", "description": "seeking alliance"},
         ],
     },
     {
         "target_id": "char-kael",
         "current_relationship": "Co-leader",
         "type": "romantic",
+        "last_updated_turn": "turn-340",
         "history": [
-            {"turn": "turn-194", "type": "romantic", "description": "trusting with leadership"},
-            {"turn": "turn-210", "type": "romantic", "description": "sharing closeness"},
-            {"turn": "turn-286", "type": "leadership", "description": "overseeing perimeter"},
-            {"turn": "turn-326", "type": "romantic", "description": "feeling fourth child"},
-            {"turn": "turn-340", "type": "leadership", "description": "winter council report"},
+            {"turn": "turn-194", "description": "trusting with leadership"},
+            {"turn": "turn-210", "description": "sharing closeness"},
+            {"turn": "turn-286", "description": "overseeing perimeter"},
+            {"turn": "turn-326", "description": "feeling fourth child"},
+            {"turn": "turn-340", "description": "winter council report"},
         ],
     },
     {
         "target_id": "char-elder",
         "current_relationship": "Respected elder",
         "type": "social",
+        "last_updated_turn": "turn-340",
         "history": [
-            {"turn": "turn-015", "type": "social", "description": "acceptance ritual"},
-            {"turn": "turn-029", "type": "social", "description": "offered broth"},
-            {"turn": "turn-340", "type": "social", "description": "spiritual counsel"},
+            {"turn": "turn-015", "description": "acceptance ritual"},
+            {"turn": "turn-029", "description": "offered broth"},
+            {"turn": "turn-340", "description": "spiritual counsel"},
         ],
     },
     {
         "target_id": "char-Elder",
         "current_relationship": "Moral anchor",
         "type": "social",
+        "last_updated_turn": "turn-015",
         "history": [
-            {"turn": "turn-015", "type": "social", "description": "ritual begins"},
+            {"turn": "turn-015", "description": "ritual begins"},
         ],
     },
 ]
@@ -305,7 +312,7 @@ class TestPhaseSegmentation:
             else:
                 turn += 1
 
-        phases = segment_phases(events, "character", "char-player")
+        phases = segment_phases(events, "char-player")
         assert 4 <= len(phases) <= 8, f"Expected 4–8 phases, got {len(phases)}"
 
         # All events accounted for
@@ -327,13 +334,13 @@ class TestPhaseSegmentation:
                 f"NPC event {i}",
             ))
 
-        phases = segment_phases(events, "character", "char-npc")
+        phases = segment_phases(events, "char-npc")
         assert 2 <= len(phases) <= 4, f"Expected 2–4 phases, got {len(phases)}"
 
     def test_minor_entity_single_phase(self):
         """NPC with 5 events → 1 phase."""
         events = _make_events_range(100, 104, "char-minor")
-        phases = segment_phases(events, "character", "char-minor")
+        phases = segment_phases(events, "char-minor")
         assert len(phases) == 1
         assert phases[0]["event_count"] == 5
 
@@ -346,25 +353,25 @@ class TestPhaseSegmentation:
         # Cluster B: turns 30–45
         events.extend(_make_events_range(30, 45, "char-test"))
 
-        phases = segment_phases(events, "character", "char-test")
+        phases = segment_phases(events, "char-test")
         # Should be 2+ phases due to the gap
         assert len(phases) >= 2
 
     def test_single_turn_entity(self):
         """Entity with a single event produces a single phase."""
         events = [_make_event("evt-solo", ["turn-042"], ["char-one"], "encounter")]
-        phases = segment_phases(events, "character", "char-one")
+        phases = segment_phases(events, "char-one")
         assert len(phases) == 1
         assert phases[0]["event_count"] == 1
 
     def test_empty_events(self):
-        phases = segment_phases([], "character", "char-empty")
+        phases = segment_phases([], "char-empty")
         assert phases == []
 
     def test_phase_structure(self):
         """Each phase has the required fields."""
         events = _make_events_range(1, 5, "char-struct")
-        phases = segment_phases(events, "character", "char-struct")
+        phases = segment_phases(events, "char-struct")
         phase = phases[0]
         assert "name" in phase
         assert "turn_range" in phase
@@ -376,7 +383,7 @@ class TestPhaseSegmentation:
     def test_all_events_accounted_for(self):
         """No events should be lost in segmentation."""
         events = _make_events_range(1, 50, "char-player")
-        phases = segment_phases(events, "character", "char-player")
+        phases = segment_phases(events, "char-player")
         total = sum(p["event_count"] for p in phases)
         assert total == 50
 
@@ -394,8 +401,11 @@ class TestRelationshipMerger:
         merged = merge_relationship_histories(SAMPLE_RELATIONSHIPS)
         # char-broad-figure → char-kael, char-Kael → char-kael, char-kael → char-kael
         assert "char-kael" in merged
-        # 2 from char-broad-figure + 4 from char-Kael + 5 from char-kael = 11
-        # minus turn-015 dedup (elder has it, not kael) = 11
+        # History entries plus synthesized "current" entries, after dedup.
+        # Broad-figure: 2 hist + 1 current(turn-035 deduped) = 2
+        # char-Kael: 4 hist + 1 current(turn-108 deduped) = 4
+        # char-kael: 5 hist + 1 current(turn-340 deduped) = 5
+        # Total unique turns: 11
         kael_history = merged["char-kael"]
         assert len(kael_history) == 11
 
@@ -418,26 +428,62 @@ class TestRelationshipMerger:
         rels = [
             {
                 "target_id": "char-test",
+                "type": "social",
                 "history": [
-                    {"turn": "turn-010", "type": "social", "description": "short"},
-                    {"turn": "turn-020", "type": "social", "description": "unique"},
+                    {"turn": "turn-010", "description": "short"},
+                    {"turn": "turn-020", "description": "unique"},
                 ],
             },
             {
                 "target_id": "char-test",
+                "type": "social",
                 "history": [
-                    {"turn": "turn-010", "type": "social", "description": "much longer description here"},
+                    {"turn": "turn-010", "description": "much longer description here"},
                 ],
             },
         ]
         merged = merge_relationship_histories(rels)
-        assert merged["char-test"][0]["description"] == "much longer description here"
+        turn_010 = [e for e in merged["char-test"] if e["turn"] == "turn-010"]
+        assert turn_010[0]["description"] == "much longer description here"
 
     def test_sorts_chronologically(self):
         merged = merge_relationship_histories(SAMPLE_RELATIONSHIPS)
         for target_id, history in merged.items():
             turns = [int(e["turn"].split("-")[1]) for e in history]
             assert turns == sorted(turns), f"{target_id} history not sorted"
+
+    def test_entries_enriched_with_type(self):
+        """Merged history entries should have type from parent relationship."""
+        merged = merge_relationship_histories(SAMPLE_RELATIONSHIPS)
+        kael_history = merged["char-kael"]
+        # All entries should have a type field
+        for entry in kael_history:
+            assert "type" in entry, f"Entry missing type: {entry}"
+        # The broad-figure entries should have social type
+        turn_012 = [e for e in kael_history if e["turn"] == "turn-012"]
+        assert turn_012[0]["type"] == "social"
+
+    def test_current_state_synthesized(self):
+        """Synthesized current entries should appear in merged timeline."""
+        rels = [
+            {
+                "target_id": "char-ally",
+                "current_relationship": "trusted friend",
+                "type": "social",
+                "last_updated_turn": "turn-200",
+                "history": [
+                    {"turn": "turn-050", "description": "first met"},
+                    {"turn": "turn-100", "description": "worked together"},
+                ],
+            },
+        ]
+        merged = merge_relationship_histories(rels)
+        ally_hist = merged["char-ally"]
+        # Should have 3 entries: 2 history + 1 synthesized current
+        assert len(ally_hist) == 3
+        # Last entry should be the synthesized current
+        assert ally_hist[-1]["turn"] == "turn-200"
+        assert ally_hist[-1]["description"] == "trusted friend"
 
     def test_empty_relationships(self):
         merged = merge_relationship_histories([])
@@ -453,6 +499,7 @@ class TestArcChunking:
     """Test rule-based relationship arc chunking (Step 5, Phase A)."""
 
     def test_chunks_by_type_transition(self):
+        # Enriched entries (as produced by merge_relationship_histories)
         history = [
             {"turn": "turn-012", "type": "social", "description": "met"},
             {"turn": "turn-020", "type": "social", "description": "worked together"},
@@ -466,6 +513,7 @@ class TestArcChunking:
         assert chunks[-1]["type"] == "romantic"
 
     def test_clusters_same_type_within_20_turns(self):
+        # Enriched entries — same type throughout but with a temporal gap
         history = [
             {"turn": "turn-010", "type": "social", "description": "met"},
             {"turn": "turn-015", "type": "social", "description": "talked"},
@@ -646,7 +694,7 @@ class TestArcSummarizerIntegration:
             assert "generated_at" in loaded
 
     def test_current_relationship_preserved(self):
-        """current_relationship from the latest relationship entry is preserved."""
+        """current_relationship from the relationship with latest last_updated_turn is used."""
         result = summarize_relationship_arcs(
             source_id="char-player",
             source_name="Fenouille",
@@ -654,9 +702,10 @@ class TestArcSummarizerIntegration:
             llm_client=None,
         )
         if "char-kael" in result["arcs"]:
-            # The latest entry for char-kael has "Co-leader"
+            # char-kael (last_updated_turn=turn-340) has "Co-leader" which is
+            # chronologically the latest
             cur = result["arcs"]["char-kael"]["current_relationship"]
-            assert cur in ("Life partner", "Co-leader")
+            assert cur == "Co-leader"
 
     def test_skips_sparse_relationships(self):
         """Relationships with ≤ 3 interactions are skipped."""
@@ -665,9 +714,10 @@ class TestArcSummarizerIntegration:
                 "target_id": "char-stranger",
                 "current_relationship": "acquaintance",
                 "type": "social",
+                "last_updated_turn": "turn-200",
                 "history": [
-                    {"turn": "turn-100", "type": "social", "description": "met once"},
-                    {"turn": "turn-200", "type": "social", "description": "met twice"},
+                    {"turn": "turn-100", "description": "met once"},
+                    {"turn": "turn-200", "description": "met twice"},
                 ],
             },
         ]

@@ -36,6 +36,9 @@ jobs:
             echo "OK: $f"
           done
 
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
       - name: Validate schemas and framework files
         run: python tools/validate.py --all
 

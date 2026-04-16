@@ -76,9 +76,9 @@ def _sort_key_turn(turn_id: str) -> int:
 def resolve_entity_id(raw_id: str) -> str:
     """Resolve an entity ID through the alias table with case-insensitive matching.
 
-    If a ``normalize_entity_id`` function is available from catalog_merger,
-    that is preferred for full fuzzy matching. This function provides the
-    lightweight fallback described in design-synthesis-layer.md §4.2.
+    This is a lightweight fallback described in design-synthesis-layer.md §4.2.
+    For full fuzzy matching (Levenshtein, token overlap), use
+    ``catalog_merger.normalize_entity_id()`` directly.
     """
     if not raw_id:
         return raw_id
@@ -211,7 +211,7 @@ def build_event_derived_profile(entity_id: str, events: list[dict]) -> dict:
 # Step 3: Phase Segmentation
 # ---------------------------------------------------------------------------
 
-def segment_phases(events: list[dict], entity_type: str, entity_id: str) -> list[dict]:
+def segment_phases(events: list[dict], entity_id: str) -> list[dict]:
     """Divide an entity's event timeline into narrative phases.
 
     Rules (from design-synthesis-layer.md §3.3):
@@ -222,7 +222,6 @@ def segment_phases(events: list[dict], entity_type: str, entity_id: str) -> list
 
     Args:
         events: Sorted list of events for this entity.
-        entity_type: ``"character"``, ``"location"``, etc.
         entity_id: The entity's canonical ID (used to detect PC).
 
     Returns:
@@ -438,24 +437,47 @@ def merge_relationship_histories(relationships: list[dict]) -> dict[str, list[di
     Handles:
       - Case-insensitive target_id matching
       - ID alias resolution
+      - Enriching history entries with the parent relationship ``type``
+        (V2 schema history items are ``{turn, description}`` only)
+      - Synthesizing a "current" entry from ``current_relationship`` /
+        ``last_updated_turn`` so the timeline reflects the present state
       - Chronological sorting by turn number
       - Deduplication of entries at the same turn
 
     Args:
         relationships: List of relationship dicts from an entity's catalog entry.
-            Each has ``target_id``, ``history`` (list of dicts with ``turn``, ``type``,
+            Each has ``target_id``, ``history`` (list of dicts with ``turn``,
             ``description``), and other relationship metadata.
 
     Returns:
         Mapping of ``canonical_target_id → merged_sorted_history``.
+        Each history entry is enriched with a ``type`` field derived from
+        the parent relationship object.
     """
     grouped: dict[str, list[dict]] = defaultdict(list)
 
     for rel in relationships:
         raw_target = rel.get("target_id", "")
         canonical = resolve_entity_id(raw_target)
+        parent_type = rel.get("type", "other")
         history = rel.get("history", [])
-        grouped[canonical].extend(history)
+        # Enrich each history entry with the parent relationship type
+        # (V2 schema history items only have {turn, description})
+        for entry in history:
+            enriched = dict(entry)
+            if "type" not in enriched:
+                enriched["type"] = parent_type
+            grouped[canonical].append(enriched)
+        # Synthesize a "current" entry so the timeline includes the
+        # present state (current_relationship lives outside history)
+        cur_rel = rel.get("current_relationship", "")
+        last_turn = rel.get("last_updated_turn", "")
+        if cur_rel and last_turn:
+            grouped[canonical].append({
+                "turn": last_turn,
+                "type": parent_type,
+                "description": cur_rel,
+            })
 
     result: dict[str, list[dict]] = {}
     for target_id, entries in grouped.items():
@@ -499,8 +521,13 @@ def chunk_relationship_arcs(history: list[dict]) -> list[dict]:
       1. Type field transitions (when ``type`` changes, start a new chunk)
       2. Within same type, clustering entries within 20 turns of each other
 
+    The ``type`` field on each entry is expected to be set by
+    ``merge_relationship_histories()``, which enriches V2 schema history
+    items (originally ``{turn, description}`` only) with the parent
+    relationship's ``type``.
+
     Args:
-        history: Merged, sorted relationship history.
+        history: Merged, sorted, type-enriched relationship history.
 
     Returns:
         List of chunk dicts, each with ``turn_range``, ``type``, ``entries``.
@@ -581,13 +608,15 @@ def _build_arc_prompt(source_name: str, target_name: str, chunks: list[dict]) ->
             lines.append(f"  - {turn}: {desc}")
         lines.append("")
 
-    lines.append("Respond with JSON:")
-    lines.append('[')
+    lines.append('Respond with a JSON object containing a "phases" key:')
+    lines.append('{')
+    lines.append('  "phases": [')
     lines.append(
-        '  {"phase": "Phase Name", "turn_range": ["turn-NNN", "turn-NNN"], '
+        '    {"phase": "Phase Name", "turn_range": ["turn-NNN", "turn-NNN"], '
         '"type": "...", "summary": "...", "key_turns": ["turn-NNN"]}'
     )
-    lines.append(']')
+    lines.append('  ]')
+    lines.append('}')
 
     return "\n".join(lines)
 
@@ -638,13 +667,19 @@ def summarize_relationship_arcs(
     """
     merged = merge_relationship_histories(relationships)
 
-    # Build a lookup for current_relationship from the original relationship entries
+    # Build a lookup for current_relationship, preferring the entry with
+    # the latest last_updated_turn for each canonical target.
     current_rel_lookup: dict[str, str] = {}
+    _current_rel_turn: dict[str, int] = {}  # track latest turn per target
     for rel in relationships:
         canonical = resolve_entity_id(rel.get("target_id", ""))
         cur_rel = rel.get("current_relationship", "")
-        if cur_rel:
+        if not cur_rel:
+            continue
+        turn_num = _parse_turn_number(rel.get("last_updated_turn", ""))
+        if canonical not in _current_rel_turn or turn_num > _current_rel_turn[canonical]:
             current_rel_lookup[canonical] = cur_rel
+            _current_rel_turn[canonical] = turn_num
 
     arcs: dict[str, dict] = {}
 
@@ -693,7 +728,8 @@ def _llm_summarize_arcs(
     system_prompt = (
         "You are a narrative analyst for an RPG campaign wiki. "
         "Given interaction phases between two characters, name each phase "
-        "and write a 1-2 sentence summary. Respond with a JSON array only."
+        "and write a 1-2 sentence summary. Respond with a JSON object "
+        'containing a "phases" key whose value is the array of phases.'
     )
 
     try:
