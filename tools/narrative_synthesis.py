@@ -26,13 +26,8 @@ from datetime import datetime, timezone
 from synthesis import (
     ID_ALIASES,
     build_event_derived_profile,
-    group_events_by_entity,
-    load_events,
-    merge_relationship_histories,
     resolve_entity_id,
     segment_phases,
-    summarize_relationship_arcs,
-    write_arc_sidecar,
     _infer_name_from_id,
     _infer_type_from_id,
     _parse_turn_number,
@@ -263,7 +258,7 @@ def assemble_synthesis_input(entity_id: str, phase: dict,
         "turn_range": turn_range,
         "phase_name": phase_name,
         "available_turns": sorted(available_turns,
-                                  key=lambda t: _parse_turn_number(t)),
+                                  key=_parse_turn_number),
     }
 
 
@@ -778,7 +773,7 @@ def validate_provenance(markdown: str, available_turns: list[str],
     return {
         "turns_cited": cited_bare,
         "turns_available": sorted(available_turns,
-                                  key=lambda t: _parse_turn_number(t)),
+                                  key=_parse_turn_number),
         "hallucination_flags": hallucination_flags,
         "uncited_critical_events": uncited,
     }
@@ -921,8 +916,7 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
         catalog_data, derived_profile, arc_summaries, events)
 
     # Provenance validation across all phases
-    available = sorted(all_available_turns,
-                       key=lambda t: _parse_turn_number(t))
+    available = sorted(all_available_turns, key=_parse_turn_number)
     provenance = validate_provenance(page, available)
 
     if provenance["hallucination_flags"]:
@@ -951,7 +945,7 @@ def _synthesize_location(entity_id, entity_name, events, catalog_data,
     for evt in events:
         for t in evt.get("source_turns", []):
             available_turns.add(t)
-    available = sorted(available_turns, key=lambda t: _parse_turn_number(t))
+    available = sorted(available_turns, key=_parse_turn_number)
     provenance = validate_provenance(page, available)
     if provenance["hallucination_flags"]:
         page = add_provenance_warning(page, entity_id)
@@ -977,7 +971,7 @@ def _synthesize_faction(entity_id, entity_name, events, catalog_data,
     for evt in events:
         for t in evt.get("source_turns", []):
             available_turns.add(t)
-    available = sorted(available_turns, key=lambda t: _parse_turn_number(t))
+    available = sorted(available_turns, key=_parse_turn_number)
     provenance = validate_provenance(page, available)
     if provenance["hallucination_flags"]:
         page = add_provenance_warning(page, entity_id)
@@ -1003,7 +997,7 @@ def _synthesize_item(entity_id, entity_name, events, catalog_data,
     for evt in events:
         for t in evt.get("source_turns", []):
             available_turns.add(t)
-    available = sorted(available_turns, key=lambda t: _parse_turn_number(t))
+    available = sorted(available_turns, key=_parse_turn_number)
     provenance = validate_provenance(page, available)
     if provenance["hallucination_flags"]:
         page = add_provenance_warning(page, entity_id)

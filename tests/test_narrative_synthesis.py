@@ -36,7 +36,7 @@ from narrative_synthesis import (
     _build_current_status,
 )
 
-from synthesis import ID_ALIASES, segment_phases
+from synthesis import ID_ALIASES
 
 # ---------------------------------------------------------------------------
 # Fixtures

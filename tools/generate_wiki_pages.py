@@ -793,7 +793,7 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
                         with open(arc_path, "r", encoding="utf-8-sig") as f:
                             arc_summaries = json.load(f)
                     except (json.JSONDecodeError, OSError):
-                        pass
+                        pass  # Corrupt or unreadable arcs sidecar; regenerate below
 
                 # Generate arcs if not available and entity has relationships
                 if arc_summaries is None and entity.get("relationships"):
