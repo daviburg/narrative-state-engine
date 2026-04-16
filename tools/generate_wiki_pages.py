@@ -623,11 +623,15 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
                     page_count += 1
 
             # Prune stale .md files whose entity JSON no longer exists
+            # Preserve event-only synthesized pages (have .synthesis.json sidecar)
             for fname in os.listdir(type_dir):
                 if fname == "README.md" or not fname.endswith(".md"):
                     continue
                 stem = fname[:-3]  # strip .md
                 if stem not in live_ids:
+                    sidecar = os.path.join(type_dir, f"{stem}.synthesis.json")
+                    if os.path.isfile(sidecar):
+                        continue  # Event-only synthesized page; keep it
                     stale_path = os.path.join(type_dir, fname)
                     os.remove(stale_path)
                     print(f"  Pruned stale wiki page: {fname}", file=sys.stderr)
@@ -666,7 +670,20 @@ def main():
         "--index-only", action="store_true",
         help="Only regenerate index pages, not individual entity pages"
     )
+    parser.add_argument(
+        "--synthesize", action="store_true",
+        help="Run LLM-powered narrative synthesis pipeline"
+    )
+    parser.add_argument(
+        "--force", action="store_true",
+        help="Force regeneration even if sidecar shows no new events (requires --synthesize)"
+    )
     args = parser.parse_args()
+
+    if args.force and not args.synthesize:
+        parser.error("--force requires --synthesize")
+    if args.index_only and args.synthesize:
+        parser.error("--index-only cannot be used with --synthesize")
 
     catalog_dir = os.path.join(args.framework, "catalogs")
     if not os.path.isdir(catalog_dir):
@@ -674,10 +691,210 @@ def main():
         sys.exit(1)
 
     types = [args.entity_type] if args.entity_type else None
-    stats = generate_wiki_pages(catalog_dir, entity_types=types, index_only=args.index_only)
+
+    if args.synthesize:
+        stats = run_synthesis_pipeline(
+            args.framework, catalog_dir,
+            entity_types=types, force=args.force)
+    else:
+        stats = generate_wiki_pages(
+            catalog_dir, entity_types=types, index_only=args.index_only)
 
     total = sum(stats.values())
     print(f"\nTotal: {total} wiki pages generated.")
+
+
+# ---------------------------------------------------------------------------
+# Synthesis pipeline integration
+# ---------------------------------------------------------------------------
+
+def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
+                           entity_types: list[str] | None = None,
+                           force: bool = False) -> dict[str, int]:
+    """Run the full LLM synthesis pipeline.
+
+    Generates narrative wiki pages using the LLM for entities that meet
+    the synthesis threshold.  Falls back to template rendering for
+    entities below the threshold.
+    """
+    from narrative_synthesis import (
+        should_synthesize,
+        synthesize_entity,
+        needs_regeneration,
+        write_synthesis_sidecar,
+    )
+    from synthesis import (
+        group_events_by_entity,
+        load_events,
+        summarize_relationship_arcs,
+        write_arc_sidecar,
+        _infer_type_from_id,
+    )
+    from llm_client import LLMClient
+
+    # Load events
+    events = load_events(framework_dir)
+    if not events:
+        print("WARNING: No events found. Falling back to template rendering.",
+              file=sys.stderr)
+        return generate_wiki_pages(catalog_dir, entity_types=entity_types)
+
+    grouped = group_events_by_entity(events)
+    all_entities = _load_all_entities(catalog_dir)
+    name_index = _build_name_index(all_entities)
+
+    # Initialise LLM client
+    config_path = os.path.join(framework_dir, "..", "config", "llm.json")
+    if not os.path.isfile(config_path):
+        config_path = "config/llm.json"
+    try:
+        llm_client = LLMClient(config_path=config_path)
+    except Exception as e:
+        print(f"ERROR: Cannot initialise LLM client: {e}", file=sys.stderr)
+        print("Falling back to template rendering.", file=sys.stderr)
+        return generate_wiki_pages(catalog_dir, entity_types=entity_types)
+
+    types_to_process = entity_types or ENTITY_TYPES
+    stats: dict[str, int] = {}
+
+    for entity_type in types_to_process:
+        if entity_type not in ENTITY_TYPES:
+            continue
+        type_dir = os.path.join(catalog_dir, entity_type)
+        os.makedirs(type_dir, exist_ok=True)
+        entities = all_entities.get(entity_type, [])
+        page_count = 0
+
+        # Process catalog entities
+        processed_ids: set[str] = set()
+        for entity in entities:
+            eid = entity.get("id", "")
+            if not eid:
+                continue
+            processed_ids.add(eid)
+
+            entity_events = grouped.get(eid, [])
+            etype_str = _type_label_for_synth(entity_type)
+
+            if should_synthesize(eid, len(entity_events), etype_str):
+                sidecar_path = os.path.join(type_dir, f"{eid}.synthesis.json")
+                if not needs_regeneration(eid, len(entity_events),
+                                          sidecar_path, force=force):
+                    print(f"  Skipping {eid} (no new events)", file=sys.stderr)
+                    continue
+
+                # Load arc summaries if available
+                arc_path = os.path.join(type_dir, f"{eid}.arcs.json")
+                arc_summaries = None
+                if os.path.isfile(arc_path):
+                    try:
+                        with open(arc_path, "r", encoding="utf-8-sig") as f:
+                            arc_summaries = json.load(f)
+                    except (json.JSONDecodeError, OSError):
+                        pass  # Corrupt or unreadable arcs sidecar; regenerate below
+
+                # Generate arcs if not available and entity has relationships
+                if arc_summaries is None and entity.get("relationships"):
+                    arc_data = summarize_relationship_arcs(
+                        eid, entity.get("name", eid),
+                        entity.get("relationships", []),
+                        llm_client=llm_client)
+                    write_arc_sidecar(arc_data, type_dir)
+                    arc_summaries = arc_data
+
+                print(f"  Synthesizing {eid} ({len(entity_events)} events)...",
+                      file=sys.stderr)
+                page, sidecar = synthesize_entity(
+                    eid, entity_events, entity, arc_summaries,
+                    llm_client, entity_type=etype_str)
+
+                md_path = os.path.join(type_dir, f"{eid}.md")
+                with open(md_path, "w", encoding="utf-8") as f:
+                    f.write(page)
+                write_synthesis_sidecar(sidecar, sidecar_path)
+                page_count += 1
+            else:
+                # Below threshold: use template rendering
+                generator = PAGE_GENERATORS.get(entity_type)
+                if generator:
+                    md_content = generator(entity, name_index)
+                    md_path = os.path.join(type_dir, f"{eid}.md")
+                    with open(md_path, "w", encoding="utf-8") as f:
+                        f.write(md_content)
+                    page_count += 1
+
+        # Process event-only entities (no catalog entry) for this type
+        if entity_type == "characters":
+            for eid, entity_events in grouped.items():
+                if eid in processed_ids:
+                    continue
+                etype_str = _infer_type_from_id(eid)
+                if etype_str != "character":
+                    continue
+
+                if should_synthesize(eid, len(entity_events), etype_str):
+                    sidecar_path = os.path.join(type_dir,
+                                                f"{eid}.synthesis.json")
+                    if not needs_regeneration(eid, len(entity_events),
+                                              sidecar_path, force=force):
+                        print(f"  Skipping {eid} (no new events)",
+                              file=sys.stderr)
+                        continue
+
+                    print(f"  Synthesizing {eid} "
+                          f"({len(entity_events)} events, events-only)...",
+                          file=sys.stderr)
+                    page, sidecar = synthesize_entity(
+                        eid, entity_events, None, None,
+                        llm_client, entity_type=etype_str)
+
+                    md_path = os.path.join(type_dir, f"{eid}.md")
+                    with open(md_path, "w", encoding="utf-8") as f:
+                        f.write(page)
+                    write_synthesis_sidecar(sidecar, sidecar_path)
+                    page_count += 1
+                    processed_ids.add(eid)
+
+        # Generate index page — include event-only entities alongside catalog ones
+        index_entities = list(entities)
+        if entity_type == "characters":
+            from synthesis import build_event_derived_profile as _build_profile
+            for eid in sorted(processed_ids):
+                if any(e.get("id") == eid for e in entities):
+                    continue  # Already in catalog entities
+                entity_events = grouped.get(eid, [])
+                if not entity_events:
+                    continue
+                profile = _build_profile(eid, entity_events)
+                index_entities.append({
+                    "id": eid,
+                    "name": profile.get("name", eid),
+                    "current_status": f"Events-only ({profile.get('event_count', 0)} events)",
+                    "first_seen_turn": profile.get("first_event_turn", ""),
+                    "last_updated_turn": profile.get("last_event_turn", ""),
+                    "relationships": [],
+                })
+        index_content = generate_index_page(entity_type, index_entities)
+        readme_path = os.path.join(type_dir, "README.md")
+        with open(readme_path, "w", encoding="utf-8") as f:
+            f.write(index_content)
+        page_count += 1
+
+        stats[entity_type] = page_count
+        print(f"  {entity_type}: {page_count} pages generated")
+
+    return stats
+
+
+def _type_label_for_synth(entity_type_dir: str) -> str:
+    """Convert directory type name to synthesis type label."""
+    _map = {
+        "characters": "character",
+        "locations": "location",
+        "factions": "faction",
+        "items": "item",
+    }
+    return _map.get(entity_type_dir, entity_type_dir)
 
 
 if __name__ == "__main__":
