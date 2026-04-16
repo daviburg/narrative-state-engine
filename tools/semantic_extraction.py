@@ -28,6 +28,11 @@ from catalog_merger import (
     merge_events,
     get_next_event_id,
     mark_dormant_relationships,
+    normalize_entity_id,
+    TYPE_TO_CATALOG_V1,
+    TYPE_TO_PREFIX,
+    _infer_type_from_prefix,
+    _strip_any_prefix,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -356,21 +361,65 @@ def format_discovery_prompt(turn: dict, known_entities: str) -> str:
     )
 
 
+# Stable attribute keys always included in trimmed PC context
+_PC_KEY_STABLE_ATTRS = {"species", "race", "class", "aliases"}
+
+# Maximum number of volatile_state snapshots to include for PC
+_PC_MAX_VOLATILE_SNAPSHOTS = 3
+
+
 def _format_prior_entity_context(current_entry: dict | None) -> str:
     """Format the prior entity state for injection into the detail prompt.
 
     Extracts identity, current_status, stable_attributes, and volatile_state
     from the existing entity (V2 fields).  Falls back to V1 description and
     attributes when V2 fields are absent.
+
+    For ``char-player``, trims the context to keep prompt size manageable:
+    - Always includes identity and current_status
+    - Only key stable_attributes (species, class, aliases)
+    - Last 3 volatile_state snapshots only
     """
     if not current_entry:
         return "{}"
+
+    is_pc = current_entry.get("id") == "char-player"
+
     prior: dict = {}
     # V2 fields
-    for key in ("identity", "current_status", "status_updated_turn",
-                "stable_attributes", "volatile_state"):
-        if key in current_entry:
-            prior[key] = current_entry[key]
+    if "identity" in current_entry:
+        prior["identity"] = current_entry["identity"]
+    if "current_status" in current_entry:
+        prior["current_status"] = current_entry["current_status"]
+    if "status_updated_turn" in current_entry:
+        prior["status_updated_turn"] = current_entry["status_updated_turn"]
+
+    # stable_attributes — trimmed for PC
+    sa = current_entry.get("stable_attributes")
+    if sa:
+        if is_pc:
+            trimmed_sa = {k: v for k, v in sa.items() if k in _PC_KEY_STABLE_ATTRS}
+            if trimmed_sa:
+                prior["stable_attributes"] = trimmed_sa
+        else:
+            prior["stable_attributes"] = sa
+
+    # volatile_state — trimmed for PC (last N snapshots)
+    vs = current_entry.get("volatile_state")
+    if vs:
+        if is_pc and isinstance(vs, dict):
+            # Keep only the most recent entries if the volatile state is large
+            # For dict-based volatile_state, keep all keys but trim list values
+            trimmed_vs = {}
+            for k, v in vs.items():
+                if isinstance(v, list) and len(v) > _PC_MAX_VOLATILE_SNAPSHOTS:
+                    trimmed_vs[k] = v[-_PC_MAX_VOLATILE_SNAPSHOTS:]
+                else:
+                    trimmed_vs[k] = v
+            prior["volatile_state"] = trimmed_vs
+        else:
+            prior["volatile_state"] = vs
+
     # V1 fallback: keep description/attributes if no V2 counterparts
     if "identity" not in prior and "description" in current_entry:
         prior["description"] = current_entry["description"]
@@ -464,6 +513,118 @@ def filter_by_confidence(discovered: list, min_confidence: float) -> list:
 def get_entity_id(entity_ref: dict) -> str:
     """Get the entity ID from a discovery result (existing_id or proposed_id)."""
     return entity_ref.get("existing_id") or entity_ref.get("proposed_id") or ""
+
+
+def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
+    """Attempt to merge valid individual fields from a near-valid PC extraction.
+
+    When full schema validation fails for char-player, this function extracts
+    whatever valid fields are present and merges them into the existing
+    catalog entry rather than losing the entire response (#107).
+    """
+    pc_result = find_entity_by_id(catalogs, "char-player")
+    if not pc_result:
+        return
+    _, pc_entry = pc_result
+
+    merged_fields = []
+
+    # Merge current_status if present and non-empty
+    if entity_data.get("current_status") and isinstance(entity_data["current_status"], str):
+        pc_entry["current_status"] = entity_data["current_status"]
+        merged_fields.append("current_status")
+
+    # Merge volatile_state if present
+    vs = entity_data.get("volatile_state")
+    if isinstance(vs, dict) and vs:
+        if "volatile_state" not in pc_entry:
+            pc_entry["volatile_state"] = {}
+        for k, v in vs.items():
+            pc_entry["volatile_state"][k] = v
+        merged_fields.append("volatile_state")
+
+    # Merge individual stable_attributes that are in the allowed set
+    sa = entity_data.get("stable_attributes")
+    if isinstance(sa, dict) and sa:
+        if "stable_attributes" not in pc_entry:
+            pc_entry["stable_attributes"] = {}
+        for k, v in sa.items():
+            if k in PC_ALLOWED_ATTRS:
+                pc_entry["stable_attributes"][k] = v
+        merged_fields.append("stable_attributes")
+
+    # Update last_updated_turn if we merged anything
+    if merged_fields:
+        pc_entry["last_updated_turn"] = turn_id
+        if entity_data.get("status_updated_turn"):
+            pc_entry["status_updated_turn"] = entity_data["status_updated_turn"]
+        print(
+            f"  WARNING: PC validation failed — partial merge of {merged_fields} at {turn_id}",
+            file=sys.stderr,
+        )
+
+
+def _collect_all_entity_ids(catalogs: dict) -> set[str]:
+    """Collect all entity IDs from all catalogs."""
+    ids: set[str] = set()
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            eid = entity.get("id")
+            if eid:
+                ids.add(eid)
+    return ids
+
+
+# IDs that should never produce stub entities — they are always present
+# or represent generic/unnamed references.
+_SKIP_STUB_IDS = {"char-player"}
+_GENERIC_STEMS = {
+    "stranger", "figure", "someone", "person", "creature", "thing",
+    "guard", "villager", "traveler", "merchant", "soldier", "voice",
+    "shadow", "spirit", "beast", "animal",
+}
+
+
+def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str) -> None:
+    """Create stub catalog entries for entity IDs referenced in events but missing from catalogs.
+
+    Stubs contain id, inferred name (from ID), inferred type (from prefix),
+    first_seen_turn, and a source marker.
+    """
+    known_ids = _collect_all_entity_ids(catalogs)
+
+    orphan_ids: set[str] = set()
+    for event in events:
+        for eid in event.get("related_entities", []):
+            if eid and eid not in known_ids and eid not in _SKIP_STUB_IDS:
+                orphan_ids.add(eid)
+
+    for eid in sorted(orphan_ids):
+        # Skip generic/unnamed entity references
+        stem = _strip_any_prefix(eid)
+        if stem in _GENERIC_STEMS:
+            continue
+
+        # Infer type and name from the ID
+        inferred_type = _infer_type_from_prefix(eid)
+        # Build a human-readable name: strip prefix, replace hyphens, title-case
+        inferred_name = stem.replace("-", " ").title()
+
+        catalog_file = TYPE_TO_CATALOG_V1.get(inferred_type)
+        if not catalog_file:
+            catalog_file = "characters.json"  # default fallback
+
+        stub = {
+            "id": eid,
+            "name": inferred_name,
+            "type": inferred_type,
+            "identity": f"Entity referenced in events (stub — auto-created from event data).",
+            "first_seen_turn": turn_id,
+            "last_updated_turn": turn_id,
+            "source": "event-stub",
+        }
+        catalogs.setdefault(catalog_file, []).append(stub)
+        print(f"  STUB: Created stub entity '{eid}' ({inferred_name}) from event data at {turn_id}")
 
 
 def extract_and_merge(
@@ -570,10 +731,13 @@ def extract_and_merge(
         _sanitize_pc_catalog_entry(catalogs)
         pc_ref = {"name": pc_entry["name"], "type": "character",
                   "existing_id": "char-player", "is_new": False}
+        # Use extended timeout for PC extraction — context is larger (#107)
+        pc_timeout = max(llm.default_timeout * 2, 120)
         try:
             detail_result = llm.extract_json(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(turn, pc_ref, pc_entry),
+                timeout=pc_timeout,
             )
             entity_data = detail_result.get("entity")
             if entity_data:
@@ -583,6 +747,9 @@ def extract_and_merge(
                 merge_entity(catalogs, entity_data)
                 # Purge any stale keys that survived the merge
                 _sanitize_pc_catalog_entry(catalogs)
+            elif entity_data:
+                # Validation failed — attempt partial merge fallback (#107)
+                _pc_partial_merge(catalogs, entity_data, turn_id)
         except LLMExtractionError as e:
             print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
         llm.delay()
@@ -634,8 +801,21 @@ def extract_and_merge(
             user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
         )
         new_events = event_result.get("events", [])
+
+        # --- Phase 1: Normalize event related_entities IDs (#108) ---
+        known_ids = _collect_all_entity_ids(catalogs)
+        for event in new_events:
+            related = event.get("related_entities", [])
+            if related:
+                event["related_entities"] = [
+                    normalize_entity_id(eid, known_ids) for eid in related
+                ]
+
         valid_events = [e for e in new_events if _validate_event(e)]
+
+        # --- Phase 2: Create stub entities for orphan IDs (#106) ---
         if valid_events:
+            _create_orphan_stubs(catalogs, valid_events, turn_id)
             merge_events(events_list, valid_events)
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
@@ -811,6 +991,58 @@ def _rewrite_stale_ids(catalogs: dict, events_list: list, merge_map: dict[str, s
                     rel["target_id"] = merge_map[rel["target_id"]]
 
 
+# Minimum number of event references for an orphan ID to warrant a post-batch stub
+_POST_BATCH_ORPHAN_MIN_REFS = 3
+
+
+def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
+    """Create stub entities for orphan event IDs that appear in 3+ events.
+
+    Runs after dedup to catch any remaining orphan IDs that weren't resolved
+    by per-turn normalization or the dedup merge map.
+
+    Returns the number of stubs created.
+    """
+    known_ids = _collect_all_entity_ids(catalogs)
+
+    # Count references per orphan ID
+    orphan_counts: dict[str, list[str]] = {}  # id -> list of turn_ids
+    for event in events_list:
+        turn_id = event.get("turn_id", "")
+        for eid in event.get("related_entities", []):
+            if eid and eid not in known_ids and eid not in _SKIP_STUB_IDS:
+                orphan_counts.setdefault(eid, []).append(turn_id)
+
+    stubs_created = 0
+    for eid, turn_ids in sorted(orphan_counts.items()):
+        if len(turn_ids) < _POST_BATCH_ORPHAN_MIN_REFS:
+            continue
+
+        stem = _strip_any_prefix(eid)
+        if stem in _GENERIC_STEMS:
+            continue
+
+        inferred_type = _infer_type_from_prefix(eid)
+        inferred_name = stem.replace("-", " ").title()
+        catalog_file = TYPE_TO_CATALOG_V1.get(inferred_type, "characters.json")
+
+        first_turn = min(turn_ids) if turn_ids else ""
+        stub = {
+            "id": eid,
+            "name": inferred_name,
+            "type": inferred_type,
+            "identity": f"Entity referenced in {len(turn_ids)} events (stub — auto-created post-batch).",
+            "first_seen_turn": first_turn,
+            "last_updated_turn": first_turn,
+            "source": "post-batch-orphan-sweep",
+        }
+        catalogs.setdefault(catalog_file, []).append(stub)
+        stubs_created += 1
+        print(f"  POST-BATCH STUB: '{eid}' ({inferred_name}), {len(turn_ids)} event refs")
+
+    return stubs_created
+
+
 def extract_semantic_batch(
     turn_dicts: list,
     session_dir: str,
@@ -914,6 +1146,12 @@ def extract_semantic_batch(
         _rewrite_stale_ids(catalogs, events_list, merge_map)
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch dedup merged {dupes_merged} duplicate(s); {entities_after} entities remain")
+
+    # --- Phase 4: Post-batch orphan sweep (#106) ---
+    orphan_stubs = _post_batch_orphan_sweep(catalogs, events_list)
+    if orphan_stubs:
+        entities_after = sum(len(v) for v in catalogs.values())
+        print(f"  Post-batch orphan sweep created {orphan_stubs} stub(s); {entities_after} entities now")
 
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
 
