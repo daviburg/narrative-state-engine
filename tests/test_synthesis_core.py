@@ -19,8 +19,6 @@ from synthesis import (
     write_arc_sidecar,
     _infer_name_from_id,
     _infer_type_from_id,
-    _count_event_types,
-    _extract_co_occurrences,
     _fallback_arc_summaries,
 )
 

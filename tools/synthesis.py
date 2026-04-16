@@ -564,10 +564,10 @@ def _make_arc_chunk(entries: list[dict], rel_type: str) -> dict:
 def _build_arc_prompt(source_name: str, target_name: str, chunks: list[dict]) -> str:
     """Build the LLM prompt for arc naming and summarization."""
     lines = [
-        f"Given these interaction phases for the relationship between "
-        f"{source_name} and {target_name},",
-        "name each phase and write a 1-2 sentence summary. "
-        "Merge or split phases if the narrative warrants it.",
+        (f"Given these interaction phases for the relationship between "
+         f"{source_name} and {target_name},"),
+        ("name each phase and write a 1-2 sentence summary. "
+         "Merge or split phases if the narrative warrants it."),
         "",
     ]
     for i, chunk in enumerate(chunks, 1):
