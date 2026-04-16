@@ -492,6 +492,47 @@ class TestPCDetailPromptContext:
 class TestContextLengthPassthrough:
     """LLMClient passes extra_body with num_ctx when context_length is set."""
 
+    def _make_client(self, tmp_path, config):
+        """Create an LLMClient with a mocked openai module."""
+        import sys
+        from unittest.mock import MagicMock
+        from types import ModuleType
+
+        config_path = tmp_path / "llm.json"
+        config_path.write_text(json.dumps(config))
+
+        # Inject a fake 'openai' module if the real one isn't installed
+        mock_openai = ModuleType("openai")
+        mock_openai_cls = MagicMock()
+        mock_openai.OpenAI = mock_openai_cls
+        orig = sys.modules.get("openai")
+        sys.modules["openai"] = mock_openai
+
+        # Force llm_client to re-import with the fake module
+        if "llm_client" in sys.modules:
+            del sys.modules["llm_client"]
+
+        try:
+            from llm_client import LLMClient
+
+            mock_client_instance = MagicMock()
+            mock_openai_cls.return_value = mock_client_instance
+
+            mock_response = MagicMock()
+            mock_response.choices = [MagicMock()]
+            mock_response.choices[0].message.content = '{"result": "ok"}'
+            mock_client_instance.chat.completions.create.return_value = mock_response
+
+            client = LLMClient(str(config_path))
+            return client, mock_client_instance
+        finally:
+            # Restore original module state
+            if orig is not None:
+                sys.modules["openai"] = orig
+            else:
+                sys.modules.pop("openai", None)
+            sys.modules.pop("llm_client", None)
+
     def test_extract_json_includes_num_ctx(self, tmp_path):
         config = {
             "provider": "openai",
@@ -505,26 +546,11 @@ class TestContextLengthPassthrough:
             "batch_delay_ms": 0,
             "context_length": 32768,
         }
-        config_path = tmp_path / "llm.json"
-        config_path.write_text(json.dumps(config))
-
-        from unittest.mock import MagicMock, patch
-        from llm_client import LLMClient
-
-        with patch("openai.OpenAI") as mock_openai_cls:
-            mock_client = MagicMock()
-            mock_openai_cls.return_value = mock_client
-            mock_response = MagicMock()
-            mock_response.choices = [MagicMock()]
-            mock_response.choices[0].message.content = '{"result": "ok"}'
-            mock_client.chat.completions.create.return_value = mock_response
-
-            client = LLMClient(str(config_path))
-            client.extract_json("system", "user")
-
-            call_kwargs = mock_client.chat.completions.create.call_args[1]
-            assert "extra_body" in call_kwargs
-            assert call_kwargs["extra_body"] == {"num_ctx": 32768}
+        client, mock_inner = self._make_client(tmp_path, config)
+        client.extract_json("system", "user")
+        call_kwargs = mock_inner.chat.completions.create.call_args[1]
+        assert "extra_body" in call_kwargs
+        assert call_kwargs["extra_body"] == {"num_ctx": 32768}
 
     def test_extract_json_no_extra_body_when_unset(self, tmp_path):
         config = {
@@ -538,25 +564,10 @@ class TestContextLengthPassthrough:
             "retry_attempts": 1,
             "batch_delay_ms": 0,
         }
-        config_path = tmp_path / "llm.json"
-        config_path.write_text(json.dumps(config))
-
-        from unittest.mock import MagicMock, patch
-        from llm_client import LLMClient
-
-        with patch("openai.OpenAI") as mock_openai_cls:
-            mock_client = MagicMock()
-            mock_openai_cls.return_value = mock_client
-            mock_response = MagicMock()
-            mock_response.choices = [MagicMock()]
-            mock_response.choices[0].message.content = '{"result": "ok"}'
-            mock_client.chat.completions.create.return_value = mock_response
-
-            client = LLMClient(str(config_path))
-            client.extract_json("system", "user")
-
-            call_kwargs = mock_client.chat.completions.create.call_args[1]
-            assert "extra_body" not in call_kwargs
+        client, mock_inner = self._make_client(tmp_path, config)
+        client.extract_json("system", "user")
+        call_kwargs = mock_inner.chat.completions.create.call_args[1]
+        assert "extra_body" not in call_kwargs
 
     def test_generate_text_includes_num_ctx(self, tmp_path):
         config = {
@@ -571,26 +582,12 @@ class TestContextLengthPassthrough:
             "batch_delay_ms": 0,
             "context_length": 16384,
         }
-        config_path = tmp_path / "llm.json"
-        config_path.write_text(json.dumps(config))
-
-        from unittest.mock import MagicMock, patch
-        from llm_client import LLMClient
-
-        with patch("openai.OpenAI") as mock_openai_cls:
-            mock_client = MagicMock()
-            mock_openai_cls.return_value = mock_client
-            mock_response = MagicMock()
-            mock_response.choices = [MagicMock()]
-            mock_response.choices[0].message.content = "Hello world"
-            mock_client.chat.completions.create.return_value = mock_response
-
-            client = LLMClient(str(config_path))
-            client.generate_text("system", "user")
-
-            call_kwargs = mock_client.chat.completions.create.call_args[1]
-            assert "extra_body" in call_kwargs
-            assert call_kwargs["extra_body"] == {"num_ctx": 16384}
+        client, mock_inner = self._make_client(tmp_path, config)
+        mock_inner.chat.completions.create.return_value.choices[0].message.content = "Hello world"
+        client.generate_text("system", "user")
+        call_kwargs = mock_inner.chat.completions.create.call_args[1]
+        assert "extra_body" in call_kwargs
+        assert call_kwargs["extra_body"] == {"num_ctx": 16384}
 
 
 # ---------------------------------------------------------------------------
