@@ -145,6 +145,65 @@ class LLMClient:
                 f"Raw response (first 500 chars): {raw_text[:500]}"
             )
 
+    def generate_text(
+        self,
+        system_prompt: str,
+        user_prompt: str,
+        timeout: int | None = None,
+    ) -> str:
+        """Send a chat completion request and return the raw text response.
+
+        Unlike ``extract_json``, this does not enforce JSON formatting or
+        parsing. Use this for free-form text generation (e.g., narrative
+        biography synthesis).
+
+        Args:
+            system_prompt: Role instructions for the model.
+            user_prompt: The user message / task description.
+            timeout: Optional per-call timeout in seconds.
+
+        Returns:
+            The raw text content from the LLM response.
+
+        Raises:
+            LLMExtractionError: If the LLM returns an empty response or
+                all retry attempts fail.
+        """
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
+
+        last_error = None
+        for attempt in range(self.retry_attempts):
+            try:
+                kwargs = {
+                    "model": self.model,
+                    "messages": messages,
+                    "temperature": self.temperature,
+                    "max_tokens": self.max_tokens,
+                }
+                if timeout is not None:
+                    kwargs["timeout"] = timeout
+
+                response = self.client.chat.completions.create(**kwargs)
+                raw_text = response.choices[0].message.content
+
+                if not raw_text:
+                    raise LLMExtractionError("Empty response from LLM.")
+
+                return raw_text.strip()
+
+            except Exception as e:
+                last_error = e
+                if attempt < self.retry_attempts - 1:
+                    backoff = (2 ** attempt) * 1.0
+                    time.sleep(backoff)
+
+        raise LLMExtractionError(
+            f"Failed after {self.retry_attempts} attempts. Last error: {last_error}"
+        )
+
     def delay(self) -> None:
         """Apply the configured batch delay between API calls."""
         if self.batch_delay_ms > 0:
