@@ -644,11 +644,16 @@ dedup_merge_entity = _update_existing_entity
 # ---------------------------------------------------------------------------
 
 _RELATIONSHIP_TYPE_MAP = {
+    # Schema enum identity mappings (pass-through)
+    "kinship": "kinship", "partnership": "partnership", "mentorship": "mentorship",
+    "political": "political", "factional": "factional", "social": "social",
+    "adversarial": "adversarial", "romantic": "romantic", "other": "other",
     # social
     "ally": "social", "ally_of": "social", "ally of": "social",
     "friend": "social", "companion": "social", "supporter": "social",
-    "supports": "social", "collaborating": "social", "collaborating with": "social",
-    "collaborator": "social",
+    "supports": "social",
+    "collaborating": "partnership", "collaborating with": "partnership",
+    "collaborator": "partnership",
     # adversarial
     "captive": "adversarial", "captive of": "adversarial",
     "prisoner": "adversarial", "captor": "adversarial",
@@ -679,7 +684,10 @@ _RELATIONSHIP_TYPE_MAP = {
 
 def _coerce_relationship_type(type_value: str) -> str:
     """Map common LLM relationship labels to schema enum values (#126)."""
-    return _RELATIONSHIP_TYPE_MAP.get(type_value.lower().strip(), type_value)
+    normalized = type_value.lower().strip()
+    if not normalized:
+        return "other"
+    return _RELATIONSHIP_TYPE_MAP.get(normalized, "other")
 
 
 def _merge_entity_relationships(existing_rels: list[dict], new_rels: list[dict]) -> None:
@@ -816,6 +824,8 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
                 new_rel["confidence"] = rel["confidence"]
             new_rel["first_seen_turn"] = turn_id
             new_rel["last_updated_turn"] = turn_id
+            # Coerce relationship type to schema enum (#126)
+            new_rel["type"] = _coerce_relationship_type(new_rel["type"])
             entity["relationships"].append(new_rel)
 
 

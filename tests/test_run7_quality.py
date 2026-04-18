@@ -1,5 +1,4 @@
 """Tests for Run 7 quality fixes (#124-#129)."""
-import io
 import os
 import sys
 
@@ -16,7 +15,6 @@ from semantic_extraction import (
 )
 from catalog_merger import (
     _coerce_relationship_type,
-    _RELATIONSHIP_TYPE_MAP,
     _consolidate_relationship,
 )
 
@@ -149,8 +147,11 @@ class TestRelationshipTypeCoercion:
     def test_guild_maps_to_factional(self):
         assert _coerce_relationship_type("guild") == "factional"
 
-    def test_unmapped_passes_through(self):
-        assert _coerce_relationship_type("blood_oath") == "blood_oath"
+    def test_unmapped_defaults_to_other(self):
+        assert _coerce_relationship_type("blood_oath") == "other"
+
+    def test_empty_defaults_to_other(self):
+        assert _coerce_relationship_type("") == "other"
 
     def test_case_insensitive(self):
         assert _coerce_relationship_type("ALLY") == "social"
@@ -159,6 +160,10 @@ class TestRelationshipTypeCoercion:
     def test_strips_whitespace(self):
         assert _coerce_relationship_type("  ally  ") == "social"
 
+    def test_collaborating_maps_to_partnership(self):
+        assert _coerce_relationship_type("collaborating") == "partnership"
+        assert _coerce_relationship_type("collaborator") == "partnership"
+
     def test_schema_enum_values_pass_through(self):
         schema_enums = [
             "kinship", "partnership", "mentorship", "political",
@@ -166,7 +171,7 @@ class TestRelationshipTypeCoercion:
         ]
         for val in schema_enums:
             result = _coerce_relationship_type(val)
-            assert result == val or result in schema_enums
+            assert result == val
 
     def test_coercion_applied_in_consolidate(self):
         existing = {
@@ -270,9 +275,20 @@ class TestEventSourceTurnsValidation:
 # ---------------------------------------------------------------------------
 
 class TestStubIdentification:
-    def test_stub_with_stub_in_notes(self):
-        entity = {"id": "char-lyra", "name": "Lyra", "notes": "Auto-created by event-stub."}
+    def test_stub_with_event_stub_notes(self):
+        entity = {"id": "char-lyra", "name": "Lyra", "identity": "Known",
+                  "notes": "Auto-created by event-stub."}
         assert _is_stub_entity(entity) is True
+
+    def test_stub_with_orphan_sweep_notes(self):
+        entity = {"id": "char-lyra", "name": "Lyra", "identity": "Known",
+                  "notes": "Auto-created by post-batch orphan sweep."}
+        assert _is_stub_entity(entity) is True
+
+    def test_non_stub_notes_not_flagged(self):
+        entity = {"id": "char-test", "name": "Test", "identity": "A person.",
+                  "notes": "Has a stubborn personality."}
+        assert _is_stub_entity(entity) is False
 
     def test_stub_with_empty_identity(self):
         entity = {"id": "char-test", "name": "Test", "identity": "", "notes": "something"}
@@ -281,6 +297,11 @@ class TestStubIdentification:
     def test_stub_with_missing_identity(self):
         entity = {"id": "char-test", "name": "Test", "notes": "normal"}
         assert _is_stub_entity(entity) is True
+
+    def test_backfilled_entity_not_reflagged(self):
+        entity = {"id": "char-lyra", "name": "Lyra", "identity": "An elf.",
+                  "notes": "Backfilled from stub."}
+        assert _is_stub_entity(entity) is False
 
     def test_full_entity_not_stub(self):
         entity = {
@@ -301,12 +322,14 @@ class TestStubIdentification:
             {
                 "id": "evt-002",
                 "related_entities": ["char-other"],
-                "source_turns": ["turn-020"],
+                "source_turns": ["turn-050"],
             },
         ]
         turns = [
+            {"turn_id": "turn-009", "speaker": "DM", "text": "Previous context."},
             {"turn_id": "turn-010", "speaker": "DM", "text": "Lyra appeared at the gate."},
-            {"turn_id": "turn-020", "speaker": "DM", "text": "Other speaks."},
+            {"turn_id": "turn-011", "speaker": "DM", "text": "Next context."},
+            {"turn_id": "turn-050", "speaker": "DM", "text": "Other speaks."},
         ]
         context = _collect_stub_context("char-lyra", events, turns, "turn-010")
         assert "Lyra appeared" in context
@@ -315,10 +338,15 @@ class TestStubIdentification:
     def test_collect_context_includes_first_seen(self):
         events = []  # no events reference this entity
         turns = [
+            {"turn_id": "turn-004", "speaker": "DM", "text": "Previous turn."},
             {"turn_id": "turn-005", "speaker": "DM", "text": "First appearance."},
+            {"turn_id": "turn-006", "speaker": "DM", "text": "Next turn."},
         ]
         context = _collect_stub_context("char-unknown", events, turns, "turn-005")
         assert "First appearance" in context
+        # Neighbors should also be included
+        assert "Previous turn" in context
+        assert "Next turn" in context
 
     def test_backfill_preserves_first_seen_turn(self):
         """Stub detection finds entities correctly before backfill."""

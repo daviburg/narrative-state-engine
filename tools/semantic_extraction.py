@@ -326,7 +326,7 @@ def _fix_event_source_turns(events: list[dict], current_turn_id: str) -> None:
     """Validate and correct event source_turns that don't match the current turn (#127).
 
     If an event's source_turns entries are more than _MAX_SOURCE_TURN_DISTANCE
-    before the current turn, replace them with the current turn ID.
+    away from the current turn, replace them with the current turn ID.
     """
     current_num = _parse_turn_number(current_turn_id)
     if current_num is None:
@@ -1231,15 +1231,14 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                         continue
 
                     # Rule 4: Levenshtein distance on ID stems (#129)
-                    dist = _levenshtein(stem_a, stem_b)
-                    if (dist <= 2
-                            and stem_a[0] == stem_b[0]
-                            and abs(len(stem_a) - len(stem_b)) <= 2):
-                        union(idx_a, idx_b)
-                        print(
-                            f"  DEDUP (levenshtein): linking '{name_a}' ({id_a}) "
-                            f"and '{name_b}' ({id_b}) as duplicates (distance={dist})"
-                        )
+                    if stem_a[0] == stem_b[0] and abs(len(stem_a) - len(stem_b)) <= 2:
+                        dist = _levenshtein(stem_a, stem_b)
+                        if dist <= 2:
+                            union(idx_a, idx_b)
+                            print(
+                                f"  DEDUP (levenshtein): linking '{name_a}' ({id_a}) "
+                                f"and '{name_b}' ({id_b}) as duplicates (distance={dist})"
+                            )
 
         # Group by root
         groups: dict[int, list[int]] = {}
@@ -1355,10 +1354,17 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
 # ---------------------------------------------------------------------------
 
 
+# Known auto-created stub note values
+_STUB_NOTE_MARKERS = {
+    "auto-created by event-stub.",
+    "auto-created by post-batch orphan sweep.",
+}
+
+
 def _is_stub_entity(entity: dict) -> bool:
     """Return True if the entity is a hollow stub needing backfill."""
     notes = entity.get("notes", "")
-    if isinstance(notes, str) and "stub" in notes.lower():
+    if isinstance(notes, str) and notes.lower().strip().rstrip(".") + "." in _STUB_NOTE_MARKERS:
         return True
     identity = entity.get("identity", "")
     if not identity or identity == "":
@@ -1380,12 +1386,20 @@ def _collect_stub_context(entity_id: str, events_list: list, turn_dicts: list,
             if st_single:
                 ref_turns.add(st_single)
 
-    # Also include first_seen_turn and neighbors
+    # Build turn lookup and preserve transcript order for neighbor selection
+    turn_lookup = {t["turn_id"]: t for t in turn_dicts}
+    ordered_turn_ids = [t["turn_id"] for t in turn_dicts]
+    turn_index = {turn_id: idx for idx, turn_id in enumerate(ordered_turn_ids)}
+
+    # Also include first_seen_turn and its neighbors
     if first_seen_turn:
         ref_turns.add(first_seen_turn)
-
-    # Build a turn lookup
-    turn_lookup = {t["turn_id"]: t for t in turn_dicts}
+        idx = turn_index.get(first_seen_turn)
+        if idx is not None:
+            if idx > 0:
+                ref_turns.add(ordered_turn_ids[idx - 1])
+            if idx + 1 < len(ordered_turn_ids):
+                ref_turns.add(ordered_turn_ids[idx + 1])
 
     # Collect context text from referenced turns
     context_parts = []
@@ -1454,6 +1468,10 @@ def backfill_stubs(
                 # Preserve first_seen_turn from original stub
                 entity_data["first_seen_turn"] = first_seen
                 merge_entity(catalogs, entity_data)
+                # Clear stub marker so entity won't be re-flagged (#128)
+                merged = find_entity_by_id(catalogs, entity_id)
+                if merged:
+                    merged[1]["notes"] = "Backfilled from stub."
                 backfilled += 1
                 print(f"  Backfill: successfully enriched stub '{entity_id}'")
         except LLMExtractionError as e:
