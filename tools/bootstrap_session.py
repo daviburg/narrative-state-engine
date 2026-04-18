@@ -474,6 +474,11 @@ def main() -> None:
         default=None,
         help="Override the LLM API base URL from config/llm.json for this run.",
     )
+    parser.add_argument(
+        "--backfill-stubs",
+        action="store_true",
+        help="After extraction, re-extract hollow stub entities using gathered context.",
+    )
     args = parser.parse_args()
 
     # Validate --start-date format if provided
@@ -652,6 +657,22 @@ def main() -> None:
             turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run,
             overrides=llm_overrides or None,
         )
+
+        # Stub backfill pass (#128)
+        if args.backfill_stubs:
+            from semantic_extraction import backfill_stubs
+            from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
+            from llm_client import LLMClient
+
+            catalog_dir = os.path.join(args.framework, "catalogs")
+            catalogs = load_catalogs(catalog_dir)
+            events_list = load_events(catalog_dir)
+            llm = LLMClient("config/llm.json", overrides=llm_overrides or None)
+            count = backfill_stubs(turn_dicts, catalogs, events_list, llm)
+            if count and not args.dry_run:
+                save_catalogs(catalog_dir, catalogs)
+                save_events(catalog_dir, events_list)
+            print(f"  Stub backfill: {count} stub(s) enriched")
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(

@@ -33,6 +33,7 @@ from catalog_merger import (
     TYPE_TO_PREFIX,
     _infer_type_from_prefix,
     _strip_any_prefix,
+    _levenshtein,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -315,6 +316,42 @@ def _validate_event(event_data: dict) -> bool:
     except jsonschema.ValidationError as e:
         print(f"  WARNING: Event failed schema validation: {e.message}", file=sys.stderr)
         return False
+
+
+# Maximum turn distance for event source_turns to be considered valid (#127)
+_MAX_SOURCE_TURN_DISTANCE = 5
+
+
+def _fix_event_source_turns(events: list[dict], current_turn_id: str) -> None:
+    """Validate and correct event source_turns that don't match the current turn (#127).
+
+    If an event's source_turns entries are more than _MAX_SOURCE_TURN_DISTANCE
+    away from the current turn, replace them with the current turn ID.
+    """
+    current_num = _parse_turn_number(current_turn_id)
+    if current_num is None:
+        return
+
+    for event in events:
+        source_turns = event.get("source_turns")
+        if not isinstance(source_turns, list) or not source_turns:
+            continue
+        corrected = False
+        for i, st in enumerate(source_turns):
+            st_num = _parse_turn_number(st)
+            if st_num is None:
+                continue
+            if abs(current_num - st_num) > _MAX_SOURCE_TURN_DISTANCE:
+                source_turns[i] = current_turn_id
+                corrected = True
+        if corrected:
+            # Deduplicate after correction
+            event["source_turns"] = list(dict.fromkeys(source_turns))
+            print(
+                f"  WARNING: Corrected event {event.get('id', '?')} source_turns "
+                f"to [{current_turn_id}] (was mismatched by >{_MAX_SOURCE_TURN_DISTANCE} turns)",
+                file=sys.stderr,
+            )
 
 
 PLAYER_CHARACTER_SEED = {
@@ -691,38 +728,55 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
         return
     _, pc_entry = pc_result
 
+    attempted_fields = []
     merged_fields = []
 
     # Merge current_status if present and non-empty
-    if entity_data.get("current_status") and isinstance(entity_data["current_status"], str):
-        pc_entry["current_status"] = entity_data["current_status"]
-        merged_fields.append("current_status")
+    if entity_data.get("current_status"):
+        attempted_fields.append("current_status")
+        if isinstance(entity_data["current_status"], str):
+            pc_entry["current_status"] = entity_data["current_status"]
+            merged_fields.append("current_status")
+        else:
+            print(
+                f"  PC partial merge: current_status skipped (not a string) at {turn_id}",
+                file=sys.stderr,
+            )
 
     # Merge volatile_state if present
     vs = entity_data.get("volatile_state")
-    if isinstance(vs, dict) and vs:
-        if "volatile_state" not in pc_entry:
-            pc_entry["volatile_state"] = {}
-        for k, v in vs.items():
-            pc_entry["volatile_state"][k] = v
-        merged_fields.append("volatile_state")
+    if vs is not None:
+        attempted_fields.append("volatile_state")
+        if isinstance(vs, dict) and vs:
+            if "volatile_state" not in pc_entry:
+                pc_entry["volatile_state"] = {}
+            for k, v in vs.items():
+                pc_entry["volatile_state"][k] = v
+            merged_fields.append("volatile_state")
+        else:
+            print(
+                f"  PC partial merge: volatile_state skipped (empty or not a dict) at {turn_id}",
+                file=sys.stderr,
+            )
 
     # Merge individual stable_attributes that are in the allowed set
     # and conform to the expected entity schema shape.
     sa = entity_data.get("stable_attributes")
-    if isinstance(sa, dict) and sa:
-        stable_attr_merged = False
-        for k, v in sa.items():
-            if k not in PC_ALLOWED_ATTRS:
-                continue
-            if not isinstance(v, dict) or "value" not in v:
-                continue
-            if "stable_attributes" not in pc_entry:
-                pc_entry["stable_attributes"] = {}
-            pc_entry["stable_attributes"][k] = v
-            stable_attr_merged = True
-        if stable_attr_merged:
-            merged_fields.append("stable_attributes")
+    if sa is not None:
+        attempted_fields.append("stable_attributes")
+        if isinstance(sa, dict) and sa:
+            stable_attr_merged = False
+            for k, v in sa.items():
+                if k not in PC_ALLOWED_ATTRS:
+                    continue
+                if not isinstance(v, dict) or "value" not in v:
+                    continue
+                if "stable_attributes" not in pc_entry:
+                    pc_entry["stable_attributes"] = {}
+                pc_entry["stable_attributes"][k] = v
+                stable_attr_merged = True
+            if stable_attr_merged:
+                merged_fields.append("stable_attributes")
 
     # Update last_updated_turn if we merged anything
     if merged_fields:
@@ -730,7 +784,14 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
         if entity_data.get("status_updated_turn"):
             pc_entry["status_updated_turn"] = entity_data["status_updated_turn"]
         print(
-            f"  WARNING: PC validation failed — partial merge of {merged_fields} at {turn_id}",
+            f"  PC partial merge: merged {merged_fields} at {turn_id} "
+            f"(attempted: {attempted_fields}, last_updated_turn => {turn_id})",
+            file=sys.stderr,
+        )
+    else:
+        print(
+            f"  WARNING: PC partial merge fired but merged_fields is empty at {turn_id} "
+            f"(attempted: {attempted_fields})",
             file=sys.stderr,
         )
 
@@ -879,6 +940,16 @@ def extract_and_merge(
     # Filter by confidence
     qualified = filter_by_confidence(discovered, min_confidence)
 
+    # Reject concept-prefix entities at discovery acceptance time (#124)
+    filtered_qualified = []
+    for entity_ref in qualified:
+        eid = get_entity_id(entity_ref)
+        if eid and eid.lower().startswith("concept-"):
+            print(f"  Skipping concept-prefix entity from discovery: {eid}", file=sys.stderr)
+            continue
+        filtered_qualified.append(entity_ref)
+    qualified = filtered_qualified
+
     # --- 2. Entity Detail Extraction (per entity above threshold) ---
     for entity_ref in qualified:
         entity_id = get_entity_id(entity_ref)
@@ -955,6 +1026,13 @@ def extract_and_merge(
                 _sanitize_pc_catalog_entry(catalogs)
             elif entity_data:
                 # Validation failed — attempt partial merge fallback (#107)
+                # Log structure of the raw response to aid diagnosis (#125)
+                _data_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
+                print(
+                    f"  PC detail extraction: validation failed at {turn_id}, "
+                    f"response keys={_data_keys}, falling back to partial merge",
+                    file=sys.stderr,
+                )
                 _pc_partial_merge(catalogs, entity_data, turn_id)
         except LLMExtractionError as e:
             print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
@@ -1007,6 +1085,9 @@ def extract_and_merge(
             user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
         )
         new_events = event_result.get("events", [])
+
+        # --- Phase 0: Validate event source_turns match processing turn (#127) ---
+        _fix_event_source_turns(new_events, turn_id)
 
         # --- Phase 1: Normalize event related_entities IDs (#108) ---
         known_ids = _collect_all_entity_ids(catalogs)
@@ -1147,6 +1228,17 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                     if len(smaller_parts) >= 2 and (parts_a.issubset(parts_b) or parts_b.issubset(parts_a)):
                         union(idx_a, idx_b)
                         print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
+                        continue
+
+                    # Rule 4: Levenshtein distance on ID stems (#129)
+                    if stem_a[0] == stem_b[0] and abs(len(stem_a) - len(stem_b)) <= 2:
+                        dist = _levenshtein(stem_a, stem_b)
+                        if dist <= 2:
+                            union(idx_a, idx_b)
+                            print(
+                                f"  DEDUP (levenshtein): linking '{name_a}' ({id_a}) "
+                                f"and '{name_b}' ({id_b}) as duplicates (distance={dist})"
+                            )
 
         # Group by root
         groups: dict[int, list[int]] = {}
@@ -1255,6 +1347,139 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
         print(f"  POST-BATCH STUB: '{eid}' ({inferred_name}), {len(turn_ids)} event refs")
 
     return stubs_created
+
+
+# ---------------------------------------------------------------------------
+# Stub backfill (#128)
+# ---------------------------------------------------------------------------
+
+
+# Known auto-created stub note values
+_STUB_NOTE_MARKERS = {
+    "auto-created by event-stub.",
+    "auto-created by post-batch orphan sweep.",
+}
+
+
+def _is_stub_entity(entity: dict) -> bool:
+    """Return True if the entity is a hollow stub needing backfill."""
+    notes = entity.get("notes", "")
+    if isinstance(notes, str) and notes.lower().strip().rstrip(".") + "." in _STUB_NOTE_MARKERS:
+        return True
+    identity = entity.get("identity", "")
+    if not identity or identity == "":
+        return True
+    return False
+
+
+def _collect_stub_context(entity_id: str, events_list: list, turn_dicts: list,
+                          first_seen_turn: str | None) -> str:
+    """Gather turn text around an entity's event references for backfill context."""
+    # Find all turns that reference this entity via events
+    ref_turns: set[str] = set()
+    for event in events_list:
+        related = event.get("related_entities", [])
+        if entity_id in related:
+            for st in event.get("source_turns", []):
+                ref_turns.add(st)
+            st_single = event.get("source_turn")
+            if st_single:
+                ref_turns.add(st_single)
+
+    # Build turn lookup and preserve transcript order for neighbor selection
+    turn_lookup = {t["turn_id"]: t for t in turn_dicts}
+    ordered_turn_ids = [t["turn_id"] for t in turn_dicts]
+    turn_index = {turn_id: idx for idx, turn_id in enumerate(ordered_turn_ids)}
+
+    # Also include first_seen_turn and its neighbors
+    if first_seen_turn:
+        ref_turns.add(first_seen_turn)
+        idx = turn_index.get(first_seen_turn)
+        if idx is not None:
+            if idx > 0:
+                ref_turns.add(ordered_turn_ids[idx - 1])
+            if idx + 1 < len(ordered_turn_ids):
+                ref_turns.add(ordered_turn_ids[idx + 1])
+
+    # Collect context text from referenced turns
+    context_parts = []
+    for tid in sorted(ref_turns):
+        turn = turn_lookup.get(tid)
+        if turn:
+            context_parts.append(f"[{tid}] {turn['text'][:500]}")
+
+    return "\n".join(context_parts[:10])  # limit context size
+
+
+def backfill_stubs(
+    turn_dicts: list,
+    catalogs: dict,
+    events_list: list,
+    llm: "LLMClient",
+) -> int:
+    """Re-extract stub entities using gathered context (#128).
+
+    Returns the number of stubs successfully backfilled.
+    """
+    stubs: list[tuple[str, dict, str]] = []  # (catalog_file, entity, entity_id)
+    for filename, entities in catalogs.items():
+        for entity in entities:
+            if _is_stub_entity(entity):
+                stubs.append((filename, entity, entity.get("id", "")))
+
+    if not stubs:
+        return 0
+
+    print(f"  Backfill: found {len(stubs)} stub(s) to re-extract")
+    backfilled = 0
+
+    for _filename, entity, entity_id in stubs:
+        if not entity_id:
+            continue
+
+        first_seen = entity.get("first_seen_turn", "turn-001")
+        context_text = _collect_stub_context(entity_id, events_list, turn_dicts, first_seen)
+        if not context_text:
+            print(f"  Backfill: no context found for stub '{entity_id}', skipping")
+            continue
+
+        # Build a synthetic turn for detail extraction
+        synthetic_turn = {
+            "turn_id": first_seen,
+            "speaker": "DM",
+            "text": context_text,
+        }
+        entity_ref = {
+            "name": entity.get("name", ""),
+            "type": entity.get("type", "character"),
+            "existing_id": entity_id,
+            "is_new": False,
+        }
+
+        try:
+            detail_result = llm.extract_json(
+                system_prompt=load_template("entity-detail"),
+                user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
+            )
+            entity_data = detail_result.get("entity")
+            if entity_data:
+                entity_data = _coerce_entity_fields(entity_data)
+            if entity_data and _validate_entity(entity_data):
+                # Preserve first_seen_turn from original stub
+                entity_data["first_seen_turn"] = first_seen
+                merge_entity(catalogs, entity_data)
+                # Clear stub marker so entity won't be re-flagged (#128)
+                merged = find_entity_by_id(catalogs, entity_id)
+                if merged:
+                    merged[1]["notes"] = "Backfilled from stub."
+                backfilled += 1
+                print(f"  Backfill: successfully enriched stub '{entity_id}'")
+        except LLMExtractionError as e:
+            print(f"  WARNING: Backfill failed for {entity_id}: {e}", file=sys.stderr)
+
+        llm.delay()
+
+    return backfilled
 
 
 def extract_semantic_batch(

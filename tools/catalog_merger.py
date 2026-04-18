@@ -643,6 +643,53 @@ dedup_merge_entity = _update_existing_entity
 # Relationship consolidation
 # ---------------------------------------------------------------------------
 
+_RELATIONSHIP_TYPE_MAP = {
+    # Schema enum identity mappings (pass-through)
+    "kinship": "kinship", "partnership": "partnership", "mentorship": "mentorship",
+    "political": "political", "factional": "factional", "social": "social",
+    "adversarial": "adversarial", "romantic": "romantic", "other": "other",
+    # social
+    "ally": "social", "ally_of": "social", "ally of": "social",
+    "friend": "social", "companion": "social", "supporter": "social",
+    "supports": "social",
+    "collaborating": "partnership", "collaborating with": "partnership",
+    "collaborator": "partnership",
+    # adversarial
+    "captive": "adversarial", "captive of": "adversarial",
+    "prisoner": "adversarial", "captor": "adversarial",
+    "rival": "adversarial", "competitor": "adversarial",
+    "enemy": "adversarial", "caught by": "adversarial",
+    "ensnared by": "adversarial",
+    # mentorship
+    "mentor": "mentorship", "teacher": "mentorship",
+    "student": "mentorship", "apprentice": "mentorship",
+    "teaching": "mentorship",
+    # kinship
+    "family": "kinship", "parent": "kinship", "child": "kinship",
+    "sibling": "kinship", "kin": "kinship", "mother": "kinship",
+    "father": "kinship", "daughter": "kinship", "son": "kinship",
+    # partnership
+    "cooperating": "partnership", "partner": "partnership",
+    "working with": "partnership",
+    # romantic
+    "lover": "romantic", "romantic partner": "romantic",
+    # political
+    "diplomatic": "political",
+    # factional
+    "faction": "factional", "guild": "factional", "tribal": "factional",
+    # other — explicit task/using relationships stay as other
+    "task related to": "other", "using": "other",
+}
+
+
+def _coerce_relationship_type(type_value: str) -> str:
+    """Map common LLM relationship labels to schema enum values (#126)."""
+    normalized = type_value.lower().strip()
+    if not normalized:
+        return "other"
+    return _RELATIONSHIP_TYPE_MAP.get(normalized, "other")
+
+
 def _merge_entity_relationships(existing_rels: list[dict], new_rels: list[dict]) -> None:
     """Merge new relationships into existing, consolidating per (target_id) pair.
 
@@ -671,6 +718,9 @@ def _merge_entity_relationships(existing_rels: list[dict], new_rels: list[dict])
             entry.setdefault("status", "active")
             if "current_relationship" not in entry and "relationship" in entry:
                 entry["current_relationship"] = entry.pop("relationship")
+            # Coerce relationship type to schema enum (#126)
+            if entry.get("type"):
+                entry["type"] = _coerce_relationship_type(entry["type"])
             existing_rels.append(entry)
             by_target[target_id] = len(existing_rels) - 1
 
@@ -680,6 +730,10 @@ def _consolidate_relationship(existing: dict, update: dict) -> None:
 
     Pushes the old current_relationship into history and updates to the new one.
     """
+    # Coerce relationship type to schema enum (#126)
+    if update.get("type"):
+        update["type"] = _coerce_relationship_type(update["type"])
+
     # Determine the new description
     new_desc = update.get("current_relationship") or update.get("relationship", "")
     old_desc = existing.get("current_relationship") or existing.get("relationship", "")
@@ -770,6 +824,8 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
                 new_rel["confidence"] = rel["confidence"]
             new_rel["first_seen_turn"] = turn_id
             new_rel["last_updated_turn"] = turn_id
+            # Coerce relationship type to schema enum (#126)
+            new_rel["type"] = _coerce_relationship_type(new_rel["type"])
             entity["relationships"].append(new_rel)
 
 
