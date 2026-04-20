@@ -475,9 +475,9 @@ def main() -> None:
         help="Override the LLM API base URL from config/llm.json for this run.",
     )
     parser.add_argument(
-        "--backfill-stubs",
+        "--skip-backfill",
         action="store_true",
-        help="After extraction, re-extract hollow stub entities using gathered context.",
+        help="Skip the stub backfill pass after extraction.",
     )
     args = parser.parse_args()
 
@@ -658,8 +658,8 @@ def main() -> None:
             overrides=llm_overrides or None,
         )
 
-        # Stub backfill pass (#128)
-        if args.backfill_stubs:
+        # Stub backfill pass (#128, #131 — now runs by default)
+        if not args.skip_backfill:
             from semantic_extraction import backfill_stubs
             from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
             from llm_client import LLMClient
@@ -673,6 +673,20 @@ def main() -> None:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
             print(f"  Stub backfill: {count} stub(s) enriched")
+
+        # PC alias merge pass (#134)
+        from semantic_extraction import _merge_pc_aliases
+        from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
+
+        catalog_dir = os.path.join(args.framework, "catalogs")
+        catalogs = load_catalogs(catalog_dir)
+        events_list = load_events(catalog_dir)
+        merged_aliases = _merge_pc_aliases(catalogs, events_list, catalog_dir)
+        if merged_aliases and not args.dry_run:
+            save_catalogs(catalog_dir, catalogs)
+            save_events(catalog_dir, events_list)
+        if merged_aliases:
+            print(f"  PC alias merge: merged {len(merged_aliases)} alias(es): {merged_aliases}")
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(

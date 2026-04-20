@@ -51,6 +51,10 @@ PC_ALLOWED_ATTRS = {
     "condition", "equipment", "quest", "allegiance", "status", "aliases",
 }
 
+# Consecutive PC extraction failure tracking (#133)
+_pc_consecutive_failures = 0
+_PC_FAILURE_WARN_THRESHOLD = 10
+
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
     """Strip non-allowed attribute keys from char-player entities.
@@ -789,9 +793,10 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
             file=sys.stderr,
         )
     else:
+        _resp_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
         print(
-            f"  WARNING: PC partial merge fired but merged_fields is empty at {turn_id} "
-            f"(attempted: {attempted_fields})",
+            f"  WARNING: PC partial merge at {turn_id}: no fields could be merged. "
+            f"Response keys: {_resp_keys} (attempted: {attempted_fields})",
             file=sys.stderr,
         )
 
@@ -1000,6 +1005,7 @@ def extract_and_merge(
         get_entity_id(e) == "char-player" for e in qualified
     )
     if not pc_already_extracted:
+        global _pc_consecutive_failures
         pc_result = find_entity_by_id(catalogs, "char-player")
         pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
         # Sanitize existing entry before sending to LLM so stale keys
@@ -1009,6 +1015,7 @@ def extract_and_merge(
                   "existing_id": "char-player", "is_new": False}
         # Use extended timeout for PC extraction — context is larger (#107)
         pc_timeout = max(llm.default_timeout * 2, 120)
+        pc_updated = False
         try:
             detail_result = llm.extract_json(
                 system_prompt=load_template("entity-detail"),
@@ -1024,6 +1031,7 @@ def extract_and_merge(
                 merge_entity(catalogs, entity_data)
                 # Purge any stale keys that survived the merge
                 _sanitize_pc_catalog_entry(catalogs)
+                pc_updated = True
             elif entity_data:
                 # Validation failed — attempt partial merge fallback (#107)
                 # Log structure of the raw response to aid diagnosis (#125)
@@ -1034,8 +1042,30 @@ def extract_and_merge(
                     file=sys.stderr,
                 )
                 _pc_partial_merge(catalogs, entity_data, turn_id)
+                # Partial merge may or may not succeed; count as update attempt
+            else:
+                # entity_data is None — extraction returned nothing (#133)
+                print(
+                    f"  WARNING: PC detail extraction returned None at {turn_id}. "
+                    f"Consecutive failures: {_pc_consecutive_failures + 1}",
+                    file=sys.stderr,
+                )
         except LLMExtractionError as e:
             print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
+
+        # Track consecutive PC extraction failures (#133)
+        if pc_updated:
+            _pc_consecutive_failures = 0
+        else:
+            _pc_consecutive_failures += 1
+            if _pc_consecutive_failures >= _PC_FAILURE_WARN_THRESHOLD:
+                print(
+                    f"  WARNING: PC extraction has failed for {_pc_consecutive_failures} "
+                    f"consecutive turns (last update: "
+                    f"{pc_entry.get('last_updated_turn', 'unknown')}). "
+                    f"Context may be too large for reliable extraction.",
+                    file=sys.stderr,
+                )
         llm.delay()
 
     # --- 3. Relationship Mapping ---
@@ -1230,8 +1260,10 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                         print(f"  DEDUP (id-stem): linking '{name_a}' ({id_a}) and '{name_b}' ({id_b}) as duplicates")
                         continue
 
-                    # Rule 4: Levenshtein distance on ID stems (#129)
-                    if stem_a[0] == stem_b[0] and abs(len(stem_a) - len(stem_b)) <= 2:
+                    # Rule 4: Levenshtein distance on ID stems (#129, #132)
+                    if (len(stem_a) >= 6 and len(stem_b) >= 6
+                            and stem_a[0] == stem_b[0]
+                            and abs(len(stem_a) - len(stem_b)) <= 2):
                         dist = _levenshtein(stem_a, stem_b)
                         if dist <= 2:
                             union(idx_a, idx_b)
@@ -1480,6 +1512,97 @@ def backfill_stubs(
         llm.delay()
 
     return backfilled
+
+
+def _merge_pc_aliases(
+    catalogs: dict,
+    events_list: list,
+    catalog_dir: str,
+) -> list[str]:
+    """Identify and merge character entities that are aliases of char-player (#134).
+
+    Scans event descriptions involving char-player for proper names, then checks
+    whether any other character entity's name appears frequently enough to be an alias.
+
+    Returns list of entity IDs that were merged.
+    """
+    pc_result = find_entity_by_id(catalogs, "char-player")
+    if not pc_result:
+        return []
+    _, pc_entry = pc_result
+
+    # Collect text from events that reference char-player
+    pc_events = [
+        e for e in events_list
+        if "char-player" in e.get("related_entities", [])
+    ]
+    pc_text = " ".join(e.get("description", "") for e in pc_events)
+    if not pc_text:
+        return []
+
+    merged = []
+    chars_catalog = "characters.json"
+    entities = catalogs.get(chars_catalog, [])
+
+    for entity in list(entities):
+        eid = entity.get("id", "")
+        if eid == "char-player" or not eid:
+            continue
+
+        name = entity.get("name", "")
+        if not name or len(name) < 3:
+            continue
+
+        # Count occurrences of the entity name in PC event text
+        occurrences = pc_text.count(name)
+        if occurrences < 2:
+            continue
+
+        # Check candidate has minimal data (≤3 turns span)
+        first = entity.get("first_seen_turn", "")
+        last = entity.get("last_updated_turn", "")
+        if first and last:
+            try:
+                first_num = int(first.replace("turn-", ""))
+                last_num = int(last.replace("turn-", ""))
+                if last_num - first_num > 3:
+                    continue  # Too much independent data — likely a real NPC
+            except ValueError:
+                continue
+
+        # Merge into char-player: add name as alias
+        sa = pc_entry.setdefault("stable_attributes", {})
+        aliases = sa.setdefault("aliases", {"value": [], "source_turns": []})
+        alias_list = aliases.get("value", [])
+        if isinstance(alias_list, list) and name not in alias_list:
+            alias_list.append(name)
+            aliases["value"] = alias_list
+
+        # Absorb unique relationships from the candidate
+        pc_rels = pc_entry.get("relationships", [])
+        for rel in entity.get("relationships", []):
+            target = rel.get("target_id", "")
+            rel_type = rel.get("type", "")
+            if target and not any(
+                r.get("target_id") == target and r.get("type") == rel_type
+                for r in pc_rels
+            ):
+                pc_rels.append(rel)
+        pc_entry["relationships"] = pc_rels
+
+        # Remove the candidate entity from the catalog
+        entities.remove(entity)
+
+        # Delete entity file from disk if it exists (V2 layout)
+        if catalog_dir:
+            entity_file = os.path.join(catalog_dir, "characters", f"{eid}.json")
+            if os.path.isfile(entity_file):
+                os.remove(entity_file)
+
+        merged.append(eid)
+        print(f"  PC alias merge: merged '{eid}' ({name}) into char-player")
+
+    return merged
 
 
 def extract_semantic_batch(

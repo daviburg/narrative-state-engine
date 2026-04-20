@@ -101,7 +101,7 @@ class TestPCPartialMergeLogging:
         entity_data = {"id": "char-player"}
         _pc_partial_merge(catalogs, entity_data, "turn-060")
         captured = capsys.readouterr()
-        assert "empty" in captured.err.lower()
+        assert "no fields could be merged" in captured.err.lower()
         assert "turn-060" in captured.err
 
     def test_logs_attempted_fields(self, capsys):
