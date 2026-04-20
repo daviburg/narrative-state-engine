@@ -65,6 +65,16 @@ When generating `derived/prompt-candidates.json`:
 - Do not infer motivations or backstory unless explicitly supported.
 - If a gap exists in the narrative, note it as an `open_question` in the plot-thread, not as a fact.
 
+### 8. Keep Documentation Current
+
+When a code change alters tool behavior, data flow, schemas, or output format:
+
+- Update `docs/architecture.md` to reflect new or changed layers, tools, or data flow.
+- Update `docs/roadmap.md` to reflect milestone progress or new capabilities.
+- Update `docs/usage.md` if the change affects how users run tools or configure the system.
+- Include documentation updates in the same commit/PR as the code change, not as a separate follow-up.
+- Agent prompt files (`.prompt.md`) must include a "Documentation Updates" section listing which docs to update and what to add.
+
 ---
 
 ## File Conventions
