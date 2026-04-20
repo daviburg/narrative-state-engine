@@ -72,7 +72,7 @@ When a code change alters tool behavior, data flow, schemas, or output format:
 - Update `docs/architecture.md` to reflect new or changed layers, tools, or data flow.
 - Update `docs/roadmap.md` to reflect milestone progress or new capabilities.
 - Update `docs/usage.md` if the change affects how users run tools or configure the system.
-- Include documentation updates in the same commit/PR as the code change, not as a separate follow-up.
+- Include documentation updates in the same PR as the code change, not as a separate follow-up.
 - Agent prompt files (`.prompt.md`) must include a "Documentation Updates" section listing which docs to update and what to add.
 
 ---
