@@ -58,6 +58,15 @@ class LLMClient:
         self.context_length = self.config.get("context_length", None)
         self.ollama_options = self.config.get("ollama_options", None)
 
+    @property
+    def _is_ollama(self) -> bool:
+        """True when the configured provider is Ollama."""
+        base_url = self.config.get("base_url", "")
+        return (
+            self.config.get("provider", "").lower() == "ollama"
+            or ":11434" in base_url
+        )
+
     def extract_json(
         self,
         system_prompt: str,
@@ -98,13 +107,14 @@ class LLMClient:
                 }
                 if timeout is not None:
                     kwargs["timeout"] = timeout
-                extra_body = {}
-                if self.context_length:
-                    extra_body["num_ctx"] = self.context_length
-                if self.ollama_options:
-                    extra_body["options"] = self.ollama_options
-                if extra_body:
-                    kwargs["extra_body"] = extra_body
+                if self._is_ollama:
+                    extra_body = {}
+                    if self.context_length:
+                        extra_body["num_ctx"] = self.context_length
+                    if self.ollama_options:
+                        extra_body["options"] = self.ollama_options
+                    if extra_body:
+                        kwargs["extra_body"] = extra_body
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
@@ -194,13 +204,14 @@ class LLMClient:
                 }
                 if timeout is not None:
                     kwargs["timeout"] = timeout
-                extra_body = {}
-                if self.context_length:
-                    extra_body["num_ctx"] = self.context_length
-                if self.ollama_options:
-                    extra_body["options"] = self.ollama_options
-                if extra_body:
-                    kwargs["extra_body"] = extra_body
+                if self._is_ollama:
+                    extra_body = {}
+                    if self.context_length:
+                        extra_body["num_ctx"] = self.context_length
+                    if self.ollama_options:
+                        extra_body["options"] = self.ollama_options
+                    if extra_body:
+                        kwargs["extra_body"] = extra_body
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
