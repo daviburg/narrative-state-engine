@@ -16,7 +16,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 
 
 def list_turns(transcript_dir: str) -> list[dict]:

@@ -16,7 +16,6 @@ import json
 import os
 import re
 import sys
-from datetime import datetime, timezone
 
 
 def find_next_sequence_number(transcript_dir: str) -> int:

@@ -5,6 +5,7 @@
   "api_key_env": "",
   "temperature": 0.0,
   "max_tokens": 4096,
+  "pc_max_tokens": 8192,
   "timeout_seconds": 120,
   "retry_attempts": 3,
   "batch_delay_ms": 200,

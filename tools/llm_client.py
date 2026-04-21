@@ -52,6 +52,7 @@ class LLMClient:
         self.model = self.config.get("model", "gpt-4o")
         self.temperature = self.config.get("temperature", 0.0)
         self.max_tokens = self.config.get("max_tokens", 4096)
+        self.pc_max_tokens = self.config.get("pc_max_tokens", self.max_tokens)
         self.retry_attempts = self.config.get("retry_attempts", 3)
         self.batch_delay_ms = self.config.get("batch_delay_ms", 200)
         self.default_timeout = self.config.get("timeout_seconds", 60)
@@ -73,6 +74,7 @@ class LLMClient:
         user_prompt: str,
         schema: dict | None = None,
         timeout: int | None = None,
+        max_tokens: int | None = None,
     ) -> dict | list:
         """Send a chat completion request and parse the JSON response.
 
@@ -82,6 +84,8 @@ class LLMClient:
             schema: Optional JSON schema for response_format (structured outputs).
             timeout: Optional per-call timeout in seconds. Overrides the
                 default timeout from config for this call only.
+            max_tokens: Optional per-call max_tokens override. When provided,
+                overrides ``self.max_tokens`` for this call only.
 
         Returns:
             Parsed JSON object/array.
@@ -102,7 +106,7 @@ class LLMClient:
                     "model": self.model,
                     "messages": messages,
                     "temperature": self.temperature,
-                    "max_tokens": self.max_tokens,
+                    "max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
                     "response_format": {"type": "json_object"},
                 }
                 if timeout is not None:

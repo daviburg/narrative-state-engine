@@ -30,7 +30,6 @@ from catalog_merger import (
     mark_dormant_relationships,
     normalize_entity_id,
     TYPE_TO_CATALOG_V1,
-    TYPE_TO_PREFIX,
     _infer_type_from_prefix,
     _strip_any_prefix,
     _levenshtein,
@@ -53,8 +52,10 @@ PC_ALLOWED_ATTRS = {
 }
 
 # Consecutive PC extraction failure tracking (#133)
-_pc_consecutive_failures = 0
+_pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
+_pc_skipped_turns = 0
 _PC_FAILURE_WARN_THRESHOLD = 10
+_PC_SKIP_THRESHOLD = 20  # Skip PC extraction after this many consecutive failures (#149)
 
 
 def _reset_pc_failure_tracking() -> None:
@@ -65,8 +66,9 @@ def _reset_pc_failure_tracking() -> None:
     carrying failure counts across unrelated invocations in long-lived
     processes.
     """
-    global _pc_consecutive_failures
+    global _pc_consecutive_failures, _pc_skipped_turns
     _pc_consecutive_failures = 0
+    _pc_skipped_turns = 0
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
@@ -987,7 +989,7 @@ def extract_and_merge(
     Returns:
         Updated (catalogs, events_list) tuple.
     """
-    global _pc_consecutive_failures
+    global _pc_consecutive_failures, _pc_skipped_turns
     turn_id = turn["turn_id"]
 
     # Load arc sidecar for PC relationship compaction (#120)
@@ -1101,67 +1103,78 @@ def extract_and_merge(
         get_entity_id(e) == "char-player" for e in qualified
     )
     if not pc_already_extracted:
-        pc_result = find_entity_by_id(catalogs, "char-player")
-        pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
-        # Sanitize existing entry before sending to LLM so stale keys
-        # don't appear in the prompt and get echoed back.
-        _sanitize_pc_catalog_entry(catalogs)
-        pc_ref = {"name": pc_entry["name"], "type": "character",
-                  "existing_id": "char-player", "is_new": False}
-        # Use extended timeout for PC extraction — context is larger (#107)
-        pc_timeout = max(llm.default_timeout * 2, 120)
-        pc_updated = False
-        try:
-            detail_result = llm.extract_json(
-                system_prompt=load_template("entity-detail"),
-                user_prompt=format_detail_prompt(turn, pc_ref, pc_entry,
-                                                 arcs_data=pc_arcs_data),
-                timeout=pc_timeout,
-            )
-            entity_data = detail_result.get("entity")
-            if entity_data:
-                entity_data = _coerce_entity_fields(entity_data)
-            if entity_data and _validate_entity(entity_data):
-                _filter_pc_attributes(entity_data)
-                merge_entity(catalogs, entity_data)
-                # Purge any stale keys that survived the merge
-                _sanitize_pc_catalog_entry(catalogs)
-                pc_updated = True
-            elif entity_data is not None:
-                # Validation failed — attempt partial merge fallback (#107)
-                # Log structure of the raw response to aid diagnosis (#125)
-                _data_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
-                print(
-                    f"  PC detail extraction: validation failed at {turn_id}, "
-                    f"response keys={_data_keys}, falling back to partial merge",
-                    file=sys.stderr,
-                )
-                # Partial merge success counts as an update (#133)
-                pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
-            else:
-                # entity_data is None — extraction returned nothing (#133)
-                print(
-                    f"  WARNING: PC detail extraction returned None at {turn_id}. "
-                    f"Consecutive failures: {_pc_consecutive_failures + 1}",
-                    file=sys.stderr,
-                )
-        except LLMExtractionError as e:
-            print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
-
-        # Track consecutive PC extraction failures (#133)
-        if pc_updated:
-            _pc_consecutive_failures = 0
+        # Skip PC extraction after too many consecutive failures (#149)
+        if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
+            _pc_skipped_turns += 1
         else:
-            _pc_consecutive_failures += 1
-            if _pc_consecutive_failures >= _PC_FAILURE_WARN_THRESHOLD:
-                print(
-                    f"  WARNING: PC extraction has failed for {_pc_consecutive_failures} "
-                    f"consecutive turns (last update: "
-                    f"{pc_entry.get('last_updated_turn', 'unknown')}). "
-                    f"Context may be too large for reliable extraction.",
-                    file=sys.stderr,
+            pc_result = find_entity_by_id(catalogs, "char-player")
+            pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
+            # Sanitize existing entry before sending to LLM so stale keys
+            # don't appear in the prompt and get echoed back.
+            _sanitize_pc_catalog_entry(catalogs)
+            pc_ref = {"name": pc_entry["name"], "type": "character",
+                      "existing_id": "char-player", "is_new": False}
+            # Use extended timeout for PC extraction — context is larger (#107)
+            pc_timeout = max(llm.default_timeout * 2, 120)
+            pc_updated = False
+            try:
+                detail_result = llm.extract_json(
+                    system_prompt=load_template("entity-detail"),
+                    user_prompt=format_detail_prompt(turn, pc_ref, pc_entry,
+                                                     arcs_data=pc_arcs_data),
+                    timeout=pc_timeout,
+                    max_tokens=llm.pc_max_tokens,
                 )
-        llm.delay()
+                entity_data = detail_result.get("entity")
+                if entity_data:
+                    entity_data = _coerce_entity_fields(entity_data)
+                if entity_data and _validate_entity(entity_data):
+                    _filter_pc_attributes(entity_data)
+                    merge_entity(catalogs, entity_data)
+                    # Purge any stale keys that survived the merge
+                    _sanitize_pc_catalog_entry(catalogs)
+                    pc_updated = True
+                elif entity_data is not None:
+                    # Validation failed — attempt partial merge fallback (#107)
+                    # Log structure of the raw response to aid diagnosis (#125)
+                    _data_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
+                    print(
+                        f"  PC detail extraction: validation failed at {turn_id}, "
+                        f"response keys={_data_keys}, falling back to partial merge",
+                        file=sys.stderr,
+                    )
+                    # Partial merge success counts as an update (#133)
+                    pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
+                else:
+                    # entity_data is None — extraction returned nothing (#133)
+                    print(
+                        f"  WARNING: PC detail extraction returned None at {turn_id}. "
+                        f"Consecutive failures: {_pc_consecutive_failures + 1}",
+                        file=sys.stderr,
+                    )
+            except LLMExtractionError as e:
+                print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
+
+            # Track consecutive PC extraction failures (#133)
+            if pc_updated:
+                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
+            else:
+                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
+                if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
+                    print(
+                        f"  WARNING: PC extraction has failed for {_pc_consecutive_failures} "
+                        f"consecutive turns (last update: "
+                        f"{pc_entry.get('last_updated_turn', 'unknown')}). "
+                        f"Context may be too large for reliable extraction.",
+                        file=sys.stderr,
+                    )
+                elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
+                    print(
+                        f"  WARNING: PC extraction skipped from now on after "
+                        f"{_PC_SKIP_THRESHOLD} consecutive failures.",
+                        file=sys.stderr,
+                    )
+            llm.delay()
 
     # --- 3. Relationship Mapping ---
     mentioned_entities = []
@@ -2222,6 +2235,13 @@ def extract_semantic_batch(
     if orphan_stubs:
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch orphan sweep created {orphan_stubs} stub(s); {entities_after} entities now")
+
+    # Report if PC extraction was skipped due to consecutive failures (#149)
+    if _pc_skipped_turns > 0:
+        print(
+            f"  PC extraction skipped for {_pc_skipped_turns} turn(s) "
+            f"after {_PC_SKIP_THRESHOLD} consecutive failures",
+        )
 
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
 
