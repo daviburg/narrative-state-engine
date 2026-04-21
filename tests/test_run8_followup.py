@@ -8,14 +8,14 @@ import shutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 import semantic_extraction as se
-from semantic_extraction import (
-    _dedup_catalogs,
-    _pc_partial_merge,
-    _merge_pc_aliases,
-    _reset_pc_failure_tracking,
-    _PC_FAILURE_WARN_THRESHOLD,
-)
 from bootstrap_session import build_parser
+
+# Shorter aliases for frequently used functions
+_dedup_catalogs = se._dedup_catalogs
+_pc_partial_merge = se._pc_partial_merge
+_merge_pc_aliases = se._merge_pc_aliases
+_reset_pc_failure_tracking = se._reset_pc_failure_tracking
+_PC_FAILURE_WARN_THRESHOLD = se._PC_FAILURE_WARN_THRESHOLD
 
 
 # ---------------------------------------------------------------------------

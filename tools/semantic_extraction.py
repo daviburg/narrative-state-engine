@@ -908,6 +908,7 @@ def extract_and_merge(
     Returns:
         Updated (catalogs, events_list) tuple.
     """
+    global _pc_consecutive_failures
     turn_id = turn["turn_id"]
 
     # Load arc sidecar for PC relationship compaction (#120)
@@ -1021,7 +1022,6 @@ def extract_and_merge(
         get_entity_id(e) == "char-player" for e in qualified
     )
     if not pc_already_extracted:
-        global _pc_consecutive_failures
         pc_result = find_entity_by_id(catalogs, "char-player")
         pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
         # Sanitize existing entry before sending to LLM so stale keys
@@ -1609,7 +1609,7 @@ def _merge_pc_aliases(
                     if candidate_num < existing_num:
                         aliases["source_turn"] = alias_source_turn
                 except ValueError:
-                    pass
+                    pass  # Non-numeric turn IDs — keep existing source_turn
 
         # Absorb unique relationships from the candidate
         pc_rels = pc_entry.get("relationships", [])
