@@ -79,6 +79,7 @@ Remaining work:
 - Batch processing mode for unattended overnight extraction
 - Provider setup documentation in `docs/usage.md`
 - Quality validation of `qwen2.5:7b` as a faster alternative to 14B
+- **Segmented extraction** (#141): Long sessions (300+ turns) are extracted in configurable segments to stay within model context limits. Each segment starts with a clean entity catalog; a reconciliation pass merges the results. Naturally parallelizable across GPU instances.
 
 Design implications for earlier phases:
 - Keep context loading modular (catalog-first) so smaller local models can handle targeted tasks

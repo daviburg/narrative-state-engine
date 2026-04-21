@@ -34,6 +34,7 @@ from catalog_merger import (
     _infer_type_from_prefix,
     _strip_any_prefix,
     _levenshtein,
+    _V1_FILENAMES,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -1766,6 +1767,222 @@ def _merge_pc_aliases(
     return merged
 
 
+# ---------------------------------------------------------------------------
+# Segmented extraction helpers (#141)
+# ---------------------------------------------------------------------------
+
+def _find_canonical(eid, ename, entity_map, id_aliases):
+    """Find canonical entity ID matching by ID or name."""
+    # Direct ID match
+    if eid in entity_map:
+        return eid
+    # Alias match
+    if eid in id_aliases:
+        return id_aliases[eid]
+    # Name match (case-insensitive) against existing entities
+    for existing_id, existing_entity in entity_map.items():
+        if existing_entity.get("name", "").lower() == ename and ename:
+            return existing_id
+    return None
+
+
+def _merge_entity_across_segments(target, source):
+    """Merge a source entity into a target entity from a different segment."""
+    # Update last_updated_turn to the later of the two
+    src_turn = source.get("last_updated_turn", "")
+    tgt_turn = target.get("last_updated_turn", "")
+    if src_turn > tgt_turn:
+        target["last_updated_turn"] = src_turn
+
+    # Update first_seen_turn to the earlier of the two
+    src_first = source.get("first_seen_turn", "")
+    tgt_first = target.get("first_seen_turn", "")
+    if src_first and (not tgt_first or src_first < tgt_first):
+        target["first_seen_turn"] = src_first
+
+    # Merge identity — prefer longer/non-stub
+    src_identity = source.get("identity", "")
+    tgt_identity = target.get("identity", "")
+    if len(src_identity) > len(tgt_identity) and "stub" not in src_identity.lower():
+        target["identity"] = src_identity
+
+    # Merge current_status — prefer the later segment's
+    if source.get("current_status") and src_turn >= tgt_turn:
+        target["current_status"] = source["current_status"]
+
+    # Merge stable_attributes — union, prefer non-empty values
+    src_attrs = source.get("stable_attributes", {})
+    tgt_attrs = target.setdefault("stable_attributes", {})
+    for key, val in src_attrs.items():
+        if key not in tgt_attrs or not tgt_attrs[key]:
+            tgt_attrs[key] = val
+
+    # Merge relationships — append new, skip duplicates
+    src_rels = source.get("relationships", [])
+    tgt_rels = target.setdefault("relationships", [])
+    existing_targets = {r.get("target_id") for r in tgt_rels}
+    for rel in src_rels:
+        if rel.get("target_id") not in existing_targets:
+            tgt_rels.append(rel)
+
+    # Replace stub notes with real data
+    if "stub" in target.get("notes", "").lower() and "stub" not in source.get("notes", "").lower():
+        target["notes"] = source.get("notes", "")
+
+
+def _dedup_events(events):
+    """Remove duplicate events across segments."""
+    seen = set()
+    unique = []
+    for event in events:
+        # Key: first source_turn + normalized description
+        key_turn = event.get("source_turns", [""])[0]
+        key_desc = event.get("description", "")[:100].strip().lower()
+        key = (key_turn, key_desc)
+        if key not in seen:
+            seen.add(key)
+            unique.append(event)
+    return unique
+
+
+def _reconcile_segments(segments):
+    """Merge catalogs and events from multiple extraction segments."""
+    merged_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    merged_events = []
+
+    # Entity reconciliation: match across segments by ID and name
+    entity_map = {}  # canonical_id -> merged entity
+    id_aliases = {}  # segment_id -> canonical_id
+
+    for seg in segments:
+        for filename, entities in seg["catalogs"].items():
+            for entity in entities:
+                eid = entity["id"]
+                ename = entity.get("name", "").lower()
+
+                # Check for existing entity by ID or name
+                canonical = _find_canonical(eid, ename, entity_map, id_aliases)
+
+                if canonical:
+                    # Merge into existing entity
+                    _merge_entity_across_segments(entity_map[canonical], entity)
+                    if eid != canonical:
+                        id_aliases[eid] = canonical
+                else:
+                    # New entity — add to map, record which catalog file it belongs to
+                    entry = entity.copy()
+                    entry["_catalog_file"] = filename
+                    entity_map[eid] = entry
+
+        # Accumulate events, rewriting entity IDs through alias map
+        for event in seg["events"]:
+            event_copy = event.copy()
+            # Rewrite related_entities through alias map
+            if "related_entities" in event_copy:
+                event_copy["related_entities"] = [
+                    id_aliases.get(eid, eid) for eid in event_copy["related_entities"]
+                ]
+            merged_events.append(event_copy)
+
+    # Distribute merged entities back into catalog structure
+    for eid, entity in entity_map.items():
+        target_file = entity.pop("_catalog_file", None)
+        if not target_file:
+            etype = entity.get("type", "character")
+            target_file = TYPE_TO_CATALOG_V1.get(etype, "characters.json")
+        merged_catalogs[target_file].append(entity)
+
+    # Deduplicate events by (source_turn, description hash)
+    merged_events = _dedup_events(merged_events)
+
+    # Re-sort events by source_turn
+    merged_events.sort(key=lambda e: e.get("source_turns", [""])[0])
+
+    return merged_catalogs, merged_events
+
+
+def _extract_segmented(
+    turn_dicts, session_dir, framework_dir, catalog_dir,
+    llm, min_confidence, dry_run, segment_size,
+):
+    """Extract in segments with fresh catalogs, then reconcile."""
+    segments = []
+    total = len(turn_dicts)
+    progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+
+    for start in range(0, total, segment_size):
+        end = min(start + segment_size, total)
+        segment_turns = turn_dicts[start:end]
+        segment_id = f"segment-{start // segment_size + 1}"
+
+        print(
+            f"\n  === {segment_id}: turns {segment_turns[0]['turn_id']}"
+            f" \u2013 {segment_turns[-1]['turn_id']} ({len(segment_turns)} turns) ==="
+        )
+
+        # Fresh catalog for each segment
+        seg_catalogs = {fn: [] for fn in _V1_FILENAMES}
+        seg_events = []
+
+        # Pre-seed player character (always present)
+        _ensure_player_character(seg_catalogs, segment_turns[0]["turn_id"])
+
+        # Process this segment's turns
+        for i, turn in enumerate(segment_turns):
+            turn_id = turn["turn_id"]
+
+            if i % 25 == 0 and i > 0:
+                entities_now = sum(len(v) for v in seg_catalogs.values())
+                print(f"  ... {turn_id} ({start + i + 1}/{total}, {entities_now} entities)")
+
+            try:
+                seg_catalogs, seg_events = extract_and_merge(
+                    turn, seg_catalogs, seg_events, llm, min_confidence,
+                    catalog_dir=None,
+                )
+            except Exception as e:
+                print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
+                continue
+
+        seg_entity_count = sum(len(v) for v in seg_catalogs.values())
+        print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events")
+
+        segments.append({
+            "id": segment_id,
+            "catalogs": seg_catalogs,
+            "events": seg_events,
+            "turn_range": (segment_turns[0]["turn_id"], segment_turns[-1]["turn_id"]),
+        })
+
+        # Save checkpoint after each segment
+        _save_progress(progress_file, segment_turns[-1]["turn_id"], total,
+                       seg_catalogs, dry_run,
+                       metadata={"segment": segment_id, "mode": "segmented"})
+
+    # Reconcile all segments into a single catalog
+    print(f"\n  === Reconciliation: merging {len(segments)} segments ===")
+    final_catalogs, final_events = _reconcile_segments(segments)
+
+    # Run standard post-batch passes on the reconciled result
+    dupes_merged, merge_map = _dedup_catalogs(final_catalogs)
+    if dupes_merged:
+        _rewrite_stale_ids(final_catalogs, final_events, merge_map)
+        print(f"  Post-reconciliation dedup merged {dupes_merged} duplicate(s)")
+
+    orphan_stubs = _post_batch_orphan_sweep(final_catalogs, final_events)
+    if orphan_stubs:
+        print(f"  Post-reconciliation orphan sweep: {orphan_stubs} stub(s)")
+
+    entities_final = sum(len(v) for v in final_catalogs.values())
+    print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events")
+
+    if not dry_run:
+        save_catalogs(catalog_dir, final_catalogs)
+        save_events(catalog_dir, final_events)
+        _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
+                       total, final_catalogs, dry_run=False, completed=True)
+
+
 def extract_semantic_batch(
     turn_dicts: list,
     session_dir: str,
@@ -1774,6 +1991,7 @@ def extract_semantic_batch(
     dry_run: bool = False,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     overrides: dict | None = None,
+    segment_size: int = 0,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -1791,6 +2009,8 @@ def extract_semantic_batch(
             ``base_url``. Any keys supplied here take precedence over values
             loaded from ``config_path``; settings not provided in ``overrides``
             continue to use the configuration file values.
+        segment_size: Extract in segments of N turns with fresh catalogs, then
+            reconcile. 0 = no segmentation (legacy behavior).
     """
     _reset_pc_failure_tracking()
 
@@ -1801,6 +2021,15 @@ def extract_semantic_batch(
         return
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
+
+    # Segmented extraction: process in chunks with fresh catalogs, then reconcile
+    if segment_size > 0 and len(turn_dicts) > segment_size:
+        _extract_segmented(
+            turn_dicts, session_dir, framework_dir, catalog_dir,
+            llm, min_confidence, dry_run, segment_size,
+        )
+        return
+
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
 
@@ -1958,6 +2187,7 @@ def _save_progress(
     catalogs: dict,
     dry_run: bool,
     completed: bool = False,
+    metadata: dict | None = None,
 ) -> None:
     """Save extraction progress for resumption."""
     if dry_run:
@@ -1969,6 +2199,8 @@ def _save_progress(
         "entities_discovered": entities,
         "completed": completed,
     }
+    if metadata:
+        progress.update(metadata)
     os.makedirs(os.path.dirname(progress_file), exist_ok=True)
     with open(progress_file, "w", encoding="utf-8") as f:
         json.dump(progress, f, indent=2)

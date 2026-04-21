@@ -480,6 +480,13 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Skip the stub backfill pass after extraction.",
     )
+    parser.add_argument(
+        "--segment-size",
+        type=int,
+        default=0,
+        help="Extract in segments of N turns with fresh catalogs, then reconcile. "
+             "0 = no segmentation (legacy behavior). Recommended: 100-150 for 14B models.",
+    )
     return parser
 
 
@@ -662,6 +669,7 @@ def main() -> None:
         extract_semantic_batch(
             turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run,
             overrides=llm_overrides or None,
+            segment_size=args.segment_size,
         )
 
         # Stub backfill pass (#128, #131 — now runs by default)
