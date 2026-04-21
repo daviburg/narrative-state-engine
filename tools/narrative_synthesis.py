@@ -506,6 +506,64 @@ def should_synthesize(entity_id: str, event_count: int, entity_type: str) -> boo
 # Step 4: Page Assembly
 # ---------------------------------------------------------------------------
 
+
+# -- Cross-page link helpers ------------------------------------------------
+
+def _resolve_link(target_id: str, name_index: dict[str, tuple[str, str]],
+                  source_type_dir: str) -> str | None:
+    """Return a markdown link string for *target_id*, or None."""
+    if not name_index or not source_type_dir or target_id not in name_index:
+        return None
+    name, generic_path = name_index[target_id]
+    # generic_path is always ../type/id.md — use simple id.md for same-dir
+    target_type_dir = generic_path.split("/")[1] if "/" in generic_path else ""
+    src_dir = os.path.basename(source_type_dir)
+    if target_type_dir == src_dir:
+        return f"[{name}]({target_id}.md)"
+    return f"[{name}]({generic_path})"
+
+
+def _safe_replace_first(text: str, name: str, link: str) -> str:
+    """Replace first occurrence of *name* that isn't inside a markdown link."""
+    idx = 0
+    while True:
+        pos = text.find(name, idx)
+        if pos == -1:
+            return text
+        before = text[:pos]
+        if before.count("[") > before.count("]"):
+            idx = pos + len(name)
+            continue
+        return text[:pos] + link + text[pos + len(name):]
+
+
+def _linkify_prose(prose: str, name_index: dict[str, tuple[str, str]] | None,
+                   source_type_dir: str | None, self_id: str,
+                   linked_entities: set[str]) -> str:
+    """Link first mention of each known entity name in *prose*."""
+    if not name_index or not source_type_dir:
+        return prose
+
+    candidates: list[tuple[str, str, str]] = []  # (name, eid, link)
+    for eid, (name, _rel) in name_index.items():
+        if eid == self_id or eid in linked_entities or len(name) < 4:
+            continue
+        link = _resolve_link(eid, name_index, source_type_dir)
+        if link:
+            candidates.append((name, eid, link))
+
+    # Longest-first to avoid partial matches
+    candidates.sort(key=lambda x: len(x[0]), reverse=True)
+
+    for name, eid, link in candidates:
+        new_prose = _safe_replace_first(prose, name, link)
+        if new_prose != prose:
+            prose = new_prose
+            linked_entities.add(eid)
+
+    return prose
+
+
 def _escape_table_cell(text: str) -> str:
     """Escape text for safe inclusion in a markdown table cell."""
     text = str(text)
@@ -556,19 +614,44 @@ def _build_infobox(entity_id: str, catalog_data: dict | None,
     return "\n".join(lines)
 
 
-def _build_event_timeline(events: list[dict]) -> str:
+def _build_event_timeline(events: list[dict], *,
+                          name_index: dict[str, tuple[str, str]] | None = None,
+                          source_type_dir: str | None = None,
+                          self_id: str = "",
+                          linked_entities: set[str] | None = None) -> str:
     """Build a chronological event timeline table."""
+    if linked_entities is None:
+        linked_entities = set()
     lines = ["| Turn | Type | Description |", "|---|---|---|"]
     for evt in events:
         turns = evt.get("source_turns", [])
         turn_str = ", ".join(turns) if turns else "—"
         etype = _escape_table_cell(evt.get("type", "other"))
-        desc = _escape_table_cell(evt.get("description", ""))
+        desc = evt.get("description", "")
+        # Linkify related entities in description
+        if name_index and source_type_dir:
+            for eid in evt.get("related_entities", []):
+                if eid == self_id or eid in linked_entities:
+                    continue
+                if eid not in name_index:
+                    continue
+                ename, _ = name_index[eid]
+                if len(ename) < 4:
+                    continue
+                link = _resolve_link(eid, name_index, source_type_dir)
+                if link and ename in desc:
+                    desc = _safe_replace_first(desc, ename, link)
+                    linked_entities.add(eid)
+        desc = _escape_table_cell(desc)
         lines.append(f"| {turn_str} | {etype} | {desc} |")
     return "\n".join(lines)
 
 
-def _build_relationship_table(arc_summaries: dict | None) -> str:
+def _build_relationship_table(arc_summaries: dict | None, *,
+                              name_index: dict[str, tuple[str, str]] | None = None,
+                              source_type_dir: str | None = None,
+                              self_id: str = "",
+                              linked_entities: set[str] | None = None) -> str:
     """Build a relationship arcs table from sidecar data."""
     if not arc_summaries:
         return ""
@@ -577,14 +660,23 @@ def _build_relationship_table(arc_summaries: dict | None) -> str:
     if not arcs:
         return ""
 
+    if linked_entities is None:
+        linked_entities = set()
+
     lines = ["| Entity | Current Relationship | Interactions |",
              "|---|---|---|"]
     for target_id in sorted(arcs.keys()):
         arc = arcs[target_id]
-        name = _infer_name_from_id(target_id)
+        link = _resolve_link(target_id, name_index, source_type_dir) if name_index else None
+        if link:
+            display = link
+            linked_entities.add(target_id)
+        else:
+            name = _infer_name_from_id(target_id)
+            display = f"{name} ({target_id})"
         current = _escape_table_cell(arc.get("current_relationship", ""))
         count = arc.get("interaction_count", 0)
-        lines.append(f"| {name} ({target_id}) | {current} | {count} |")
+        lines.append(f"| {display} | {current} | {count} |")
 
     return "\n".join(lines)
 
@@ -614,7 +706,9 @@ def assemble_character_page(entity_id: str, entity_name: str,
                             catalog_data: dict | None,
                             derived_profile: dict | None,
                             arc_summaries: dict | None,
-                            all_events: list[dict]) -> str:
+                            all_events: list[dict], *,
+                            name_index: dict[str, tuple[str, str]] | None = None,
+                            source_type_dir: str | None = None) -> str:
     """Assemble a full character wiki page.
 
     Args:
@@ -626,10 +720,14 @@ def assemble_character_page(entity_id: str, entity_name: str,
         derived_profile: Event-derived profile or None.
         arc_summaries: Arc sidecar data or None.
         all_events: All events for this entity (for timeline).
+        name_index: Entity ID → (name, relative_md_path) mapping.
+        source_type_dir: Directory name of this entity's type.
 
     Returns:
         Complete markdown page string.
     """
+    linked: set[str] = set()
+
     lines = [f"# {entity_name}", ""]
 
     if lede:
@@ -639,15 +737,20 @@ def assemble_character_page(entity_id: str, entity_name: str,
     lines += ["## Overview", "",
               _build_infobox(entity_id, catalog_data, derived_profile), ""]
 
-    # Biography
+    # Biography — linkify prose
     lines += ["## Biography", ""]
     for phase_name, text in phase_texts:
         if phase_name:
             lines += [f"### {phase_name}", ""]
+        text = _linkify_prose(text, name_index, source_type_dir,
+                              entity_id, linked)
         lines += [text, ""]
 
     # Relationships
-    rel_table = _build_relationship_table(arc_summaries)
+    rel_table = _build_relationship_table(
+        arc_summaries, name_index=name_index,
+        source_type_dir=source_type_dir, self_id=entity_id,
+        linked_entities=linked)
     if rel_table:
         lines += ["## Relationships", "", rel_table, ""]
 
@@ -658,7 +761,10 @@ def assemble_character_page(entity_id: str, entity_name: str,
 
     # Event Timeline
     lines += ["## Event Timeline", "",
-              _build_event_timeline(all_events), ""]
+              _build_event_timeline(all_events, name_index=name_index,
+                                    source_type_dir=source_type_dir,
+                                    self_id=entity_id,
+                                    linked_entities=linked), ""]
 
     # Footer
     lines += ["---",
@@ -671,8 +777,11 @@ def assemble_location_page(entity_id: str, entity_name: str,
                            significance: str,
                            catalog_data: dict | None,
                            derived_profile: dict | None,
-                           all_events: list[dict]) -> str:
+                           all_events: list[dict], *,
+                           name_index: dict[str, tuple[str, str]] | None = None,
+                           source_type_dir: str | None = None) -> str:
     """Assemble a location wiki page."""
+    linked: set[str] = set()
     lines = [f"# {entity_name}", ""]
 
     identity = (catalog_data or {}).get("identity", "")
@@ -683,13 +792,18 @@ def assemble_location_page(entity_id: str, entity_name: str,
     lines += ["## Overview", "",
               _build_infobox(entity_id, catalog_data, derived_profile), ""]
 
-    # Significance
+    # Significance — linkify prose
     if significance:
+        significance = _linkify_prose(significance, name_index,
+                                      source_type_dir, entity_id, linked)
         lines += ["## Significance", "", significance, ""]
 
     # Key Events
     lines += ["## Key Events", "",
-              _build_event_timeline(all_events), ""]
+              _build_event_timeline(all_events, name_index=name_index,
+                                    source_type_dir=source_type_dir,
+                                    self_id=entity_id,
+                                    linked_entities=linked), ""]
 
     # Connected entities (from catalog relationships)
     if catalog_data and catalog_data.get("relationships"):
@@ -697,9 +811,15 @@ def assemble_location_page(entity_id: str, entity_name: str,
                   "| Entity | Connection |", "|---|---|"]
         for rel in catalog_data["relationships"]:
             target = rel.get("target_id", "")
-            name = _infer_name_from_id(target)
+            link = _resolve_link(target, name_index, source_type_dir) if name_index else None
+            if link:
+                display = link
+                linked.add(target)
+            else:
+                name = _infer_name_from_id(target)
+                display = f"{name} ({target})"
             cur = _escape_table_cell(rel.get("current_relationship", ""))
-            lines.append(f"| {name} ({target}) | {cur} |")
+            lines.append(f"| {display} | {cur} |")
         lines.append("")
 
     lines += ["---",
@@ -711,8 +831,11 @@ def assemble_faction_page(entity_id: str, entity_name: str,
                           history: str,
                           catalog_data: dict | None,
                           derived_profile: dict | None,
-                          all_events: list[dict]) -> str:
+                          all_events: list[dict], *,
+                          name_index: dict[str, tuple[str, str]] | None = None,
+                          source_type_dir: str | None = None) -> str:
     """Assemble a faction wiki page."""
+    linked: set[str] = set()
     lines = [f"# {entity_name}", ""]
 
     identity = (catalog_data or {}).get("identity", "")
@@ -723,8 +846,10 @@ def assemble_faction_page(entity_id: str, entity_name: str,
     lines += ["## Overview", "",
               _build_infobox(entity_id, catalog_data, derived_profile), ""]
 
-    # History
+    # History — linkify prose
     if history:
+        history = _linkify_prose(history, name_index, source_type_dir,
+                                 entity_id, linked)
         lines += ["## History", "", history, ""]
 
     # Members (from event co-occurrences)
@@ -739,7 +864,13 @@ def assemble_faction_page(entity_id: str, entity_name: str,
         lines += ["## Known Members", "",
                   "| Member | First Seen |", "|---|---|"]
         for mid in sorted(member_ids):
-            name = _infer_name_from_id(mid)
+            link = _resolve_link(mid, name_index, source_type_dir) if name_index else None
+            if link:
+                display = link
+                linked.add(mid)
+            else:
+                name = _infer_name_from_id(mid)
+                display = f"{name} ({mid})"
             # Find first event with this member
             first_turn = ""
             for evt in all_events:
@@ -748,12 +879,15 @@ def assemble_faction_page(entity_id: str, entity_name: str,
                     turns = evt.get("source_turns", [])
                     first_turn = turns[0] if turns else ""
                     break
-            lines.append(f"| {name} ({mid}) | {first_turn} |")
+            lines.append(f"| {display} | {first_turn} |")
         lines.append("")
 
     # Key Events
     lines += ["## Key Events", "",
-              _build_event_timeline(all_events), ""]
+              _build_event_timeline(all_events, name_index=name_index,
+                                    source_type_dir=source_type_dir,
+                                    self_id=entity_id,
+                                    linked_entities=linked), ""]
 
     lines += ["---",
               f"*Generated from events data — do not edit manually.*"]
@@ -764,8 +898,11 @@ def assemble_item_page(entity_id: str, entity_name: str,
                        significance: str,
                        catalog_data: dict | None,
                        derived_profile: dict | None,
-                       all_events: list[dict]) -> str:
+                       all_events: list[dict], *,
+                       name_index: dict[str, tuple[str, str]] | None = None,
+                       source_type_dir: str | None = None) -> str:
     """Assemble an item wiki page."""
+    linked: set[str] = set()
     lines = [f"# {entity_name}", ""]
 
     identity = (catalog_data or {}).get("identity", "")
@@ -776,13 +913,18 @@ def assemble_item_page(entity_id: str, entity_name: str,
     lines += ["## Overview", "",
               _build_infobox(entity_id, catalog_data, derived_profile), ""]
 
-    # Significance
+    # Significance — linkify prose
     if significance:
+        significance = _linkify_prose(significance, name_index,
+                                      source_type_dir, entity_id, linked)
         lines += ["## Significance", "", significance, ""]
 
     # Key Events
     lines += ["## Key Events", "",
-              _build_event_timeline(all_events), ""]
+              _build_event_timeline(all_events, name_index=name_index,
+                                    source_type_dir=source_type_dir,
+                                    self_id=entity_id,
+                                    linked_entities=linked), ""]
 
     lines += ["---",
               f"*Generated from events data — do not edit manually.*"]
@@ -905,7 +1047,9 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
                       catalog_data: dict | None,
                       arc_summaries: dict | None,
                       llm_client,
-                      entity_type: str | None = None) -> tuple[str, dict]:
+                      entity_type: str | None = None, *,
+                      name_index: dict[str, tuple[str, str]] | None = None,
+                      source_type_dir: str | None = None) -> tuple[str, dict]:
     """Run the full synthesis pipeline for a single entity.
 
     Args:
@@ -915,6 +1059,8 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
         arc_summaries: Arc sidecar data or None.
         llm_client: LLMClient instance.
         entity_type: Override entity type (otherwise inferred).
+        name_index: Entity ID → (name, relative_md_path) mapping.
+        source_type_dir: Directory name of this entity's type.
 
     Returns:
         Tuple of (markdown_page, sidecar_dict).
@@ -923,23 +1069,30 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
     entity_name = (catalog_data or {}).get("name") or _infer_name_from_id(entity_id)
     derived_profile = None if catalog_data else build_event_derived_profile(entity_id, entity_events)
 
+    link_kw = dict(name_index=name_index, source_type_dir=source_type_dir)
+
     if etype == "location":
         return _synthesize_location(entity_id, entity_name, entity_events,
-                                    catalog_data, derived_profile, llm_client)
+                                    catalog_data, derived_profile, llm_client,
+                                    **link_kw)
     elif etype == "faction":
         return _synthesize_faction(entity_id, entity_name, entity_events,
-                                   catalog_data, derived_profile, llm_client)
+                                   catalog_data, derived_profile, llm_client,
+                                   **link_kw)
     elif etype == "item":
         return _synthesize_item(entity_id, entity_name, entity_events,
-                                catalog_data, derived_profile, llm_client)
+                                catalog_data, derived_profile, llm_client,
+                                **link_kw)
     else:
         return _synthesize_character(entity_id, entity_name, entity_events,
                                      catalog_data, derived_profile,
-                                     arc_summaries, llm_client)
+                                     arc_summaries, llm_client,
+                                     **link_kw)
 
 
 def _synthesize_character(entity_id, entity_name, events, catalog_data,
-                          derived_profile, arc_summaries, llm_client):
+                          derived_profile, arc_summaries, llm_client, *,
+                          name_index=None, source_type_dir=None):
     """Synthesize a character page with per-phase biography."""
     phases = segment_phases(events, entity_id)
 
@@ -974,7 +1127,8 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
     # Assemble page
     page = assemble_character_page(
         entity_id, entity_name, lede, phase_texts,
-        catalog_data, derived_profile, arc_summaries, events)
+        catalog_data, derived_profile, arc_summaries, events,
+        name_index=name_index, source_type_dir=source_type_dir)
 
     # Provenance validation across all phases
     available = sorted(all_available_turns, key=_parse_turn_number)
@@ -996,13 +1150,16 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
 
 
 def _synthesize_location(entity_id, entity_name, events, catalog_data,
-                         derived_profile, llm_client):
+                         derived_profile, llm_client, *,
+                         name_index=None, source_type_dir=None):
     """Synthesize a location page."""
     loc_input = assemble_location_input(entity_id, events, catalog_data)
     significance = generate_location_summary(llm_client, loc_input)
 
     page = assemble_location_page(entity_id, entity_name, significance,
-                                  catalog_data, derived_profile, events)
+                                  catalog_data, derived_profile, events,
+                                  name_index=name_index,
+                                  source_type_dir=source_type_dir)
 
     available_turns = set()
     for evt in events:
@@ -1022,13 +1179,16 @@ def _synthesize_location(entity_id, entity_name, events, catalog_data,
 
 
 def _synthesize_faction(entity_id, entity_name, events, catalog_data,
-                        derived_profile, llm_client):
+                        derived_profile, llm_client, *,
+                        name_index=None, source_type_dir=None):
     """Synthesize a faction page."""
     fac_input = assemble_faction_input(entity_id, events, catalog_data)
     history = generate_faction_history(llm_client, fac_input)
 
     page = assemble_faction_page(entity_id, entity_name, history,
-                                 catalog_data, derived_profile, events)
+                                 catalog_data, derived_profile, events,
+                                 name_index=name_index,
+                                 source_type_dir=source_type_dir)
 
     available_turns = set()
     for evt in events:
@@ -1048,13 +1208,16 @@ def _synthesize_faction(entity_id, entity_name, events, catalog_data,
 
 
 def _synthesize_item(entity_id, entity_name, events, catalog_data,
-                     derived_profile, llm_client):
+                     derived_profile, llm_client, *,
+                     name_index=None, source_type_dir=None):
     """Synthesize an item page."""
     item_input = assemble_item_input(entity_id, events, catalog_data)
     significance = generate_item_summary(llm_client, item_input)
 
     page = assemble_item_page(entity_id, entity_name, significance,
-                              catalog_data, derived_profile, events)
+                              catalog_data, derived_profile, events,
+                              name_index=name_index,
+                              source_type_dir=source_type_dir)
 
     available_turns = set()
     for evt in events:
