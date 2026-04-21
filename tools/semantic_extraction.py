@@ -30,7 +30,6 @@ from catalog_merger import (
     mark_dormant_relationships,
     normalize_entity_id,
     TYPE_TO_CATALOG_V1,
-    TYPE_TO_PREFIX,
     _infer_type_from_prefix,
     _strip_any_prefix,
     _levenshtein,
@@ -53,7 +52,7 @@ PC_ALLOWED_ATTRS = {
 }
 
 # Consecutive PC extraction failure tracking (#133)
-_pc_consecutive_failures = 0
+_pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
 _PC_FAILURE_WARN_THRESHOLD = 10
 _PC_SKIP_THRESHOLD = 20  # Skip PC extraction after this many consecutive failures (#149)
 

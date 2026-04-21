@@ -11,8 +11,6 @@ from semantic_extraction import (
     _format_prior_entity_context,
     _post_batch_orphan_sweep,
     format_detail_prompt,
-    _compact_relationships_with_arcs,
-    _build_volatile_digest,
     _extract_turn_number,
     _extract_themes,
 )
