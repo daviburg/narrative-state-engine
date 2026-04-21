@@ -61,7 +61,7 @@ Rules:
    Integration", "Building the Settlement"). Do NOT use generic labels
    like "Phase" or "Part". Do NOT include turn numbers in the title.
    Then write the biography prose below that line, without any markdown
-   headings.\
+   headings.
 """
 
 LEDE_SYSTEM_PROMPT = """\
@@ -457,6 +457,8 @@ def _parse_biography_response(raw_response: str, fallback_name: str) -> tuple[st
     if lines and lines[0].upper().startswith("TITLE:"):
         title = lines[0].split(":", 1)[1].strip()
         prose = lines[1].strip() if len(lines) > 1 else ""
+        if not title:
+            title = fallback_name
     else:
         title = fallback_name
         prose = raw_response.strip()
@@ -1096,4 +1098,12 @@ def needs_regeneration(entity_id: str, event_count: int,
         return True
 
     prev_count = existing.get("source_data", {}).get("events_count", 0)
-    return event_count != prev_count
+    if event_count != prev_count:
+        return True
+
+    # Regenerate if any cached phase is missing a descriptive title
+    for phase in existing.get("phases", []):
+        if "title" not in phase:
+            return True
+
+    return False

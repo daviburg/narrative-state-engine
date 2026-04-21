@@ -1044,3 +1044,36 @@ class TestBiographyTitleParsing:
         assert "### Capture and Integration (turns" in page
         # The generic Phase label should NOT appear
         assert "Phase (turns" not in page
+
+    def test_parse_biography_response_empty_title_uses_fallback(self):
+        """TITLE: with no content falls back to fallback_name."""
+        raw = "TITLE:   \n\nProse about something."
+        title, prose = _parse_biography_response(raw, "Fallback Name")
+        assert title == "Fallback Name"
+        assert prose == "Prose about something."
+
+    def test_needs_regeneration_missing_title_in_sidecar(self):
+        """Sidecar phases without 'title' trigger regeneration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sidecar_path = os.path.join(tmpdir, "char-test.synthesis.json")
+
+            # Sidecar with matching event count but no title in phases
+            sidecar = {
+                "source_data": {"events_count": 5},
+                "phases": [
+                    {"name": "Phase (turns turn-001–turn-050)",
+                     "turn_range": ["turn-001", "turn-050"]}
+                ],
+            }
+            with open(sidecar_path, "w") as f:
+                json.dump(sidecar, f)
+
+            # Missing title → needs regeneration
+            assert needs_regeneration("char-test", 5, sidecar_path) is True
+
+            # Add title → skip regeneration
+            sidecar["phases"][0]["title"] = "Awakening"
+            with open(sidecar_path, "w") as f:
+                json.dump(sidecar, f)
+
+            assert needs_regeneration("char-test", 5, sidecar_path) is False
