@@ -240,3 +240,78 @@ def test_create_orphan_stubs_earliest_turn():
     lyra = [e for e in catalogs["characters.json"] if e["id"] == "char-lyrawyn"]
     assert len(lyra) == 1
     assert lyra[0]["first_seen_turn"] == "turn-141"
+
+
+# ---------------------------------------------------------------------------
+# PR review comment fixes — additional tests
+# ---------------------------------------------------------------------------
+
+def test_earliest_mention_numeric_comparison():
+    """Turn IDs are compared numerically, not lexicographically.
+
+    'turn-999' should sort before 'turn-1000' even though string comparison
+    would place 'turn-1000' first.
+    """
+    events = [
+        _make_event("evt-1", "social", "Lyrawyn appears.", ["char-player"], ["turn-1000"]),
+        _make_event("evt-2", "social", "Lyrawyn again.", ["char-player"], ["turn-999"]),
+    ]
+    result = _find_earliest_mention("char-lyrawyn", "Lyrawyn", events)
+    assert result == "turn-999"
+
+
+def test_earliest_mention_multi_source_turns():
+    """When an event has multiple source_turns, the smallest is chosen."""
+    events = [
+        _make_event("evt-1", "birth", "A girl named Lyrawyn is born.",
+                     ["char-player"], ["turn-143", "turn-141", "turn-142"]),
+    ]
+    result = _find_earliest_mention("char-lyrawyn", "Lyrawyn", events)
+    assert result == "turn-141"
+
+
+def test_birth_entity_id_sanitized():
+    """Child names with apostrophes or special chars produce valid entity IDs."""
+    events = [
+        _make_event("evt-1", "birth", "A boy named Kel'thas is born.",
+                     ["char-player"], ["turn-200"]),
+    ]
+    catalogs = {"characters.json": [{"id": "char-player", "name": "Player"}]}
+    created = _ensure_birth_entities(events, catalogs)
+    assert len(created) == 1
+    # The apostrophe should be stripped, producing a valid schema ID
+    child_id = created[0]
+    import re
+    assert re.match(r'^char-[a-z0-9]+(-[a-z0-9]+)*$', child_id), f"Invalid ID: {child_id}"
+
+
+def test_birth_entity_picks_earliest_source_turn():
+    """Birth entity first_seen_turn uses the smallest source turn."""
+    events = [
+        _make_event("evt-1", "birth", "A girl named Lyrawyn is born.",
+                     ["char-player"], ["turn-143", "turn-141"]),
+    ]
+    catalogs = {"characters.json": [{"id": "char-player", "name": "Player"}]}
+    _ensure_birth_entities(events, catalogs)
+    entity = [e for e in catalogs["characters.json"] if e["id"] == "char-lyrawyn"][0]
+    assert entity["first_seen_turn"] == "turn-141"
+
+
+def test_create_orphan_stubs_uses_all_events():
+    """Stubs find earliest mention from all_events, not just current-turn events."""
+    # Historical event mentioning Lyrawyn by name (already merged)
+    historical = [
+        _make_event("evt-old", "birth", "A girl named Lyrawyn is born.",
+                     ["char-player"], ["turn-141"]),
+    ]
+    # Current turn event referencing char-lyrawyn by ID (orphan)
+    current = [
+        _make_event("evt-new", "social", "The child dances.",
+                     ["char-lyrawyn"], ["turn-200"]),
+    ]
+    catalogs = {"characters.json": [{"id": "char-player", "name": "Player"}]}
+    _create_orphan_stubs(catalogs, current, "turn-200",
+                         all_events=historical + current)
+    lyra = [e for e in catalogs["characters.json"] if e["id"] == "char-lyrawyn"]
+    assert len(lyra) == 1
+    assert lyra[0]["first_seen_turn"] == "turn-141"

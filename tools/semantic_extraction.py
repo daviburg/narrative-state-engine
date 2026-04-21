@@ -841,12 +841,18 @@ _GENERIC_STEMS = {
 }
 
 
-def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str) -> None:
+def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
+                        all_events: list | None = None) -> None:
     """Create stub catalog entries for entity IDs referenced in events but missing from catalogs.
 
     Stubs contain id, inferred name (from ID), inferred type (from prefix),
     first_seen_turn, and a source marker.
+
+    *all_events* is the full accumulated event list used for earliest-mention
+    lookup.  When ``None``, falls back to *events* (current-turn only).
     """
+    if all_events is None:
+        all_events = events
     known_ids = _collect_all_entity_ids(catalogs)
 
     orphan_ids: set[str] = set()
@@ -873,7 +879,7 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str) -> None:
         if not catalog_file:
             catalog_file = "characters.json"  # default fallback
 
-        earliest = _find_earliest_mention(eid, inferred_name, events)
+        earliest = _find_earliest_mention(eid, inferred_name, all_events)
         effective_turn = earliest or turn_id
         stub = {
             "id": eid,
@@ -911,9 +917,22 @@ def _ensure_birth_entities(events_list: list, catalogs: dict) -> list[str]:
             continue
 
         child_name = match.group(1)
-        child_id = f"char-{child_name.lower().replace(' ', '-')}"
+        # Sanitize to valid entity ID chars: lowercase alphanumeric + hyphens
+        slug = re.sub(r'[^a-z0-9]+', '-', child_name.lower()).strip('-')
+        if not slug:
+            continue
+        child_id = f"char-{slug}"
         source_turns = event.get("source_turns", [])
-        first_turn = source_turns[0] if source_turns else event.get("source_turn")
+        # Pick the earliest source turn (by parsed number) for accuracy
+        first_turn = None
+        first_turn_num = None
+        for st in source_turns:
+            sn = _parse_turn_number(st)
+            if sn is not None and (first_turn_num is None or sn < first_turn_num):
+                first_turn = st
+                first_turn_num = sn
+        if first_turn is None:
+            first_turn = event.get("source_turn")
 
         # Ensure child is in related_entities regardless of whether entity exists
         rel = event.get("related_entities", [])
@@ -934,7 +953,11 @@ def _ensure_birth_entities(events_list: list, catalogs: dict) -> list[str]:
             "last_updated_turn": first_turn or "turn-001",
             "notes": "Auto-created from birth event.",
         }
-        catalogs.setdefault(catalog_file, []).append(entity)
+        if not _validate_entity(entity):
+            print(f"  WARNING: Birth entity '{child_id}' failed validation, skipping",
+                  file=sys.stderr)
+            continue
+        merge_entity(catalogs, entity)
         known_ids.add(child_id)
         created.append(child_id)
         print(f"  BIRTH: Created entity '{child_id}' ({child_name}) from birth event")
@@ -1204,7 +1227,8 @@ def extract_and_merge(
 
         # --- Phase 2: Create stub entities for orphan IDs (#106) ---
         if valid_events:
-            _create_orphan_stubs(catalogs, valid_events, turn_id)
+            _create_orphan_stubs(catalogs, valid_events, turn_id,
+                                all_events=events_list + valid_events)
             merge_events(events_list, valid_events)
 
         # --- Phase 3: Create entities for birth events (#136) ---
@@ -1481,8 +1505,13 @@ def _is_stub_entity(entity: dict) -> bool:
 
 def _find_earliest_mention(entity_id: str, entity_name: str | None,
                            events_list: list) -> str | None:
-    """Find the earliest turn where entity appears by ID or name in events."""
+    """Find the earliest turn where entity appears by ID or name in events.
+
+    Uses parsed turn numbers for comparison so that turn-1000 sorts after
+    turn-999 regardless of string ordering.
+    """
     earliest: str | None = None
+    earliest_num: int | None = None
     name_lower = entity_name.lower() if entity_name and len(entity_name) >= 3 else None
     for event in events_list:
         turns = event.get("source_turns", [])
@@ -1496,8 +1525,12 @@ def _find_earliest_mention(entity_id: str, entity_name: str | None,
             matched = True
         if matched:
             for t in turns:
-                if earliest is None or t < earliest:
+                t_num = _parse_turn_number(t)
+                if t_num is None:
+                    continue
+                if earliest_num is None or t_num < earliest_num:
                     earliest = t
+                    earliest_num = t_num
     return earliest
 
 
