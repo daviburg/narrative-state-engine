@@ -32,6 +32,11 @@ from synthesis import (
     _infer_type_from_id,
     _parse_turn_number,
 )
+from temporal_extraction import (
+    format_season_label,
+    get_season_at_turn,
+    estimate_day_from_anchor,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -574,8 +579,14 @@ def _escape_table_cell(text: str) -> str:
 
 
 def _build_infobox(entity_id: str, catalog_data: dict | None,
-                   derived_profile: dict | None) -> str:
-    """Build an infobox table from catalog or event-derived profile."""
+                   derived_profile: dict | None, *,
+                   timeline_data: list[dict] | None = None,
+                   timeline_anchor: dict | None = None) -> str:
+    """Build an infobox table from catalog or event-derived profile.
+
+    If *timeline_data* is provided, birth date and season information
+    are included for characters with birth events.
+    """
     lines = ["| | |", "|---|---|"]
 
     if catalog_data:
@@ -587,6 +598,13 @@ def _build_infobox(entity_id: str, catalog_data: dict | None,
             lines.append(f"| **First Seen** | {first_seen} |")
         if last_updated:
             lines.append(f"| **Last Updated** | {last_updated} |")
+        # Timeline-enriched birth date
+        if timeline_data and first_seen:
+            day_info = estimate_day_from_anchor(first_seen, timeline_anchor)
+            season = get_season_at_turn(timeline_data, first_seen)
+            if day_info and day_info.get("confidence", 0) > 0:
+                season_str = f" ({format_season_label(season)})" if season else ""
+                lines.append(f"| **First Seen Day** | ~Day {day_info['estimated_day']}{season_str} |")
         stable = catalog_data.get("stable_attributes", {})
         for key, attr in stable.items():
             if key == "aliases":
@@ -618,11 +636,22 @@ def _build_event_timeline(events: list[dict], *,
                           name_index: dict[str, tuple[str, str]] | None = None,
                           source_type_dir: str | None = None,
                           self_id: str = "",
-                          linked_entities: set[str] | None = None) -> str:
-    """Build a chronological event timeline table."""
+                          linked_entities: set[str] | None = None,
+                          timeline_data: list[dict] | None = None,
+                          timeline_anchor: dict | None = None) -> str:
+    """Build a chronological event timeline table.
+
+    If *timeline_data* is provided, an **Est. Day** column is appended
+    showing the estimated in-game day for each event.
+    """
     if linked_entities is None:
         linked_entities = set()
-    lines = ["| Turn | Type | Description |", "|---|---|---|"]
+    show_day = timeline_data is not None
+    if show_day:
+        lines = ["| Turn | Type | Est. Day | Description |",
+                 "|---|---|---|---|"]
+    else:
+        lines = ["| Turn | Type | Description |", "|---|---|---|"]
     for evt in events:
         turns = evt.get("source_turns", [])
         turn_str = ", ".join(turns) if turns else "—"
@@ -644,7 +673,13 @@ def _build_event_timeline(events: list[dict], *,
                     desc = _safe_replace_first(desc, ename, link)
                     linked_entities.add(eid)
         desc = _escape_table_cell(desc)
-        lines.append(f"| {turn_str} | {etype} | {desc} |")
+        if show_day:
+            first_turn = turns[0] if turns else None
+            day_info = estimate_day_from_anchor(first_turn, timeline_anchor) if first_turn else None
+            day_str = f"~{day_info['estimated_day']}" if day_info and day_info.get('confidence', 0) > 0 else "—"
+            lines.append(f"| {turn_str} | {etype} | {day_str} | {desc} |")
+        else:
+            lines.append(f"| {turn_str} | {etype} | {desc} |")
     return "\n".join(lines)
 
 
@@ -710,7 +745,9 @@ def assemble_character_page(entity_id: str, entity_name: str,
                             arc_summaries: dict | None,
                             all_events: list[dict], *,
                             name_index: dict[str, tuple[str, str]] | None = None,
-                            source_type_dir: str | None = None) -> str:
+                            source_type_dir: str | None = None,
+                            timeline_data: list[dict] | None = None,
+                            timeline_anchor: dict | None = None) -> str:
     """Assemble a full character wiki page.
 
     Args:
@@ -725,6 +762,8 @@ def assemble_character_page(entity_id: str, entity_name: str,
         name_index: Entity ID → (name, relative_md_path) mapping.
         source_type_dir: Directory path for this entity type's catalog
             (for example, ``.../catalogs/characters``).
+        timeline_data: Timeline entries for day/season enrichment.
+        timeline_anchor: Reference anchor dict for day estimation.
 
     Returns:
         Complete markdown page string.
@@ -738,7 +777,9 @@ def assemble_character_page(entity_id: str, entity_name: str,
 
     # Overview / infobox
     lines += ["## Overview", "",
-              _build_infobox(entity_id, catalog_data, derived_profile), ""]
+              _build_infobox(entity_id, catalog_data, derived_profile,
+                             timeline_data=timeline_data,
+                             timeline_anchor=timeline_anchor), ""]
 
     # Biography — linkify prose
     lines += ["## Biography", ""]
@@ -767,7 +808,9 @@ def assemble_character_page(entity_id: str, entity_name: str,
               _build_event_timeline(all_events, name_index=name_index,
                                     source_type_dir=source_type_dir,
                                     self_id=entity_id,
-                                    linked_entities=linked), ""]
+                                    linked_entities=linked,
+                                    timeline_data=timeline_data,
+                                    timeline_anchor=timeline_anchor), ""]
 
     # Footer
     lines += ["---",

@@ -37,6 +37,7 @@ Divide session processing across multiple specialized agents, each with a focuse
 | Strategy agent | Generate next-move analysis; apply heuristics and risk model | — |
 | Prompt agent | Generate candidate player prompts optimized per mode | — |
 | DM profile agent | Infer and refine DM behavior from accumulated evidence | — |
+| Timeline agent | Extract temporal signals and estimate in-game time progression | **Implemented** (#137) |
 
 The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a four-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.
 
@@ -45,6 +46,12 @@ Post-extraction quality passes include:
 - **Stub backfill** — re-extracts hollow stub entities using gathered context; runs by default (#128, #131)
 - **PC alias merge** — detects character entities that are aliases of char-player and merges them (#134)
 - **PC consecutive-failure logging** — warns when PC extraction fails for ≥10 consecutive turns (#133)
+
+**Timeline tracking** (#137): The pipeline extracts temporal signals (season transitions,
+biological markers, construction milestones) and estimates in-game day offsets from a
+configurable reference anchor. Implemented in `tools/temporal_extraction.py` with
+pattern-based detection plus an optional LLM template. Integrated into wiki page display
+(estimated day column in event timelines, season-enriched infoboxes).
 
 Benefits:
 - Narrower per-agent context window → lower token cost

@@ -106,6 +106,17 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - Biography sections use LLM-generated descriptive titles (not generic "Phase" labels), cached in `.synthesis.json` sidecars
 - Wiki pages include cross-page entity links: the first mention of each known entity in biography prose, relationship tables, event timelines, and member/connection lists is a clickable markdown link to that entity's wiki page. Link resolution uses relative paths across entity types.
 
+### Timeline Layer (Framework)
+
+Estimated timeline of in-game events, anchored to a configurable reference point.
+
+- `framework/catalogs/timeline.json` — temporal markers with day estimates, seasons, and confidence scores
+- `tools/temporal_extraction.py` — pattern-based extraction of season keywords, biological markers, construction milestones, and time-skip language
+- `templates/extraction/temporal-signals.md` — optional LLM prompt template for ambiguous temporal estimation
+- Calibrated from biological markers (pregnancies), construction timelines, and seasonal descriptions
+- Reference anchor defaults to turn-001 (Day 0); a named anchor (e.g., settlement founding) can be set in config
+- Feeds into wiki page generation for character ages and event dating (estimated day column in event timelines, season labels in infoboxes)
+
 ---
 
 ## Schemas
@@ -122,6 +133,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `evidence.schema.json` | A piece of tagged evidence |
 | `prompt-candidate.schema.json` | A candidate next-player-prompt |
 | `dm-profile.schema.json` | Inferred DM behavior profile |
+| `timeline.schema.json` | A temporal marker (season transition, time skip, biological marker, etc.) |
 
 ---
 
@@ -135,6 +147,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/analyze_next_move.py` | Generate next-move analysis and prompt candidates |
 | `tools/validate.py` | Validate all JSON files against schemas |
 | `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |
+| `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
 | `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, etc.) |
 

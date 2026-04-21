@@ -276,6 +276,45 @@ python tools/analyze_next_move.py --session sessions/session-001 --mode all_opti
 
 ---
 
+## Timeline Configuration
+
+The pipeline tracks in-game time progression by extracting temporal signals (season keywords, biological markers, construction milestones, time-skip language) from transcript turns. By default, turn-001 is Day 0.
+
+Timeline data is stored in `framework/catalogs/timeline.json` and conforms to `schemas/timeline.schema.json`.
+
+### Reference Anchor
+
+To set a named anchor event (e.g., settlement founding), add a `timeline_anchor` key to `config/llm.json`:
+
+```json
+{
+  "timeline_anchor": {
+    "turn": "turn-292",
+    "label": "Foundation of the Quiet Weave",
+    "day": 0
+  }
+}
+```
+
+Events before the anchor receive negative day estimates; events after receive positive.
+
+### Season Granularity
+
+The timeline uses 12 fine-grained season labels: `early_winter`, `mid_winter`, `late_winter`, `early_spring`, `mid_spring`, `late_spring`, `early_summer`, `mid_summer`, `late_summer`, `early_autumn`, `mid_autumn`, `late_autumn`.
+
+### Day Estimation
+
+Day offsets are estimated using a configurable days-per-turn ratio (default: 3.5). Confidence scores decrease with distance from the anchor. For campaigns with variable pacing, day estimates serve as rough approximations.
+
+### Wiki Integration
+
+When timeline data is available, wiki pages include:
+- **Infobox**: "First Seen Day" with estimated day and season label
+- **Event Timeline**: An "Est. Day" column showing approximate in-game day for each event
+- **World State** (`framework/story/world-state.md`): Current timeline summary
+
+---
+
 ## Validating JSON
 
 ```bash
