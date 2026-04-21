@@ -154,7 +154,7 @@ SEASON_TRANSITION_PATTERNS = [
         re.IGNORECASE,
     ),
     re.compile(
-        r"(?:(?:Early|Mid|Late)\s+)?(" + _SEASON_ALT + r")\s+"
+        r"((?:(?:Early|Mid|Late)\s+)?(?:" + _SEASON_ALT + r"))\s+"
         r"(?:has\s+)?(?:come|arrived|begun|settled)",
         re.IGNORECASE,
     ),
@@ -170,6 +170,33 @@ def _normalize_season(name: str) -> str:
     """Normalize season name (autumn -> fall)."""
     name = name.lower().strip()
     return "fall" if name == "autumn" else name
+
+
+_SEASON_PREFIX_MAP = {
+    "spring": "mid_spring",
+    "summer": "mid_summer",
+    "fall": "mid_autumn",
+    "autumn": "mid_autumn",
+    "winter": "mid_winter",
+}
+
+
+def _normalize_timeline_season(name: str) -> str:
+    """Normalize season name to a timeline-schema-compliant enum value.
+
+    Unprefixed names get a ``mid_`` prefix; already-prefixed names are
+    passed through (with ``fall`` → ``autumn`` correction).
+    Accepts both underscored (``early_winter``) and spaced (``Early winter``)
+    forms.
+    """
+    name = name.strip().lower().replace(" ", "_")
+    for prefix in ("early_", "mid_", "late_"):
+        if name.startswith(prefix):
+            base = name[len(prefix):]
+            if base == "fall":
+                return f"{prefix}autumn"
+            return name
+    return _SEASON_PREFIX_MAP.get(name, name)
 
 
 def _detect_year(text: str) -> int | None:
@@ -196,7 +223,7 @@ def extract_temporal_markers(
 
     for pattern in SEASON_TRANSITION_PATTERNS:
         for m in pattern.finditer(text):
-            season = _normalize_season(m.group(1))
+            season = _normalize_timeline_season(m.group(1))
             if season in seen_seasons:
                 continue
             seen_seasons.add(season)
