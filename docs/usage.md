@@ -284,17 +284,17 @@ Timeline data is stored in `framework/catalogs/timeline.json` and conforms to `s
 
 ### Reference Anchor
 
-To set a named anchor event (e.g., settlement founding), add a `timeline_anchor` key to `config/llm.json`:
+The reference anchor defaults to turn-001 = Day 0. To use a custom anchor, pass a `timeline_anchor` dict when calling `synthesize_entity()` or `assemble_character_page()`:
 
-```json
-{
-  "timeline_anchor": {
+```python
+anchor = {
     "turn": "turn-292",
     "label": "Foundation of the Quiet Weave",
     "day": 0
-  }
 }
 ```
+
+A future release will support loading the anchor from `config/llm.json` automatically.
 
 Events before the anchor receive negative day estimates; events after receive positive.
 
@@ -311,7 +311,6 @@ Day offsets are estimated using a configurable days-per-turn ratio (default: 3.5
 When timeline data is available, wiki pages include:
 - **Infobox**: "First Seen Day" with estimated day and season label
 - **Event Timeline**: An "Est. Day" column showing approximate in-game day for each event
-- **World State** (`framework/story/world-state.md`): Current timeline summary
 
 ---
 

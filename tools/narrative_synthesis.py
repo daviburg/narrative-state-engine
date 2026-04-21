@@ -584,8 +584,9 @@ def _build_infobox(entity_id: str, catalog_data: dict | None,
                    timeline_anchor: dict | None = None) -> str:
     """Build an infobox table from catalog or event-derived profile.
 
-    If *timeline_data* is provided, birth date and season information
-    are included for characters with birth events.
+    If *timeline_data* is provided, a "First Seen Day" row is added
+    showing the estimated in-game day and season for the entity's
+    ``first_seen_turn``.
     """
     lines = ["| | |", "|---|---|"]
 
@@ -598,7 +599,7 @@ def _build_infobox(entity_id: str, catalog_data: dict | None,
             lines.append(f"| **First Seen** | {first_seen} |")
         if last_updated:
             lines.append(f"| **Last Updated** | {last_updated} |")
-        # Timeline-enriched birth date
+        # Timeline-enriched first-seen day estimate
         if timeline_data and first_seen:
             day_info = estimate_day_from_anchor(first_seen, timeline_anchor)
             season = get_season_at_turn(timeline_data, first_seen)
@@ -1097,7 +1098,9 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
                       llm_client,
                       entity_type: str | None = None, *,
                       name_index: dict[str, tuple[str, str]] | None = None,
-                      source_type_dir: str | None = None) -> tuple[str, dict]:
+                      source_type_dir: str | None = None,
+                      timeline_data: list[dict] | None = None,
+                      timeline_anchor: dict | None = None) -> tuple[str, dict]:
     """Run the full synthesis pipeline for a single entity.
 
     Args:
@@ -1109,6 +1112,8 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
         entity_type: Override entity type (otherwise inferred).
         name_index: Entity ID → (name, relative_md_path) mapping.
         source_type_dir: Directory name of this entity's type.
+        timeline_data: Timeline entries for day/season enrichment.
+        timeline_anchor: Reference anchor dict for day estimation.
 
     Returns:
         Tuple of (markdown_page, sidecar_dict).
@@ -1118,6 +1123,7 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
     derived_profile = None if catalog_data else build_event_derived_profile(entity_id, entity_events)
 
     link_kw = dict(name_index=name_index, source_type_dir=source_type_dir)
+    timeline_kw = dict(timeline_data=timeline_data, timeline_anchor=timeline_anchor)
 
     if etype == "location":
         return _synthesize_location(entity_id, entity_name, entity_events,
@@ -1135,12 +1141,13 @@ def synthesize_entity(entity_id: str, entity_events: list[dict],
         return _synthesize_character(entity_id, entity_name, entity_events,
                                      catalog_data, derived_profile,
                                      arc_summaries, llm_client,
-                                     **link_kw)
+                                     **link_kw, **timeline_kw)
 
 
 def _synthesize_character(entity_id, entity_name, events, catalog_data,
                           derived_profile, arc_summaries, llm_client, *,
-                          name_index=None, source_type_dir=None):
+                          name_index=None, source_type_dir=None,
+                          timeline_data=None, timeline_anchor=None):
     """Synthesize a character page with per-phase biography."""
     phases = segment_phases(events, entity_id)
 
@@ -1176,7 +1183,8 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
     page = assemble_character_page(
         entity_id, entity_name, lede, phase_texts,
         catalog_data, derived_profile, arc_summaries, events,
-        name_index=name_index, source_type_dir=source_type_dir)
+        name_index=name_index, source_type_dir=source_type_dir,
+        timeline_data=timeline_data, timeline_anchor=timeline_anchor)
 
     # Provenance validation across all phases
     available = sorted(all_available_turns, key=_parse_turn_number)

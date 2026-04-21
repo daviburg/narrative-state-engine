@@ -1077,3 +1077,50 @@ class TestBiographyTitleParsing:
                 json.dump(sidecar, f)
 
             assert needs_regeneration("char-test", 5, sidecar_path) is False
+
+
+# ---------------------------------------------------------------------------
+# Timeline-enriched rendering
+# ---------------------------------------------------------------------------
+
+SAMPLE_TIMELINE = [
+    {"id": "time-001", "source_turn": "turn-001", "type": "season_transition",
+     "season": "mid_winter"},
+    {"id": "time-002", "source_turn": "turn-100", "type": "season_transition",
+     "season": "early_spring"},
+]
+
+
+class TestTimelineRendering:
+    """Tests for timeline-enriched infobox and event timeline."""
+
+    def test_infobox_shows_first_seen_day_with_timeline(self):
+        """Infobox includes First Seen Day row when timeline_data provided."""
+        text = _build_infobox("char-player", SAMPLE_CATALOG, None,
+                              timeline_data=SAMPLE_TIMELINE)
+        assert "First Seen Day" in text
+        assert "~Day" in text
+
+    def test_infobox_omits_first_seen_day_without_timeline(self):
+        """Infobox does NOT include First Seen Day when no timeline_data."""
+        text = _build_infobox("char-player", SAMPLE_CATALOG, None)
+        assert "First Seen Day" not in text
+
+    def test_infobox_shows_season_label(self):
+        """Infobox includes season label from timeline data."""
+        text = _build_infobox("char-player", SAMPLE_CATALOG, None,
+                              timeline_data=SAMPLE_TIMELINE)
+        assert "Mid Winter" in text
+
+    def test_event_timeline_shows_est_day_column_with_timeline(self):
+        """Event timeline table includes Est. Day column when timeline_data provided."""
+        text = _build_event_timeline(
+            SAMPLE_EVENTS[:2], timeline_data=SAMPLE_TIMELINE)
+        assert "| Turn | Type | Est. Day | Description |" in text
+        assert "~" in text  # Day estimates start with ~
+
+    def test_event_timeline_omits_est_day_column_without_timeline(self):
+        """Event timeline table has NO Est. Day column when no timeline_data."""
+        text = _build_event_timeline(SAMPLE_EVENTS[:2])
+        assert "Est. Day" not in text
+        assert "| Turn | Type | Description |" in text

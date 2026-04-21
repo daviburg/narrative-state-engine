@@ -6,7 +6,9 @@ Provides pattern-based detection of season markers, biological time markers
 (pregnancies/births), construction milestones, and time-skip language.
 Optionally runs an LLM-based estimator for ambiguous turns.
 
-Produces timeline entries conforming to schemas/timeline.schema.json.
+Returns intermediate temporal signal dicts that are assigned IDs and
+merged into timeline entries conforming to schemas/timeline.schema.json
+via ``merge_temporal_signals()``.
 """
 
 import json
@@ -275,7 +277,7 @@ def estimate_day_from_anchor(turn_id: str, anchor: dict | None = None,
                 "confidence": 0.0}
 
     delta_turns = turn_num - anchor_num
-    estimated_day = anchor.get("day", 0) + int(delta_turns * days_per_turn)
+    estimated_day = anchor.get("day", 0) + round(delta_turns * days_per_turn)
 
     # Confidence decreases with distance from anchor
     distance = abs(delta_turns)
@@ -329,20 +331,35 @@ def get_next_timeline_id(timeline: list[dict]) -> int:
     return max_id + 1
 
 
+def _dedup_key(entry: dict) -> tuple:
+    """Build a dedup key from a timeline entry or signal.
+
+    Uses ``(source_turn, type, season, raw_text)`` so distinct signals
+    of the same type within a single turn (e.g., multiple biological
+    markers) are preserved.
+    """
+    return (
+        entry.get("source_turn"),
+        entry.get("type"),
+        entry.get("season"),
+        entry.get("raw_text"),
+    )
+
+
 def merge_temporal_signals(timeline: list[dict], signals: list[dict],
                            next_id: int | None = None) -> list[dict]:
     """Merge new temporal signals into the timeline, avoiding duplicates.
 
-    Signals for the same source_turn and type are considered duplicates.
-    Returns the updated timeline.
+    Signals sharing the same ``(source_turn, type, season, raw_text)``
+    are considered duplicates.  Returns the updated timeline.
     """
     if next_id is None:
         next_id = get_next_timeline_id(timeline)
 
-    existing = {(e.get("source_turn"), e.get("type")) for e in timeline}
+    existing = {_dedup_key(e) for e in timeline}
 
     for signal in signals:
-        key = (signal.get("source_turn"), signal.get("type"))
+        key = _dedup_key(signal)
         if key in existing:
             continue
         signal["id"] = f"time-{next_id:03d}"

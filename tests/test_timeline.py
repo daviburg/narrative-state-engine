@@ -367,6 +367,7 @@ class TestTimelineCatalog:
             "id": "time-001",
             "source_turn": "turn-001",
             "type": "season_transition",
+            "season": "mid_winter",
         }]
         new_signals = [{
             "source_turn": "turn-001",
