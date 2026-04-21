@@ -806,7 +806,8 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
                       file=sys.stderr)
                 page, sidecar = synthesize_entity(
                     eid, entity_events, entity, arc_summaries,
-                    llm_client, entity_type=etype_str)
+                    llm_client, entity_type=etype_str,
+                    name_index=name_index, source_type_dir=type_dir)
 
                 md_path = os.path.join(type_dir, f"{eid}.md")
                 with open(md_path, "w", encoding="utf-8") as f:
@@ -846,7 +847,8 @@ def run_synthesis_pipeline(framework_dir: str, catalog_dir: str,
                           file=sys.stderr)
                     page, sidecar = synthesize_entity(
                         eid, entity_events, None, None,
-                        llm_client, entity_type=etype_str)
+                        llm_client, entity_type=etype_str,
+                        name_index=name_index, source_type_dir=type_dir)
 
                     md_path = os.path.join(type_dir, f"{eid}.md")
                     with open(md_path, "w", encoding="utf-8") as f:
