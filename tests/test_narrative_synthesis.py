@@ -302,6 +302,63 @@ class TestFormatHelpers:
         text = _format_arc_section(None)
         assert "No relationship arc summaries" in text
 
+    def test_format_arc_section_turn_range_non_list(self):
+        """Malformed turn_range (string instead of list) should not crash."""
+        arc = {
+            "entity_id": "char-player",
+            "generated_at": "2026-04-15T00:00:00Z",
+            "arcs": {
+                "char-kael": {
+                    "arc_summary": [
+                        {"phase": "Bond", "turn_range": "bad", "summary": "ok"},
+                    ],
+                    "current_relationship": "Ally",
+                    "interaction_count": 1,
+                },
+            },
+        }
+        text = _format_arc_section(arc)
+        assert "Bond" in text
+        assert "Kael" in text
+
+    def test_format_arc_section_turn_range_empty_list(self):
+        """Empty turn_range list should not crash."""
+        arc = {
+            "entity_id": "char-player",
+            "generated_at": "2026-04-15T00:00:00Z",
+            "arcs": {
+                "char-kael": {
+                    "arc_summary": [
+                        {"phase": "Bond", "turn_range": [], "summary": "ok"},
+                    ],
+                    "current_relationship": "Ally",
+                    "interaction_count": 1,
+                },
+            },
+        }
+        text = _format_arc_section(arc)
+        assert "Bond" in text
+        assert "?" in text  # fallback placeholder
+
+    def test_format_arc_section_turn_range_single_element(self):
+        """Single-element turn_range list should not crash."""
+        arc = {
+            "entity_id": "char-player",
+            "generated_at": "2026-04-15T00:00:00Z",
+            "arcs": {
+                "char-kael": {
+                    "arc_summary": [
+                        {"phase": "Bond", "turn_range": ["turn-001"], "summary": "ok"},
+                    ],
+                    "current_relationship": "Ally",
+                    "interaction_count": 1,
+                },
+            },
+        }
+        text = _format_arc_section(arc)
+        assert "Bond" in text
+        assert "turn-001" in text
+
 
 # ---------------------------------------------------------------------------
 # Test provenance validation

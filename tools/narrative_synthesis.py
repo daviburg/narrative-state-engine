@@ -181,6 +181,8 @@ def _format_arc_section(arc_summaries: dict | None,
         for phase in phases:
             pname = phase.get("phase", "")
             tr = phase.get("turn_range", ["?", "?"])
+            if not isinstance(tr, list) or len(tr) < 2:
+                tr = [tr[0] if isinstance(tr, list) and tr else "?", "?"]
             summary = phase.get("summary", "")
             lines.append(f"- {pname} (turns {tr[0]}–{tr[1]}): {summary}")
         sections.append("\n".join(lines))
