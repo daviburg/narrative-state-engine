@@ -34,6 +34,7 @@ from catalog_merger import (
     _infer_type_from_prefix,
     _strip_any_prefix,
     _levenshtein,
+    _V1_FILENAMES,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -1766,6 +1767,333 @@ def _merge_pc_aliases(
     return merged
 
 
+# ---------------------------------------------------------------------------
+# Segmented extraction helpers (#141)
+# ---------------------------------------------------------------------------
+
+def _compare_turns(turn_a, turn_b):
+    """Compare two turn IDs numerically. Returns -1, 0, or 1.
+
+    Falls back to string comparison if parsing fails.
+    """
+    na = _parse_turn_number(turn_a)
+    nb = _parse_turn_number(turn_b)
+    if na is not None and nb is not None:
+        return (na > nb) - (na < nb)
+    # Fallback to string comparison for non-standard turn IDs
+    return (turn_a > turn_b) - (turn_a < turn_b)
+
+
+def _find_canonical(eid, ename, entity_map, id_aliases):
+    """Find canonical entity ID matching by ID or name within the same entity type."""
+    # Direct ID match
+    if eid in entity_map:
+        return eid
+    # Alias match
+    if eid in id_aliases:
+        return id_aliases[eid]
+
+    normalized_name = (ename or "").strip().lower()
+    if not normalized_name:
+        return None
+
+    incoming_type = _infer_type_from_prefix(eid) if eid else None
+    name_matches = []
+
+    # Name match (case-insensitive) against existing entities, scoped by type
+    for existing_id, existing_entity in entity_map.items():
+        existing_name = existing_entity.get("name", "").strip().lower()
+        if existing_name != normalized_name:
+            continue
+
+        existing_type = existing_entity.get("type") or _infer_type_from_prefix(existing_id)
+        if incoming_type:
+            if existing_type == incoming_type:
+                return existing_id
+        else:
+            name_matches.append(existing_id)
+
+    # If the incoming ID does not reveal a type, only accept an unambiguous match
+    if len(name_matches) == 1:
+        return name_matches[0]
+    return None
+
+
+def _is_empty_attr_value(value):
+    """Check if a stable_attribute value is empty/missing."""
+    return value is None or value == "" or value == [] or value == {}
+
+
+def _merge_entity_across_segments(target, source):
+    """Merge a source entity into a target entity from a different segment."""
+    # Update last_updated_turn to the later of the two (numeric comparison)
+    src_turn = source.get("last_updated_turn", "")
+    tgt_turn = target.get("last_updated_turn", "")
+    if _compare_turns(src_turn, tgt_turn) > 0:
+        target["last_updated_turn"] = src_turn
+
+    # Update first_seen_turn to the earlier of the two (numeric comparison)
+    src_first = source.get("first_seen_turn", "")
+    tgt_first = target.get("first_seen_turn", "")
+    if src_first and (not tgt_first or _compare_turns(src_first, tgt_first) < 0):
+        target["first_seen_turn"] = src_first
+
+    # Merge identity — prefer longer/non-stub
+    src_identity = source.get("identity", "")
+    tgt_identity = target.get("identity", "")
+    if len(src_identity) > len(tgt_identity) and "stub" not in src_identity.lower():
+        target["identity"] = src_identity
+
+    # Merge current_status — prefer the later segment's
+    if source.get("current_status") and _compare_turns(src_turn, tgt_turn) >= 0:
+        target["current_status"] = source["current_status"]
+
+    # Merge stable_attributes — handles both V1 scalar and V2 dict formats
+    src_attrs = source.get("stable_attributes", {})
+    tgt_attrs = target.setdefault("stable_attributes", {})
+    for key, val in src_attrs.items():
+        tgt_val = tgt_attrs.get(key)
+
+        # V1 scalar format (backward compatibility)
+        if not isinstance(val, dict):
+            if key not in tgt_attrs or not tgt_val:
+                tgt_attrs[key] = val
+            continue
+
+        # V2 dict format: {value, inference, confidence, source_turn}
+        if key not in tgt_attrs or not isinstance(tgt_val, dict):
+            # Target missing or legacy scalar — take the full V2 object
+            if key not in tgt_attrs or not tgt_val or not _is_empty_attr_value(val.get("value")):
+                tgt_attrs[key] = dict(val)
+            continue
+
+        src_value = val.get("value")
+        tgt_value = tgt_val.get("value")
+        src_attr_turn = val.get("source_turn", "")
+        tgt_attr_turn = tgt_val.get("source_turn", "")
+
+        # Prefer non-empty source value when target is empty or source is newer
+        if not _is_empty_attr_value(src_value) and (
+            _is_empty_attr_value(tgt_value) or _compare_turns(src_attr_turn, tgt_attr_turn) >= 0
+        ):
+            merged_attr = dict(tgt_val)
+            merged_attr["value"] = src_value
+            for meta_key in ("inference", "confidence", "source_turn"):
+                if meta_key in val and val.get(meta_key) is not None:
+                    merged_attr[meta_key] = val[meta_key]
+            tgt_attrs[key] = merged_attr
+        else:
+            # Preserve existing value, but backfill missing provenance
+            for meta_key in ("inference", "confidence", "source_turn"):
+                if (
+                    meta_key not in tgt_val or tgt_val.get(meta_key) is None
+                ) and val.get(meta_key) is not None:
+                    tgt_val[meta_key] = val[meta_key]
+
+    # Merge relationships — update existing by target_id, append new
+    src_rels = source.get("relationships", [])
+    tgt_rels = target.setdefault("relationships", [])
+    tgt_rel_index = {r.get("target_id"): i for i, r in enumerate(tgt_rels)}
+    for rel in src_rels:
+        tid = rel.get("target_id")
+        if tid in tgt_rel_index:
+            # Merge into existing relationship
+            existing = tgt_rels[tgt_rel_index[tid]]
+            rel_src_turn = rel.get("last_updated_turn", "")
+            rel_tgt_turn = existing.get("last_updated_turn", "")
+            if _compare_turns(rel_src_turn, rel_tgt_turn) >= 0:
+                existing["current_relationship"] = rel.get(
+                    "current_relationship", existing.get("current_relationship", "")
+                )
+                existing["last_updated_turn"] = rel_src_turn or rel_tgt_turn
+            # Merge history entries
+            src_history = rel.get("history", [])
+            tgt_history = existing.setdefault("history", [])
+            existing_descs = {(h.get("turn"), h.get("description")) for h in tgt_history}
+            for h in src_history:
+                if (h.get("turn"), h.get("description")) not in existing_descs:
+                    tgt_history.append(h)
+        else:
+            tgt_rels.append(rel)
+            tgt_rel_index[tid] = len(tgt_rels) - 1
+
+    # Replace stub notes with real data
+    if "stub" in target.get("notes", "").lower() and "stub" not in source.get("notes", "").lower():
+        target["notes"] = source.get("notes", "")
+
+
+def _dedup_events(events):
+    """Remove duplicate events across segments."""
+    seen = set()
+    unique = []
+    for event in events:
+        # Key: first source_turn + normalized description
+        key_turn = event.get("source_turns", [""])[0]
+        key_desc = event.get("description", "")[:100].strip().lower()
+        key = (key_turn, key_desc)
+        if key not in seen:
+            seen.add(key)
+            unique.append(event)
+    return unique
+
+
+def _reconcile_segments(segments):
+    """Merge catalogs and events from multiple extraction segments."""
+    merged_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    merged_events = []
+
+    # Entity reconciliation: match across segments by ID and name
+    entity_map = {}  # canonical_id -> merged entity
+    id_aliases = {}  # segment_id -> canonical_id
+
+    for seg in segments:
+        for filename, entities in seg["catalogs"].items():
+            for entity in entities:
+                eid = entity["id"]
+                ename = entity.get("name", "").lower()
+
+                # Check for existing entity by ID or name
+                canonical = _find_canonical(eid, ename, entity_map, id_aliases)
+
+                if canonical:
+                    # Merge into existing entity
+                    _merge_entity_across_segments(entity_map[canonical], entity)
+                    if eid != canonical:
+                        id_aliases[eid] = canonical
+                else:
+                    # New entity — add to map, record which catalog file it belongs to
+                    entry = entity.copy()
+                    entry["_catalog_file"] = filename
+                    entity_map[eid] = entry
+
+        # Accumulate events, rewriting entity IDs through alias map
+        for event in seg["events"]:
+            event_copy = event.copy()
+            # Rewrite related_entities through alias map
+            if "related_entities" in event_copy:
+                event_copy["related_entities"] = [
+                    id_aliases.get(eid, eid) for eid in event_copy["related_entities"]
+                ]
+            merged_events.append(event_copy)
+
+    # Rewrite relationship target_ids through alias map in merged entities
+    if id_aliases:
+        for entity in entity_map.values():
+            for rel in entity.get("relationships", []):
+                tid = rel.get("target_id")
+                if tid and tid in id_aliases:
+                    rel["target_id"] = id_aliases[tid]
+                sid = rel.get("source_id")
+                if sid and sid in id_aliases:
+                    rel["source_id"] = id_aliases[sid]
+
+    # Distribute merged entities back into catalog structure
+    for eid, entity in entity_map.items():
+        target_file = entity.pop("_catalog_file", None)
+        if not target_file:
+            etype = entity.get("type", "character")
+            target_file = TYPE_TO_CATALOG_V1.get(etype, "characters.json")
+        merged_catalogs[target_file].append(entity)
+
+    # Deduplicate events by (source_turn, description hash)
+    merged_events = _dedup_events(merged_events)
+
+    # Re-sort events by source_turn (numeric, not lexicographic)
+    merged_events.sort(
+        key=lambda e: (
+            _parse_turn_number(e.get("source_turns", [""])[0])
+            if _parse_turn_number(e.get("source_turns", [""])[0]) is not None
+            else float("inf")
+        )
+    )
+
+    return merged_catalogs, merged_events
+
+
+def _extract_segmented(
+    turn_dicts, session_dir, framework_dir, catalog_dir,
+    llm, min_confidence, dry_run, segment_size,
+):
+    """Extract in segments with fresh catalogs, then reconcile."""
+    segments = []
+    total = len(turn_dicts)
+    progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+
+    for start in range(0, total, segment_size):
+        end = min(start + segment_size, total)
+        segment_turns = turn_dicts[start:end]
+        segment_id = f"segment-{start // segment_size + 1}"
+
+        print(
+            f"\n  === {segment_id}: turns {segment_turns[0]['turn_id']}"
+            f" \u2013 {segment_turns[-1]['turn_id']} ({len(segment_turns)} turns) ==="
+        )
+
+        # Fresh catalog for each segment
+        seg_catalogs = {fn: [] for fn in _V1_FILENAMES}
+        seg_events = []
+
+        # Pre-seed player character (always present)
+        _ensure_player_character(seg_catalogs, segment_turns[0]["turn_id"])
+
+        # Process this segment's turns
+        for i, turn in enumerate(segment_turns):
+            turn_id = turn["turn_id"]
+
+            if i % 25 == 0 and i > 0:
+                entities_now = sum(len(v) for v in seg_catalogs.values())
+                print(f"  ... {turn_id} ({start + i + 1}/{total}, {entities_now} entities)")
+
+            try:
+                seg_catalogs, seg_events = extract_and_merge(
+                    turn, seg_catalogs, seg_events, llm, min_confidence,
+                    catalog_dir=None,
+                )
+            except Exception as e:
+                print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
+                continue
+
+        seg_entity_count = sum(len(v) for v in seg_catalogs.values())
+        print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events")
+
+        segments.append({
+            "id": segment_id,
+            "catalogs": seg_catalogs,
+            "events": seg_events,
+            "turn_range": (segment_turns[0]["turn_id"], segment_turns[-1]["turn_id"]),
+        })
+
+        # Save checkpoint after each segment — use separate progress key
+        # so an interrupted segmented run cannot confuse the legacy resume logic
+        _save_progress(progress_file, segment_turns[-1]["turn_id"], total,
+                       seg_catalogs, dry_run,
+                       metadata={"segment": segment_id, "mode": "segmented",
+                                 "completed": False})
+
+    # Reconcile all segments into a single catalog
+    print(f"\n  === Reconciliation: merging {len(segments)} segments ===")
+    final_catalogs, final_events = _reconcile_segments(segments)
+
+    # Run standard post-batch passes on the reconciled result
+    dupes_merged, merge_map = _dedup_catalogs(final_catalogs)
+    if dupes_merged:
+        _rewrite_stale_ids(final_catalogs, final_events, merge_map)
+        print(f"  Post-reconciliation dedup merged {dupes_merged} duplicate(s)")
+
+    orphan_stubs = _post_batch_orphan_sweep(final_catalogs, final_events)
+    if orphan_stubs:
+        print(f"  Post-reconciliation orphan sweep: {orphan_stubs} stub(s)")
+
+    entities_final = sum(len(v) for v in final_catalogs.values())
+    print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events")
+
+    if not dry_run:
+        save_catalogs(catalog_dir, final_catalogs)
+        save_events(catalog_dir, final_events)
+        _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
+                       total, final_catalogs, dry_run=False, completed=True)
+
+
 def extract_semantic_batch(
     turn_dicts: list,
     session_dir: str,
@@ -1774,6 +2102,7 @@ def extract_semantic_batch(
     dry_run: bool = False,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     overrides: dict | None = None,
+    segment_size: int = 0,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -1791,6 +2120,8 @@ def extract_semantic_batch(
             ``base_url``. Any keys supplied here take precedence over values
             loaded from ``config_path``; settings not provided in ``overrides``
             continue to use the configuration file values.
+        segment_size: Extract in segments of N turns with fresh catalogs, then
+            reconcile. 0 = no segmentation (legacy behavior).
     """
     _reset_pc_failure_tracking()
 
@@ -1801,6 +2132,15 @@ def extract_semantic_batch(
         return
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
+
+    # Segmented extraction: process in chunks with fresh catalogs, then reconcile
+    if segment_size > 0 and len(turn_dicts) > segment_size:
+        _extract_segmented(
+            turn_dicts, session_dir, framework_dir, catalog_dir,
+            llm, min_confidence, dry_run, segment_size,
+        )
+        return
+
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
 
@@ -1817,17 +2157,21 @@ def extract_semantic_batch(
         try:
             with open(progress_file, "r", encoding="utf-8") as f:
                 progress = json.load(f)
-            last_completed = progress.get("last_completed_turn", "")
-            if last_completed:
-                for i, t in enumerate(turn_dicts):
-                    if t["turn_id"] == last_completed:
-                        start_from = i + 1
-                        break
-                if start_from > 0:
-                    print(f"  Resuming from turn {start_from + 1} (after {last_completed})")
-                    # Reload catalogs since they may have been partially written
-                    catalogs = load_catalogs(catalog_dir)
-                    events_list = load_events(catalog_dir)
+            # Ignore incomplete segmented checkpoints — catalogs won't be on disk
+            if progress.get("mode") == "segmented" and not progress.get("completed"):
+                pass
+            else:
+                last_completed = progress.get("last_completed_turn", "")
+                if last_completed:
+                    for i, t in enumerate(turn_dicts):
+                        if t["turn_id"] == last_completed:
+                            start_from = i + 1
+                            break
+                    if start_from > 0:
+                        print(f"  Resuming from turn {start_from + 1} (after {last_completed})")
+                        # Reload catalogs since they may have been partially written
+                        catalogs = load_catalogs(catalog_dir)
+                        events_list = load_events(catalog_dir)
         except (json.JSONDecodeError, KeyError):
             pass  # Corrupted progress file; start from beginning
 
@@ -1958,6 +2302,7 @@ def _save_progress(
     catalogs: dict,
     dry_run: bool,
     completed: bool = False,
+    metadata: dict | None = None,
 ) -> None:
     """Save extraction progress for resumption."""
     if dry_run:
@@ -1969,6 +2314,8 @@ def _save_progress(
         "entities_discovered": entities,
         "completed": completed,
     }
+    if metadata:
+        progress.update(metadata)
     os.makedirs(os.path.dirname(progress_file), exist_ok=True)
     with open(progress_file, "w", encoding="utf-8") as f:
         json.dump(progress, f, indent=2)
