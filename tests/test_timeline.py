@@ -24,7 +24,6 @@ from temporal_extraction import (
     _detect_time_skips,
     _detect_time_of_day,
     _parse_turn_number,
-    DEFAULT_ANCHOR,
 )
 from validate import validate_file
 
