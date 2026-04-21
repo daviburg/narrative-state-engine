@@ -943,7 +943,6 @@ def _ensure_birth_entities(events_list: list, catalogs: dict) -> list[str]:
             continue
 
         # Create a proper character entity (not a hollow stub)
-        catalog_file = TYPE_TO_CATALOG_V1.get("character", "characters.json")
         entity = {
             "id": child_id,
             "name": child_name,
