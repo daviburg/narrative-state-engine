@@ -56,6 +56,18 @@ _pc_consecutive_failures = 0
 _PC_FAILURE_WARN_THRESHOLD = 10
 
 
+def _reset_pc_failure_tracking() -> None:
+    """Reset per-run char-player extraction failure state.
+
+    This counter is module-level state, so top-level extraction entry points
+    must call this at the start of each new batch/single run to avoid
+    carrying failure counts across unrelated invocations in long-lived
+    processes.
+    """
+    global _pc_consecutive_failures
+    _pc_consecutive_failures = 0
+
+
 def _filter_pc_attributes(entity_data: dict) -> dict:
     """Strip non-allowed attribute keys from char-player entities.
 
@@ -720,16 +732,18 @@ def get_entity_id(entity_ref: dict) -> str:
     return entity_ref.get("existing_id") or entity_ref.get("proposed_id") or ""
 
 
-def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
+def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> bool:
     """Attempt to merge valid individual fields from a near-valid PC extraction.
 
     When full schema validation fails for char-player, this function extracts
     whatever valid fields are present and merges them into the existing
     catalog entry rather than losing the entire response (#107).
+
+    Returns True if at least one field was successfully merged.
     """
     pc_result = find_entity_by_id(catalogs, "char-player")
     if not pc_result:
-        return
+        return False
     _, pc_entry = pc_result
 
     attempted_fields = []
@@ -792,6 +806,7 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
             f"(attempted: {attempted_fields}, last_updated_turn => {turn_id})",
             file=sys.stderr,
         )
+        return True
     else:
         _resp_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
         print(
@@ -799,6 +814,7 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> None:
             f"Response keys: {_resp_keys} (attempted: {attempted_fields})",
             file=sys.stderr,
         )
+        return False
 
 
 def _collect_all_entity_ids(catalogs: dict) -> set[str]:
@@ -1041,8 +1057,8 @@ def extract_and_merge(
                     f"response keys={_data_keys}, falling back to partial merge",
                     file=sys.stderr,
                 )
-                _pc_partial_merge(catalogs, entity_data, turn_id)
-                # Partial merge may or may not succeed; count as update attempt
+                # Partial merge success counts as an update (#133)
+                pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
             else:
                 # entity_data is None — extraction returned nothing (#133)
                 print(
@@ -1518,6 +1534,7 @@ def _merge_pc_aliases(
     catalogs: dict,
     events_list: list,
     catalog_dir: str,
+    dry_run: bool = False,
 ) -> list[str]:
     """Identify and merge character entities that are aliases of char-player (#134).
 
@@ -1541,6 +1558,7 @@ def _merge_pc_aliases(
         return []
 
     merged = []
+    merge_map: dict[str, str] = {}
     chars_catalog = "characters.json"
     entities = catalogs.get(chars_catalog, [])
 
@@ -1553,8 +1571,10 @@ def _merge_pc_aliases(
         if not name or len(name) < 3:
             continue
 
-        # Count occurrences of the entity name in PC event text
-        occurrences = pc_text.count(name)
+        # Count whole-name occurrences in PC event text, case-insensitively,
+        # to avoid matching substrings inside larger words or names.
+        name_pattern = r"(?<!\w)" + re.escape(name) + r"(?!\w)"
+        occurrences = len(re.findall(name_pattern, pc_text, re.IGNORECASE))
         if occurrences < 2:
             continue
 
@@ -1571,12 +1591,25 @@ def _merge_pc_aliases(
                 continue
 
         # Merge into char-player: add name as alias
+        alias_source_turn = first or last or ""
         sa = pc_entry.setdefault("stable_attributes", {})
-        aliases = sa.setdefault("aliases", {"value": [], "source_turns": []})
+        aliases = sa.setdefault("aliases", {"value": [], "source_turn": alias_source_turn})
         alias_list = aliases.get("value", [])
         if isinstance(alias_list, list) and name not in alias_list:
             alias_list.append(name)
             aliases["value"] = alias_list
+            # Keep source_turn pointing to the earliest alias origin
+            existing_source = aliases.get("source_turn", "")
+            if not existing_source:
+                aliases["source_turn"] = alias_source_turn
+            elif alias_source_turn:
+                try:
+                    existing_num = int(existing_source.replace("turn-", ""))
+                    candidate_num = int(alias_source_turn.replace("turn-", ""))
+                    if candidate_num < existing_num:
+                        aliases["source_turn"] = alias_source_turn
+                except ValueError:
+                    pass
 
         # Absorb unique relationships from the candidate
         pc_rels = pc_entry.get("relationships", [])
@@ -1594,13 +1627,18 @@ def _merge_pc_aliases(
         entities.remove(entity)
 
         # Delete entity file from disk if it exists (V2 layout)
-        if catalog_dir:
+        if catalog_dir and not dry_run:
             entity_file = os.path.join(catalog_dir, "characters", f"{eid}.json")
             if os.path.isfile(entity_file):
                 os.remove(entity_file)
 
+        merge_map[eid] = "char-player"
         merged.append(eid)
         print(f"  PC alias merge: merged '{eid}' ({name}) into char-player")
+
+    # Rewrite dangling references to merged alias IDs across events and relationships
+    if merge_map:
+        _rewrite_stale_ids(catalogs, events_list, merge_map)
 
     return merged
 
@@ -1631,6 +1669,8 @@ def extract_semantic_batch(
             loaded from ``config_path``; settings not provided in ``overrides``
             continue to use the configuration file values.
     """
+    _reset_pc_failure_tracking()
+
     try:
         llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
@@ -1753,6 +1793,8 @@ def extract_semantic_single(
         overrides: Optional dictionary of config key/value overrides passed to
             ``LLMClient`` to override settings loaded from ``config_path``.
     """
+    _reset_pc_failure_tracking()
+
     try:
         llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:

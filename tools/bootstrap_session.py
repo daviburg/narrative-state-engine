@@ -393,11 +393,11 @@ def ensure_exports_dir(session_dir: str, dry_run: bool) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for bootstrap_session."""
     parser = argparse.ArgumentParser(
         description="Bootstrap a session from an existing large transcript file.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=__doc__,
     )
     parser.add_argument("--session", required=True, help="Path to the target session directory.")
     parser.add_argument("--file", required=True, help="Path to the source transcript file.")
@@ -479,6 +479,11 @@ def main() -> None:
         action="store_true",
         help="Skip the stub backfill pass after extraction.",
     )
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     # Validate --start-date format if provided
@@ -675,18 +680,20 @@ def main() -> None:
             print(f"  Stub backfill: {count} stub(s) enriched")
 
         # PC alias merge pass (#134)
-        from semantic_extraction import _merge_pc_aliases
-        from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
+        if args.dry_run:
+            print("  PC alias merge: skipped during dry run")
+        else:
+            from semantic_extraction import _merge_pc_aliases
+            from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
 
-        catalog_dir = os.path.join(args.framework, "catalogs")
-        catalogs = load_catalogs(catalog_dir)
-        events_list = load_events(catalog_dir)
-        merged_aliases = _merge_pc_aliases(catalogs, events_list, catalog_dir)
-        if merged_aliases and not args.dry_run:
-            save_catalogs(catalog_dir, catalogs)
-            save_events(catalog_dir, events_list)
-        if merged_aliases:
-            print(f"  PC alias merge: merged {len(merged_aliases)} alias(es): {merged_aliases}")
+            catalog_dir = os.path.join(args.framework, "catalogs")
+            catalogs = load_catalogs(catalog_dir)
+            events_list = load_events(catalog_dir)
+            merged_aliases = _merge_pc_aliases(catalogs, events_list, catalog_dir)
+            if merged_aliases:
+                save_catalogs(catalog_dir, catalogs)
+                save_events(catalog_dir, events_list)
+                print(f"  PC alias merge: merged {len(merged_aliases)} alias(es): {merged_aliases}")
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(

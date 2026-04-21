@@ -4,17 +4,18 @@ import sys
 import json
 import tempfile
 import shutil
-from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
+import semantic_extraction as se
 from semantic_extraction import (
     _dedup_catalogs,
     _pc_partial_merge,
     _merge_pc_aliases,
-    _pc_consecutive_failures,
+    _reset_pc_failure_tracking,
     _PC_FAILURE_WARN_THRESHOLD,
 )
+from bootstrap_session import build_parser
 
 
 # ---------------------------------------------------------------------------
@@ -50,21 +51,15 @@ class TestBackfillDefault:
     """Verify that backfill runs by default (no flag needed)."""
 
     def test_skip_backfill_flag_exists(self):
-        """--skip-backfill should be defined in argparse."""
-        import bootstrap_session
-        import argparse
-        # Parse with --skip-backfill to verify it's recognized
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--skip-backfill", action="store_true")
-        args = parser.parse_args(["--skip-backfill"])
+        """--skip-backfill should be defined in the real bootstrap parser."""
+        parser = build_parser()
+        args = parser.parse_args(["--session", "s", "--file", "f", "--skip-backfill"])
         assert args.skip_backfill is True
 
     def test_skip_backfill_default_false(self):
         """--skip-backfill should default to False (backfill ON)."""
-        import argparse
-        parser = argparse.ArgumentParser()
-        parser.add_argument("--skip-backfill", action="store_true")
-        args = parser.parse_args([])
+        parser = build_parser()
+        args = parser.parse_args(["--session", "s", "--file", "f"])
         assert args.skip_backfill is False
 
 
@@ -148,9 +143,18 @@ class TestPCConsecutiveFailureTracking:
         """Threshold should be 10."""
         assert _PC_FAILURE_WARN_THRESHOLD == 10
 
+    def test_reset_clears_counter(self):
+        """_reset_pc_failure_tracking should set counter to 0."""
+        original = se._pc_consecutive_failures
+        try:
+            se._pc_consecutive_failures = 7
+            _reset_pc_failure_tracking()
+            assert se._pc_consecutive_failures == 0
+        finally:
+            se._pc_consecutive_failures = original
+
     def test_warning_at_threshold(self, capsys):
         """WARNING should fire at 10 consecutive failures."""
-        import semantic_extraction as se
         original = se._pc_consecutive_failures
         try:
             # Simulate 10 failures
@@ -177,7 +181,6 @@ class TestPCConsecutiveFailureTracking:
 
     def test_counter_resets_on_success(self):
         """Counter should reset to 0 on successful extraction."""
-        import semantic_extraction as se
         original = se._pc_consecutive_failures
         try:
             se._pc_consecutive_failures = 5
@@ -187,8 +190,26 @@ class TestPCConsecutiveFailureTracking:
         finally:
             se._pc_consecutive_failures = original
 
-    def test_empty_merge_warning_includes_response_keys(self, capsys):
-        """Empty merge WARNING should include response keys."""
+    def test_partial_merge_returns_true_on_success(self):
+        """_pc_partial_merge should return True when fields are merged."""
+        catalogs = {
+            "characters.json": [
+                {
+                    "id": "char-player",
+                    "name": "Player Character",
+                    "type": "character",
+                    "identity": "The player character.",
+                    "first_seen_turn": "turn-001",
+                    "last_updated_turn": "turn-050",
+                }
+            ]
+        }
+        entity_data = {"id": "char-player", "current_status": "Fighting."}
+        result = _pc_partial_merge(catalogs, entity_data, "turn-100")
+        assert result is True
+
+    def test_partial_merge_returns_false_on_empty(self):
+        """_pc_partial_merge should return False when no fields merge."""
         catalogs = {
             "characters.json": [
                 {
@@ -202,31 +223,8 @@ class TestPCConsecutiveFailureTracking:
             ]
         }
         entity_data = {"id": "char-player", "garbage_field": "junk"}
-        _pc_partial_merge(catalogs, entity_data, "turn-060")
-        captured = capsys.readouterr()
-        assert "no fields could be merged" in captured.err.lower()
-        assert "Response keys:" in captured.err
-        assert "turn-060" in captured.err
-
-    def test_none_extraction_warning(self, capsys):
-        """When entity_data is None, a specific warning should fire."""
-        import semantic_extraction as se
-        original = se._pc_consecutive_failures
-        try:
-            se._pc_consecutive_failures = 3
-            # Simulate the None-extraction warning path
-            turn_id = "turn-200"
-            print(
-                f"  WARNING: PC detail extraction returned None at {turn_id}. "
-                f"Consecutive failures: {se._pc_consecutive_failures + 1}",
-                file=sys.stderr,
-            )
-            captured = capsys.readouterr()
-            assert "returned None" in captured.err
-            assert "turn-200" in captured.err
-            assert "4" in captured.err  # 3 + 1
-        finally:
-            se._pc_consecutive_failures = original
+        result = _pc_partial_merge(catalogs, entity_data, "turn-060")
+        assert result is False
 
 
 # ---------------------------------------------------------------------------
@@ -253,10 +251,12 @@ class TestPCAliaseMerge:
         merged = _merge_pc_aliases(catalogs, events, "")
         assert "char-fenouille-moonwind" in merged
         assert len(catalogs["characters.json"]) == 1
-        # Name should be added to aliases
+        # Name should be added to aliases with schema-compliant source_turn
         pc = catalogs["characters.json"][0]
-        aliases = pc.get("stable_attributes", {}).get("aliases", {}).get("value", [])
-        assert "Fenouille Moonwind" in aliases
+        aliases_attr = pc.get("stable_attributes", {}).get("aliases", {})
+        assert "Fenouille Moonwind" in aliases_attr.get("value", [])
+        assert "source_turn" in aliases_attr
+        assert "source_turns" not in aliases_attr  # schema compliance
 
     def test_no_merge_many_turns(self):
         """Entity with >3 turn span should NOT be merged even if name appears often."""
@@ -296,7 +296,6 @@ class TestPCAliaseMerge:
         try:
             chars_dir = os.path.join(tmpdir, "characters")
             os.makedirs(chars_dir)
-            # Write the candidate entity file
             candidate = _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
                                      "turn-059", "turn-059")
             with open(os.path.join(chars_dir, "char-fenouille-moonwind.json"), "w") as f:
@@ -315,6 +314,35 @@ class TestPCAliaseMerge:
             merged = _merge_pc_aliases(catalogs, events, tmpdir)
             assert "char-fenouille-moonwind" in merged
             assert not os.path.exists(os.path.join(chars_dir, "char-fenouille-moonwind.json"))
+        finally:
+            shutil.rmtree(tmpdir)
+
+    def test_dry_run_preserves_entity_file(self):
+        """In dry_run mode, entity file should NOT be deleted."""
+        tmpdir = tempfile.mkdtemp()
+        try:
+            chars_dir = os.path.join(tmpdir, "characters")
+            os.makedirs(chars_dir)
+            candidate = _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
+                                     "turn-059", "turn-059")
+            entity_path = os.path.join(chars_dir, "char-fenouille-moonwind.json")
+            with open(entity_path, "w") as f:
+                json.dump(candidate, f)
+
+            catalogs = {
+                "characters.json": [
+                    _make_entity("char-player", "Player Character", "turn-001"),
+                    dict(candidate),
+                ]
+            }
+            events = [
+                _make_event("evt-1", "Fenouille Moonwind strikes", ["char-player"], "turn-253"),
+                _make_event("evt-2", "Fenouille Moonwind rests", ["char-player"], "turn-313"),
+            ]
+            merged = _merge_pc_aliases(catalogs, events, tmpdir, dry_run=True)
+            assert "char-fenouille-moonwind" in merged
+            # File should still exist in dry_run mode
+            assert os.path.exists(entity_path)
         finally:
             shutil.rmtree(tmpdir)
 
@@ -361,3 +389,40 @@ class TestPCAliaseMerge:
         ]
         merged = _merge_pc_aliases(catalogs, events, "")
         assert merged == []
+
+    def test_word_boundary_prevents_substring_match(self):
+        """'Ann' should NOT match inside 'Annabelle' — only whole-word matches."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-ann", "Ann", "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Annabelle walks forward", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Annabelle casts a spell", ["char-player"], "turn-101"),
+            _make_event("evt-3", "Annabelle rests", ["char-player"], "turn-102"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    def test_stale_ids_rewritten_in_events(self):
+        """After alias merge, events referencing the alias ID should point to char-player."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
+                             "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Fenouille Moonwind draws her sword",
+                        ["char-player", "char-fenouille-moonwind"], "turn-253"),
+            _make_event("evt-2", "Fenouille Moonwind casts healing word",
+                        ["char-player"], "turn-313"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille-moonwind" in merged
+        # The alias ID in evt-1's related_entities should now be char-player
+        assert "char-fenouille-moonwind" not in events[0]["related_entities"]
+        assert "char-player" in events[0]["related_entities"]
