@@ -38,6 +38,12 @@ class TestNormalizeTimelineSeason:
     def test_whitespace_stripped(self):
         assert _normalize_timeline_season("  winter  ") == "mid_winter"
 
+    def test_spaced_prefix_form(self):
+        assert _normalize_timeline_season("Early winter") == "early_winter"
+
+    def test_spaced_prefix_fall_to_autumn(self):
+        assert _normalize_timeline_season("Late fall") == "late_autumn"
+
 
 class TestExtractTemporalMarkersSeasonEnum:
     def test_fall_transition_produces_mid_autumn(self):
@@ -57,3 +63,15 @@ class TestExtractTemporalMarkersSeasonEnum:
         entries = extract_temporal_markers(text, "turn-102")
         assert len(entries) == 1
         assert entries[0]["season"] == "mid_autumn"
+
+    def test_early_winter_has_come_produces_early_winter(self):
+        text = "Early winter has come to the northern reaches."
+        entries = extract_temporal_markers(text, "turn-103")
+        assert len(entries) == 1
+        assert entries[0]["season"] == "early_winter"
+
+    def test_late_summer_settled_produces_late_summer(self):
+        text = "Late summer has settled over the valley."
+        entries = extract_temporal_markers(text, "turn-104")
+        assert len(entries) == 1
+        assert entries[0]["season"] == "late_summer"

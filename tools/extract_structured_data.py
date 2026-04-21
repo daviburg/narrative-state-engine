@@ -154,7 +154,7 @@ SEASON_TRANSITION_PATTERNS = [
         re.IGNORECASE,
     ),
     re.compile(
-        r"(?:(?:Early|Mid|Late)\s+)?(" + _SEASON_ALT + r")\s+"
+        r"((?:(?:Early|Mid|Late)\s+)?(?:" + _SEASON_ALT + r"))\s+"
         r"(?:has\s+)?(?:come|arrived|begun|settled)",
         re.IGNORECASE,
     ),
@@ -186,8 +186,10 @@ def _normalize_timeline_season(name: str) -> str:
 
     Unprefixed names get a ``mid_`` prefix; already-prefixed names are
     passed through (with ``fall`` → ``autumn`` correction).
+    Accepts both underscored (``early_winter``) and spaced (``Early winter``)
+    forms.
     """
-    name = name.strip().lower()
+    name = name.strip().lower().replace(" ", "_")
     for prefix in ("early_", "mid_", "late_"):
         if name.startswith(prefix):
             base = name[len(prefix):]
