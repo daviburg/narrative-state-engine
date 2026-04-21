@@ -231,7 +231,7 @@ class TestPCConsecutiveFailureTracking:
 # #134 — Post-extraction PC alias merge
 # ---------------------------------------------------------------------------
 
-class TestPCAliaseMerge:
+class TestPCAliasMerge:
     """Verify _merge_pc_aliases() identifies and merges PC aliases."""
 
     def test_merge_alias_with_multiple_events(self):

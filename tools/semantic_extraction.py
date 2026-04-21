@@ -1048,7 +1048,7 @@ def extract_and_merge(
                 # Purge any stale keys that survived the merge
                 _sanitize_pc_catalog_entry(catalogs)
                 pc_updated = True
-            elif entity_data:
+            elif entity_data is not None:
                 # Validation failed — attempt partial merge fallback (#107)
                 # Log structure of the raw response to aid diagnosis (#125)
                 _data_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
@@ -1593,7 +1593,11 @@ def _merge_pc_aliases(
         # Merge into char-player: add name as alias
         alias_source_turn = first or last or ""
         sa = pc_entry.setdefault("stable_attributes", {})
-        aliases = sa.setdefault("aliases", {"value": [], "source_turn": alias_source_turn})
+        # Only include source_turn if it's a valid turn ID (schema requires turn-NNN pattern)
+        alias_default = {"value": []}
+        if alias_source_turn:
+            alias_default["source_turn"] = alias_source_turn
+        aliases = sa.setdefault("aliases", alias_default)
         alias_list = aliases.get("value", [])
         if isinstance(alias_list, list) and name not in alias_list:
             alias_list.append(name)

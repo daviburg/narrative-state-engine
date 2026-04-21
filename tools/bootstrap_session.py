@@ -398,6 +398,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Bootstrap a session from an existing large transcript file.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=__doc__,
     )
     parser.add_argument("--session", required=True, help="Path to the target session directory.")
     parser.add_argument("--file", required=True, help="Path to the source transcript file.")
@@ -664,7 +665,11 @@ def main() -> None:
         )
 
         # Stub backfill pass (#128, #131 — now runs by default)
-        if not args.skip_backfill:
+        if args.skip_backfill:
+            pass  # Explicitly skipped via --skip-backfill
+        elif args.dry_run:
+            print("  Stub backfill: skipped during dry run")
+        else:
             from semantic_extraction import backfill_stubs
             from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
             from llm_client import LLMClient
@@ -674,7 +679,7 @@ def main() -> None:
             events_list = load_events(catalog_dir)
             llm = LLMClient("config/llm.json", overrides=llm_overrides or None)
             count = backfill_stubs(turn_dicts, catalogs, events_list, llm)
-            if count and not args.dry_run:
+            if count:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
             print(f"  Stub backfill: {count} stub(s) enriched")
