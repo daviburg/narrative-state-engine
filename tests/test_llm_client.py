@@ -3,8 +3,17 @@
 import json
 import os
 import sys
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+
+# Ensure `import openai` succeeds even when the package is not installed.
+# LLMClient.__init__ does `from openai import OpenAI` at runtime.
+if "openai" not in sys.modules:
+    _mock_openai = MagicMock()
+    _mock_openai.OpenAI = MagicMock
+    sys.modules["openai"] = _mock_openai
 
 from llm_client import LLMClient
 
