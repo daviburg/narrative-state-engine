@@ -56,6 +56,7 @@ class LLMClient:
         self.batch_delay_ms = self.config.get("batch_delay_ms", 200)
         self.default_timeout = self.config.get("timeout_seconds", 60)
         self.context_length = self.config.get("context_length", None)
+        self.ollama_options = self.config.get("ollama_options", None)
 
     def extract_json(
         self,
@@ -97,8 +98,13 @@ class LLMClient:
                 }
                 if timeout is not None:
                     kwargs["timeout"] = timeout
+                extra_body = {}
                 if self.context_length:
-                    kwargs["extra_body"] = {"num_ctx": self.context_length}
+                    extra_body["num_ctx"] = self.context_length
+                if self.ollama_options:
+                    extra_body["options"] = self.ollama_options
+                if extra_body:
+                    kwargs["extra_body"] = extra_body
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
@@ -188,8 +194,13 @@ class LLMClient:
                 }
                 if timeout is not None:
                     kwargs["timeout"] = timeout
+                extra_body = {}
                 if self.context_length:
-                    kwargs["extra_body"] = {"num_ctx": self.context_length}
+                    extra_body["num_ctx"] = self.context_length
+                if self.ollama_options:
+                    extra_body["options"] = self.ollama_options
+                if extra_body:
+                    kwargs["extra_body"] = extra_body
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
