@@ -315,3 +315,83 @@ class TestNoLinksFallback:
         page = assemble_item_page(
             "item-sword", "Magic Sword", "Important.", None, None, [])
         assert "# Magic Sword" in page
+
+
+# ---------------------------------------------------------------------------
+# Cross-section deduplication
+# ---------------------------------------------------------------------------
+
+class TestCrossSectionDedup:
+    def test_biography_links_prevent_relationship_relink(self):
+        """Entity linked in biography should NOT be linked again in relationships."""
+        arcs = {"arcs": {
+            "char-kael": {"current_relationship": "ally", "interaction_count": 5},
+        }}
+        page = assemble_character_page(
+            "char-player", "Player Character", "",
+            [("Phase 1", "Kael helped build the settlement.")],
+            None, None, arcs, [],
+            name_index=NAME_INDEX, source_type_dir=CHARACTERS_DIR)
+        # Only one link to Kael across the whole page
+        assert page.count("[Kael]") == 1
+
+    def test_biography_links_prevent_timeline_relink(self):
+        """Entity linked in biography should NOT be linked again in timeline."""
+        events = [_evt("Kael arrived at Haven",
+                       related=["char-kael", "loc-haven"])]
+        page = assemble_character_page(
+            "char-player", "Player Character", "",
+            [("Phase 1", "Kael helped build the settlement.")],
+            None, None, None, events,
+            name_index=NAME_INDEX, source_type_dir=CHARACTERS_DIR)
+        assert page.count("[Kael]") == 1
+
+    def test_faction_history_links_prevent_member_relink(self):
+        """Entity linked in faction history should NOT relink in members list."""
+        events = [_evt("Kael joined", related=["char-kael"])]
+        page = assemble_faction_page(
+            "faction-guild", "The Guild", "Kael founded the guild.",
+            None, None, events,
+            name_index=NAME_INDEX, source_type_dir=FACTIONS_DIR)
+        assert page.count("[Kael]") == 1
+
+    def test_location_significance_prevents_connected_relink(self):
+        """Entity linked in significance should NOT relink in connected entities."""
+        catalog = {
+            "relationships": [
+                {"target_id": "char-kael", "current_relationship": "resident"},
+            ],
+        }
+        page = assemble_location_page(
+            "loc-haven", "Haven", "Kael founded Haven.",
+            catalog, None, [],
+            name_index=NAME_INDEX, source_type_dir=LOCATIONS_DIR)
+        assert page.count("[Kael]") == 1
+
+
+# ---------------------------------------------------------------------------
+# Alias ID resolution
+# ---------------------------------------------------------------------------
+
+class TestAliasIDResolution:
+    def test_event_timeline_resolves_alias(self):
+        """Alias IDs (e.g. char-Kael) should be canonicalized and still link."""
+        events = [_evt("Kael arrived", related=["char-Kael"])]
+        table = _build_event_timeline(
+            events, name_index=NAME_INDEX,
+            source_type_dir=CHARACTERS_DIR, self_id="char-player")
+        assert "[Kael]" in table
+
+    def test_connected_entities_resolves_alias(self):
+        """Alias target_id in relationships should resolve and link."""
+        from narrative_synthesis import assemble_location_page
+        catalog = {
+            "relationships": [
+                {"target_id": "char-Kael", "current_relationship": "visitor"},
+            ],
+        }
+        page = assemble_location_page(
+            "loc-haven", "Haven", "A settlement.",
+            catalog, None, [],
+            name_index=NAME_INDEX, source_type_dir=LOCATIONS_DIR)
+        assert "[Kael]" in page

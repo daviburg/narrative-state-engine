@@ -630,7 +630,8 @@ def _build_event_timeline(events: list[dict], *,
         desc = evt.get("description", "")
         # Linkify related entities in description
         if name_index and source_type_dir:
-            for eid in evt.get("related_entities", []):
+            for raw_eid in evt.get("related_entities", []):
+                eid = resolve_entity_id(raw_eid)
                 if eid == self_id or eid in linked_entities:
                     continue
                 if eid not in name_index:
@@ -667,13 +668,14 @@ def _build_relationship_table(arc_summaries: dict | None, *,
              "|---|---|---|"]
     for target_id in sorted(arcs.keys()):
         arc = arcs[target_id]
+        if target_id == self_id:
+            continue
+        name = _infer_name_from_id(target_id)
+        display = f"{name} ({target_id})"
         link = _resolve_link(target_id, name_index, source_type_dir) if name_index else None
-        if link:
+        if link and target_id not in linked_entities:
             display = link
             linked_entities.add(target_id)
-        else:
-            name = _infer_name_from_id(target_id)
-            display = f"{name} ({target_id})"
         current = _escape_table_cell(arc.get("current_relationship", ""))
         count = arc.get("interaction_count", 0)
         lines.append(f"| {display} | {current} | {count} |")
@@ -721,7 +723,8 @@ def assemble_character_page(entity_id: str, entity_name: str,
         arc_summaries: Arc sidecar data or None.
         all_events: All events for this entity (for timeline).
         name_index: Entity ID → (name, relative_md_path) mapping.
-        source_type_dir: Directory name of this entity's type.
+        source_type_dir: Directory path for this entity type's catalog
+            (for example, ``.../catalogs/characters``).
 
     Returns:
         Complete markdown page string.
@@ -811,13 +814,15 @@ def assemble_location_page(entity_id: str, entity_name: str,
                   "| Entity | Connection |", "|---|---|"]
         for rel in catalog_data["relationships"]:
             target = rel.get("target_id", "")
-            link = _resolve_link(target, name_index, source_type_dir) if name_index else None
+            canonical_target = resolve_entity_id(target) or target
+            link = (_resolve_link(canonical_target, name_index, source_type_dir)
+                    if name_index and canonical_target not in linked else None)
             if link:
                 display = link
-                linked.add(target)
+                linked.add(canonical_target)
             else:
-                name = _infer_name_from_id(target)
-                display = f"{name} ({target})"
+                name = _infer_name_from_id(canonical_target)
+                display = f"{name} ({canonical_target})"
             cur = _escape_table_cell(rel.get("current_relationship", ""))
             lines.append(f"| {display} | {cur} |")
         lines.append("")
@@ -864,13 +869,13 @@ def assemble_faction_page(entity_id: str, entity_name: str,
         lines += ["## Known Members", "",
                   "| Member | First Seen |", "|---|---|"]
         for mid in sorted(member_ids):
-            link = _resolve_link(mid, name_index, source_type_dir) if name_index else None
-            if link:
-                display = link
-                linked.add(mid)
-            else:
-                name = _infer_name_from_id(mid)
-                display = f"{name} ({mid})"
+            name = _infer_name_from_id(mid)
+            display = f"{name} ({mid})"
+            if mid not in linked and name_index:
+                link = _resolve_link(mid, name_index, source_type_dir)
+                if link:
+                    display = link
+                    linked.add(mid)
             # Find first event with this member
             first_turn = ""
             for evt in all_events:
