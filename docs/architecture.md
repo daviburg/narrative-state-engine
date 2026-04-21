@@ -101,6 +101,8 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - All extracted entities are validated against `schemas/entity.schema.json` before merging
 - Entities below a confidence threshold are logged but not cataloged
 - Batch mode checkpoints progress every 50 turns for resume after interruption
+- Birth events trigger automatic entity creation for named children, with child IDs added to event `related_entities`
+- Stub backfill gathers context from both `related_entities` references and entity name mentions in event descriptions
 
 ---
 

@@ -873,17 +873,73 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str) -> None:
         if not catalog_file:
             catalog_file = "characters.json"  # default fallback
 
+        earliest = _find_earliest_mention(eid, inferred_name, events)
+        effective_turn = earliest or turn_id
         stub = {
             "id": eid,
             "name": inferred_name,
             "type": inferred_type,
             "identity": f"Entity referenced in events (stub — auto-created from event data).",
-            "first_seen_turn": turn_id,
+            "first_seen_turn": effective_turn,
             "last_updated_turn": turn_id,
             "notes": "Auto-created by event-stub.",
         }
         catalogs.setdefault(catalog_file, []).append(stub)
         print(f"  STUB: Created stub entity '{eid}' ({inferred_name}) from event data at {turn_id}")
+
+
+def _ensure_birth_entities(events_list: list, catalogs: dict) -> list[str]:
+    """Ensure entities named in birth events exist as catalog entries.
+
+    For birth-type events, detects "named X" patterns in descriptions and
+    creates character entities if they don't already exist.  Also adds the
+    child ID to the event's ``related_entities`` so downstream consumers
+    (backfill, wiki, etc.) can find them.
+
+    Returns a list of newly created entity IDs.
+    """
+    known_ids = _collect_all_entity_ids(catalogs)
+    created: list[str] = []
+
+    for event in events_list:
+        if event.get("type") != "birth":
+            continue
+        desc = event.get("description", "")
+        # Look for "named X" pattern in birth descriptions
+        match = re.search(r'\bnamed\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)*)', desc)
+        if not match:
+            continue
+
+        child_name = match.group(1)
+        child_id = f"char-{child_name.lower().replace(' ', '-')}"
+        source_turns = event.get("source_turns", [])
+        first_turn = source_turns[0] if source_turns else event.get("source_turn")
+
+        # Ensure child is in related_entities regardless of whether entity exists
+        rel = event.get("related_entities", [])
+        if child_id not in rel:
+            event.setdefault("related_entities", []).append(child_id)
+
+        if child_id in known_ids:
+            continue
+
+        # Create a proper character entity (not a hollow stub)
+        catalog_file = TYPE_TO_CATALOG_V1.get("character", "characters.json")
+        entity = {
+            "id": child_id,
+            "name": child_name,
+            "type": "character",
+            "identity": f"Child born during the narrative, named {child_name}.",
+            "first_seen_turn": first_turn or "turn-001",
+            "last_updated_turn": first_turn or "turn-001",
+            "notes": "Auto-created from birth event.",
+        }
+        catalogs.setdefault(catalog_file, []).append(entity)
+        known_ids.add(child_id)
+        created.append(child_id)
+        print(f"  BIRTH: Created entity '{child_id}' ({child_name}) from birth event")
+
+    return created
 
 
 def extract_and_merge(
@@ -1150,6 +1206,9 @@ def extract_and_merge(
         if valid_events:
             _create_orphan_stubs(catalogs, valid_events, turn_id)
             merge_events(events_list, valid_events)
+
+        # --- Phase 3: Create entities for birth events (#136) ---
+        _ensure_birth_entities(events_list, catalogs)
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
 
@@ -1420,14 +1479,40 @@ def _is_stub_entity(entity: dict) -> bool:
     return False
 
 
+def _find_earliest_mention(entity_id: str, entity_name: str | None,
+                           events_list: list) -> str | None:
+    """Find the earliest turn where entity appears by ID or name in events."""
+    earliest: str | None = None
+    name_lower = entity_name.lower() if entity_name and len(entity_name) >= 3 else None
+    for event in events_list:
+        turns = event.get("source_turns", [])
+        st_single = event.get("source_turn")
+        if st_single and st_single not in turns:
+            turns = list(turns) + [st_single]
+        matched = False
+        if entity_id in event.get("related_entities", []):
+            matched = True
+        if name_lower and name_lower in event.get("description", "").lower():
+            matched = True
+        if matched:
+            for t in turns:
+                if earliest is None or t < earliest:
+                    earliest = t
+    return earliest
+
+
 def _collect_stub_context(entity_id: str, events_list: list, turn_dicts: list,
-                          first_seen_turn: str | None) -> str:
+                          first_seen_turn: str | None,
+                          entity_name: str | None = None) -> str:
     """Gather turn text around an entity's event references for backfill context."""
     # Find all turns that reference this entity via events
     ref_turns: set[str] = set()
+    name_lower = entity_name.lower() if entity_name and len(entity_name) >= 3 else None
     for event in events_list:
         related = event.get("related_entities", [])
-        if entity_id in related:
+        id_match = entity_id in related
+        name_match = name_lower and name_lower in event.get("description", "").lower()
+        if id_match or name_match:
             for st in event.get("source_turns", []):
                 ref_turns.add(st)
             st_single = event.get("source_turn")
@@ -1486,7 +1571,9 @@ def backfill_stubs(
             continue
 
         first_seen = entity.get("first_seen_turn", "turn-001")
-        context_text = _collect_stub_context(entity_id, events_list, turn_dicts, first_seen)
+        entity_name = entity.get("name", "")
+        context_text = _collect_stub_context(entity_id, events_list, turn_dicts, first_seen,
+                                             entity_name=entity_name)
         if not context_text:
             print(f"  Backfill: no context found for stub '{entity_id}', skipping")
             continue
