@@ -1157,9 +1157,9 @@ def extract_and_merge(
 
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
-                _pc_consecutive_failures = 0
+                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
             else:
-                _pc_consecutive_failures += 1
+                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
                 if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
                     print(
                         f"  WARNING: PC extraction has failed for {_pc_consecutive_failures} "

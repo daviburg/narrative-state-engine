@@ -299,7 +299,7 @@ class TestPCSkipIntegration:
 
         llm_ok.extract_json = MagicMock(side_effect=_extract_ok)
         turn = {"turn_id": "turn-006", "speaker": "dm", "text": "text"}
-        catalogs, events = se.extract_and_merge(
+        se.extract_and_merge(
             turn, catalogs, events, llm_ok, min_confidence=0.6,
         )
         assert se._pc_consecutive_failures == 0
