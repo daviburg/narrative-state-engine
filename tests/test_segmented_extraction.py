@@ -7,7 +7,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 from semantic_extraction import (
     _compare_turns,
     _find_canonical,
-    _is_empty_attr_value,
     _merge_entity_across_segments,
     _dedup_events,
     _reconcile_segments,
