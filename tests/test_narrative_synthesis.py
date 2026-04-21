@@ -34,6 +34,8 @@ from narrative_synthesis import (
     _build_infobox,
     _build_event_timeline,
     _build_current_status,
+    _parse_biography_response,
+    _normalize_subheadings,
 )
 
 from narrative_synthesis import _collect_critical_turns
@@ -625,6 +627,8 @@ class TestBiographyGeneration:
 
         assert "[turn-001]" in text
         assert meta["name"] == "Test Phase"
+        # No TITLE: prefix in mock response → title falls back to phase_name
+        assert meta["title"] == "Test Phase"
         assert meta["llm_model"] == "mock-model"
         assert meta["tokens_used"] > 0
         assert len(llm.calls) == 1
@@ -645,6 +649,7 @@ class TestBiographyGeneration:
 
         assert "Generation failed" in text
         assert "error" in meta
+        assert meta["title"] == "Test"
 
     def test_generate_lede(self):
         """Lede generation returns text."""
@@ -939,3 +944,136 @@ class TestFullPipelineIntegration:
 
             loaded = load_synthesis_sidecar(sidecar_path)
             assert loaded["entity_id"] == "char-player"
+
+
+# ---------------------------------------------------------------------------
+# Test biography title parsing and subheading normalization
+# ---------------------------------------------------------------------------
+
+
+class TestBiographyTitleParsing:
+
+    def test_parse_biography_response_with_title(self):
+        """TITLE: prefix is extracted as the section title."""
+        raw = "TITLE: Capture and Integration\n\nProse about the capture."
+        title, prose = _parse_biography_response(raw, "Fallback Name")
+        assert title == "Capture and Integration"
+        assert prose == "Prose about the capture."
+
+    def test_parse_biography_response_without_title(self):
+        """Missing TITLE: prefix uses fallback name."""
+        raw = "Prose without a title prefix."
+        title, prose = _parse_biography_response(raw, "Fallback Name")
+        assert title == "Fallback Name"
+        assert prose == "Prose without a title prefix."
+
+    def test_parse_biography_response_title_case_insensitive(self):
+        """TITLE: matching is case-insensitive."""
+        raw = "title: Awakening in the Snow\n\nSome text here."
+        title, prose = _parse_biography_response(raw, "Fallback")
+        assert title == "Awakening in the Snow"
+        assert prose == "Some text here."
+
+    def test_parse_biography_response_title_only(self):
+        """TITLE: line with no following prose returns empty prose."""
+        raw = "TITLE: Solo Title"
+        title, prose = _parse_biography_response(raw, "Fallback")
+        assert title == "Solo Title"
+        assert prose == ""
+
+    def test_normalize_subheadings_downgrades(self):
+        """### headings become #### headings."""
+        text = "### Sub-section A\nContent.\n### Sub-section B\nMore."
+        result = _normalize_subheadings(text)
+        assert "#### Sub-section A" in result
+        assert "#### Sub-section B" in result
+        # No lines start with exactly "### " (only "#### ")
+        for line in result.splitlines():
+            assert not line.startswith("### ")
+
+    def test_normalize_subheadings_keeps_h4(self):
+        """#### headings stay unchanged."""
+        text = "#### Already level 4\nContent."
+        result = _normalize_subheadings(text)
+        assert "#### Already level 4" in result
+        # No spurious extra # added
+        assert "##### Already level 4" not in result
+
+    def test_sidecar_caches_title(self):
+        """Phase metadata in sidecar includes the title field."""
+        llm = MockLLMClient(
+            "TITLE: Awakening in the Snow\n\n"
+            "The character awakened [turn-001] and was found [turn-005]."
+        )
+
+        page, sidecar = synthesize_entity(
+            "char-player", SAMPLE_EVENTS[:3], SAMPLE_CATALOG,
+            None, llm, entity_type="character")
+
+        assert len(sidecar["phases"]) >= 1
+        phase = sidecar["phases"][0]
+        assert phase["title"] == "Awakening in the Snow"
+
+    def test_no_generic_phase_titles(self):
+        """When LLM returns TITLE:, no generic 'Phase (turns' headings appear."""
+        llm = MockLLMClient(
+            "TITLE: Early Days\n\n"
+            "The character awakened [turn-001] and was found [turn-005]."
+        )
+
+        page, sidecar = synthesize_entity(
+            "char-player", SAMPLE_EVENTS[:3], SAMPLE_CATALOG,
+            None, llm, entity_type="character")
+
+        import re
+        assert not re.search(r"^### Phase \(turns", page, re.MULTILINE)
+        assert "### Early Days (turns" in page
+
+    def test_descriptive_title_in_full_pipeline(self):
+        """Full pipeline uses LLM title with turn range in heading."""
+        llm = MockLLMClient(
+            "TITLE: Capture and Integration\n\n"
+            "Events unfolded [turn-001] and [turn-005]."
+        )
+
+        page, sidecar = synthesize_entity(
+            "char-player", SAMPLE_EVENTS[:3], SAMPLE_CATALOG,
+            None, llm, entity_type="character")
+
+        # The heading should include the descriptive title and turn range
+        assert "### Capture and Integration (turns" in page
+        # The generic Phase label should NOT appear
+        assert "Phase (turns" not in page
+
+    def test_parse_biography_response_empty_title_uses_fallback(self):
+        """TITLE: with no content falls back to fallback_name."""
+        raw = "TITLE:   \n\nProse about something."
+        title, prose = _parse_biography_response(raw, "Fallback Name")
+        assert title == "Fallback Name"
+        assert prose == "Prose about something."
+
+    def test_needs_regeneration_missing_title_in_sidecar(self):
+        """Sidecar phases without 'title' trigger regeneration."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sidecar_path = os.path.join(tmpdir, "char-test.synthesis.json")
+
+            # Sidecar with matching event count but no title in phases
+            sidecar = {
+                "source_data": {"events_count": 5},
+                "phases": [
+                    {"name": "Phase (turns turn-001–turn-050)",
+                     "turn_range": ["turn-001", "turn-050"]}
+                ],
+            }
+            with open(sidecar_path, "w") as f:
+                json.dump(sidecar, f)
+
+            # Missing title → needs regeneration
+            assert needs_regeneration("char-test", 5, sidecar_path) is True
+
+            # Add title → skip regeneration
+            sidecar["phases"][0]["title"] = "Awakening"
+            with open(sidecar_path, "w") as f:
+                json.dump(sidecar, f)
+
+            assert needs_regeneration("char-test", 5, sidecar_path) is False

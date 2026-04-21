@@ -55,7 +55,13 @@ Rules:
    micro-interactions.
 7. If uncertain about a connection (e.g., whether two entity IDs refer
    to the same person), note the uncertainty explicitly.
-8. Keep each biography phase to 3–6 sentences.\
+8. Keep each biography phase to 3–6 sentences.
+9. Begin your response with a single line "TITLE: <title>" where <title>
+   is a concise descriptive label for this phase (e.g., "Capture and
+   Integration", "Building the Settlement"). Do NOT use generic labels
+   like "Phase" or "Part". Do NOT include turn numbers in the title.
+   Then write the biography prose below that line, without any markdown
+   headings.
 """
 
 LEDE_SYSTEM_PROMPT = """\
@@ -342,21 +348,26 @@ def generate_phase_biography(llm_client, synthesis_input: dict) -> tuple[str, di
         Tuple of (markdown_text, phase_metadata).
         On failure, returns a fallback message and metadata with error info.
     """
+    fallback_name = synthesis_input.get("phase_name", "")
     try:
-        text = llm_client.generate_text(
+        raw_text = llm_client.generate_text(
             system_prompt=synthesis_input["system_prompt"],
             user_prompt=synthesis_input["user_prompt"],
         )
         llm_client.delay()
 
+        title, prose = _parse_biography_response(raw_text, fallback_name)
+        prose = _normalize_subheadings(prose)
+
         metadata = {
             "name": synthesis_input.get("phase_name", ""),
+            "title": title,
             "turn_range": synthesis_input.get("turn_range", []),
             "events_used": synthesis_input.get("events_used", []),
             "llm_model": getattr(llm_client, "model", "unknown"),
-            "tokens_used": _estimate_tokens(synthesis_input["user_prompt"], text),
+            "tokens_used": _estimate_tokens(synthesis_input["user_prompt"], raw_text),
         }
-        return text, metadata
+        return prose, metadata
 
     except Exception as e:
         logger.error("Phase biography generation failed: %s", e)
@@ -364,6 +375,7 @@ def generate_phase_biography(llm_client, synthesis_input: dict) -> tuple[str, di
                     "timeline below]")
         metadata = {
             "name": synthesis_input.get("phase_name", ""),
+            "title": fallback_name,
             "turn_range": synthesis_input.get("turn_range", []),
             "events_used": synthesis_input.get("events_used", []),
             "llm_model": getattr(llm_client, "model", "unknown"),
@@ -432,6 +444,30 @@ def generate_item_summary(llm_client, item_input: dict) -> str:
 def _estimate_tokens(prompt: str, response: str) -> int:
     """Rough token estimate (~4 chars per token)."""
     return (len(prompt) + len(response)) // 4
+
+
+def _parse_biography_response(raw_response: str, fallback_name: str) -> tuple[str, str]:
+    """Extract title and prose from LLM biography response.
+
+    The LLM is instructed to begin with ``TITLE: <descriptive title>``
+    followed by the biography prose.  If the prefix is missing, the
+    *fallback_name* is used and the entire response is treated as prose.
+    """
+    lines = raw_response.strip().split("\n", 1)
+    if lines and lines[0].upper().startswith("TITLE:"):
+        title = lines[0].split(":", 1)[1].strip()
+        prose = lines[1].strip() if len(lines) > 1 else ""
+        if not title:
+            title = fallback_name
+    else:
+        title = fallback_name
+        prose = raw_response.strip()
+    return title, prose
+
+
+def _normalize_subheadings(prose: str) -> str:
+    """Ensure LLM-generated subheadings don't conflict with phase headings."""
+    return re.sub(r'^###\s', '#### ', prose, flags=re.MULTILINE)
 
 
 # Critical event types that should be cited in the biography
@@ -918,8 +954,16 @@ def _synthesize_character(entity_id, entity_name, events, catalog_data,
             all_available_turns.add(t)
 
         text, meta = generate_phase_biography(llm_client, synth_input)
-        phase_name = synth_input["phase_name"]
-        phase_texts.append((phase_name, text))
+        turn_range = synth_input.get("turn_range", ["?", "?"])
+        title = meta.get("title", synth_input["phase_name"])
+        fallback = synth_input["phase_name"]
+        # Only append turn range if the title is descriptive (not the
+        # generic fallback which already contains the range).
+        if title != fallback:
+            display_name = f"{title} (turns {turn_range[0]}\u2013{turn_range[1]})"
+        else:
+            display_name = fallback
+        phase_texts.append((display_name, text))
         phase_metadata.append(meta)
 
     # Generate lede
@@ -1054,4 +1098,12 @@ def needs_regeneration(entity_id: str, event_count: int,
         return True
 
     prev_count = existing.get("source_data", {}).get("events_count", 0)
-    return event_count != prev_count
+    if event_count != prev_count:
+        return True
+
+    # Regenerate if any cached phase is missing a descriptive title
+    for phase in existing.get("phases", []):
+        if "title" not in phase:
+            return True
+
+    return False
