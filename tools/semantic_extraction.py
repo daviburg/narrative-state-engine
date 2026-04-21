@@ -53,6 +53,7 @@ PC_ALLOWED_ATTRS = {
 
 # Consecutive PC extraction failure tracking (#133)
 _pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
+_pc_skipped_turns = 0
 _PC_FAILURE_WARN_THRESHOLD = 10
 _PC_SKIP_THRESHOLD = 20  # Skip PC extraction after this many consecutive failures (#149)
 
@@ -65,8 +66,9 @@ def _reset_pc_failure_tracking() -> None:
     carrying failure counts across unrelated invocations in long-lived
     processes.
     """
-    global _pc_consecutive_failures
+    global _pc_consecutive_failures, _pc_skipped_turns
     _pc_consecutive_failures = 0
+    _pc_skipped_turns = 0
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
@@ -987,7 +989,7 @@ def extract_and_merge(
     Returns:
         Updated (catalogs, events_list) tuple.
     """
-    global _pc_consecutive_failures
+    global _pc_consecutive_failures, _pc_skipped_turns
     turn_id = turn["turn_id"]
 
     # Load arc sidecar for PC relationship compaction (#120)
@@ -1103,7 +1105,7 @@ def extract_and_merge(
     if not pc_already_extracted:
         # Skip PC extraction after too many consecutive failures (#149)
         if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            pass  # Silently skip — end-of-run summary will report
+            _pc_skipped_turns += 1
         else:
             pc_result = find_entity_by_id(catalogs, "char-player")
             pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
@@ -2235,10 +2237,9 @@ def extract_semantic_batch(
         print(f"  Post-batch orphan sweep created {orphan_stubs} stub(s); {entities_after} entities now")
 
     # Report if PC extraction was skipped due to consecutive failures (#149)
-    if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-        skipped = _pc_consecutive_failures - _PC_SKIP_THRESHOLD
+    if _pc_skipped_turns > 0:
         print(
-            f"  PC extraction skipped for {skipped} turn(s) "
+            f"  PC extraction skipped for {_pc_skipped_turns} turn(s) "
             f"after {_PC_SKIP_THRESHOLD} consecutive failures",
         )
 
