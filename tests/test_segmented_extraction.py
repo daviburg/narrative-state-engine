@@ -5,11 +5,12 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from semantic_extraction import (
+    _compare_turns,
     _find_canonical,
+    _is_empty_attr_value,
     _merge_entity_across_segments,
     _dedup_events,
     _reconcile_segments,
-    _extract_segmented,
     _ensure_player_character,
     extract_semantic_batch,
     _V1_FILENAMES,
@@ -125,18 +126,82 @@ def test_merge_stable_attributes_union():
     assert target["stable_attributes"]["class"] == "warrior"
 
 
+def test_merge_stable_attributes_v2_format():
+    """V2 dict-format stable_attributes are merged correctly."""
+    target = _make_entity("char-kael", "Kael", "turn-050")
+    target["stable_attributes"] = {
+        "race": {"value": "human", "source_turn": "turn-010"},
+    }
+    source = _make_entity("char-kael", "Kael", "turn-150")
+    source["stable_attributes"] = {
+        "class": {"value": "warrior", "source_turn": "turn-120"},
+        "race": {"value": "", "source_turn": "turn-005"},
+    }
+    _merge_entity_across_segments(target, source)
+    assert target["stable_attributes"]["race"]["value"] == "human"
+    assert target["stable_attributes"]["class"]["value"] == "warrior"
+
+
+def test_merge_stable_attributes_v2_newer_wins():
+    """V2 attr with later source_turn replaces earlier one."""
+    target = _make_entity("char-kael", "Kael", "turn-050")
+    target["stable_attributes"] = {
+        "role": {"value": "scout", "source_turn": "turn-010"},
+    }
+    source = _make_entity("char-kael", "Kael", "turn-150")
+    source["stable_attributes"] = {
+        "role": {"value": "captain", "source_turn": "turn-130"},
+    }
+    _merge_entity_across_segments(target, source)
+    assert target["stable_attributes"]["role"]["value"] == "captain"
+    assert target["stable_attributes"]["role"]["source_turn"] == "turn-130"
+
+
 def test_merge_relationships_dedup():
     target = _make_entity("char-kael", "Kael", "turn-050")
-    target["relationships"] = [{"target_id": "char-player", "type": "ally"}]
+    target["relationships"] = [
+        {"target_id": "char-player", "type": "social",
+         "current_relationship": "ally", "first_seen_turn": "turn-050",
+         "last_updated_turn": "turn-050"},
+    ]
     source = _make_entity("char-kael", "Kael", "turn-150")
     source["relationships"] = [
-        {"target_id": "char-player", "type": "ally"},
-        {"target_id": "char-renn", "type": "friend"},
+        {"target_id": "char-player", "type": "social",
+         "current_relationship": "trusted ally", "first_seen_turn": "turn-050",
+         "last_updated_turn": "turn-150"},
+        {"target_id": "char-renn", "type": "social",
+         "current_relationship": "friend", "first_seen_turn": "turn-120",
+         "last_updated_turn": "turn-120"},
     ]
     _merge_entity_across_segments(target, source)
     assert len(target["relationships"]) == 2
     targets = {r["target_id"] for r in target["relationships"]}
     assert targets == {"char-player", "char-renn"}
+
+
+def test_merge_relationships_updates_existing():
+    """Existing relationships are updated with later segment data."""
+    target = _make_entity("char-kael", "Kael", "turn-050")
+    target["relationships"] = [
+        {"target_id": "char-player", "type": "social",
+         "current_relationship": "ally", "first_seen_turn": "turn-050",
+         "last_updated_turn": "turn-050", "history": [
+             {"turn": "turn-050", "description": "Met during patrol"},
+         ]},
+    ]
+    source = _make_entity("char-kael", "Kael", "turn-150")
+    source["relationships"] = [
+        {"target_id": "char-player", "type": "social",
+         "current_relationship": "trusted ally", "first_seen_turn": "turn-050",
+         "last_updated_turn": "turn-150", "history": [
+             {"turn": "turn-150", "description": "Fought together in battle"},
+         ]},
+    ]
+    _merge_entity_across_segments(target, source)
+    rel = target["relationships"][0]
+    assert rel["current_relationship"] == "trusted ally"
+    assert rel["last_updated_turn"] == "turn-150"
+    assert len(rel["history"]) == 2
 
 
 def test_merge_replaces_stub_notes():
@@ -325,3 +390,89 @@ def test_player_character_seeded_each_segment():
     pc2 = [e for e in chars2 if e["id"] == "char-player"]
     assert len(pc2) == 1
     assert pc2[0]["first_seen_turn"] == "turn-201"
+
+
+# --- _compare_turns (numeric comparison) ---
+
+def test_compare_turns_numeric():
+    assert _compare_turns("turn-999", "turn-1000") < 0
+    assert _compare_turns("turn-1000", "turn-999") > 0
+    assert _compare_turns("turn-100", "turn-100") == 0
+
+
+def test_compare_turns_three_digit_padding():
+    assert _compare_turns("turn-010", "turn-050") < 0
+    assert _compare_turns("turn-345", "turn-100") > 0
+
+
+# --- Type-aware _find_canonical ---
+
+def test_find_canonical_type_mismatch_no_merge():
+    """Same name but different type should NOT match."""
+    entity_map = {
+        "loc-haven": _make_entity("loc-haven", "Haven", etype="location"),
+    }
+    result = _find_canonical("item-haven", "haven", entity_map, {})
+    assert result is None
+
+
+def test_find_canonical_type_match_succeeds():
+    """Same name and same type should match."""
+    entity_map = {
+        "char-kael": _make_entity("char-kael", "Kael", etype="character"),
+    }
+    result = _find_canonical("char-kael-warrior", "kael", entity_map, {})
+    assert result == "char-kael"
+
+
+# --- Reconciliation: relationship alias rewriting ---
+
+def test_reconcile_rewrites_relationship_target_ids():
+    """After reconciliation, relationship target_ids should use canonical IDs."""
+    seg1_catalogs = {
+        "characters.json": [
+            _make_entity("char-kael", "Kael", "turn-001"),
+            _make_entity("char-renn", "Renn", "turn-020"),
+        ],
+        "locations.json": [], "factions.json": [], "items.json": [],
+    }
+    seg2_entity = _make_entity("char-kael-warrior", "Kael", "turn-150")
+    seg2_entity["relationships"] = [
+        {"target_id": "char-renn-scout", "type": "social",
+         "current_relationship": "ally", "first_seen_turn": "turn-150"},
+    ]
+    seg2_catalogs = {
+        "characters.json": [
+            seg2_entity,
+            _make_entity("char-renn-scout", "Renn", "turn-150"),
+        ],
+        "locations.json": [], "factions.json": [], "items.json": [],
+    }
+    segments = [
+        _make_segment("segment-1", seg1_catalogs, [], ("turn-001", "turn-100")),
+        _make_segment("segment-2", seg2_catalogs, [], ("turn-101", "turn-200")),
+    ]
+    catalogs, events = _reconcile_segments(segments)
+    kael = [e for e in catalogs["characters.json"] if e["id"] == "char-kael"][0]
+    rel_targets = {r["target_id"] for r in kael.get("relationships", [])}
+    # char-renn-scout should have been rewritten to char-renn
+    assert "char-renn" in rel_targets
+    assert "char-renn-scout" not in rel_targets
+
+
+# --- Event numeric sort ---
+
+def test_reconcile_events_sorted_numerically():
+    """Events should sort by turn number, not lexicographically."""
+    events_input = [
+        _make_event("evt-001", "Event at 999", "turn-999"),
+        _make_event("evt-002", "Event at 1000", "turn-1000"),
+        _make_event("evt-003", "Event at 50", "turn-050"),
+    ]
+    seg_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    segments = [
+        _make_segment("segment-1", seg_catalogs, events_input, ("turn-001", "turn-1000")),
+    ]
+    catalogs, events = _reconcile_segments(segments)
+    turn_order = [e.get("source_turns", [""])[0] for e in events]
+    assert turn_order == ["turn-050", "turn-999", "turn-1000"]
