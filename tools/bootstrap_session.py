@@ -393,7 +393,8 @@ def ensure_exports_dir(session_dir: str, dry_run: bool) -> None:
 # Main
 # ---------------------------------------------------------------------------
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build and return the argument parser for bootstrap_session."""
     parser = argparse.ArgumentParser(
         description="Bootstrap a session from an existing large transcript file.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -475,10 +476,15 @@ def main() -> None:
         help="Override the LLM API base URL from config/llm.json for this run.",
     )
     parser.add_argument(
-        "--backfill-stubs",
+        "--skip-backfill",
         action="store_true",
-        help="After extraction, re-extract hollow stub entities using gathered context.",
+        help="Skip the stub backfill pass after extraction.",
     )
+    return parser
+
+
+def main() -> None:
+    parser = build_parser()
     args = parser.parse_args()
 
     # Validate --start-date format if provided
@@ -658,8 +664,12 @@ def main() -> None:
             overrides=llm_overrides or None,
         )
 
-        # Stub backfill pass (#128)
-        if args.backfill_stubs:
+        # Stub backfill pass (#128, #131 — now runs by default)
+        if args.skip_backfill:
+            pass  # Explicitly skipped via --skip-backfill
+        elif args.dry_run:
+            print("  Stub backfill: skipped during dry run")
+        else:
             from semantic_extraction import backfill_stubs
             from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
             from llm_client import LLMClient
@@ -669,10 +679,26 @@ def main() -> None:
             events_list = load_events(catalog_dir)
             llm = LLMClient("config/llm.json", overrides=llm_overrides or None)
             count = backfill_stubs(turn_dicts, catalogs, events_list, llm)
-            if count and not args.dry_run:
+            if count:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
             print(f"  Stub backfill: {count} stub(s) enriched")
+
+        # PC alias merge pass (#134)
+        if args.dry_run:
+            print("  PC alias merge: skipped during dry run")
+        else:
+            from semantic_extraction import _merge_pc_aliases
+            from catalog_merger import load_catalogs, load_events, save_catalogs, save_events
+
+            catalog_dir = os.path.join(args.framework, "catalogs")
+            catalogs = load_catalogs(catalog_dir)
+            events_list = load_events(catalog_dir)
+            merged_aliases = _merge_pc_aliases(catalogs, events_list, catalog_dir)
+            if merged_aliases:
+                save_catalogs(catalog_dir, catalogs)
+                save_events(catalog_dir, events_list)
+                print(f"  PC alias merge: merged {len(merged_aliases)} alias(es): {merged_aliases}")
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(

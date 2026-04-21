@@ -40,6 +40,12 @@ Divide session processing across multiple specialized agents, each with a focuse
 
 The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a four-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.
 
+Post-extraction quality passes include:
+- **Dedup** — name, token-overlap, ID-stem, and Levenshtein matching (with minimum 6-char stem guard, #132)
+- **Stub backfill** — re-extracts hollow stub entities using gathered context; runs by default (#128, #131)
+- **PC alias merge** — detects character entities that are aliases of char-player and merges them (#134)
+- **PC consecutive-failure logging** — warns when PC extraction fails for ≥10 consecutive turns (#133)
+
 Benefits:
 - Narrower per-agent context window → lower token cost
 - Agents can run in parallel on unrelated subtasks
