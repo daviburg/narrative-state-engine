@@ -1090,12 +1090,18 @@ def extract_and_merge(
         if entity_data and _validate_entity(entity_data):
             _filter_pc_attributes(entity_data)
             merge_entity(catalogs, entity_data)
-            # Clear residual stub notes from now-enriched entity (#152)
-            _eid = entity_data.get("id") or get_entity_id(entity_data)
-            if _eid:
-                _merged = find_entity_by_id(catalogs, _eid)
-                if _merged and _merged[1].get("identity"):
-                    _clear_stub_notes(_merged[1])
+            # Clear residual stub notes only when the effective identity is
+            # non-stub; placeholder stub identities still carry useful notes (#152).
+            _effective_identity = entity_data.get("identity")
+            if not _effective_identity and current_entry:
+                _effective_identity = current_entry.get("identity")
+            if (
+                current_entry
+                and isinstance(_effective_identity, str)
+                and _effective_identity.strip()
+                and "stub" not in _effective_identity.lower()
+            ):
+                _clear_stub_notes(current_entry)
             # If this was char-player, also purge stale keys from catalog
             if entity_data.get("id") == "char-player":
                 _sanitize_pc_catalog_entry(catalogs)
@@ -1508,12 +1514,19 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
 _STUB_NOTE_MARKERS = {
     "auto-created by event-stub.",
     "auto-created by post-batch orphan sweep.",
+    "auto-created by post-batch-orphan-sweep.",
 }
 
 # Notes to clear from enriched entities (#152) — includes backfill markers
 _STUB_CLEANUP_MARKERS = _STUB_NOTE_MARKERS | {
     "backfilled from stub.",
 }
+
+
+def _has_real_identity(entity: dict) -> bool:
+    """Return True if the entity has a non-stub identity string."""
+    identity = entity.get("identity", "")
+    return bool(identity) and isinstance(identity, str) and "stub" not in identity.lower()
 
 
 def _clear_stub_notes(entity: dict) -> bool:
@@ -1687,7 +1700,7 @@ def backfill_stubs(
     # Clear residual stub notes from enriched entities (#152)
     for entities in catalogs.values():
         for entity in entities:
-            if entity.get("identity") and _clear_stub_notes(entity):
+            if _has_real_identity(entity) and _clear_stub_notes(entity):
                 print(f"  Cleared stub notes from enriched entity: {entity.get('id', 'unknown')}")
 
     return backfilled

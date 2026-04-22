@@ -4,7 +4,12 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from semantic_extraction import _clear_stub_notes
+from semantic_extraction import _clear_stub_notes, _has_real_identity
+
+
+# Real stub identity strings produced by semantic_extraction.py
+_EVENT_STUB_IDENTITY = "Entity referenced in events (stub — auto-created from event data)."
+_POST_BATCH_STUB_IDENTITY = "Entity referenced in 3 events (stub — auto-created post-batch)."
 
 
 class TestClearStubNotes:
@@ -20,8 +25,14 @@ class TestClearStubNotes:
         assert _clear_stub_notes(entity) is True
         assert entity["notes"] == ""
 
-    def test_clears_orphan_sweep_note(self):
+    def test_clears_orphan_sweep_note_spaced(self):
         entity = {"notes": "Auto-created by post-batch orphan sweep.", "identity": "Some identity"}
+        assert _clear_stub_notes(entity) is True
+        assert entity["notes"] == ""
+
+    def test_clears_orphan_sweep_note_hyphenated(self):
+        """The actual production note uses hyphens: 'post-batch-orphan-sweep'."""
+        entity = {"notes": "Auto-created by post-batch-orphan-sweep.", "identity": "Some identity"}
         assert _clear_stub_notes(entity) is True
         assert entity["notes"] == ""
 
@@ -54,11 +65,33 @@ class TestClearStubNotes:
         assert entity["notes"] == ""
 
 
+class TestHasRealIdentity:
+    """Tests for _has_real_identity() — distinguishes real vs stub identity."""
+
+    def test_real_identity(self):
+        assert _has_real_identity({"identity": "A powerful wizard of the north."}) is True
+
+    def test_stub_identity_event(self):
+        assert _has_real_identity({"identity": _EVENT_STUB_IDENTITY}) is False
+
+    def test_stub_identity_post_batch(self):
+        assert _has_real_identity({"identity": _POST_BATCH_STUB_IDENTITY}) is False
+
+    def test_empty_identity(self):
+        assert _has_real_identity({"identity": ""}) is False
+
+    def test_none_identity(self):
+        assert _has_real_identity({"identity": None}) is False
+
+    def test_missing_identity(self):
+        assert _has_real_identity({}) is False
+
+
 class TestBackfillSweepClearsStubNotes:
     """Integration-style test: the sweep after backfill clears enriched entities."""
 
     def test_sweep_clears_enriched_entities(self):
-        """Enriched entities (identity=truthy) should have stub notes cleared."""
+        """Enriched entities (non-stub identity) should have stub notes cleared."""
         catalogs = {
             "characters.json": [
                 {
@@ -70,46 +103,52 @@ class TestBackfillSweepClearsStubNotes:
                 {
                     "id": "char-still-stub",
                     "name": "Unknown NPC",
-                    "identity": "",
+                    "identity": _EVENT_STUB_IDENTITY,
                     "notes": "Auto-created by event-stub.",
                 },
             ]
         }
 
-        # Simulate the sweep logic from backfill_stubs
+        # Simulate the sweep logic from backfill_stubs (uses _has_real_identity)
         for entities in catalogs.values():
             for entity in entities:
-                if entity.get("identity") and _clear_stub_notes(entity):
+                if _has_real_identity(entity) and _clear_stub_notes(entity):
                     pass  # would print in real code
 
         # Enriched entity should have notes cleared
         assert catalogs["characters.json"][0]["notes"] == ""
-        # Stub entity (no real identity) should keep its notes
+        # Stub entity (placeholder stub identity) should keep its notes
         assert catalogs["characters.json"][1]["notes"] == "Auto-created by event-stub."
 
-    def test_identity_false_entities_retain_stub_notes(self):
-        """Entities without identity data are real stubs and keep their notes."""
+    def test_stub_identity_entities_retain_stub_notes(self):
+        """Entities with stub placeholder identity keep their notes."""
         entity = {
             "id": "char-stub",
             "name": "Mystery Figure",
-            "identity": "",
+            "identity": _EVENT_STUB_IDENTITY,
             "notes": "Auto-created by event-stub.",
         }
-        # identity is falsy, so the sweep condition (entity.get("identity")) is False
-        # We should NOT call _clear_stub_notes for these
-        should_clear = bool(entity.get("identity"))
-        assert should_clear is False
-        # Notes preserved
+        assert _has_real_identity(entity) is False
         assert entity["notes"] == "Auto-created by event-stub."
 
-    def test_identity_none_entities_retain_stub_notes(self):
-        """Entities with identity=None are stubs and keep their notes."""
+    def test_post_batch_stub_retains_notes(self):
+        """Post-batch stubs with hyphenated notes and stub identity keep their notes."""
         entity = {
             "id": "char-stub2",
             "name": "Another Mystery",
-            "identity": None,
-            "notes": "Auto-created by post-batch orphan sweep.",
+            "identity": _POST_BATCH_STUB_IDENTITY,
+            "notes": "Auto-created by post-batch-orphan-sweep.",
         }
-        should_clear = bool(entity.get("identity"))
-        assert should_clear is False
-        assert entity["notes"] == "Auto-created by post-batch orphan sweep."
+        assert _has_real_identity(entity) is False
+        assert entity["notes"] == "Auto-created by post-batch-orphan-sweep."
+
+    def test_empty_identity_entities_retain_stub_notes(self):
+        """Entities with empty identity are stubs and keep their notes."""
+        entity = {
+            "id": "char-stub3",
+            "name": "Yet Another Mystery",
+            "identity": "",
+            "notes": "Auto-created by event-stub.",
+        }
+        assert _has_real_identity(entity) is False
+        assert entity["notes"] == "Auto-created by event-stub."
