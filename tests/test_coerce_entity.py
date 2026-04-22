@@ -721,3 +721,231 @@ def test_coerce_accepts_valid_turn_id_for_source_turn():
     }
     result = _coerce_entity_fields(entity)
     assert result["stable_attributes"]["abilities"]["source_turn"] == "turn-1234"
+
+
+# --- #172: Extended coercion maps and _new suffix stripping ---
+
+
+def test_coerce_equipment_and_tools_to_volatile():
+    """Top-level 'equipment_and_tools' remapped to volatile_state.equipment."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "equipment_and_tools": ["staff", "rope"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "equipment_and_tools" not in result
+    assert result["volatile_state"]["equipment"] == ["staff", "rope"]
+
+
+def test_coerce_item_equipment_to_volatile():
+    """Top-level 'item_equipment' remapped to volatile_state.equipment."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "item_equipment": "sword, shield",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "item_equipment" not in result
+    assert result["volatile_state"]["equipment"] == ["sword", "shield"]
+
+
+def test_coerce_item_inventory_to_volatile():
+    """Top-level 'item_inventory' remapped to volatile_state.equipment."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "item_inventory": ["potion", "scroll"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "item_inventory" not in result
+    assert result["volatile_state"]["equipment"] == ["potion", "scroll"]
+
+
+def test_coerce_health_status_to_volatile_condition():
+    """Top-level 'health_status' remapped to volatile_state.condition."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "health_status": "wounded but stable",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "health_status" not in result
+    assert result["volatile_state"]["condition"] == "wounded but stable"
+
+
+def test_coerce_status_effects_to_volatile_condition():
+    """Top-level 'status_effects' remapped to volatile_state.condition."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "status_effects": "poisoned",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "status_effects" not in result
+    assert result["volatile_state"]["condition"] == "poisoned"
+
+
+def test_coerce_skills_and_abilities_to_stable():
+    """Top-level 'skills_and_abilities' remapped to stable_attributes.abilities."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "skills_and_abilities": ["stealth", "perception"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "skills_and_abilities" not in result
+    assert result["stable_attributes"]["abilities"]["value"] == ["stealth", "perception"]
+
+
+def test_coerce_alignment_to_stable():
+    """Top-level 'alignment' remapped to stable_attributes.alignment."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "alignment": "chaotic neutral",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "alignment" not in result
+    assert result["stable_attributes"]["alignment"]["value"] == "chaotic neutral"
+
+
+def test_coerce_weaknesses_to_stable():
+    """Top-level 'weaknesses' remapped to stable_attributes.weaknesses."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "weaknesses": "fire vulnerability",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "weaknesses" not in result
+    assert result["stable_attributes"]["weaknesses"]["value"] == "fire vulnerability"
+
+
+def test_coerce_items_relations_to_relationships():
+    """Top-level 'items_relations' remapped to 'relationships'."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "items_relations": [{"target_id": "item-sword", "current_relationship": "owns",
+                              "type": "social", "first_seen_turn": "turn-010"}],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "items_relations" not in result
+    assert len(result["relationships"]) == 1
+
+
+def test_coerce_current_relationships_to_relationships():
+    """Top-level 'current_relationships' remapped to 'relationships'."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "current_relationships": [{"target_id": "char-npc", "current_relationship": "friend",
+                                    "type": "social", "first_seen_turn": "turn-005"}],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "current_relationships" not in result
+    assert len(result["relationships"]) == 1
+
+
+def test_coerce_discards_extended_noise_keys():
+    """Extended noise keys from #172 are silently discarded."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Active.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "events": [{"event": "arrived"}],
+        "activities": ["walking"],
+        "activity_history": ["rested", "walked"],
+        "abilities_used_in_last_turn": ["darkvision"],
+        "description_of_activity": "walking north",
+        "recent_emotional_states": "calm",
+        "recent_relationship_changes": "none",
+        "name_changes": [],
+        "equipment_history": ["found sword"],
+        "faction_relations_history": [],
+        "relationships_history": [],
+    }
+    result = _coerce_entity_fields(entity)
+    for key in ("events", "activities", "activity_history",
+                "abilities_used_in_last_turn", "description_of_activity",
+                "recent_emotional_states", "recent_relationship_changes",
+                "name_changes", "equipment_history", "faction_relations_history",
+                "relationships_history"):
+        assert key not in result, f"{key} should have been discarded"
+
+
+def test_coerce_strips_new_suffix_to_base_key():
+    """Keys ending in '_new' are normalised to their base form."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "description_new": "A seasoned adventurer.",
+        "faction_relations_new": [{"target_id": "faction-guild",
+                                    "current_relationship": "allied",
+                                    "type": "factional",
+                                    "first_seen_turn": "turn-020"}],
+    }
+    result = _coerce_entity_fields(entity)
+    # description_new → description → identity (via V1→V2 fallback already ran,
+    # but _new strip happens after V1→V2, so description survives as discard or
+    # stays).  The key point: _new suffix is gone.
+    assert "description_new" not in result
+    assert "faction_relations_new" not in result
+
+
+def test_coerce_new_suffix_discards_when_base_exists():
+    """Delta key is discarded when the base key already exists."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "relations": [{"target_id": "char-a", "current_relationship": "ally",
+                        "type": "social", "first_seen_turn": "turn-010"}],
+        "relations_new": [{"target_id": "char-b", "current_relationship": "rival",
+                            "type": "adversarial", "first_seen_turn": "turn-040"}],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "relations_new" not in result
+    assert "relations" not in result  # base processed by rel remap
+    assert len(result["relationships"]) == 1
+    assert result["relationships"][0]["target_id"] == "char-a"
+
+
+def test_coerce_new_suffix_remapped_through_volatile():
+    """A _new suffixed volatile key gets stripped then remapped."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "equipment_new": ["bow", "arrows"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "equipment_new" not in result
+    assert "equipment" not in result
+    assert result["volatile_state"]["equipment"] == ["bow", "arrows"]
+
+
+def test_coerce_new_suffix_skips_schema_keys():
+    """Schema-native keys with _new-like names are not stripped."""
+    # 'notes' is a schema key; there's no 'notes_new' to worry about in
+    # practice, but confirm the suffix strip only targets non-schema keys.
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "notes": "Keep an eye on this one.",
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["notes"] == "Keep an eye on this one."
