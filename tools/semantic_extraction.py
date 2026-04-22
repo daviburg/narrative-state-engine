@@ -54,8 +54,11 @@ PC_ALLOWED_ATTRS = {
 # Consecutive PC extraction failure tracking (#133)
 _pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
 _pc_skipped_turns = 0
+_pc_turns_since_cooldown = 0  # Tracks turns since cooldown started (increments every turn, skip or attempt)
 _PC_FAILURE_WARN_THRESHOLD = 10
-_PC_SKIP_THRESHOLD = 20  # Skip PC extraction after this many consecutive failures (#149)
+_PC_SKIP_COOLDOWN = 50       # Skip PC extraction for this many turns after threshold failures
+_PC_RETRY_WINDOW = 5         # Retry for this many turns before entering cooldown again
+_PC_SKIP_THRESHOLD = 20      # Enter cooldown after this many consecutive failures (#149)
 
 
 def _reset_pc_failure_tracking() -> None:
@@ -65,10 +68,30 @@ def _reset_pc_failure_tracking() -> None:
     must call this at the start of each new batch/single run to avoid
     carrying failure counts across unrelated invocations in long-lived
     processes.
+
+    After ``_PC_SKIP_THRESHOLD`` consecutive failures, PC extraction enters
+    a cooldown cycle: it skips ``_PC_SKIP_COOLDOWN`` turns then retries for
+    ``_PC_RETRY_WINDOW`` turns, repeating until a success resets the counter.
     """
-    global _pc_consecutive_failures, _pc_skipped_turns
+    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     _pc_consecutive_failures = 0
     _pc_skipped_turns = 0
+    _pc_turns_since_cooldown = 0
+
+
+def _should_skip_pc(consecutive_failures: int, turns_since_cooldown: int) -> bool:
+    """Return True if PC extraction should be skipped this turn.
+
+    Uses the cooldown model: after ``_PC_SKIP_THRESHOLD`` consecutive
+    failures, skip ``_PC_SKIP_COOLDOWN`` turns then allow attempts for
+    ``_PC_RETRY_WINDOW`` turns, repeating.  ``turns_since_cooldown``
+    is a separate counter that advances every turn (skip or attempt)
+    once the threshold is reached.
+    """
+    if consecutive_failures < _PC_SKIP_THRESHOLD:
+        return False
+    cycle_position = turns_since_cooldown % (_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW)
+    return cycle_position < _PC_SKIP_COOLDOWN
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
@@ -641,6 +664,23 @@ def _format_prior_entity_context(
     return json.dumps(prior, indent=2)
 
 
+def _unwrap_entity_response(detail_result: dict) -> dict | None:
+    """Extract entity data from LLM response, handling missing envelope.
+
+    The entity-detail template asks the LLM to return ``{"entity": {...}}``,
+    but smaller models sometimes return the entity object flat at the top
+    level.  This function accepts both formats.
+    """
+    # Standard envelope format
+    entity_data = detail_result.get("entity")
+    if isinstance(entity_data, dict):
+        return entity_data
+    # Flat format — LLM returned the entity directly
+    if "id" in detail_result and "type" in detail_result:
+        return dict(detail_result)  # shallow copy to avoid mutating the raw response
+    return None
+
+
 def format_detail_prompt(
     turn: dict,
     entity_ref: dict,
@@ -989,7 +1029,7 @@ def extract_and_merge(
     Returns:
         Updated (catalogs, events_list) tuple.
     """
-    global _pc_consecutive_failures, _pc_skipped_turns
+    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
 
     # Load arc sidecar for PC relationship compaction (#120)
@@ -1082,7 +1122,7 @@ def extract_and_merge(
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
             continue
 
-        entity_data = detail_result.get("entity")
+        entity_data = _unwrap_entity_response(detail_result)
         if entity_data:
             entity_data = _coerce_entity_fields(entity_data)
         if entity_data and not _filter_concept_prefix_from_items(entity_data):
@@ -1116,9 +1156,12 @@ def extract_and_merge(
     )
     if not pc_already_extracted:
         # Skip PC extraction after too many consecutive failures (#149)
+        _skip_pc = _should_skip_pc(_pc_consecutive_failures, _pc_turns_since_cooldown)
         if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            _pc_skipped_turns += 1
-        else:
+            _pc_turns_since_cooldown += 1  # lgtm[py/unused-global-variable]
+            if _skip_pc:
+                _pc_skipped_turns += 1
+        if not _skip_pc:
             pc_result = find_entity_by_id(catalogs, "char-player")
             pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
             # Sanitize existing entry before sending to LLM so stale keys
@@ -1137,7 +1180,7 @@ def extract_and_merge(
                     timeout=pc_timeout,
                     max_tokens=llm.pc_max_tokens,
                 )
-                entity_data = detail_result.get("entity")
+                entity_data = _unwrap_entity_response(detail_result)
                 if entity_data:
                     entity_data = _coerce_entity_fields(entity_data)
                 if entity_data and _validate_entity(entity_data):
@@ -1170,6 +1213,7 @@ def extract_and_merge(
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
                 _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
+                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
             else:
                 _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
                 if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
@@ -1182,8 +1226,9 @@ def extract_and_merge(
                     )
                 elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
                     print(
-                        f"  WARNING: PC extraction skipped from now on after "
-                        f"{_PC_SKIP_THRESHOLD} consecutive failures.",
+                        f"  WARNING: PC extraction entering cooldown after "
+                        f"{_PC_SKIP_THRESHOLD} consecutive failures "
+                        f"(skip {_PC_SKIP_COOLDOWN}, retry {_PC_RETRY_WINDOW}).",
                         file=sys.stderr,
                     )
             llm.delay()
@@ -1679,7 +1724,7 @@ def backfill_stubs(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
             )
-            entity_data = detail_result.get("entity")
+            entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
                 entity_data = _coerce_entity_fields(entity_data)
             if entity_data and _validate_entity(entity_data):
@@ -1846,7 +1891,7 @@ def refresh_entities(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
             )
-            entity_data = detail_result.get("entity")
+            entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
                 entity_data = _coerce_entity_fields(entity_data)
             if entity_data and _validate_entity(entity_data):
@@ -2672,7 +2717,9 @@ def extract_semantic_batch(
     if _pc_skipped_turns > 0:
         print(
             f"  PC extraction skipped for {_pc_skipped_turns} turn(s) "
-            f"after {_PC_SKIP_THRESHOLD} consecutive failures",
+            f"(cooldown after {_PC_SKIP_THRESHOLD} consecutive failures, "
+            f"retrying for {_PC_RETRY_WINDOW} turn(s) every "
+            f"{_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW} turns)",
         )
 
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
