@@ -1706,6 +1706,161 @@ def backfill_stubs(
     return backfilled
 
 
+# ---------------------------------------------------------------------------
+# Entity refresh — periodic re-extraction of stale entities (#161)
+# ---------------------------------------------------------------------------
+
+# Defaults used when config keys are absent
+_DEFAULT_REFRESH_INTERVAL = 50
+_DEFAULT_REFRESH_BATCH_SIZE = 5
+
+
+def find_stale_entities(
+    current_turn_number: int,
+    catalogs: dict,
+    turn_dicts: list,
+    refresh_interval: int = _DEFAULT_REFRESH_INTERVAL,
+    batch_size: int = _DEFAULT_REFRESH_BATCH_SIZE,
+) -> list[tuple[str, dict]]:
+    """Find entities whose ``last_updated_turn`` is stale and that are still
+    mentioned in the transcript since their last update.
+
+    Returns up to *batch_size* ``(catalog_file, entity)`` tuples sorted by
+    staleness (most stale first).  The player character (``char-player``) is
+    excluded because it is already extracted every turn.
+    """
+    stale: list[tuple[int, str, dict]] = []  # (gap, catalog_file, entity)
+
+    if refresh_interval <= 0:
+        return []
+
+    for filename, entities in catalogs.items():
+        for entity in entities:
+            entity_id = entity.get("id", "")
+            if entity_id == "char-player":
+                continue  # PC is always refreshed
+
+            last_turn = _parse_turn_number(entity.get("last_updated_turn"))
+            if last_turn is None:
+                continue
+            gap = current_turn_number - last_turn
+            if gap <= refresh_interval:
+                continue
+
+            # Only refresh if the entity is mentioned in transcript since last update
+            entity_name = entity.get("name", "")
+            if not _entity_mentioned_since(entity_id, entity_name, last_turn, turn_dicts):
+                continue
+
+            stale.append((gap, filename, entity))
+
+    # Sort by staleness descending (highest gap first) and limit
+    stale.sort(key=lambda x: x[0], reverse=True)
+    return [(fn, ent) for _gap, fn, ent in stale[:batch_size]]
+
+
+def _entity_mentioned_since(
+    entity_id: str,
+    entity_name: str,
+    last_turn_number: int,
+    turn_dicts: list,
+) -> bool:
+    """Return True if entity is mentioned in any turn after *last_turn_number*.
+
+    Checks both the entity ID and entity name (case-insensitive, minimum 3
+    chars) against the turn text.
+    """
+    name_lower = entity_name.strip().lower() if entity_name and len(entity_name.strip()) >= 3 else None
+
+    for turn in turn_dicts:
+        turn_num = _parse_turn_number(turn.get("turn_id"))
+        if turn_num is None or turn_num <= last_turn_number:
+            continue
+        text = turn.get("text", "")
+        text_lower = text.lower()
+        if entity_id in text_lower:
+            return True
+        if name_lower and name_lower in text_lower:
+            return True
+    return False
+
+
+def refresh_entities(
+    stale_entities: list[tuple[str, dict]],
+    current_turn_id: str,
+    turn_dicts: list,
+    catalogs: dict,
+    llm: "LLMClient",
+) -> int:
+    """Re-extract detail for stale entities using recent transcript context.
+
+    For each entity, gathers transcript turns where the entity is mentioned
+    after its ``last_updated_turn``, builds a synthetic context, and calls the
+    LLM to update the entity detail.  New details are merged (not overwritten)
+    into the existing entity.
+
+    Returns the number of entities successfully refreshed.
+    """
+    refreshed = 0
+    for _catalog_file, entity in stale_entities:
+        entity_id = entity.get("id", "")
+        entity_name = entity.get("name", "")
+        entity_type = entity.get("type", "character")
+        last_updated = _parse_turn_number(entity.get("last_updated_turn")) or 0
+
+        # Gather recent context: turns where entity is mentioned since last update
+        context_parts: list[str] = []
+        for turn in turn_dicts:
+            t_num = _parse_turn_number(turn.get("turn_id"))
+            if t_num is None or t_num <= last_updated:
+                continue
+            text = turn.get("text", "")
+            text_lower = text.lower()
+            name_lower = entity_name.strip().lower() if entity_name and len(entity_name.strip()) >= 3 else None
+            if entity_id in text_lower or (name_lower and name_lower in text_lower):
+                context_parts.append(f"[{turn['turn_id']}] {text[:500]}")
+        context_text = "\n".join(context_parts[:15])  # cap context size
+
+        if not context_text:
+            continue
+
+        # Build a synthetic turn containing collected context
+        synthetic_turn = {
+            "turn_id": current_turn_id,
+            "speaker": "DM",
+            "text": context_text,
+        }
+        entity_ref = {
+            "name": entity_name,
+            "type": entity_type,
+            "existing_id": entity_id,
+            "is_new": False,
+        }
+
+        try:
+            detail_result = llm.extract_json(
+                system_prompt=load_template("entity-detail"),
+                user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
+            )
+            entity_data = detail_result.get("entity")
+            if entity_data:
+                entity_data = _coerce_entity_fields(entity_data)
+            if entity_data and _validate_entity(entity_data):
+                # Preserve first_seen_turn from original entity
+                entity_data["first_seen_turn"] = entity.get("first_seen_turn",
+                                                             current_turn_id)
+                merge_entity(catalogs, entity_data)
+                refreshed += 1
+                print(f"  REFRESH: Updated stale entity '{entity_id}' "
+                      f"(was stuck at {entity.get('last_updated_turn', '?')})")
+        except LLMExtractionError as e:
+            print(f"  WARNING: Refresh failed for {entity_id}: {e}", file=sys.stderr)
+
+        llm.delay()
+
+    return refreshed
+
+
 def _merge_pc_aliases(
     catalogs: dict,
     events_list: list,
@@ -2115,6 +2270,11 @@ def _extract_segmented(
         # Pre-seed player character (always present)
         _ensure_player_character(seg_catalogs, segment_turns[0]["turn_id"])
 
+        # Entity refresh config (#161)
+        _seg_refresh_cfg = getattr(llm, "config", None) or {}
+        seg_refresh_interval = _seg_refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
+        seg_refresh_batch = _seg_refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
+
         # Process this segment's turns
         for i, turn in enumerate(segment_turns):
             turn_id = turn["turn_id"]
@@ -2131,6 +2291,26 @@ def _extract_segmented(
             except Exception as e:
                 print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
                 continue
+
+            # --- Entity refresh pass (#161) ---
+            seg_turn_number = _parse_turn_number(turn_id)
+            if (
+                seg_refresh_interval > 0
+                and seg_turn_number is not None
+                and seg_turn_number % seg_refresh_interval == 0
+            ):
+                stale = find_stale_entities(
+                    seg_turn_number, seg_catalogs, segment_turns[:i + 1],
+                    refresh_interval=seg_refresh_interval,
+                    batch_size=seg_refresh_batch,
+                )
+                if stale:
+                    print(f"  REFRESH: {len(stale)} stale entity/entities at {turn_id}")
+                    refreshed = refresh_entities(stale, turn_id,
+                                                 segment_turns[:i + 1],
+                                                 seg_catalogs, llm)
+                    if refreshed:
+                        print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
         seg_entity_count = sum(len(v) for v in seg_catalogs.values())
         print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events")
@@ -2258,6 +2438,11 @@ def extract_semantic_batch(
 
     print(f"  Processing {total - start_from} turns for semantic extraction...")
 
+    # Entity refresh config (#161)
+    _refresh_cfg = getattr(llm, "config", None) or {}
+    refresh_interval = _refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
+    refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
+
     for i in range(start_from, total):
         turn = turn_dicts[i]
         turn_id = turn["turn_id"]
@@ -2277,6 +2462,25 @@ def extract_semantic_batch(
             _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
                            total, catalogs, dry_run)
             continue
+
+        # --- Entity refresh pass (#161) ---
+        current_turn_number = _parse_turn_number(turn_id)
+        if (
+            refresh_interval > 0
+            and current_turn_number is not None
+            and current_turn_number % refresh_interval == 0
+        ):
+            stale = find_stale_entities(
+                current_turn_number, catalogs, turn_dicts[:i + 1],
+                refresh_interval=refresh_interval,
+                batch_size=refresh_batch_size,
+            )
+            if stale:
+                print(f"  REFRESH: {len(stale)} stale entity/entities at {turn_id}")
+                refreshed = refresh_entities(stale, turn_id, turn_dicts[:i + 1],
+                                             catalogs, llm)
+                if refreshed:
+                    print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
         # Checkpoint every 50 turns
         if (i + 1) % 50 == 0:
