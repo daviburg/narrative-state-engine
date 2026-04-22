@@ -142,7 +142,7 @@ def load_catalogs(catalog_dir: str) -> dict:
                         stacklevel=2,
                     )
             except (json.JSONDecodeError, OSError):
-                pass
+                pass  # Unreadable flat file — not actionable; skip the guard.
 
     for dirname, key in zip(_V2_DIRNAMES, CATALOG_KEYS):
         entity_dir = os.path.join(catalog_dir, dirname)
