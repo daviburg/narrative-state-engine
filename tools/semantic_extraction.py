@@ -1738,6 +1738,14 @@ def _merge_pc_aliases(
     chars_catalog = "characters.json"
     entities = catalogs.get(chars_catalog, [])
 
+    # Precompute set of entity IDs that co-occur with char-player in events
+    pc_cooccurring_ids: set[str] = set()
+    for e in events_list:
+        rel = e.get("related_entities", [])
+        if "char-player" in rel:
+            pc_cooccurring_ids.update(rel)
+    pc_cooccurring_ids.discard("char-player")
+
     for entity in list(entities):
         eid = entity.get("id", "")
         if eid == "char-player" or not eid:
@@ -1765,6 +1773,21 @@ def _merge_pc_aliases(
                     continue  # Too much independent data — likely a real NPC
             except ValueError:
                 continue
+
+        # Guard: skip if candidate co-occurs with char-player in any event
+        # (co-occurrence indicates distinct entity, not alias)
+        if eid in pc_cooccurring_ids:
+            continue
+
+        # Guard: skip if candidate has a relationship with char-player
+        candidate_rels = entity.get("relationships", [])
+        if any(r.get("target_id") == "char-player" for r in candidate_rels):
+            continue
+
+        # Guard: skip if char-player has a relationship targeting this candidate
+        pc_rels = pc_entry.get("relationships", [])
+        if any(r.get("target_id") == eid for r in pc_rels):
+            continue
 
         # Merge into char-player: add name as alias
         alias_source_turn = first or last or ""
