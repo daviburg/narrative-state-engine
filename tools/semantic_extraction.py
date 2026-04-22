@@ -1766,6 +1766,26 @@ def _merge_pc_aliases(
             except ValueError:
                 continue
 
+        # Guard: skip if candidate co-occurs with char-player in any event
+        # (co-occurrence indicates distinct entity, not alias)
+        cooccurs = any(
+            eid in e.get("related_entities", [])
+            and "char-player" in e.get("related_entities", [])
+            for e in events_list
+        )
+        if cooccurs:
+            continue
+
+        # Guard: skip if candidate has a relationship with char-player
+        candidate_rels = entity.get("relationships", [])
+        if any(r.get("target_id") == "char-player" for r in candidate_rels):
+            continue
+
+        # Guard: skip if char-player has a relationship targeting this candidate
+        pc_rels = pc_entry.get("relationships", [])
+        if any(r.get("target_id") == eid for r in pc_rels):
+            continue
+
         # Merge into char-player: add name as alias
         alias_source_turn = first or last or ""
         sa = pc_entry.setdefault("stable_attributes", {})
