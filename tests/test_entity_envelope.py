@@ -36,21 +36,57 @@ def test_unwrap_entity_response_entity_is_not_dict():
 
 
 def test_pc_skip_cooldown_cycle():
-    """PC skip uses cooldown+retry cycle, not permanent skip."""
-    from semantic_extraction import _PC_SKIP_THRESHOLD, _PC_SKIP_COOLDOWN, _PC_RETRY_WINDOW
+    """PC skip uses a repeating cooldown+retry progression, not a permanent skip.
 
-    skipped = 0
-    attempted = 0
-    for consecutive_failures in range(
-        _PC_SKIP_THRESHOLD, _PC_SKIP_THRESHOLD + 100
-    ):  # 100 turns after threshold
-        turns_since = consecutive_failures - _PC_SKIP_THRESHOLD
-        cycle_pos = turns_since % (_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW)
-        if cycle_pos < _PC_SKIP_COOLDOWN:
-            skipped += 1
-        else:
-            attempted += 1
+    Simulates realistic state progression: _should_skip_pc is called each turn
+    with a ``turns_since_cooldown`` counter that advances every turn once the
+    threshold is reached.  Consecutive failures stay constant during skipped
+    turns (no extraction attempted) and only increment during retry-window
+    turns (when extraction is attempted but fails).
+    """
+    from semantic_extraction import (
+        _should_skip_pc,
+        _PC_SKIP_THRESHOLD,
+        _PC_SKIP_COOLDOWN,
+        _PC_RETRY_WINDOW,
+    )
 
-    # In 100 turns: ~91 skipped, ~9 attempted (two retry windows)
-    assert attempted > 0, "Should retry during window"
-    assert skipped > attempted, "Should skip more than retry"
+    cycle_len = _PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW
+    # Simulate 2 full cycles after threshold
+    total_turns = cycle_len * 2
+    consecutive_failures = _PC_SKIP_THRESHOLD
+    turns_since_cooldown = 0
+    sequence = []  # True = attempted, False = skipped
+
+    for _ in range(total_turns):
+        skip = _should_skip_pc(consecutive_failures, turns_since_cooldown)
+        sequence.append(not skip)
+        turns_since_cooldown += 1
+        if not skip:
+            # Attempt extraction — simulate failure
+            consecutive_failures += 1
+
+    # First cooldown window: all skipped
+    assert sequence[:_PC_SKIP_COOLDOWN] == [False] * _PC_SKIP_COOLDOWN
+    # First retry window: all attempted
+    assert sequence[_PC_SKIP_COOLDOWN:cycle_len] == [True] * _PC_RETRY_WINDOW
+    # Second cooldown window
+    assert sequence[cycle_len:cycle_len + _PC_SKIP_COOLDOWN] == [False] * _PC_SKIP_COOLDOWN
+    # Second retry window
+    assert sequence[cycle_len + _PC_SKIP_COOLDOWN:cycle_len * 2] == [True] * _PC_RETRY_WINDOW
+
+    attempted = sum(sequence)
+    skipped = len(sequence) - attempted
+    assert attempted == _PC_RETRY_WINDOW * 2
+    assert skipped == _PC_SKIP_COOLDOWN * 2
+
+
+def test_pc_skip_resets_on_success():
+    """A successful extraction during the retry window resets cooldown."""
+    from semantic_extraction import _should_skip_pc, _PC_SKIP_THRESHOLD
+
+    # At threshold, first turn should be skipped (cooldown position 0)
+    assert _should_skip_pc(_PC_SKIP_THRESHOLD, 0) is True
+    # Below threshold, never skip
+    assert _should_skip_pc(_PC_SKIP_THRESHOLD - 1, 0) is False
+    assert _should_skip_pc(0, 0) is False

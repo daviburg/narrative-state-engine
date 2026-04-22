@@ -54,6 +54,7 @@ PC_ALLOWED_ATTRS = {
 # Consecutive PC extraction failure tracking (#133)
 _pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
 _pc_skipped_turns = 0
+_pc_turns_since_cooldown = 0  # Tracks turns since cooldown started (increments every turn, skip or attempt)
 _PC_FAILURE_WARN_THRESHOLD = 10
 _PC_SKIP_COOLDOWN = 50       # Skip PC extraction for this many turns after threshold failures
 _PC_RETRY_WINDOW = 5         # Retry for this many turns before entering cooldown again
@@ -72,9 +73,25 @@ def _reset_pc_failure_tracking() -> None:
     a cooldown cycle: it skips ``_PC_SKIP_COOLDOWN`` turns then retries for
     ``_PC_RETRY_WINDOW`` turns, repeating until a success resets the counter.
     """
-    global _pc_consecutive_failures, _pc_skipped_turns
+    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     _pc_consecutive_failures = 0
     _pc_skipped_turns = 0
+    _pc_turns_since_cooldown = 0
+
+
+def _should_skip_pc(consecutive_failures: int, turns_since_cooldown: int) -> bool:
+    """Return True if PC extraction should be skipped this turn.
+
+    Uses the cooldown model: after ``_PC_SKIP_THRESHOLD`` consecutive
+    failures, skip ``_PC_SKIP_COOLDOWN`` turns then allow attempts for
+    ``_PC_RETRY_WINDOW`` turns, repeating.  ``turns_since_cooldown``
+    is a separate counter that advances every turn (skip or attempt)
+    once the threshold is reached.
+    """
+    if consecutive_failures < _PC_SKIP_THRESHOLD:
+        return False
+    cycle_position = turns_since_cooldown % (_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW)
+    return cycle_position < _PC_SKIP_COOLDOWN
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
@@ -1012,7 +1029,7 @@ def extract_and_merge(
     Returns:
         Updated (catalogs, events_list) tuple.
     """
-    global _pc_consecutive_failures, _pc_skipped_turns
+    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
 
     # Load arc sidecar for PC relationship compaction (#120)
@@ -1139,15 +1156,11 @@ def extract_and_merge(
     )
     if not pc_already_extracted:
         # Skip PC extraction after too many consecutive failures (#149)
-        _skip_pc = False
+        _skip_pc = _should_skip_pc(_pc_consecutive_failures, _pc_turns_since_cooldown)
         if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            # Cooldown model: skip _PC_SKIP_COOLDOWN turns, then retry for _PC_RETRY_WINDOW turns
-            turns_since_threshold = _pc_consecutive_failures - _PC_SKIP_THRESHOLD
-            cycle_position = turns_since_threshold % (_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW)
-            if cycle_position < _PC_SKIP_COOLDOWN:
+            _pc_turns_since_cooldown += 1
+            if _skip_pc:
                 _pc_skipped_turns += 1
-                _skip_pc = True
-            # else: we're in the retry window — fall through to attempt extraction
         if not _skip_pc:
             pc_result = find_entity_by_id(catalogs, "char-player")
             pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
@@ -1200,6 +1213,7 @@ def extract_and_merge(
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
                 _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
+                _pc_turns_since_cooldown = 0
             else:
                 _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
                 if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
@@ -1212,8 +1226,9 @@ def extract_and_merge(
                     )
                 elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
                     print(
-                        f"  WARNING: PC extraction skipped from now on after "
-                        f"{_PC_SKIP_THRESHOLD} consecutive failures.",
+                        f"  WARNING: PC extraction entering cooldown after "
+                        f"{_PC_SKIP_THRESHOLD} consecutive failures "
+                        f"(skip {_PC_SKIP_COOLDOWN}, retry {_PC_RETRY_WINDOW}).",
                         file=sys.stderr,
                     )
             llm.delay()
@@ -2703,7 +2718,8 @@ def extract_semantic_batch(
         print(
             f"  PC extraction skipped for {_pc_skipped_turns} turn(s) "
             f"(cooldown after {_PC_SKIP_THRESHOLD} consecutive failures, "
-            f"retrying every {_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW} turns)",
+            f"retrying for {_PC_RETRY_WINDOW} turn(s) every "
+            f"{_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW} turns)",
         )
 
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")

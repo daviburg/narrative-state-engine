@@ -185,18 +185,22 @@ class TestPCSkipThreshold:
         assert se._PC_FAILURE_WARN_THRESHOLD < se._PC_SKIP_THRESHOLD
 
     def test_reset_clears_all_counters(self):
-        """_reset_pc_failure_tracking clears both counters."""
+        """_reset_pc_failure_tracking clears all counters."""
         original_f = se._pc_consecutive_failures
         original_s = se._pc_skipped_turns
+        original_c = se._pc_turns_since_cooldown
         try:
             se._pc_consecutive_failures = 25
             se._pc_skipped_turns = 10
+            se._pc_turns_since_cooldown = 30
             se._reset_pc_failure_tracking()
             assert se._pc_consecutive_failures == 0
             assert se._pc_skipped_turns == 0
+            assert se._pc_turns_since_cooldown == 0
         finally:
             se._pc_consecutive_failures = original_f
             se._pc_skipped_turns = original_s
+            se._pc_turns_since_cooldown = original_c
 
 
 class TestPCSkipIntegration:
@@ -342,11 +346,11 @@ class TestPCSkipLogNoise:
         assert count == 1, f"Expected 1 warning, got {count}"
 
     def test_skip_message_at_skip_threshold(self, monkeypatch, capsys):
-        """Skip warning fires exactly at _PC_SKIP_THRESHOLD."""
+        """Cooldown warning fires exactly at _PC_SKIP_THRESHOLD."""
         captured = self._run_turns_capture_stderr(
             monkeypatch, capsys, se._PC_SKIP_THRESHOLD,
         )
-        assert "skipped from now on" in captured.err
+        assert "entering cooldown" in captured.err
 
     def test_no_warnings_while_skipping(self, monkeypatch, capsys):
         """No per-turn warnings should fire while PC extraction is skipped."""
