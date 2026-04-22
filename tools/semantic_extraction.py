@@ -60,6 +60,9 @@ _PC_SKIP_COOLDOWN = 50       # Skip PC extraction for this many turns after thre
 _PC_RETRY_WINDOW = 5         # Retry for this many turns before entering cooldown again
 _PC_SKIP_THRESHOLD = 20      # Enter cooldown after this many consecutive failures (#149)
 
+# Schema-compliant turn ID pattern (matches e.g. turn-001, turn-1234)
+_TURN_ID_RE = re.compile(r"^turn-[0-9]{3,}$")
+
 
 def _reset_pc_failure_tracking() -> None:
     """Reset per-run char-player extraction failure state.
@@ -272,7 +275,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             turn_id = entity_data.get("last_updated_turn", "")
             # Only include source_turn / last_updated_turn when a valid
             # turn ID is available (schema requires pattern ^turn-[0-9]{3,}$).
-            has_valid_turn = bool(turn_id and turn_id.startswith("turn-"))
+            has_valid_turn = bool(turn_id and _TURN_ID_RE.match(turn_id))
             for key, val in attrs.items():
                 if key in volatile_keys:
                     if key == "equipment" and isinstance(val, str):
@@ -306,7 +309,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     # V2 entity schema, causing additionalProperties validation failures.
     # Remap them into the correct V2 locations before validation.
     turn_id = entity_data.get("last_updated_turn", "")
-    has_valid_turn = bool(turn_id and turn_id.startswith("turn-"))
+    has_valid_turn = bool(turn_id and _TURN_ID_RE.match(turn_id))
 
     # Keys that should become volatile_state entries
     _volatile_remap = {
@@ -320,11 +323,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "physical_state": "condition",
     }
     for src_key, vs_key in _volatile_remap.items():
-        if src_key in entity_data and src_key not in (
-            "id", "name", "type", "identity", "current_status",
-            "status_updated_turn", "stable_attributes", "volatile_state",
-            "relationships", "first_seen_turn", "last_updated_turn", "notes",
-        ):
+        if src_key in entity_data:
             val = entity_data.pop(src_key)
             if "volatile_state" not in entity_data:
                 entity_data["volatile_state"] = {}
@@ -380,8 +379,11 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         if rk in entity_data:
             val = entity_data.pop(rk)
             # Only adopt if no relationships already present
-            if "relationships" not in entity_data and isinstance(val, list):
-                entity_data["relationships"] = val
+            if "relationships" not in entity_data:
+                if isinstance(val, list):
+                    entity_data["relationships"] = val
+                elif isinstance(val, dict):
+                    entity_data["relationships"] = [val]
             print(f"  COERCE: {rk} → relationships", file=sys.stderr)
 
     # Discard known noise keys that carry no recoverable structured data

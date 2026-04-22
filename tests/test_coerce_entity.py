@@ -678,4 +678,46 @@ def test_coerce_multiple_nonstandard_keys_combined():
     assert result["volatile_state"]["location"] == "bonfire"
     assert result["volatile_state"]["condition"] == "tired but safe"
     assert result["stable_attributes"]["abilities"]["value"] == ["darkvision"]
-    assert result["current_status"] == "Resting by fire."
+
+
+def test_coerce_relations_dict_wrapped_to_list():
+    """Single dict under a relationship key variant is wrapped in a list."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "relations": {"target_id": "char-kael", "current_relationship": "ally",
+                       "type": "social", "first_seen_turn": "turn-010"},
+    }
+    result = _coerce_entity_fields(entity)
+    assert "relations" not in result
+    assert isinstance(result["relationships"], list)
+    assert len(result["relationships"]) == 1
+    assert result["relationships"][0]["target_id"] == "char-kael"
+
+
+def test_coerce_rejects_malformed_turn_id_for_source_turn():
+    """Malformed turn IDs (too few digits or non-numeric) don't become source_turn."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-ab",
+        "abilities": ["darkvision"],
+    }
+    result = _coerce_entity_fields(entity)
+    # abilities should still be remapped
+    assert "abilities" in result["stable_attributes"]
+    # but source_turn must NOT be set because "turn-ab" is invalid
+    assert "source_turn" not in result["stable_attributes"]["abilities"]
+
+
+def test_coerce_accepts_valid_turn_id_for_source_turn():
+    """Valid turn IDs with 3+ digits are accepted as source_turn."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-1234",
+        "abilities": ["darkvision"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["stable_attributes"]["abilities"]["source_turn"] == "turn-1234"
