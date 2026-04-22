@@ -75,7 +75,7 @@ def _make_stub_llm(pc_fail=True, pc_max_tokens=4096):
 
 def _fresh_catalogs():
     """Return minimal catalogs with a PC entry."""
-    catalogs = {fn: [] for fn in se._V1_FILENAMES}
+    catalogs = {fn: [] for fn in se.CATALOG_KEYS}
     se._ensure_player_character(catalogs, "turn-001")
     return catalogs
 

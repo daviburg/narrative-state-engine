@@ -35,7 +35,7 @@ def test_stringifies_array_attribute():
         "attributes": {"uses": ["healing", "cooking"]},
     }
     result = _coerce_entity_fields(entity)
-    # V1→V2 coercion: attributes → stable_attributes (array was first stringified)
+    # LLM coercion: attributes → stable_attributes (array was first stringified)
     assert result["stable_attributes"]["uses"]["value"] == "healing, cooking"
 
 
@@ -46,7 +46,7 @@ def test_stringifies_dict_attribute():
         "attributes": {"relationship": {"target_id": "char-001", "type": "owned_by"}},
     }
     result = _coerce_entity_fields(entity)
-    # V1→V2 coercion: dict was stringified then moved to stable_attributes
+    # LLM coercion: dict was stringified then moved to stable_attributes
     assert isinstance(result["stable_attributes"]["relationship"]["value"], str)
 
 
@@ -108,7 +108,7 @@ def test_coerces_numeric_attribute_to_string():
         "attributes": {"weight": 5, "magical": True, "value": 3.5},
     }
     result = _coerce_entity_fields(entity)
-    # V1→V2 coercion: numeric values were stringified then moved to stable_attributes
+    # LLM coercion: numeric values were stringified then moved to stable_attributes
     assert result["stable_attributes"]["weight"]["value"] == "5"
     assert result["stable_attributes"]["magical"]["value"] == "True"
     assert result["stable_attributes"]["value"]["value"] == "3.5"
@@ -183,13 +183,13 @@ def test_coerces_none_attribute_to_empty_string():
         "attributes": {"notes": None},
     }
     result = _coerce_entity_fields(entity)
-    # V1→V2 coercion: None was stringified to "" then moved to stable_attributes
+    # LLM coercion: None was stringified to "" then moved to stable_attributes
     assert result["stable_attributes"]["notes"]["value"] == ""
 
 
-# --- V1→V2 coercion tests ---
+# --- LLM field normalization tests ---
 
-def test_v1_description_fallback_coercion():
+def test_description_fallback_coercion():
     """LLM returning 'description' but not 'identity' gets mapped to identity."""
     entity = {
         "id": "char-elder",
@@ -206,7 +206,7 @@ def test_v1_description_fallback_coercion():
     assert result["current_status"] == ""
 
 
-def test_v1_description_not_overwritten_when_identity_present():
+def test_description_not_overwritten_when_identity_present():
     """If both description and identity exist, identity stays and description is stripped."""
     entity = {
         "id": "char-elder",
@@ -223,7 +223,7 @@ def test_v1_description_not_overwritten_when_identity_present():
     assert "description" not in result
 
 
-def test_v1_flat_attributes_coerced_to_stable_volatile():
+def test_flat_attributes_coerced_to_stable_volatile():
     """LLM returning flat 'attributes' should be classified into stable/volatile."""
     entity = {
         "id": "char-kael",
@@ -253,7 +253,7 @@ def test_v1_flat_attributes_coerced_to_stable_volatile():
     assert sa["race"]["confidence"] == 1.0
     assert sa["race"]["source_turn"] == "turn-025"
 
-    # Inference marker detected from V1 suffix
+    # Inference marker detected from suffix
     assert sa["class"]["value"] == "fighter"
     assert sa["class"]["inference"] is True
     assert sa["class"]["confidence"] == 0.7
@@ -305,8 +305,8 @@ def test_stable_volatile_attributes_in_output():
     assert result["volatile_state"]["condition"] == "healthy"
 
 
-def test_v1_relationship_fields_coerced_to_v2():
-    """V1 relationship with 'relationship' and 'source_turn' gets V2 fields."""
+def test_relationship_fields_coerced_to_v2():
+    """Relationship with 'relationship' and 'source_turn' gets V2 fields."""
     entity = {
         "id": "char-elder",
         "name": "The Elder",
@@ -396,24 +396,6 @@ def test_prior_entity_context_assembly_v2():
     assert parsed["current_status"] == "At the council fire."
     assert "stable_attributes" in parsed
     assert "volatile_state" in parsed
-
-
-def test_prior_entity_context_assembly_v1_fallback():
-    """V1 entity falls back to description/attributes in context."""
-    entity = {
-        "id": "char-elder",
-        "name": "The Elder",
-        "type": "character",
-        "description": "An old leader.",
-        "attributes": {"role": "leader"},
-        "first_seen_turn": "turn-019",
-        "last_updated_turn": "turn-019",
-    }
-    result = _format_prior_entity_context(entity)
-    parsed = json.loads(result)
-    assert parsed["description"] == "An old leader."
-    assert parsed["attributes"]["role"] == "leader"
-    assert "identity" not in parsed
 
 
 def test_prior_entity_context_empty():

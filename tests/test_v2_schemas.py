@@ -8,7 +8,7 @@ import shutil
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from validate import validate_file, validate_dir, _is_v1_entity
+from validate import validate_file, validate_dir
 
 REPO_ROOT = os.path.join(os.path.dirname(__file__), "..")
 ENTITY_SCHEMA = os.path.join(REPO_ROOT, "schemas", "entity.schema.json")
@@ -111,36 +111,6 @@ def test_v2_entity_validates_full():
     }
     errors = _write_and_validate(entity, ENTITY_SCHEMA)
     assert errors == [], f"Unexpected errors: {errors}"
-
-
-def test_v1_entity_fails_v2_validation():
-    """V1 entity with 'description' and 'attributes' is detected and rejected."""
-    v1_entity = {
-        "id": "char-old",
-        "name": "Old Character",
-        "type": "character",
-        "description": "An old-format character.",
-        "attributes": {"role": "protagonist"},
-        "first_seen_turn": "turn-001",
-    }
-    errors = _write_and_validate(v1_entity, ENTITY_SCHEMA)
-    assert len(errors) == 1
-    assert "V1 entity format detected" in errors[0]
-
-
-def test_v1_entity_array_detected():
-    """V1 catalog array with description field is detected."""
-    v1_catalog = [
-        {
-            "id": "char-one",
-            "name": "One",
-            "type": "character",
-            "description": "First character.",
-            "first_seen_turn": "turn-001",
-        }
-    ]
-    errors = _write_and_validate(v1_catalog, ENTITY_SCHEMA)
-    assert any("V1 entity format detected" in e for e in errors)
 
 
 def test_v2_entity_missing_identity_fails():
@@ -396,31 +366,6 @@ def test_existing_demo_state_validates():
 
 
 # ---------------------------------------------------------------------------
-# V1 detection helper tests
-# ---------------------------------------------------------------------------
-
-def test_is_v1_entity_dict_with_description():
-    assert _is_v1_entity({"description": "old"}) is True
-
-
-def test_is_v1_entity_dict_with_attributes():
-    assert _is_v1_entity({"attributes": {"role": "npc"}}) is True
-
-
-def test_is_v1_entity_v2_dict():
-    assert _is_v1_entity({"identity": "new", "stable_attributes": {}}) is False
-
-
-def test_is_v1_entity_list():
-    assert _is_v1_entity([{"description": "old"}]) is True
-    assert _is_v1_entity([{"identity": "new"}]) is False
-
-
-def test_is_v1_entity_empty_list():
-    assert _is_v1_entity([]) is False
-
-
-# ---------------------------------------------------------------------------
 # Per-entity directory validation tests
 # ---------------------------------------------------------------------------
 
@@ -447,22 +392,22 @@ def test_per_entity_directory_validation():
         shutil.rmtree(tmpdir)
 
 
-def test_per_entity_dir_v1_file_fails():
-    """V1 entity file inside per-entity directory is detected and fails."""
+def test_per_entity_dir_non_schema_field_fails():
+    """Entity with non-schema fields (e.g. 'description') fails validation."""
     tmpdir = tempfile.mkdtemp()
     try:
         cat_dir = os.path.join(tmpdir, "catalogs", "characters")
         os.makedirs(cat_dir)
 
-        v1_entity = {
+        bad_entity = {
             "id": "char-old",
             "name": "Old",
             "type": "character",
-            "description": "V1 format.",
+            "description": "Not a V2 field.",
             "first_seen_turn": "turn-001",
         }
         with open(os.path.join(cat_dir, "char-old.json"), "w") as f:
-            json.dump(v1_entity, f)
+            json.dump(bad_entity, f)
 
         passed, failed, _ = validate_dir(tmpdir, REPO_ROOT)
         assert failed == 1

@@ -310,7 +310,7 @@ Recommended segment sizes:
 - 14B models (32K context): 100-150 turns
 - 70B+ models (128K context): 300+ turns (may not need segmentation)
 
-Segment size 0 (the default) preserves legacy single-pass behavior.
+Segment size 0 (the default) runs a single-pass extraction without segmentation.
 
 ### Coreference Hints
 

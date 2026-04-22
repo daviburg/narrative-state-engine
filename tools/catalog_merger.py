@@ -3,19 +3,13 @@
 catalog_merger.py — Merge agent-extracted entities, relationships, and events
 into existing catalog files.
 
-Supports both V2 per-entity file layout (preferred) and V1 flat file fallback.
-
-V2 layout (per-entity files):
+Uses the V2 per-entity file layout:
   framework/catalogs/characters/
     index.json            → lightweight roster (regenerated)
     char-player.json      → full entity detail
     char-elder.json       → full entity detail
 
-V1 layout (flat files — deprecated):
-  framework/catalogs/characters.json
-
 Handles:
-- Format detection (V2 directory vs V1 flat file)
 - New entity insertion with ID prefix validation
 - Existing entity updates (identity, status, attributes, last_updated_turn)
 - Name changes and alias tracking
@@ -32,8 +26,9 @@ import os
 import re
 import warnings
 
-# V1 flat file mapping (for backward compatibility)
-TYPE_TO_CATALOG_V1 = {
+# Maps entity types to catalog bucket keys (keyed by legacy filenames for
+# backward-compatible dict keys used throughout the pipeline).
+TYPE_TO_CATALOG = {
     "character": "characters.json",
     "location": "locations.json",
     "faction": "factions.json",
@@ -42,10 +37,10 @@ TYPE_TO_CATALOG_V1 = {
     "concept": "items.json",
 }
 
-# Flat file names used by the V1 format
-_V1_FILENAMES = ["characters.json", "locations.json", "factions.json", "items.json"]
+# Canonical catalog bucket keys (one per entity-type directory).
+CATALOG_KEYS = ["characters.json", "locations.json", "factions.json", "items.json"]
 
-# Directory names used by the V2 format
+# Per-entity directory names under catalogs/
 _V2_DIRNAMES = ["characters", "locations", "factions", "items"]
 
 TYPE_TO_PREFIX = {
@@ -58,33 +53,6 @@ TYPE_TO_PREFIX = {
 }
 
 DEFAULT_DORMANCY_THRESHOLD = 10
-
-
-# ---------------------------------------------------------------------------
-# Format detection
-# ---------------------------------------------------------------------------
-
-def detect_format(catalog_dir: str) -> str:
-    """Detect whether catalog_dir uses V2 (per-entity dirs) or V1 (flat files).
-
-    Returns ``"v2"`` only when the layout is unambiguously V2: either all
-    expected entity-type subdirectories exist, or at least one V2 directory
-    exists and no legacy V1 flat files remain.  Mixed layouts fall back to
-    ``"v1"`` so legacy flat files are still loaded during migration.
-    """
-    existing_v2_dirs = [
-        d for d in _V2_DIRNAMES
-        if os.path.isdir(os.path.join(catalog_dir, d))
-    ]
-    existing_v1_files = [
-        f for f in _V1_FILENAMES
-        if os.path.isfile(os.path.join(catalog_dir, f))
-    ]
-    if len(existing_v2_dirs) == len(_V2_DIRNAMES):
-        return "v2"
-    if existing_v2_dirs and not existing_v1_files:
-        return "v2"
-    return "v1"
 
 
 # ---------------------------------------------------------------------------
@@ -142,118 +110,70 @@ def _generate_index(entity_dir: str, entities: list[dict]) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Unified load / save (V2 preferred, V1 fallback)
+# Unified load / save
 # ---------------------------------------------------------------------------
 
 def load_catalogs(catalog_dir: str) -> dict:
     """Load all entity catalogs into a dict keyed by catalog name.
 
-    V2 mode: reads per-entity files from type directories.
-    V1 mode: reads flat JSON files (emits deprecation warning).
+    Reads per-entity files from V2 type directories.
 
-    The returned dict is keyed by the canonical V1 filenames
-    (``characters.json``, etc.) for backward compatibility with callers.
+    The returned dict is keyed by the canonical catalog keys
+    (``characters.json``, etc.) for compatibility with callers.
+
+    Raises a warning if stale V1 flat files with real data are found,
+    since they are no longer loaded and the data would be silently ignored.
     """
-    fmt = detect_format(catalog_dir)
     catalogs: dict[str, list[dict]] = {}
 
-    if fmt == "v2":
-        for dirname, filename in zip(_V2_DIRNAMES, _V1_FILENAMES):
-            entity_dir = os.path.join(catalog_dir, dirname)
-            catalogs[filename] = _read_v2_entities(entity_dir)
-    else:
-        warnings.warn(
-            "V1 flat catalog format detected; run migrate_catalogs_v2.py to upgrade",
-            DeprecationWarning,
-            stacklevel=2,
-        )
-        for filename in _V1_FILENAMES:
-            filepath = os.path.join(catalog_dir, filename)
-            if os.path.exists(filepath):
-                with open(filepath, "r", encoding="utf-8-sig") as f:
-                    catalogs[filename] = json.load(f)
-            else:
-                catalogs[filename] = []
+    # Guard: warn if stale V1 flat files contain data that would be lost
+    for key in CATALOG_KEYS:
+        flat_path = os.path.join(catalog_dir, key)
+        if os.path.isfile(flat_path):
+            try:
+                with open(flat_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    warnings.warn(
+                        f"Stale V1 flat file '{key}' contains {len(data)} "
+                        f"entries that will NOT be loaded. Remove it or "
+                        f"re-run the V1\u2192V2 migration.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+            except (json.JSONDecodeError, OSError):
+                pass  # Unreadable flat file — not actionable; skip the guard.
+
+    for dirname, key in zip(_V2_DIRNAMES, CATALOG_KEYS):
+        entity_dir = os.path.join(catalog_dir, dirname)
+        catalogs[key] = _read_v2_entities(entity_dir)
     return catalogs
 
 
-def _has_real_v1_data(catalog_dir: str) -> bool:
-    """Return True if any V1 flat file contains meaningful data (not just ``[]``)."""
-    for fname in _V1_FILENAMES:
-        fpath = os.path.join(catalog_dir, fname)
-        if not os.path.isfile(fpath):
-            continue
-        try:
-            size = os.path.getsize(fpath)
-        except OSError:
-            continue
-        if size <= 3:
-            # File is empty or just "[]" / "[]\n"
-            continue
-        # Read and check for non-empty array
-        try:
-            with open(fpath, "r", encoding="utf-8-sig") as f:
-                data = json.load(f)
-            if isinstance(data, list) and len(data) > 0:
-                return True
-        except (json.JSONDecodeError, OSError):
-            continue
-    return False
+def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False) -> None:
+    """Write all catalogs back to disk using V2 per-entity layout.
 
-
-def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False, prefer_v2: bool = True) -> None:
-    """Write all catalogs back to disk.
-
-    V2 mode: writes per-entity files and regenerates index.json.
-    V1 mode: writes flat JSON files.
-
-    When *prefer_v2* is True (default) and ``detect_format()`` returns
-    ``"v1"`` but no flat file contains real data (all empty or just ``[]``),
-    the output format is upgraded to V2 automatically.  This prevents a clean
-    extraction start from defaulting to the deprecated V1 layout.
+    Writes per-entity files and regenerates index.json for each type directory.
     """
-    fmt = detect_format(catalog_dir)
-
-    # On a clean start (neither V1 nor V2 exist), default to V2 if preferred
-    if fmt == "v1" and prefer_v2 and not _has_real_v1_data(catalog_dir):
-        fmt = "v2"
-        # Remove empty V1 flat files to avoid a mixed layout
-        if not dry_run:
-            for fname in _V1_FILENAMES:
-                fpath = os.path.join(catalog_dir, fname)
-                if os.path.isfile(fpath):
-                    os.remove(fpath)
-
-    if fmt == "v2":
-        for dirname, filename in zip(_V2_DIRNAMES, _V1_FILENAMES):
-            entities = catalogs.get(filename, [])
-            entity_dir = os.path.join(catalog_dir, dirname)
-            if dry_run:
-                print(f"  [DRY RUN] Would write {len(entities)} entities to {entity_dir}/")
+    for dirname, key in zip(_V2_DIRNAMES, CATALOG_KEYS):
+        entities = catalogs.get(key, [])
+        entity_dir = os.path.join(catalog_dir, dirname)
+        if dry_run:
+            print(f"  [DRY RUN] Would write {len(entities)} entities to {entity_dir}/")
+            continue
+        os.makedirs(entity_dir, exist_ok=True)
+        # Remove stale per-entity files for entities no longer in memory
+        # (e.g. after dedup merges)
+        live_ids = {e["id"] for e in entities}
+        for fname in os.listdir(entity_dir):
+            if fname == "index.json" or not fname.endswith(".json"):
                 continue
-            os.makedirs(entity_dir, exist_ok=True)
-            # Remove stale per-entity files for entities no longer in memory
-            # (e.g. after dedup merges)
-            live_ids = {e["id"] for e in entities}
-            for fname in os.listdir(entity_dir):
-                if fname == "index.json" or not fname.endswith(".json"):
-                    continue
-                stem = fname[:-5]  # strip .json
-                if stem not in live_ids:
-                    os.remove(os.path.join(entity_dir, fname))
-            for entity in entities:
-                _write_v2_entity(entity_dir, entity)
-            _generate_index(entity_dir, entities)
-    else:
-        for filename, data in catalogs.items():
-            filepath = os.path.join(catalog_dir, filename)
-            if dry_run:
-                print(f"  [DRY RUN] Would write {len(data)} entries to {filepath}")
-                continue
-            os.makedirs(catalog_dir, exist_ok=True)
-            with open(filepath, "w", encoding="utf-8") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-                f.write("\n")
+            stem = fname[:-5]  # strip .json
+            if stem not in live_ids:
+                os.remove(os.path.join(entity_dir, fname))
+        for entity in entities:
+            _write_v2_entity(entity_dir, entity)
+        _generate_index(entity_dir, entities)
 
 
 def load_events(catalog_dir: str) -> list:
@@ -291,17 +211,11 @@ def find_entity_by_id(catalogs: dict, entity_id: str) -> tuple[str, dict] | None
 
 
 def format_known_entities(catalogs: dict) -> str:
-    """Format all known entities as a compact table for the discovery prompt.
-
-    Supports both V2 (identity + stable_attributes.aliases) and
-    V1 (description + attributes.aliases) entity shapes.
-    """
+    """Format all known entities as a compact table for the discovery prompt."""
     lines = []
     for filename, entities in catalogs.items():
         for entity in entities:
-            # V2: identity field; V1: description field
-            desc = entity.get("identity") or entity.get("description", "")
-            # V2: stable_attributes.aliases.value; V1: attributes.aliases (string)
+            desc = entity.get("identity", "")
             aliases = ""
             sa = entity.get("stable_attributes", {}).get("aliases")
             if sa:
@@ -310,8 +224,6 @@ def format_known_entities(catalogs: dict) -> str:
                     aliases = ", ".join(val)
                 else:
                     aliases = str(val)
-            if not aliases:
-                aliases = entity.get("attributes", {}).get("aliases", "")
             extra = ""
             if desc:
                 extra += f" — {desc}"
@@ -515,8 +427,8 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
         print(f"  WARNING: Entity '{entity_id}' has invalid prefix for type '{entity_type}'. Skipping.")
         return
 
-    # Map type to the V1 filename key used in the catalogs dict
-    catalog_file = TYPE_TO_CATALOG_V1.get(entity_type)
+    # Map type to the catalog bucket key
+    catalog_file = TYPE_TO_CATALOG.get(entity_type)
     if not catalog_file or catalog_file not in catalogs:
         return
 
@@ -532,25 +444,20 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
         _update_existing_entity(current, entity)
         catalogs[catalog_file][idx] = current
     else:
-        # Ensure required fields for new entity (V2: identity; V1: description)
+        # Ensure required fields for new entity
         required_base = ["id", "name", "type", "first_seen_turn"]
-        has_desc = entity.get("identity") or entity.get("description")
+        has_desc = entity.get("identity")
         if all(entity.get(f) for f in required_base) and has_desc:
             catalogs[catalog_file].append(entity)
         else:
             missing = [f for f in required_base if not entity.get(f)]
             if not has_desc:
-                missing.append("identity/description")
+                missing.append("identity")
             print(f"  WARNING: New entity '{entity_id}' missing required fields: {missing}. Skipping.")
 
 
 def _update_existing_entity(current: dict, update: dict) -> None:
-    """Update an existing entity with new information.
-
-    Supports both V2 (identity/current_status/stable_attributes/volatile_state)
-    and V1 (description/attributes) entity shapes.
-    """
-    # --- V2 fields ---
+    """Update an existing entity with new information."""
     if update.get("identity") and update["identity"] != current.get("identity"):
         current["identity"] = update["identity"]
 
@@ -573,51 +480,30 @@ def _update_existing_entity(current: dict, update: dict) -> None:
         for key, value in update["volatile_state"].items():
             current["volatile_state"][key] = value
 
-    # --- V1 fields (backward compat) ---
-    if update.get("description") and update["description"] != current.get("description"):
-        current["description"] = update["description"]
-
-    if update.get("attributes"):
-        if "attributes" not in current:
-            current["attributes"] = {}
-        for key, value in update["attributes"].items():
-            current["attributes"][key] = value
-
-    # Handle name changes / aliases (V2: stable_attributes.aliases; V1: attributes.aliases)
+    # Handle name changes / aliases via stable_attributes.aliases
     if update.get("name") and update["name"] != current.get("name"):
         old_name = current["name"]
-        # V2 path
-        if "stable_attributes" in current:
-            sa = current["stable_attributes"]
-            existing_aliases = sa.get("aliases", {})
-            if isinstance(existing_aliases, dict):
-                val = existing_aliases.get("value", [])
-                if isinstance(val, str):
-                    val = [a.strip() for a in val.split(",") if a.strip()]
-                if old_name not in val:
-                    val.append(old_name)
-                alias_turn = (update.get("last_updated_turn")
-                              or current.get("last_updated_turn")
-                              or current.get("first_seen_turn", ""))
-                sa["aliases"] = {"value": val, "inference": False,
-                                 "source_turn": alias_turn}
-            else:
-                alias_turn = (update.get("last_updated_turn")
-                              or current.get("last_updated_turn")
-                              or current.get("first_seen_turn", ""))
-                sa["aliases"] = {"value": [old_name], "inference": False,
-                                 "source_turn": alias_turn}
+        if "stable_attributes" not in current:
+            current["stable_attributes"] = {}
+        sa = current["stable_attributes"]
+        existing_aliases = sa.get("aliases", {})
+        if isinstance(existing_aliases, dict):
+            val = existing_aliases.get("value", [])
+            if isinstance(val, str):
+                val = [a.strip() for a in val.split(",") if a.strip()]
+            if old_name not in val:
+                val.append(old_name)
+            alias_turn = (update.get("last_updated_turn")
+                          or current.get("last_updated_turn")
+                          or current.get("first_seen_turn", ""))
+            sa["aliases"] = {"value": val, "inference": False,
+                             "source_turn": alias_turn}
         else:
-            # V1 path
-            if "attributes" not in current:
-                current["attributes"] = {}
-            existing_aliases = current["attributes"].get("aliases", "")
-            alias_list = [a.strip() for a in existing_aliases.split(",")] if existing_aliases else []
-            if old_name not in alias_list:
-                if existing_aliases:
-                    current["attributes"]["aliases"] = f"{existing_aliases}, {old_name}"
-                else:
-                    current["attributes"]["aliases"] = old_name
+            alias_turn = (update.get("last_updated_turn")
+                          or current.get("last_updated_turn")
+                          or current.get("first_seen_turn", ""))
+            sa["aliases"] = {"value": [old_name], "inference": False,
+                             "source_turn": alias_turn}
         current["name"] = update["name"]
 
     # Update last_updated_turn
@@ -751,9 +637,6 @@ def _consolidate_relationship(existing: dict, update: dict) -> None:
     # Update current
     if new_desc:
         existing["current_relationship"] = new_desc
-        # Also keep the old field for V1 compat if it exists
-        if "relationship" in existing:
-            existing["relationship"] = new_desc
 
     # Update other fields
     if update.get("type"):
