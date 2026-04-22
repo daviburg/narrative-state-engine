@@ -74,16 +74,56 @@ Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
 {
   "provider": "ollama",
   "base_url": "http://localhost:11434/v1",
-  "model": "qwen2.5:14b",
+  "model": "qwen2.5:14b-8k",
   "api_key_env": "",
   "temperature": 0.0,
   "max_tokens": 4096,
   "pc_max_tokens": 8192,
+  "context_length": 8192,
   "timeout_seconds": 180,
   "retry_attempts": 3,
   "batch_delay_ms": 500
 }
 ```
+
+### Setting the Context Size (Ollama)
+
+Ollama's OpenAI-compatible `/v1` endpoint **ignores** runtime `num_ctx`
+overrides. To set a custom context length you must create a model variant via
+a Modelfile. Pre-tuned Modelfiles are provided in `config/ollama/`:
+
+```bash
+# Pull the base model
+ollama pull qwen2.5:14b
+
+# Create a variant (pick one that fits your GPU)
+ollama create qwen2.5:14b-8k -f config/ollama/qwen2.5-14b-8k.Modelfile
+```
+
+| Variant | Context | VRAM (approx) | GPU |
+|---------|---------|---------------|-----|
+| `qwen2.5:14b-4k` | 4 096 | ~9.1 GB | 8 GB (tight) |
+| **`qwen2.5:14b-8k`** | **8 192** | **~9.8 GB** | **12 GB (recommended)** |
+| `qwen2.5:14b-16k` | 16 384 | ~11.2 GB | 16 GB+ |
+
+After creating the variant, update `model` in `config/llm.json` to match.
+The `context_length` field is optional — it is passed to Ollama's native API
+but ignored by the `/v1` endpoint. The Modelfile is what actually sets the
+context size.
+
+```json
+{
+  "model": "qwen2.5:14b-8k"
+}
+```
+
+> **Why does this matter?** With the default 4K context, longer DM turns and
+> PC entity prompts are silently truncated, degrading extraction quality.
+> Using 8K context on an RTX 4070 (12 GB) yields a ~4–5× throughput improvement
+> over the broken-default scenario and eliminates most timeout failures.
+
+See `config/ollama/README.md` for details on adding variants for other base
+models.
 
 | Field | Description |
 |---|---|
@@ -213,10 +253,13 @@ The semantic extraction pipeline uses an LLM to automatically extract entities, 
    {
      "provider": "openai",
      "base_url": "http://localhost:11434/v1",
-     "model": "qwen2.5:14b",
+     "model": "qwen2.5:14b-8k",
      "api_key_env": ""
    }
    ```
+
+   For Ollama, also create a context-tuned model variant first — see
+   [Setting the Context Size](#setting-the-context-size-ollama) above.
 
    For a cloud provider (e.g. OpenAI):
    ```json
