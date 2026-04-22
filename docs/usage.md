@@ -415,6 +415,43 @@ Do not edit unless the data model needs to change. If schemas change, re-validat
 
 ---
 
+## Post-Extraction Validation
+
+After running semantic extraction, validate the output against curated ground truth to catch entity-level problems that schema validation alone cannot detect (false alias merges, missing characters, coreference fragmentation, entity staleness).
+
+### Running
+
+```bash
+# Default: validates framework-local/catalogs against full-session ground truth
+python tools/validate_extraction.py --catalog-dir framework-local/catalogs
+
+# Custom ground truth fixture
+python tools/validate_extraction.py --catalog-dir framework-local/catalogs \
+    --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
+```
+
+### Interpreting the Scorecard
+
+The script checks 7 categories and prints a scorecard with PASS/WARN/FAIL for each item:
+
+| Category | What it checks |
+|---|---|
+| Independent Characters | Expected NPCs exist as separate catalog entities |
+| PC Aliases | Only legitimate aliases appear on char-player |
+| Must-Not-Merge | Named entities were not incorrectly absorbed into other entities |
+| Coreference Groups | Pre-naming descriptions merged into the canonical entity |
+| Staleness | Entity `last_updated_turn` is within expected range |
+| Locations (late-game) | Expected late-game locations exist in catalogs |
+| Factions (late-game) | Expected late-game factions exist in catalogs |
+
+Exit code 0 means no FAILs; exit code 1 means at least one FAIL was found.
+
+### Ground Truth Fixtures
+
+Ground truth files live in `tests/fixtures/` and define the expected extraction output for a session or turn range. The full-session fixture (`extraction-ground-truth-full-session.json`) covers turns 1–345 of `session-import` and is derived from `docs/design-synthesis-layer.md`.
+
+---
+
 ## Example Session
 
 See `examples/demo-session/` for a complete worked example with 6 turns, 3 entities, 2 plot threads, and annotated analysis.

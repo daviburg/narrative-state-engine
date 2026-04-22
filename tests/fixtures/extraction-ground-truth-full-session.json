@@ -1,0 +1,194 @@
+{
+  "description": "Ground truth for full-session extraction validation — session-import turns 1-345. Derived from docs/design-synthesis-layer.md §1.2-§1.6.",
+  "source_session": "session-import",
+  "turn_range": [1, 345],
+
+  "expected_pc_aliases": ["Fenouille Moonwind"],
+
+  "expected_independent_characters": [
+    {
+      "name": "Lyrawyn",
+      "role": "PC's firstborn daughter",
+      "id_patterns": ["char-lyrawyn"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [70, 72],
+      "expected_last_updated_min": 300,
+      "relationship_to_pc": "kinship",
+      "notes": "Born turn-071; named explicitly; appears 50+ turns; has kinship to PC and Kael"
+    },
+    {
+      "name": "Faelan",
+      "role": "PC's firstborn son",
+      "id_patterns": ["char-faelan"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [183, 185],
+      "expected_last_updated_min": 300,
+      "relationship_to_pc": "kinship",
+      "notes": "Born turn-183; PC's second child; arcane power catalyst"
+    },
+    {
+      "name": "Rune",
+      "role": "PC's third child",
+      "id_patterns": ["char-rune"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [306, 308],
+      "expected_last_updated_min": 306,
+      "relationship_to_pc": "kinship",
+      "notes": "Born turn-306; miniature snowflake in eyes; arcane alignment"
+    },
+    {
+      "name": "Kael",
+      "role": "PC's partner, tribe warrior-leader",
+      "id_patterns": ["char-kael"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [5, 15],
+      "expected_last_updated_min": 300,
+      "relationship_to_pc": "romantic",
+      "coreference_variants": ["broad figure", "young hunter", "brave warrior", "young warrior", "my hunter"],
+      "notes": "Major NPC present in 16+ events; appears from turn-009 as unnamed captor through turn-343 as tribal leader. Pre-naming descriptions should merge into char-kael, not remain as separate entities."
+    },
+    {
+      "name": "The Elder",
+      "role": "Tribal elder/authority figure",
+      "id_patterns": ["char-elder-figure-by-fire", "char-elder"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [8, 15],
+      "expected_last_updated_min": 300,
+      "notes": "Authority figure from turn-015 through turn-340 (winter council). Grizzled man with eyes like chips of flint."
+    },
+    {
+      "name": "The Shaman",
+      "role": "Tribal spiritual leader",
+      "id_patterns": ["char-shaman"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [40, 60],
+      "expected_last_updated_min": 250,
+      "notes": "Distinct from The Healer. Appears turn-059+, has earthy magic, performs rituals. Active through turn-340."
+    },
+    {
+      "name": "Anya",
+      "role": "PC's apprentice/student",
+      "id_patterns": ["char-anya"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [189, 195],
+      "expected_last_updated_min": 250,
+      "notes": "Trained by PC in subtle energy sensing. Active in plague crisis and disruption field experiments."
+    },
+    {
+      "name": "Lena",
+      "role": "Co-teacher, education leader",
+      "id_patterns": ["char-lena"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [155, 165],
+      "expected_last_updated_min": 250,
+      "notes": "Recruited as co-teacher turn-157. Later formally delegated as learning leader turn-301."
+    },
+    {
+      "name": "Tala",
+      "role": "Mead apprentice",
+      "id_patterns": ["char-tala"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [145, 155],
+      "expected_last_updated_min": 300,
+      "notes": "Mead-making apprentice. Present at winter council turn-339."
+    },
+    {
+      "name": "Borin",
+      "role": "Ceramics apprentice, kiln master",
+      "id_patterns": ["char-borin"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [175, 180],
+      "expected_last_updated_min": 300,
+      "notes": "Kiln apprentice turn-178. Accepts Faelan's tutelage turn-324."
+    },
+    {
+      "name": "The Healer",
+      "role": "Tribal healer (distinct from shaman)",
+      "id_patterns": ["char-healer"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [225, 250],
+      "expected_last_updated_min": 250,
+      "notes": "Active in plague crisis. Distinct role from shaman — healer for recognition, shaman for rites."
+    },
+    {
+      "name": "Gorok",
+      "role": "Warrior-Chief, external leader",
+      "id_patterns": ["char-warrior-chief-gorok", "char-gorok"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [313, 316],
+      "expected_last_updated_min": 330,
+      "notes": "Warrior-Chief Gorok. Arrives at settlement turn-314. Paired with Maelis as dual forces turn-343."
+    },
+    {
+      "name": "Chief Thorne",
+      "role": "Ironwood Clan leader",
+      "id_patterns": ["char-chief-thorne", "char-thorne"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [313, 316],
+      "expected_last_updated_min": 314,
+      "notes": "Leader of the Ironwood Clan. Accepts food and sends trackers turn-316."
+    },
+    {
+      "name": "Elder Lyra",
+      "role": "Riverfolk elder (NOT same as Lyrawyn)",
+      "id_patterns": ["char-lyra", "char-elder-lyra"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [313, 316],
+      "expected_last_updated_min": 314,
+      "notes": "CRITICAL DISAMBIGUATION: Elder Lyra (Riverfolk elder, turn-314+) vs Lyrawyn (PC's daughter, turn-071+). Two different people."
+    },
+    {
+      "name": "Maelis",
+      "role": "Swift Arrows hunter-scout",
+      "id_patterns": ["char-maelis"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [330, 335],
+      "expected_last_updated_min": 332,
+      "notes": "Maelis of the Swift Arrows. Riverfolk hunter-scout. Arrives turn-332."
+    },
+    {
+      "name": "Rurik",
+      "role": "Eastern expedition companion",
+      "id_patterns": ["char-rurik"],
+      "must_not_be_pc_alias": true,
+      "expected_first_seen_range": [194, 196],
+      "expected_last_updated_min": 194,
+      "notes": "Minor character. Accompanies PC on eastern expedition turns 194-204."
+    }
+  ],
+
+  "must_not_merge": [
+    {"pair": ["Lyrawyn", "char-player"], "reason": "Lyrawyn is PC's daughter, not an alias"},
+    {"pair": ["Faelan", "char-player"], "reason": "Faelan is PC's son, not an alias"},
+    {"pair": ["Chief Thorne", "char-player"], "reason": "Thorne is Ironwood Clan leader, not PC"},
+    {"pair": ["the shaman", "char-player"], "reason": "Shaman is a distinct tribal NPC"},
+    {"pair": ["Elder Lyra", "Lyrawyn"], "reason": "Elder Lyra (Riverfolk) is different from Lyrawyn (PC's daughter)"}
+  ],
+
+  "coreference_groups": [
+    {
+      "canonical_name": "Kael",
+      "expected_id": "char-kael",
+      "variants_to_merge": ["broad figure", "young hunter", "brave warrior", "young warrior", "my hunter"],
+      "notes": "Kael is first seen as unnamed captor (turn-009) and later named (turn-149). All pre-naming descriptions refer to the same person."
+    }
+  ],
+
+  "entity_staleness_targets": [
+    {"id": "char-player", "expected_last_updated_min": 300, "reason": "PC is active through turn-344"},
+    {"id": "char-elder-figure-by-fire", "expected_last_updated_min": 300, "reason": "Elder active through turn-340 winter council"},
+    {"id": "char-kael", "expected_last_updated_min": 300, "reason": "Kael active through turn-343"},
+    {"id": "char-lena", "expected_last_updated_min": 250, "reason": "Lena active through turn-301"},
+    {"id": "char-anya", "expected_last_updated_min": 250, "reason": "Anya active through turn-343"}
+  ],
+
+  "expected_locations_beyond_turn_100": [
+    {"name": "Eastern boundary / mountains", "expected_first_seen_range": [189, 201], "notes": "Arcane fragment discovery site"},
+    {"name": "Pulsating river stones", "expected_first_seen_range": [268, 270], "notes": "Disruption field experiment site"}
+  ],
+
+  "expected_factions_beyond_early_game": [
+    {"name": "The Quiet Weave", "expected_first_seen_range": [291, 293], "notes": "Formally named settlement/philosophy"},
+    {"name": "Southern Tribes / Ironwood Clan", "expected_first_seen_range": [313, 316], "notes": "Chief Thorne's people"}
+  ]
+}
