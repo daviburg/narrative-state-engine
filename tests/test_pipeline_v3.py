@@ -548,7 +548,7 @@ class TestContextLengthPassthrough:
         client.extract_json("system", "user")
         call_kwargs = mock_inner.chat.completions.create.call_args[1]
         assert "extra_body" in call_kwargs
-        assert call_kwargs["extra_body"] == {"num_ctx": 32768}
+        assert call_kwargs["extra_body"] == {"options": {"num_ctx": 32768}}
 
     def test_extract_json_no_extra_body_when_unset(self, tmp_path):
         config = {
@@ -585,7 +585,7 @@ class TestContextLengthPassthrough:
         client.generate_text("system", "user")
         call_kwargs = mock_inner.chat.completions.create.call_args[1]
         assert "extra_body" in call_kwargs
-        assert call_kwargs["extra_body"] == {"num_ctx": 16384}
+        assert call_kwargs["extra_body"] == {"options": {"num_ctx": 16384}}
 
 
 # ---------------------------------------------------------------------------

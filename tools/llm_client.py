@@ -112,13 +112,13 @@ class LLMClient:
                 if timeout is not None:
                     kwargs["timeout"] = timeout
                 if self._is_ollama:
-                    extra_body = {}
+                    options = {}
                     if self.context_length:
-                        extra_body["num_ctx"] = self.context_length
+                        options["num_ctx"] = self.context_length
                     if self.ollama_options:
-                        extra_body["options"] = self.ollama_options
-                    if extra_body:
-                        kwargs["extra_body"] = extra_body
+                        options.update(self.ollama_options)
+                    if options:
+                        kwargs["extra_body"] = {"options": options}
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
@@ -209,13 +209,13 @@ class LLMClient:
                 if timeout is not None:
                     kwargs["timeout"] = timeout
                 if self._is_ollama:
-                    extra_body = {}
+                    options = {}
                     if self.context_length:
-                        extra_body["num_ctx"] = self.context_length
+                        options["num_ctx"] = self.context_length
                     if self.ollama_options:
-                        extra_body["options"] = self.ollama_options
-                    if extra_body:
-                        kwargs["extra_body"] = extra_body
+                        options.update(self.ollama_options)
+                    if options:
+                        kwargs["extra_body"] = {"options": options}
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
