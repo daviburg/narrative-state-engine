@@ -1158,7 +1158,7 @@ def extract_and_merge(
         # Skip PC extraction after too many consecutive failures (#149)
         _skip_pc = _should_skip_pc(_pc_consecutive_failures, _pc_turns_since_cooldown)
         if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            _pc_turns_since_cooldown += 1
+            _pc_turns_since_cooldown += 1  # lgtm[py/unused-global-variable]
             if _skip_pc:
                 _pc_skipped_turns += 1
         if not _skip_pc:
@@ -1213,7 +1213,7 @@ def extract_and_merge(
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
                 _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
-                _pc_turns_since_cooldown = 0
+                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
             else:
                 _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
                 if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
