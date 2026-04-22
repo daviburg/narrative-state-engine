@@ -9,7 +9,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 from semantic_extraction import (
     find_stale_entities,
     _entity_mentioned_since,
-    _parse_turn_number,
     _DEFAULT_REFRESH_INTERVAL,
     _DEFAULT_REFRESH_BATCH_SIZE,
 )
