@@ -251,6 +251,25 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         print("  COERCE: relationships dict → single-element array", file=sys.stderr)
 
     # --- V1 → V2 coercion ---
+    # Strip "_new" suffix from non-schema keys (#172) BEFORE V1→V2 mapping
+    # so that e.g. "description_new" becomes "description" and is then
+    # handled by the description → identity fallback below.
+    _schema_keys = {
+        "id", "name", "type", "identity", "current_status",
+        "status_updated_turn", "stable_attributes", "volatile_state",
+        "relationships", "first_seen_turn", "last_updated_turn", "notes",
+    }
+    for key in list(entity_data.keys()):
+        if key.endswith("_new") and key not in _schema_keys:
+            base = key[:-4]  # strip "_new"
+            if base not in entity_data:
+                entity_data[base] = entity_data.pop(key)
+                print(f"  COERCE: {key} → {base} (stripped _new suffix)", file=sys.stderr)
+            else:
+                # base key already present — discard the delta variant
+                entity_data.pop(key)
+                print(f"  COERCE: discarded delta key '{key}' (base '{base}' exists)", file=sys.stderr)
+
     # If LLM returned "description" but not "identity", map description → identity.
     # Always strip the V1-only "description" field afterward so mixed V1/V2
     # payloads still validate against the V2 schema (additionalProperties: false).
@@ -304,7 +323,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 entity_data["volatile_state"] = volatile
             print("  COERCE: flat attributes → stable_attributes/volatile_state (V1→V2)", file=sys.stderr)
 
-    # --- Remap non-standard top-level keys into V2 slots (#170) ---
+    # --- Remap non-standard top-level keys into V2 slots (#170, #172) ---
     # The LLM often returns useful data under keys that don't exist in the
     # V2 entity schema, causing additionalProperties validation failures.
     # Remap them into the correct V2 locations before validation.
@@ -315,12 +334,17 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     _volatile_remap = {
         "equipment": "equipment",
         "inventory": "equipment",
+        "equipment_and_tools": "equipment",
+        "item_equipment": "equipment",
+        "item_inventory": "equipment",
         "location": "location",
         "current_location": "location",
         "status": "condition",
         "current_situation": "condition",
         "emotional_state": "condition",
         "physical_state": "condition",
+        "health_status": "condition",
+        "status_effects": "condition",
     }
     for src_key, vs_key in _volatile_remap.items():
         if src_key in entity_data:
@@ -346,7 +370,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     # Keys that should become stable_attributes entries
     _stable_remap = {
         "abilities": "abilities",
+        "skills_and_abilities": "abilities",
         "name_aliases": "aliases",
+        "alignment": "alignment",
+        "weaknesses": "weaknesses",
     }
     for src_key, sa_key in _stable_remap.items():
         if src_key in entity_data:
@@ -374,7 +401,8 @@ def _coerce_entity_fields(entity_data) -> dict | None:
 
     # Relationship key variants → relationships
     _rel_keys = ["relations", "character_relations", "faction_relations",
-                 "item_relations", "social_connections"]
+                 "item_relations", "items_relations", "social_connections",
+                 "current_relationships"]
     for rk in _rel_keys:
         if rk in entity_data:
             val = entity_data.pop(rk)
@@ -392,6 +420,13 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "future_plans", "image_url", "quests", "history", "emotions",
         "tools_used", "background_story", "personality_traits", "traits",
         "faction", "confidence",
+        # Added in #172: ephemeral / history keys observed in Run 10a
+        "events", "activities", "activity_history",
+        "abilities_used_in_last_turn", "description_of_activity",
+        "description_of_recent_activity", "recent_emotional_states",
+        "recent_relationship_changes", "name_changes",
+        "equipment_history", "faction_relations_history",
+        "relationships_history",
     }
     for dk in list(entity_data.keys()):
         if dk in _discard_keys:
