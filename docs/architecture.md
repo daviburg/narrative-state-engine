@@ -113,6 +113,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - **PC alias merge** (`_merge_pc_aliases`): Post-extraction pass that identifies character entities which are actually aliases of the player character (e.g., the PC's proper name appearing as a separate entity). Candidates must appear ≥2 times in PC event text within a ≤3 turn span. Two guards prevent false positives: (1) **co-occurrence guard** — skips merge if the candidate and char-player both appear in the same event's `related_entities`, indicating distinct characters; (2) **relationship guard** — skips merge if either entity has a relationship targeting the other.
 - Biography sections use LLM-generated descriptive titles (not generic "Phase" labels), cached in `.synthesis.json` sidecars
 - Wiki pages include cross-page entity links: the first mention of each known entity in biography prose, relationship tables, event timelines, and member/connection lists is a clickable markdown link to that entity's wiki page. Link resolution uses relative paths across entity types.
+- **Coreference hints** (`apply_coreference_hints`): Optional manual merge rules in `sessions/*/coreference-hints.json`. Each entry maps a canonical entity ID to variant names and ID patterns. After the automatic dedup pass, the pipeline loads any hints file from the session directory and deterministically merges variant entities into their canonical counterpart — absorbing relationships, events, and stable attributes, deleting variant files, and rewriting all dangling references. Validated against `schemas/coreference-hints.schema.json`.
 
 ### Timeline Layer (Framework)
 
@@ -142,6 +143,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `prompt-candidate.schema.json` | A candidate next-player-prompt |
 | `dm-profile.schema.json` | Inferred DM behavior profile |
 | `timeline.schema.json` | A temporal marker (season transition, time skip, biological marker, etc.) |
+| `coreference-hints.schema.json` | Manual coreference hints for entity fragmentation resolution |
 
 ---
 

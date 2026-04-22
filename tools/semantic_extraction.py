@@ -2021,6 +2021,141 @@ def _merge_pc_aliases(
 
 
 # ---------------------------------------------------------------------------
+# Coreference hints — deterministic merging (#162)
+# ---------------------------------------------------------------------------
+
+def apply_coreference_hints(
+    catalogs: dict,
+    events_list: list,
+    catalog_dir: str,
+    hints_path: str,
+    dry_run: bool = False,
+) -> list[str]:
+    """Apply manual coreference hints to merge known entity variants.
+
+    Loads a coreference-hints.json file and merges variant entities into their
+    canonical counterpart.  This is a deterministic merge for cases where the
+    same character is referred to by multiple names/IDs across the transcript.
+
+    Returns list of entity IDs that were merged away.
+    """
+    from catalog_merger import dedup_merge_entity
+
+    if not os.path.isfile(hints_path):
+        return []
+
+    try:
+        with open(hints_path, "r", encoding="utf-8") as f:
+            hints = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"  WARNING: failed to load coreference hints '{hints_path}': {exc}", file=sys.stderr)
+        return []
+
+    groups = hints.get("character_groups", [])
+    if not groups:
+        return []
+
+    merged_ids: list[str] = []
+    merge_map: dict[str, str] = {}
+
+    for group in groups:
+        canonical_id = group.get("canonical_id", "")
+        canonical_name = group.get("canonical_name", "")
+        variant_id_patterns = set(group.get("variant_id_patterns", []))
+        variant_names = {n.strip().lower() for n in group.get("variant_names", [])}
+
+        if not canonical_id:
+            continue
+
+        # Find canonical entity
+        canonical_result = find_entity_by_id(catalogs, canonical_id)
+        if not canonical_result:
+            print(f"  Coreference hints: canonical entity '{canonical_id}' not found, skipping group '{canonical_name}'")
+            continue
+        canonical_catalog, canonical_entry = canonical_result
+
+        # Find and merge all variants
+        entities = catalogs.get(canonical_catalog, [])
+        variants_to_remove = []
+
+        for entity in entities:
+            eid = entity.get("id", "")
+            if eid == canonical_id or not eid:
+                continue
+
+            ename = entity.get("name", "").strip().lower()
+            matched = eid in variant_id_patterns or ename in variant_names
+            if not matched:
+                continue
+
+            # Merge variant into canonical, but prevent dedup_merge_entity
+            # from overwriting the canonical name with the variant's name.
+            saved_name = canonical_entry.get("name")
+            variant_copy = dict(entity)
+            variant_copy.pop("name", None)
+            dedup_merge_entity(canonical_entry, variant_copy)
+            canonical_entry["name"] = saved_name
+            variants_to_remove.append(entity)
+            merge_map[eid] = canonical_id
+            merged_ids.append(eid)
+            print(f"  Coreference hints: merged '{eid}' ({entity.get('name', '')}) into '{canonical_id}'")
+
+        # Remove merged variants from catalog list
+        for variant in variants_to_remove:
+            entities.remove(variant)
+
+        # Delete variant files from disk (V2 layout) — per-group only
+        if catalog_dir and not dry_run:
+            # Determine subdirectory from entity type prefix
+            prefix = canonical_id.split("-", 1)[0] if "-" in canonical_id else ""
+            type_dirs = {
+                "char": "characters",
+                "loc": "locations",
+                "faction": "factions",
+                "item": "items",
+                "creature": "creatures",
+                "concept": "concepts",
+            }
+            subdir = type_dirs.get(prefix, "")
+            if subdir:
+                for variant in variants_to_remove:
+                    eid = variant.get("id", "")
+                    if eid:
+                        entity_file = os.path.join(catalog_dir, subdir, f"{eid}.json")
+                        if os.path.isfile(entity_file):
+                            os.remove(entity_file)
+
+        # Add variant names as aliases on the canonical entry
+        sa = canonical_entry.setdefault("stable_attributes", {})
+        aliases = sa.get("aliases", {"value": []})
+        if not isinstance(aliases, dict):
+            aliases = {"value": []}
+        alias_list = aliases.get("value", [])
+        if isinstance(alias_list, str):
+            alias_list = [a.strip() for a in alias_list.split(",") if a.strip()]
+        existing_aliases_lower = {a.strip().lower() for a in alias_list if isinstance(a, str) and a.strip()}
+        canonical_lower = canonical_name.strip().lower()
+        for vname in group.get("variant_names", []):
+            stripped = vname.strip() if isinstance(vname, str) else ""
+            if not stripped:
+                continue
+            if stripped.lower() not in existing_aliases_lower and stripped.lower() != canonical_lower:
+                alias_list.append(stripped)
+                existing_aliases_lower.add(stripped.lower())
+        aliases["value"] = alias_list
+        sa["aliases"] = aliases
+
+    # Rewrite dangling references to merged variant IDs
+    if merge_map:
+        _rewrite_stale_ids(catalogs, events_list, merge_map)
+
+    if merged_ids:
+        print(f"  Coreference hints: merged {len(merged_ids)} variant(s) total")
+
+    return merged_ids
+
+
+# ---------------------------------------------------------------------------
 # Segmented extraction helpers (#141)
 # ---------------------------------------------------------------------------
 
@@ -2518,6 +2653,14 @@ def extract_semantic_batch(
         _rewrite_stale_ids(catalogs, events_list, merge_map)
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch dedup merged {dupes_merged} duplicate(s); {entities_after} entities remain")
+
+    # Apply coreference hints (manual merge rules, #162)
+    hints_path = os.path.join(session_dir, "coreference-hints.json")
+    if os.path.isfile(hints_path):
+        coref_merged = apply_coreference_hints(catalogs, events_list, catalog_dir, hints_path, dry_run)
+        if coref_merged:
+            entities_after = sum(len(v) for v in catalogs.values())
+            print(f"  Coreference hints applied; {entities_after} entities remain")
 
     # --- Phase 4: Post-batch orphan sweep (#106) ---
     orphan_stubs = _post_batch_orphan_sweep(catalogs, events_list)
