@@ -269,6 +269,42 @@ Recommended segment sizes:
 
 Segment size 0 (the default) preserves legacy single-pass behavior.
 
+### Coreference Hints
+
+When the automatic dedup pass doesn't catch all duplicates (e.g., a character
+referred to by descriptions like "broad figure" before being named), you can
+provide a manual hints file to force deterministic merging.
+
+Create `sessions/<session>/coreference-hints.json`:
+
+```json
+{
+  "character_groups": [
+    {
+      "canonical_name": "Kael",
+      "canonical_id": "char-kael",
+      "variant_names": ["broad figure", "young hunter", "brave warrior"],
+      "variant_id_patterns": ["char-broad-figure", "char-young-hunter", "char-brave-warrior"],
+      "notes": "Kael appears unnamed before turn-149"
+    }
+  ]
+}
+```
+
+Fields:
+- `canonical_name` / `canonical_id` — the entity that survives the merge
+- `variant_names` — entity names to match (case-insensitive)
+- `variant_id_patterns` — entity IDs to match exactly
+- `notes` — optional documentation
+
+The hints file is validated against `schemas/coreference-hints.schema.json`.
+If no hints file exists, the pipeline skips this step gracefully.
+
+During batch extraction, coreference hints run after the automatic dedup pass.
+Variant entities are merged into the canonical entity: relationships, events,
+and stable attributes are absorbed, variant files are deleted from disk, and
+all dangling references are rewritten.
+
 ### Incremental Mode (Ingest)
 
 Pass `--extract` to `ingest_turn.py` to run semantic extraction on a single new turn:
