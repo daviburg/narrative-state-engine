@@ -938,3 +938,22 @@ def test_coerce_new_suffix_discards_schema_key_variants_when_base_exists():
     assert "name_new" not in result
     assert result["id"] == "char-player"
     assert result["name"] == "PC"
+
+
+def test_coerce_stable_attributes_null_value_removed():
+    """stable_attributes entries with null value are stripped (#178)."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "stable_attributes": {
+            "race": {"value": "human", "inference": False, "confidence": 1.0},
+            "class": {"value": None, "inference": False, "confidence": 1.0},
+            "alignment": {"value": "neutral", "inference": True, "confidence": 0.7},
+        },
+    }
+    result = _coerce_entity_fields(entity)
+    sa = result["stable_attributes"]
+    assert "race" in sa
+    assert "alignment" in sa
+    assert "class" not in sa  # null value stripped
