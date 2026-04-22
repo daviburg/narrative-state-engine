@@ -102,17 +102,18 @@ ollama create qwen2.5:14b-8k -f config/ollama/qwen2.5-14b-8k.Modelfile
 
 | Variant | Context | VRAM (approx) | GPU |
 |---------|---------|---------------|-----|
-| `qwen2.5-14b-4k` | 4 096 | ~9.1 GB | 8 GB (tight) |
-| **`qwen2.5-14b-8k`** | **8 192** | **~9.8 GB** | **12 GB (recommended)** |
-| `qwen2.5-14b-16k` | 16 384 | ~11.2 GB | 16 GB+ |
+| `qwen2.5:14b-4k` | 4 096 | ~9.1 GB | 8 GB (tight) |
+| **`qwen2.5:14b-8k`** | **8 192** | **~9.8 GB** | **12 GB (recommended)** |
+| `qwen2.5:14b-16k` | 16 384 | ~11.2 GB | 16 GB+ |
 
-After creating the variant, set **both** `model` and `context_length` in
-`config/llm.json` to match:
+After creating the variant, update `model` in `config/llm.json` to match.
+The `context_length` field is optional — it is passed to Ollama's native API
+but ignored by the `/v1` endpoint. The Modelfile is what actually sets the
+context size.
 
 ```json
 {
-  "model": "qwen2.5:14b-8k",
-  "context_length": 8192
+  "model": "qwen2.5:14b-8k"
 }
 ```
 
