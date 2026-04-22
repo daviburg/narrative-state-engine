@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import sys
 from datetime import date
@@ -45,13 +44,28 @@ def _load_character(catalog_dir: Path, char_id: str) -> dict[str, Any] | None:
     return None
 
 
+def _normalize_aliases(raw: Any) -> list[str]:
+    """Normalize aliases value to a lowercase list.
+
+    Handles: list of strings, single string, comma-separated string,
+    or missing/None value.
+    """
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        return [s.strip().lower() for s in raw.split(",") if s.strip()]
+    if isinstance(raw, list):
+        return [str(a).lower() for a in raw]
+    return []
+
+
 def _pc_aliases(catalog_dir: Path) -> list[str]:
     """Return the list of PC aliases from char-player.json."""
     pc = _load_character(catalog_dir, "char-player")
     if not pc:
         return []
     aliases_attr = pc.get("stable_attributes", {}).get("aliases", {})
-    return [a.lower() for a in aliases_attr.get("value", [])]
+    return _normalize_aliases(aliases_attr.get("value"))
 
 
 def _all_character_ids(catalog_dir: Path) -> list[str]:
@@ -131,14 +145,21 @@ def check_independent_characters(
         turn_display = f"turn-{last_turn}" if last_turn else "unknown"
 
         expected_min = entry.get("expected_last_updated_min")
-        if expected_min and last_turn and last_turn < expected_min:
+        if expected_min and last_turn is None:
+            results.append(Result(
+                Result.FAIL,
+                name,
+                f"{found_id:30s} ({turn_display}) — last_updated_turn missing "
+                f"(expected >={expected_min})",
+            ))
+        elif expected_min and last_turn and last_turn < expected_min:
             gap = expected_min - last_turn
             severity = Result.FAIL if gap > 50 else Result.WARN
             results.append(Result(
                 severity,
                 name,
                 f"{found_id:30s} ({turn_display}) — stale by {gap} turns "
-                f"(expected ≥{expected_min})",
+                f"(expected >={expected_min})",
             ))
         else:
             results.append(Result(
@@ -172,6 +193,49 @@ def check_pc_aliases(
     return results
 
 
+def _resolve_name_to_ids(
+    name: str, catalog_dir: Path, ground_truth: dict,
+) -> list[str]:
+    """Resolve a human name to catalog entity IDs.
+
+    Checks id_patterns from ground truth first, then scans all character files
+    for matching name or alias.
+    """
+    # Direct ID (starts with char-)
+    if name.startswith("char-"):
+        return [name]
+
+    # Check ground truth id_patterns
+    for entry in ground_truth.get("expected_independent_characters", []):
+        if entry["name"].lower() == name.lower():
+            return entry.get("id_patterns", [])
+
+    # Scan catalog files for name/alias match
+    matched: list[str] = []
+    chars_dir = catalog_dir / "characters"
+    if not chars_dir.is_dir():
+        return matched
+    for f in chars_dir.iterdir():
+        if (
+            f.suffix != ".json"
+            or f.name.endswith(".synthesis.json")
+            or f.name.endswith(".arcs.json")
+            or f.name == "index.json"
+        ):
+            continue
+        char = _load_json(f)
+        char_name = char.get("name", "").lower()
+        if char_name == name.lower():
+            matched.append(f.stem)
+            continue
+        aliases = _normalize_aliases(
+            char.get("stable_attributes", {}).get("aliases", {}).get("value"),
+        )
+        if name.lower() in aliases:
+            matched.append(f.stem)
+    return matched
+
+
 def check_must_not_merge(
     ground_truth: dict, catalog_dir: Path, pc_alias_list: list[str],
 ) -> list[Result]:
@@ -189,28 +253,48 @@ def check_must_not_merge(
         if entity_b == "char-player":
             if entity_a.lower() in pc_alias_list:
                 merged = True
-        # Also check reverse
         elif entity_a == "char-player":
             if entity_b.lower() in pc_alias_list:
                 merged = True
         else:
-            # Check if one entity references the other as an alias
-            # by loading both and seeing if one has the other's name
-            for check_id_name, check_alias_name in [
-                (entity_a, entity_b), (entity_b, entity_a),
-            ]:
-                # Try loading as character ID
-                char = _load_character(catalog_dir, check_id_name)
-                if char:
-                    aliases = char.get("stable_attributes", {}).get(
-                        "aliases", {},
-                    ).get("value", [])
-                    if check_alias_name.lower() in [
-                        a.lower() for a in aliases
-                    ]:
-                        merged = True
+            # Resolve both names to IDs and cross-check aliases
+            ids_a = _resolve_name_to_ids(entity_a, catalog_dir, ground_truth)
+            ids_b = _resolve_name_to_ids(entity_b, catalog_dir, ground_truth)
 
-        label = f"{entity_a} ↔ {entity_b}"
+            for id_a in ids_a:
+                char_a = _load_character(catalog_dir, id_a)
+                if not char_a:
+                    continue
+                aliases_a = _normalize_aliases(
+                    char_a.get("stable_attributes", {}).get(
+                        "aliases", {},
+                    ).get("value"),
+                )
+                # Check if entity_b's name or any of its IDs appear as alias
+                if entity_b.lower() in aliases_a:
+                    merged = True
+                for id_b in ids_b:
+                    if id_b in aliases_a or id_b == id_a:
+                        # Same ID means they were merged
+                        pass
+
+            for id_b in ids_b:
+                char_b = _load_character(catalog_dir, id_b)
+                if not char_b:
+                    continue
+                aliases_b = _normalize_aliases(
+                    char_b.get("stable_attributes", {}).get(
+                        "aliases", {},
+                    ).get("value"),
+                )
+                if entity_a.lower() in aliases_b:
+                    merged = True
+
+            # Also check if both names resolve to the same entity ID
+            if ids_a and ids_b and set(ids_a) & set(ids_b):
+                merged = True
+
+        label = f"{entity_a} <-> {entity_b}"
         if merged:
             results.append(Result(Result.FAIL, label, f"MERGED — {reason}"))
         else:
@@ -288,12 +372,12 @@ def check_staleness(
         if gap > 50:
             results.append(Result(
                 Result.FAIL, entity_id,
-                f"turn-{last_turn} (expected ≥{expected_min}, gap={gap})",
+                f"turn-{last_turn} (expected >={expected_min}, gap={gap})",
             ))
         elif gap > 20:
             results.append(Result(
                 Result.WARN, entity_id,
-                f"turn-{last_turn} (expected ≥{expected_min}, gap={gap})",
+                f"turn-{last_turn} (expected >={expected_min}, gap={gap})",
             ))
         else:
             results.append(Result(

@@ -118,3 +118,177 @@ class TestValidationScriptImportable:
         assert hasattr(validate_extraction, "check_staleness")
         assert hasattr(validate_extraction, "check_locations")
         assert hasattr(validate_extraction, "check_factions")
+
+
+# ---------------------------------------------------------------------------
+# Functional end-to-end tests with synthetic catalog
+# ---------------------------------------------------------------------------
+
+def _write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f)
+
+
+@pytest.fixture
+def mini_ground_truth(tmp_path):
+    """Minimal ground truth covering key check paths."""
+    gt = {
+        "description": "mini fixture",
+        "source_session": "test",
+        "turn_range": [1, 50],
+        "expected_pc_aliases": ["Hero Name"],
+        "expected_independent_characters": [
+            {
+                "name": "Alice",
+                "role": "ally",
+                "id_patterns": ["char-alice"],
+                "must_not_be_pc_alias": True,
+                "expected_first_seen_range": [1, 5],
+                "expected_last_updated_min": 40,
+                "notes": "test char",
+            },
+            {
+                "name": "MissingBob",
+                "role": "missing",
+                "id_patterns": ["char-bob"],
+                "must_not_be_pc_alias": True,
+                "expected_first_seen_range": [10, 12],
+                "expected_last_updated_min": 30,
+                "notes": "should be missing",
+            },
+        ],
+        "must_not_merge": [
+            {"pair": ["Alice", "char-player"], "reason": "Alice is an NPC"},
+        ],
+        "coreference_groups": [
+            {
+                "canonical_name": "Alice",
+                "expected_id": "char-alice",
+                "variants_to_merge": ["tall figure"],
+                "notes": "test group",
+            },
+        ],
+        "entity_staleness_targets": [
+            {"id": "char-alice", "expected_last_updated_min": 40, "reason": "active"},
+            {"id": "char-gone", "expected_last_updated_min": 30, "reason": "deleted"},
+        ],
+        "expected_locations_beyond_turn_100": [],
+        "expected_factions_beyond_early_game": [],
+    }
+    gt_path = tmp_path / "gt.json"
+    _write_json(gt_path, gt)
+    return gt_path
+
+
+@pytest.fixture
+def synthetic_catalog(tmp_path):
+    """Synthetic catalog directory with controlled entities."""
+    cat_dir = tmp_path / "catalogs"
+    chars = cat_dir / "characters"
+    chars.mkdir(parents=True)
+
+    # PC with one correct and one false alias
+    _write_json(chars / "char-player.json", {
+        "id": "char-player",
+        "name": "Player Character",
+        "type": "character",
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-045",
+        "stable_attributes": {
+            "aliases": {"value": ["Hero Name", "Alice"], "source_turn": "turn-005"},
+        },
+    })
+
+    # Alice exists but is stale
+    _write_json(chars / "char-alice.json", {
+        "id": "char-alice",
+        "name": "Alice",
+        "type": "character",
+        "first_seen_turn": "turn-003",
+        "last_updated_turn": "turn-015",
+        "stable_attributes": {},
+    })
+
+    # A coreference fragment that should have been merged
+    _write_json(chars / "char-tall-figure.json", {
+        "id": "char-tall-figure",
+        "name": "tall figure",
+        "type": "character",
+        "first_seen_turn": "turn-003",
+        "last_updated_turn": "turn-004",
+        "stable_attributes": {},
+    })
+
+    return cat_dir
+
+
+class TestFunctionalValidation:
+    def test_independent_char_found_but_stale(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        gt = json.loads(mini_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(synthetic_catalog)
+        results = validate_extraction.check_independent_characters(
+            gt, synthetic_catalog, pc_aliases,
+        )
+        alice = [r for r in results if r.label == "Alice"][0]
+        # Alice exists but last_updated_turn=15 vs expected 40 → gap=25 → WARN
+        assert alice.status == validate_extraction.Result.WARN
+
+    def test_independent_char_missing(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        gt = json.loads(mini_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(synthetic_catalog)
+        results = validate_extraction.check_independent_characters(
+            gt, synthetic_catalog, pc_aliases,
+        )
+        bob = [r for r in results if r.label == "MissingBob"][0]
+        assert bob.status == validate_extraction.Result.FAIL
+
+    def test_pc_alias_correct_and_false_positive(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        gt = json.loads(mini_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(synthetic_catalog)
+        results = validate_extraction.check_pc_aliases(gt, pc_aliases)
+        statuses = {r.label: r.status for r in results}
+        # "hero name" should be PASS, "alice" should be FAIL (false positive)
+        assert statuses["hero name"] == validate_extraction.Result.PASS
+        assert statuses["alice"] == validate_extraction.Result.FAIL
+
+    def test_must_not_merge_detects_pc_alias(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        gt = json.loads(mini_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(synthetic_catalog)
+        results = validate_extraction.check_must_not_merge(
+            gt, synthetic_catalog, pc_aliases,
+        )
+        assert len(results) == 1
+        assert results[0].status == validate_extraction.Result.FAIL
+        assert "MERGED" in results[0].detail
+
+    def test_coreference_fragmentation_detected(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        gt = json.loads(mini_ground_truth.read_text(encoding="utf-8"))
+        results = validate_extraction.check_coreference_groups(gt, synthetic_catalog)
+        assert len(results) == 1
+        assert results[0].status == validate_extraction.Result.WARN
+        assert "FRAGMENT" in results[0].detail
+
+    def test_staleness_missing_entity(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        gt = json.loads(mini_ground_truth.read_text(encoding="utf-8"))
+        results = validate_extraction.check_staleness(gt, synthetic_catalog)
+        gone = [r for r in results if r.label == "char-gone"][0]
+        assert gone.status == validate_extraction.Result.FAIL
+
+    def test_validate_returns_nonzero(self, mini_ground_truth, synthetic_catalog):
+        import validate_extraction
+        exit_code = validate_extraction.validate(synthetic_catalog, mini_ground_truth)
+        assert exit_code == 1, "Expected failures in synthetic catalog"
+
+    def test_normalize_aliases_string(self):
+        import validate_extraction
+        assert validate_extraction._normalize_aliases("foo, bar") == ["foo", "bar"]
+        assert validate_extraction._normalize_aliases("single") == ["single"]
+        assert validate_extraction._normalize_aliases(None) == []
+        assert validate_extraction._normalize_aliases(["A", "B"]) == ["a", "b"]
