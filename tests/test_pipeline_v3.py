@@ -548,7 +548,7 @@ class TestContextLengthPassthrough:
         client.extract_json("system", "user")
         call_kwargs = mock_inner.chat.completions.create.call_args[1]
         assert "extra_body" in call_kwargs
-        assert call_kwargs["extra_body"] == {"num_ctx": 32768}
+        assert call_kwargs["extra_body"] == {"options": {"num_ctx": 32768}}
 
     def test_extract_json_no_extra_body_when_unset(self, tmp_path):
         config = {
@@ -585,7 +585,67 @@ class TestContextLengthPassthrough:
         client.generate_text("system", "user")
         call_kwargs = mock_inner.chat.completions.create.call_args[1]
         assert "extra_body" in call_kwargs
-        assert call_kwargs["extra_body"] == {"num_ctx": 16384}
+        assert call_kwargs["extra_body"] == {"options": {"num_ctx": 16384}}
+
+    def test_ollama_options_merged_into_options(self, tmp_path):
+        config = {
+            "provider": "openai",
+            "base_url": "http://localhost:11434/v1",
+            "model": "test-model",
+            "api_key_env": "",
+            "temperature": 0.0,
+            "max_tokens": 100,
+            "timeout_seconds": 10,
+            "retry_attempts": 1,
+            "batch_delay_ms": 0,
+            "context_length": 8192,
+            "ollama_options": {"num_batch": 256, "num_gpu": 99},
+        }
+        client, mock_inner = self._make_client(tmp_path, config)
+        client.extract_json("system", "user")
+        call_kwargs = mock_inner.chat.completions.create.call_args[1]
+        opts = call_kwargs["extra_body"]["options"]
+        assert opts["num_ctx"] == 8192
+        assert opts["num_batch"] == 256
+        assert opts["num_gpu"] == 99
+
+    def test_context_length_wins_over_ollama_options_num_ctx(self, tmp_path):
+        config = {
+            "provider": "openai",
+            "base_url": "http://localhost:11434/v1",
+            "model": "test-model",
+            "api_key_env": "",
+            "temperature": 0.0,
+            "max_tokens": 100,
+            "timeout_seconds": 10,
+            "retry_attempts": 1,
+            "batch_delay_ms": 0,
+            "context_length": 8192,
+            "ollama_options": {"num_ctx": 4096},
+        }
+        client, mock_inner = self._make_client(tmp_path, config)
+        client.extract_json("system", "user")
+        call_kwargs = mock_inner.chat.completions.create.call_args[1]
+        # context_length is authoritative — it must override ollama_options
+        assert call_kwargs["extra_body"]["options"]["num_ctx"] == 8192
+
+    def test_ollama_options_only_without_context_length(self, tmp_path):
+        config = {
+            "provider": "openai",
+            "base_url": "http://localhost:11434/v1",
+            "model": "test-model",
+            "api_key_env": "",
+            "temperature": 0.0,
+            "max_tokens": 100,
+            "timeout_seconds": 10,
+            "retry_attempts": 1,
+            "batch_delay_ms": 0,
+            "ollama_options": {"num_batch": 512},
+        }
+        client, mock_inner = self._make_client(tmp_path, config)
+        client.extract_json("system", "user")
+        call_kwargs = mock_inner.chat.completions.create.call_args[1]
+        assert call_kwargs["extra_body"] == {"options": {"num_batch": 512}}
 
 
 # ---------------------------------------------------------------------------
