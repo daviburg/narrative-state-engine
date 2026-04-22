@@ -55,7 +55,9 @@ PC_ALLOWED_ATTRS = {
 _pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
 _pc_skipped_turns = 0
 _PC_FAILURE_WARN_THRESHOLD = 10
-_PC_SKIP_THRESHOLD = 20  # Skip PC extraction after this many consecutive failures (#149)
+_PC_SKIP_COOLDOWN = 50       # Skip PC extraction for this many turns after threshold failures
+_PC_RETRY_WINDOW = 5         # Retry for this many turns before entering cooldown again
+_PC_SKIP_THRESHOLD = 20      # Enter cooldown after this many consecutive failures (#149)
 
 
 def _reset_pc_failure_tracking() -> None:
@@ -65,6 +67,10 @@ def _reset_pc_failure_tracking() -> None:
     must call this at the start of each new batch/single run to avoid
     carrying failure counts across unrelated invocations in long-lived
     processes.
+
+    After ``_PC_SKIP_THRESHOLD`` consecutive failures, PC extraction enters
+    a cooldown cycle: it skips ``_PC_SKIP_COOLDOWN`` turns then retries for
+    ``_PC_RETRY_WINDOW`` turns, repeating until a success resets the counter.
     """
     global _pc_consecutive_failures, _pc_skipped_turns
     _pc_consecutive_failures = 0
@@ -641,6 +647,23 @@ def _format_prior_entity_context(
     return json.dumps(prior, indent=2)
 
 
+def _unwrap_entity_response(detail_result: dict) -> dict | None:
+    """Extract entity data from LLM response, handling missing envelope.
+
+    The entity-detail template asks the LLM to return ``{"entity": {...}}``,
+    but smaller models sometimes return the entity object flat at the top
+    level.  This function accepts both formats.
+    """
+    # Standard envelope format
+    entity_data = detail_result.get("entity")
+    if isinstance(entity_data, dict):
+        return entity_data
+    # Flat format — LLM returned the entity directly
+    if "id" in detail_result and "type" in detail_result:
+        return dict(detail_result)  # shallow copy to avoid mutating the raw response
+    return None
+
+
 def format_detail_prompt(
     turn: dict,
     entity_ref: dict,
@@ -1082,7 +1105,7 @@ def extract_and_merge(
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
             continue
 
-        entity_data = detail_result.get("entity")
+        entity_data = _unwrap_entity_response(detail_result)
         if entity_data:
             entity_data = _coerce_entity_fields(entity_data)
         if entity_data and not _filter_concept_prefix_from_items(entity_data):
@@ -1116,9 +1139,16 @@ def extract_and_merge(
     )
     if not pc_already_extracted:
         # Skip PC extraction after too many consecutive failures (#149)
+        _skip_pc = False
         if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            _pc_skipped_turns += 1
-        else:
+            # Cooldown model: skip _PC_SKIP_COOLDOWN turns, then retry for _PC_RETRY_WINDOW turns
+            turns_since_threshold = _pc_consecutive_failures - _PC_SKIP_THRESHOLD
+            cycle_position = turns_since_threshold % (_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW)
+            if cycle_position < _PC_SKIP_COOLDOWN:
+                _pc_skipped_turns += 1
+                _skip_pc = True
+            # else: we're in the retry window — fall through to attempt extraction
+        if not _skip_pc:
             pc_result = find_entity_by_id(catalogs, "char-player")
             pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
             # Sanitize existing entry before sending to LLM so stale keys
@@ -1137,7 +1167,7 @@ def extract_and_merge(
                     timeout=pc_timeout,
                     max_tokens=llm.pc_max_tokens,
                 )
-                entity_data = detail_result.get("entity")
+                entity_data = _unwrap_entity_response(detail_result)
                 if entity_data:
                     entity_data = _coerce_entity_fields(entity_data)
                 if entity_data and _validate_entity(entity_data):
@@ -1679,7 +1709,7 @@ def backfill_stubs(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
             )
-            entity_data = detail_result.get("entity")
+            entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
                 entity_data = _coerce_entity_fields(entity_data)
             if entity_data and _validate_entity(entity_data):
@@ -1846,7 +1876,7 @@ def refresh_entities(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
             )
-            entity_data = detail_result.get("entity")
+            entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
                 entity_data = _coerce_entity_fields(entity_data)
             if entity_data and _validate_entity(entity_data):
@@ -2672,7 +2702,8 @@ def extract_semantic_batch(
     if _pc_skipped_turns > 0:
         print(
             f"  PC extraction skipped for {_pc_skipped_turns} turn(s) "
-            f"after {_PC_SKIP_THRESHOLD} consecutive failures",
+            f"(cooldown after {_PC_SKIP_THRESHOLD} consecutive failures, "
+            f"retrying every {_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW} turns)",
         )
 
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
