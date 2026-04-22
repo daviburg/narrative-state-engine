@@ -90,6 +90,7 @@ When a code change alters tool behavior, data flow, schemas, or output format:
 | `framework/story/summary.md` | High-level story arc | Yes |
 | `schemas/*.schema.json` | JSON schemas | No |
 | `config/llm.json` | LLM provider/model configuration | Yes |
+| `config/ollama/*.Modelfile` | Ollama context-size variants | Yes |
 | `templates/extraction/*.md` | LLM prompt templates for semantic extraction | Yes |
 | `requirements-llm.txt` | Optional LLM dependencies | Yes |
 
