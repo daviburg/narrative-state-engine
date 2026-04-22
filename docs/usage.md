@@ -89,6 +89,8 @@ Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
 |---|---|
 | `max_tokens` | Default max output tokens for all LLM extraction calls. |
 | `pc_max_tokens` | Max output tokens for **PC entity extraction** only. Defaults to `max_tokens` if omitted. The player-character entity accumulates context over many turns and may need a higher token limit to avoid truncation. |
+| `entity_refresh_interval` | Every N turns, find and re-extract stale entities whose `last_updated_turn` has fallen behind by more than N turns. Default: `50`. Set to `0` to disable. |
+| `entity_refresh_batch_size` | Maximum number of stale entities to refresh per interval. Default: `5`. Entities are prioritized by staleness (most stale first) and must appear in the transcript since their last update. |
 
 **PC extraction skip-after-failures:** If PC extraction fails for 20 consecutive turns, it is automatically skipped for the remainder of the run to avoid wasting time on doomed LLM calls. An end-of-run summary reports how many turns were skipped. The threshold (20) is defined as `_PC_SKIP_THRESHOLD` in `tools/semantic_extraction.py`.
 

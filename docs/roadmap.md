@@ -47,6 +47,7 @@ Post-extraction quality passes include:
 - **PC alias merge** — detects character entities that are aliases of char-player and merges them (#134)
 - **PC consecutive-failure logging** — warns when PC extraction fails for ≥10 consecutive turns (#133)
 - **Extraction validation** — post-extraction ground truth comparison that catches false alias merges, missing entities, coreference fragmentation, and staleness (#159). Uses curated fixtures in `tests/fixtures/` and runs via `tools/validate_extraction.py`.
+- **Periodic entity refresh** (#161) — re-extracts stale entities every N turns (`entity_refresh_interval`, default 50) using recent transcript context. Up to `entity_refresh_batch_size` (default 5) entities are refreshed per interval, prioritized by staleness. Prevents entities from going permanently stale in long extractions.
 
 **Timeline tracking** (#137): The pipeline extracts temporal signals (season transitions,
 biological markers, construction milestones) and estimates in-game day offsets from a
