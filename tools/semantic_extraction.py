@@ -251,6 +251,25 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         print("  COERCE: relationships dict → single-element array", file=sys.stderr)
 
     # --- V1 → V2 coercion ---
+    # Strip "_new" suffix from non-schema keys (#172) BEFORE V1→V2 mapping
+    # so that e.g. "description_new" becomes "description" and is then
+    # handled by the description → identity fallback below.
+    _schema_keys = {
+        "id", "name", "type", "identity", "current_status",
+        "status_updated_turn", "stable_attributes", "volatile_state",
+        "relationships", "first_seen_turn", "last_updated_turn", "notes",
+    }
+    for key in list(entity_data.keys()):
+        if key.endswith("_new") and key not in _schema_keys:
+            base = key[:-4]  # strip "_new"
+            if base not in entity_data:
+                entity_data[base] = entity_data.pop(key)
+                print(f"  COERCE: {key} → {base} (stripped _new suffix)", file=sys.stderr)
+            else:
+                # base key already present — discard the delta variant
+                entity_data.pop(key)
+                print(f"  COERCE: discarded delta key '{key}' (base '{base}' exists)", file=sys.stderr)
+
     # If LLM returned "description" but not "identity", map description → identity.
     # Always strip the V1-only "description" field afterward so mixed V1/V2
     # payloads still validate against the V2 schema (additionalProperties: false).
@@ -310,26 +329,6 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     # Remap them into the correct V2 locations before validation.
     turn_id = entity_data.get("last_updated_turn", "")
     has_valid_turn = bool(turn_id and _TURN_ID_RE.match(turn_id))
-
-    # Strip "_new" suffix from non-schema keys (#172).  The LLM sometimes
-    # returns diff-format keys like "relationships_new", "description_new",
-    # "faction_relations_new".  Normalise these to their base form so
-    # downstream remap / discard maps can handle them.
-    _schema_keys = {
-        "id", "name", "type", "identity", "current_status",
-        "status_updated_turn", "stable_attributes", "volatile_state",
-        "relationships", "first_seen_turn", "last_updated_turn", "notes",
-    }
-    for key in list(entity_data.keys()):
-        if key.endswith("_new") and key not in _schema_keys:
-            base = key[:-4]  # strip "_new"
-            if base not in entity_data:
-                entity_data[base] = entity_data.pop(key)
-                print(f"  COERCE: {key} → {base} (stripped _new suffix)", file=sys.stderr)
-            else:
-                # base key already present — discard the delta variant
-                entity_data.pop(key)
-                print(f"  COERCE: discarded delta key '{key}' (base '{base}' exists)", file=sys.stderr)
 
     # Keys that should become volatile_state entries
     _volatile_remap = {

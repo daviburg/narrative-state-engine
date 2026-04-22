@@ -898,11 +898,13 @@ def test_coerce_strips_new_suffix_to_base_key():
                                     "first_seen_turn": "turn-020"}],
     }
     result = _coerce_entity_fields(entity)
-    # description_new → description → identity (via V1→V2 fallback already ran,
-    # but _new strip happens after V1→V2, so description survives as discard or
-    # stays).  The key point: _new suffix is gone.
+    # The _new suffix should be removed, but V2 output must also remain schema-
+    # compliant: `description` is not a valid top-level V2 field, and an
+    # existing identity value must not be overwritten by description_new.
     assert "description_new" not in result
     assert "faction_relations_new" not in result
+    assert "description" not in result
+    assert result["identity"] == "The player."
 
 
 def test_coerce_new_suffix_discards_when_base_exists():
@@ -937,15 +939,20 @@ def test_coerce_new_suffix_remapped_through_volatile():
     assert result["volatile_state"]["equipment"] == ["bow", "arrows"]
 
 
-def test_coerce_new_suffix_skips_schema_keys():
-    """Schema-native keys with _new-like names are not stripped."""
-    # 'notes' is a schema key; there's no 'notes_new' to worry about in
-    # practice, but confirm the suffix strip only targets non-schema keys.
+def test_coerce_new_suffix_discards_schema_key_variants_when_base_exists():
+    """Schema keys ending in '_new' are discarded when the base key exists."""
     entity = {
-        "id": "char-player", "name": "PC", "type": "character",
+        "id": "char-player",
+        "id_new": "char-player-updated",
+        "name": "PC",
+        "name_new": "Updated PC",
+        "type": "character",
         "identity": "The player.",
-        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
-        "notes": "Keep an eye on this one.",
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-050",
     }
     result = _coerce_entity_fields(entity)
-    assert result["notes"] == "Keep an eye on this one."
+    assert "id_new" not in result
+    assert "name_new" not in result
+    assert result["id"] == "char-player"
+    assert result["name"] == "PC"
