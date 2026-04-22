@@ -1,5 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "coreference-hints.schema.json",
   "title": "Coreference Hints",
   "description": "Manual coreference hints for entity fragmentation resolution",
   "type": "object",
@@ -9,21 +10,26 @@
       "items": {
         "type": "object",
         "properties": {
-          "canonical_name": { "type": "string" },
-          "canonical_id": { "type": "string" },
+          "canonical_name": { "type": "string", "minLength": 1 },
+          "canonical_id": {
+            "type": "string",
+            "pattern": "^(char|loc|faction|item|creature|concept)-[a-z0-9]+(-[a-z0-9]+)*$"
+          },
           "variant_names": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "type": "string", "minLength": 1 }
           },
           "variant_id_patterns": {
             "type": "array",
-            "items": { "type": "string" }
+            "items": { "type": "string", "minLength": 1 }
           },
           "notes": { "type": "string" }
         },
-        "required": ["canonical_name", "canonical_id", "variant_names"]
+        "required": ["canonical_name", "canonical_id", "variant_names"],
+        "additionalProperties": false
       }
     }
   },
-  "required": ["character_groups"]
+  "required": ["character_groups"],
+  "additionalProperties": false
 }

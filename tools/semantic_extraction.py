@@ -2044,8 +2044,12 @@ def apply_coreference_hints(
     if not os.path.isfile(hints_path):
         return []
 
-    with open(hints_path, "r", encoding="utf-8") as f:
-        hints = json.load(f)
+    try:
+        with open(hints_path, "r", encoding="utf-8") as f:
+            hints = json.load(f)
+    except (json.JSONDecodeError, OSError) as exc:
+        print(f"  WARNING: failed to load coreference hints '{hints_path}': {exc}", file=sys.stderr)
+        return []
 
     groups = hints.get("character_groups", [])
     if not groups:
@@ -2100,7 +2104,7 @@ def apply_coreference_hints(
         for variant in variants_to_remove:
             entities.remove(variant)
 
-        # Delete variant files from disk (V2 layout)
+        # Delete variant files from disk (V2 layout) — per-group only
         if catalog_dir and not dry_run:
             # Determine subdirectory from entity type prefix
             prefix = canonical_id.split("-", 1)[0] if "-" in canonical_id else ""
@@ -2114,10 +2118,12 @@ def apply_coreference_hints(
             }
             subdir = type_dirs.get(prefix, "")
             if subdir:
-                for eid in merged_ids:
-                    entity_file = os.path.join(catalog_dir, subdir, f"{eid}.json")
-                    if os.path.isfile(entity_file):
-                        os.remove(entity_file)
+                for variant in variants_to_remove:
+                    eid = variant.get("id", "")
+                    if eid:
+                        entity_file = os.path.join(catalog_dir, subdir, f"{eid}.json")
+                        if os.path.isfile(entity_file):
+                            os.remove(entity_file)
 
         # Add variant names as aliases on the canonical entry
         sa = canonical_entry.setdefault("stable_attributes", {})
@@ -2127,9 +2133,15 @@ def apply_coreference_hints(
         alias_list = aliases.get("value", [])
         if isinstance(alias_list, str):
             alias_list = [a.strip() for a in alias_list.split(",") if a.strip()]
+        existing_aliases_lower = {a.strip().lower() for a in alias_list if isinstance(a, str) and a.strip()}
+        canonical_lower = canonical_name.strip().lower()
         for vname in group.get("variant_names", []):
-            if vname not in alias_list and vname.lower() != canonical_name.lower():
-                alias_list.append(vname)
+            stripped = vname.strip() if isinstance(vname, str) else ""
+            if not stripped:
+                continue
+            if stripped.lower() not in existing_aliases_lower and stripped.lower() != canonical_lower:
+                alias_list.append(stripped)
+                existing_aliases_lower.add(stripped.lower())
         aliases["value"] = alias_list
         sa["aliases"] = aliases
 

@@ -3,7 +3,6 @@ import json
 import os
 import sys
 import tempfile
-from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -256,6 +255,25 @@ class TestCoreferenceGracefulSkip:
 
         assert merged == []
         assert len(catalogs["characters.json"]) == 2
+
+    def test_skip_when_malformed_json(self, capsys):
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-kael", "Kael", "turn-149"),
+            ]
+        }
+        events = []
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            hints_path = os.path.join(tmpdir, "coreference-hints.json")
+            with open(hints_path, "w") as f:
+                f.write("{invalid json content!!!")
+            merged = apply_coreference_hints(catalogs, events, tmpdir, hints_path)
+
+        assert merged == []
+        assert len(catalogs["characters.json"]) == 1
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err
 
 
 class TestCoreferenceMatchByName:
