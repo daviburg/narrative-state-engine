@@ -53,7 +53,7 @@ SCHEMA_MAP = {
 }
 
 # Entity catalog directory names that contain per-entity JSON files
-ENTITY_CATALOG_DIRS = {"characters", "locations", "factions", "items", "creatures", "concepts"}
+ENTITY_CATALOG_DIRS = {"characters", "locations", "factions", "items"}
 
 
 def load_schema(schema_path: str) -> dict:

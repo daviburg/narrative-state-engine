@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import warnings
 
 # Maps entity types to catalog bucket keys (keyed by legacy filenames for
 # backward-compatible dict keys used throughout the pipeline).
@@ -119,8 +120,29 @@ def load_catalogs(catalog_dir: str) -> dict:
 
     The returned dict is keyed by the canonical catalog keys
     (``characters.json``, etc.) for compatibility with callers.
+
+    Raises a warning if stale V1 flat files with real data are found,
+    since they are no longer loaded and the data would be silently ignored.
     """
     catalogs: dict[str, list[dict]] = {}
+
+    # Guard: warn if stale V1 flat files contain data that would be lost
+    for key in CATALOG_KEYS:
+        flat_path = os.path.join(catalog_dir, key)
+        if os.path.isfile(flat_path):
+            try:
+                with open(flat_path, "r", encoding="utf-8-sig") as f:
+                    data = json.load(f)
+                if isinstance(data, list) and len(data) > 0:
+                    warnings.warn(
+                        f"Stale V1 flat file '{key}' contains {len(data)} "
+                        f"entries that will NOT be loaded. Remove it or "
+                        f"re-run the V1\u2192V2 migration.",
+                        UserWarning,
+                        stacklevel=2,
+                    )
+            except (json.JSONDecodeError, OSError):
+                pass
 
     for dirname, key in zip(_V2_DIRNAMES, CATALOG_KEYS):
         entity_dir = os.path.join(catalog_dir, dirname)
