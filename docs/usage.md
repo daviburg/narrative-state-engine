@@ -167,6 +167,8 @@ Useful flags:
 - `--format {auto,markdown,labeled,alternating}` override auto-detect
 - `--dm-label` / `--player-label` for non-default speaker labels
 
+**Important:** The `--player-label` must match the speaker label text used in your source transcript (case-insensitive; pass the label text without the trailing colon). For example, if the transcript uses `Fenouille Moonwind:` as the player label, pass `--player-label "Fenouille Moonwind"`. If the label text doesn't match, the parser won't recognize player turns and their text will be appended to the preceding DM turn, contaminating extraction input.
+
 ---
 
 ## Updating State
