@@ -72,7 +72,7 @@ Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
 
 ```json
 {
-  "provider": "ollama",
+  "provider": "openai",
   "base_url": "http://localhost:11434/v1",
   "model": "qwen2.5:14b-8k",
   "api_key_env": "",
@@ -80,11 +80,13 @@ Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
   "max_tokens": 4096,
   "pc_max_tokens": 8192,
   "context_length": 8192,
-  "timeout_seconds": 180,
+  "timeout_seconds": 120,
   "retry_attempts": 3,
-  "batch_delay_ms": 500
+  "batch_delay_ms": 200
 }
 ```
+
+> **Note:** Use `"provider": "openai"` for Ollama — it exposes an OpenAI-compatible `/v1` endpoint. The `provider` field selects the client library, not the vendor.
 
 ### Setting the Context Size (Ollama)
 
@@ -107,9 +109,10 @@ ollama create qwen2.5:14b-8k -f config/ollama/qwen2.5-14b-8k.Modelfile
 | `qwen2.5:14b-16k` | 16 384 | ~11.2 GB | 16 GB+ |
 
 After creating the variant, update `model` in `config/llm.json` to match.
-The `context_length` field is optional — it is passed to Ollama's native API
-but ignored by the `/v1` endpoint. The Modelfile is what actually sets the
-context size.
+The Modelfile sets the model's default context size permanently. The
+`context_length` field in `config/llm.json` is also passed to Ollama via
+`extra_body.options.num_ctx` as a runtime override (#175). Both mechanisms
+work; the Modelfile is preferred because it persists across restarts.
 
 ```json
 {
@@ -131,8 +134,13 @@ models.
 | `pc_max_tokens` | Max output tokens for **PC entity extraction** only. Defaults to `max_tokens` if omitted. The player-character entity accumulates context over many turns and may need a higher token limit to avoid truncation. |
 | `entity_refresh_interval` | Every N turns, find and re-extract stale entities whose `last_updated_turn` has fallen behind by more than N turns. Default: `50`. Set to `0` to disable. |
 | `entity_refresh_batch_size` | Maximum number of stale entities to refresh per interval. Default: `5`. Entities are prioritized by staleness (most stale first) and must appear in the transcript since their last update. |
+| `context_length` | Context window size in tokens. Passed to Ollama via `extra_body.options.num_ctx` (#175). Also used for prompt budget calculations. The Modelfile variant is the primary mechanism for setting context size; this field provides a runtime override. |
+| `timeout_seconds` | HTTP timeout per LLM call in seconds. PC extraction uses `2×` this value. |
+| `retry_attempts` | Number of retries on LLM call failure. |
+| `batch_delay_ms` | Delay between consecutive LLM calls in milliseconds. Prevents GPU thrashing. |
+| `ollama_options` | Optional dict of Ollama-specific parameters (e.g., `{"num_gpu": 99}`). Merged into `extra_body.options` alongside `num_ctx`. `context_length` takes precedence over `num_ctx` in this dict. |
 
-**PC extraction skip-after-failures:** If PC extraction fails for 20 consecutive turns, it is automatically skipped for the remainder of the run to avoid wasting time on doomed LLM calls. An end-of-run summary reports how many turns were skipped. The threshold (20) is defined as `_PC_SKIP_THRESHOLD` in `tools/semantic_extraction.py`.
+**PC extraction cooldown:** If PC extraction fails for 20 consecutive turns (`_PC_SKIP_THRESHOLD`), it enters a cooldown cycle: skipping 50 turns, then retrying for 5 turns, repeating until a success resets the counter (#133, #168). An end-of-run summary reports how many turns were skipped.
 
 Or use CLI overrides for one-off runs:
 
