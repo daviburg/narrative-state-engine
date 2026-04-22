@@ -301,6 +301,106 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 entity_data["volatile_state"] = volatile
             print("  COERCE: flat attributes → stable_attributes/volatile_state (V1→V2)", file=sys.stderr)
 
+    # --- Remap non-standard top-level keys into V2 slots (#170) ---
+    # The LLM often returns useful data under keys that don't exist in the
+    # V2 entity schema, causing additionalProperties validation failures.
+    # Remap them into the correct V2 locations before validation.
+    turn_id = entity_data.get("last_updated_turn", "")
+    has_valid_turn = bool(turn_id and turn_id.startswith("turn-"))
+
+    # Keys that should become volatile_state entries
+    _volatile_remap = {
+        "equipment": "equipment",
+        "inventory": "equipment",
+        "location": "location",
+        "current_location": "location",
+        "status": "condition",
+        "current_situation": "condition",
+        "emotional_state": "condition",
+        "physical_state": "condition",
+    }
+    for src_key, vs_key in _volatile_remap.items():
+        if src_key in entity_data and src_key not in (
+            "id", "name", "type", "identity", "current_status",
+            "status_updated_turn", "stable_attributes", "volatile_state",
+            "relationships", "first_seen_turn", "last_updated_turn", "notes",
+        ):
+            val = entity_data.pop(src_key)
+            if "volatile_state" not in entity_data:
+                entity_data["volatile_state"] = {}
+            vs = entity_data["volatile_state"]
+            # equipment/inventory → array of strings
+            if vs_key == "equipment":
+                if isinstance(val, str):
+                    val = [v.strip() for v in val.split(",") if v.strip()]
+                elif isinstance(val, list):
+                    val = [str(v) for v in val]
+                else:
+                    val = [str(val)]
+            elif not isinstance(val, str):
+                val = str(val) if val is not None else ""
+            # Only set if target slot is empty (don't overwrite existing data)
+            if vs_key not in vs:
+                vs[vs_key] = val
+            print(f"  COERCE: {src_key} → volatile_state.{vs_key}", file=sys.stderr)
+
+    # Keys that should become stable_attributes entries
+    _stable_remap = {
+        "abilities": "abilities",
+        "name_aliases": "aliases",
+    }
+    for src_key, sa_key in _stable_remap.items():
+        if src_key in entity_data:
+            val = entity_data.pop(src_key)
+            if "stable_attributes" not in entity_data:
+                entity_data["stable_attributes"] = {}
+            sa = entity_data["stable_attributes"]
+            if sa_key not in sa and val:
+                # Wrap in V2 attribute object format
+                if isinstance(val, list):
+                    attr_val = [str(v) for v in val]
+                elif isinstance(val, str):
+                    attr_val = val
+                else:
+                    attr_val = str(val)
+                entry: dict = {
+                    "value": attr_val,
+                    "inference": False,
+                    "confidence": 1.0,
+                }
+                if has_valid_turn:
+                    entry["source_turn"] = turn_id
+                sa[sa_key] = entry
+            print(f"  COERCE: {src_key} → stable_attributes.{sa_key}", file=sys.stderr)
+
+    # Relationship key variants → relationships
+    _rel_keys = ["relations", "character_relations", "faction_relations",
+                 "item_relations", "social_connections"]
+    for rk in _rel_keys:
+        if rk in entity_data:
+            val = entity_data.pop(rk)
+            # Only adopt if no relationships already present
+            if "relationships" not in entity_data and isinstance(val, list):
+                entity_data["relationships"] = val
+            print(f"  COERCE: {rk} → relationships", file=sys.stderr)
+
+    # Discard known noise keys that carry no recoverable structured data
+    _discard_keys = {
+        "current_activity", "actions", "last_activity", "recent_events",
+        "future_plans", "image_url", "quests", "history", "emotions",
+        "tools_used", "background_story", "personality_traits", "traits",
+        "faction", "confidence",
+    }
+    for dk in list(entity_data.keys()):
+        if dk in _discard_keys:
+            entity_data.pop(dk)
+            print(f"  COERCE: discarded non-schema key '{dk}'", file=sys.stderr)
+
+    # Ensure volatile_state has last_updated_turn if we populated it
+    vs = entity_data.get("volatile_state")
+    if isinstance(vs, dict) and "last_updated_turn" not in vs and has_valid_turn:
+        vs["last_updated_turn"] = turn_id
+
     # Coerce V1 relationship fields to V2 format
     for rel in entity_data.get("relationships", []):
         if "relationship" in rel and "current_relationship" not in rel:

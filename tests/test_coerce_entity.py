@@ -487,3 +487,195 @@ def test_relationship_prompt_includes_existing():
     prompt = format_relationship_prompt(turn, entities, existing)
     assert "Existing relationships" in prompt
     assert "mentor of" in prompt
+
+
+# --- Tests for non-standard key coercion (#170) ---
+
+
+def test_coerce_equipment_to_volatile_state():
+    """Top-level 'equipment' remapped to volatile_state.equipment."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Resting.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "equipment": ["sword", "shield"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "equipment" not in result  # removed from top level
+    assert result["volatile_state"]["equipment"] == ["sword", "shield"]
+
+
+def test_coerce_inventory_to_volatile_equipment():
+    """Top-level 'inventory' remapped to volatile_state.equipment."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Resting.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "inventory": "sword, shield, potion",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "inventory" not in result
+    assert result["volatile_state"]["equipment"] == ["sword", "shield", "potion"]
+
+
+def test_coerce_location_to_volatile_state():
+    """Top-level 'location' remapped to volatile_state.location."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Exploring.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "location": "The village square",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "location" not in result
+    assert result["volatile_state"]["location"] == "The village square"
+
+
+def test_coerce_current_location_to_volatile():
+    """Top-level 'current_location' remapped to volatile_state.location."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "current_location": "The forest",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "current_location" not in result
+    assert result["volatile_state"]["location"] == "The forest"
+
+
+def test_coerce_status_to_volatile_condition():
+    """Top-level 'status' remapped to volatile_state.condition."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Active.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "status": "healthy and alert",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "status" not in result  # removed from top level
+    assert result["volatile_state"]["condition"] == "healthy and alert"
+
+
+def test_coerce_emotional_state_to_volatile_condition():
+    """Top-level 'emotional_state' remapped to volatile_state.condition."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "emotional_state": "anxious but determined",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "emotional_state" not in result
+    assert result["volatile_state"]["condition"] == "anxious but determined"
+
+
+def test_coerce_abilities_to_stable_attributes():
+    """Top-level 'abilities' remapped to stable_attributes.abilities."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "abilities": ["darkvision", "keen senses"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "abilities" not in result
+    assert result["stable_attributes"]["abilities"]["value"] == ["darkvision", "keen senses"]
+    assert result["stable_attributes"]["abilities"]["source_turn"] == "turn-050"
+
+
+def test_coerce_name_aliases_to_stable_aliases():
+    """Top-level 'name_aliases' remapped to stable_attributes.aliases."""
+    entity = {
+        "id": "char-player", "name": "Fenouille", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "name_aliases": "Fenouille Moonwind",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "name_aliases" not in result
+    assert result["stable_attributes"]["aliases"]["value"] == "Fenouille Moonwind"
+
+
+def test_coerce_relations_to_relationships():
+    """Top-level 'relations' remapped to 'relationships'."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "relations": [{"target_id": "char-kael", "current_relationship": "ally",
+                        "type": "social", "first_seen_turn": "turn-010"}],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "relations" not in result
+    assert len(result["relationships"]) == 1
+    assert result["relationships"][0]["target_id"] == "char-kael"
+
+
+def test_coerce_character_relations_to_relationships():
+    """Top-level 'character_relations' remapped to 'relationships'."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "character_relations": [{"target_id": "char-elder", "current_relationship": "mentee",
+                                  "type": "mentorship", "first_seen_turn": "turn-005"}],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "character_relations" not in result
+    assert len(result["relationships"]) == 1
+
+
+def test_coerce_discards_noise_keys():
+    """Known noise keys are silently discarded."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Active.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "image_url": "http://example.com/img.png",
+        "future_plans": "Find the artifact",
+        "actions": ["walked to camp"],
+        "current_activity": "resting",
+        "confidence": 0.9,
+    }
+    result = _coerce_entity_fields(entity)
+    for key in ("image_url", "future_plans", "actions", "current_activity", "confidence"):
+        assert key not in result
+
+
+def test_coerce_does_not_overwrite_existing_volatile():
+    """Remapped keys don't overwrite existing volatile_state entries."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-050",
+        "volatile_state": {"location": "the camp", "last_updated_turn": "turn-050"},
+        "location": "the forest",  # should NOT overwrite
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["volatile_state"]["location"] == "the camp"
+
+
+def test_coerce_multiple_nonstandard_keys_combined():
+    """Multiple non-standard keys coerced in a single entity."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "The player.", "current_status": "Resting by fire.",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-085",
+        "abilities": ["darkvision"],
+        "equipment": ["staff"],
+        "location": "bonfire",
+        "status": "tired but safe",
+        "actions": ["sat down"],
+        "image_url": "http://x.com/y.png",
+    }
+    result = _coerce_entity_fields(entity)
+    # All non-standard keys should be gone
+    for key in ("abilities", "equipment", "location", "status", "actions", "image_url"):
+        assert key not in result, f"{key} should have been removed"
+    # Data should be in the right V2 slots
+    assert result["volatile_state"]["equipment"] == ["staff"]
+    assert result["volatile_state"]["location"] == "bonfire"
+    assert result["volatile_state"]["condition"] == "tired but safe"
+    assert result["stable_attributes"]["abilities"]["value"] == ["darkvision"]
+    assert result["current_status"] == "Resting by fire."
