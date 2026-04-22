@@ -1771,6 +1771,7 @@ def _entity_mentioned_since(
     chars) against the turn text.
     """
     name_lower = entity_name.strip().lower() if entity_name and len(entity_name.strip()) >= 3 else None
+    id_lower = entity_id.strip().lower() if entity_id else None
 
     for turn in turn_dicts:
         turn_num = _parse_turn_number(turn.get("turn_id"))
@@ -1778,7 +1779,7 @@ def _entity_mentioned_since(
             continue
         text = turn.get("text", "")
         text_lower = text.lower()
-        if entity_id in text_lower:
+        if id_lower and id_lower in text_lower:
             return True
         if name_lower and name_lower in text_lower:
             return True
@@ -1804,11 +1805,15 @@ def refresh_entities(
     refreshed = 0
     for _catalog_file, entity in stale_entities:
         entity_id = entity.get("id", "")
+        if not entity_id:
+            continue  # Cannot refresh an entity without an ID
         entity_name = entity.get("name", "")
         entity_type = entity.get("type", "character")
         last_updated = _parse_turn_number(entity.get("last_updated_turn")) or 0
 
         # Gather recent context: turns where entity is mentioned since last update
+        id_lower = entity_id.lower()
+        name_lower = entity_name.strip().lower() if entity_name and len(entity_name.strip()) >= 3 else None
         context_parts: list[str] = []
         for turn in turn_dicts:
             t_num = _parse_turn_number(turn.get("turn_id"))
@@ -1816,8 +1821,7 @@ def refresh_entities(
                 continue
             text = turn.get("text", "")
             text_lower = text.lower()
-            name_lower = entity_name.strip().lower() if entity_name and len(entity_name.strip()) >= 3 else None
-            if entity_id in text_lower or (name_lower and name_lower in text_lower):
+            if id_lower in text_lower or (name_lower and name_lower in text_lower):
                 context_parts.append(f"[{turn['turn_id']}] {text[:500]}")
         context_text = "\n".join(context_parts[:15])  # cap context size
 
@@ -1849,6 +1853,21 @@ def refresh_entities(
                 # Preserve first_seen_turn from original entity
                 entity_data["first_seen_turn"] = entity.get("first_seen_turn",
                                                              current_turn_id)
+                # Explicitly advance last_updated_turn so the entity won't
+                # be re-queued on the next refresh interval if the LLM
+                # omitted or backdated the field.
+                current_num = _parse_turn_number(current_turn_id)
+                existing_num = _parse_turn_number(
+                    entity.get("last_updated_turn"))
+                if (
+                    current_num is not None
+                    and existing_num is not None
+                    and existing_num > current_num
+                ):
+                    entity_data["last_updated_turn"] = entity.get(
+                        "last_updated_turn")
+                else:
+                    entity_data["last_updated_turn"] = current_turn_id
                 merge_entity(catalogs, entity_data)
                 refreshed += 1
                 print(f"  REFRESH: Updated stale entity '{entity_id}' "

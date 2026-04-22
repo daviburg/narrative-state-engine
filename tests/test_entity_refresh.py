@@ -230,8 +230,8 @@ class TestIntervalTrigger:
 class TestRefreshEntities:
     def test_refresh_merges_not_overwrites(self):
         """refresh_entities should call merge_entity, which augments rather
-        than replaces. We test indirectly by checking that the function handles
-        existing entities and uses merge_entity."""
+        than replaces. Verify merge_entity is invoked and original attributes
+        survive alongside the new ones."""
         from unittest.mock import MagicMock, patch
         from semantic_extraction import refresh_entities
 
@@ -255,9 +255,16 @@ class TestRefreshEntities:
         mock_llm.delay = MagicMock()
 
         stale = [("characters.json", elder)]
-        refreshed = refresh_entities(stale, "turn-100", turns, catalogs, mock_llm)
-        assert refreshed == 1
-        assert mock_llm.extract_json.called
+
+        with patch("semantic_extraction.merge_entity") as mock_merge:
+            refreshed = refresh_entities(stale, "turn-100", turns, catalogs, mock_llm)
+            assert refreshed == 1
+            assert mock_llm.extract_json.called
+            # merge_entity must be called (merge, not overwrite)
+            assert mock_merge.called
+            merged_entity = mock_merge.call_args[0][1]
+            assert merged_entity["id"] == "char-elder"
+            assert merged_entity["last_updated_turn"] == "turn-100"
 
     def test_refresh_skips_when_no_context(self):
         """If entity has no mentions since last update, refresh should skip."""
