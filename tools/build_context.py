@@ -23,30 +23,6 @@ import warnings
 # V2 per-entity directory names
 _V2_DIRNAMES = ["characters", "locations", "factions", "items"]
 
-# V1 flat file names (deprecated fallback)
-_V1_FILENAMES = ["characters.json", "locations.json", "factions.json", "items.json"]
-
-
-# ---------------------------------------------------------------------------
-# Format detection (mirrors catalog_merger.py logic)
-# ---------------------------------------------------------------------------
-
-def detect_format(catalog_dir: str) -> str:
-    """Detect whether catalog_dir uses V2 (per-entity dirs) or V1 (flat files)."""
-    existing_v2_dirs = [
-        d for d in _V2_DIRNAMES
-        if os.path.isdir(os.path.join(catalog_dir, d))
-    ]
-    existing_v1_files = [
-        f for f in _V1_FILENAMES
-        if os.path.isfile(os.path.join(catalog_dir, f))
-    ]
-    if len(existing_v2_dirs) == len(_V2_DIRNAMES):
-        return "v2"
-    if existing_v2_dirs and not existing_v1_files:
-        return "v2"
-    return "v1"
-
 
 # ---------------------------------------------------------------------------
 # Step A: Read turn transcript
@@ -100,41 +76,6 @@ def load_indexes(catalog_dir: str) -> tuple[dict[str, list[dict]], dict[str, dic
             id_lookup[eid] = entry
             name_lower = entry["name"].lower()
             name_lookup.setdefault(name_lower, []).append(entry)
-
-    return name_lookup, id_lookup
-
-
-def load_indexes_v1(catalog_dir: str) -> tuple[dict[str, list[dict]], dict[str, dict]]:
-    """Fallback: build index-like lookups from V1 flat files."""
-    warnings.warn(
-        "Using V1 flat file fallback. Migrate to V2 per-entity layout.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    name_lookup: dict[str, list[dict]] = {}
-    id_lookup: dict[str, dict] = {}
-
-    for filename in _V1_FILENAMES:
-        fpath = os.path.join(catalog_dir, filename)
-        if not os.path.isfile(fpath):
-            continue
-        with open(fpath, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-        entities = data if isinstance(data, list) else data.get("entities", [])
-        for entity in entities:
-            eid = entity.get("id", "")
-            name = entity.get("name", "")
-            etype = entity.get("type", "character")
-            entry = {
-                "id": eid,
-                "name": name,
-                "type": etype,
-                "first_seen_turn": entity.get("first_seen_turn", "turn-000"),
-                "last_updated_turn": entity.get("last_updated_turn", "turn-000"),
-                "status_summary": entity.get("current_status", entity.get("identity", ""))[:80],
-            }
-            id_lookup[eid] = entry
-            name_lookup.setdefault(name.lower(), []).append(entry)
 
     return name_lookup, id_lookup
 
@@ -210,26 +151,10 @@ def load_entity_file(catalog_dir: str, entity_id: str, id_lookup: dict[str, dict
         return json.load(f)
 
 
-def load_entity_v1(catalog_dir: str, entity_id: str) -> dict | None:
-    """Fallback: load entity from V1 flat files."""
-    for filename in _V1_FILENAMES:
-        fpath = os.path.join(catalog_dir, filename)
-        if not os.path.isfile(fpath):
-            continue
-        with open(fpath, "r", encoding="utf-8-sig") as f:
-            data = json.load(f)
-        entities = data if isinstance(data, list) else data.get("entities", [])
-        for entity in entities:
-            if entity.get("id") == entity_id:
-                return entity
-    return None
-
-
 def expand_one_hop(
     mentioned_ids: set[str],
     catalog_dir: str,
     id_lookup: dict[str, dict],
-    fmt: str,
 ) -> set[str]:
     """For each mentioned entity, find active relationship targets.
 
@@ -237,10 +162,7 @@ def expand_one_hop(
     """
     expanded_ids: set[str] = set()
     for eid in list(mentioned_ids):
-        if fmt == "v2":
-            entity = load_entity_file(catalog_dir, eid, id_lookup)
-        else:
-            entity = load_entity_v1(catalog_dir, eid)
+        entity = load_entity_file(catalog_dir, eid, id_lookup)
         if not entity:
             continue
         for rel in entity.get("relationships", []):
@@ -259,17 +181,11 @@ def build_scene_entity(
     entity: dict,
     id_lookup: dict[str, dict],
 ) -> dict:
-    """Build a scene entity record from a full entity dict.
-
-    Handles both V2 (identity/current_relationship) and V1 (description/relationship)
-    field names for best-effort backward compatibility.
-    """
-    # V1 entities use 'description' instead of 'identity'
-    identity = entity.get("identity") or entity.get("description", "")
+    """Build a scene entity record from a full entity dict."""
     result: dict = {
         "id": entity["id"],
         "name": entity["name"],
-        "identity": identity,
+        "identity": entity.get("identity", ""),
     }
     if entity.get("current_status"):
         result["current_status"] = entity["current_status"]
@@ -280,8 +196,7 @@ def build_scene_entity(
     active_rels = []
     for rel in entity.get("relationships", []):
         if rel.get("status", "active") == "active":
-            # V1 uses 'relationship', V2 uses 'current_relationship'
-            rel_text = rel.get("current_relationship") or rel.get("relationship", "")
+            rel_text = rel.get("current_relationship", "")
             rel_record: dict = {
                 "target_id": rel["target_id"],
                 "relationship": rel_text,
@@ -375,17 +290,11 @@ def build_context(
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
 
-    # Detect format
-    fmt = detect_format(catalog_dir)
-
     # Step A: Read turn transcript
     turn_text = read_turn_text(session_dir, turn_id)
 
     # Step B: Load indexes and find mentions
-    if fmt == "v2":
-        name_lookup, id_lookup = load_indexes(catalog_dir)
-    else:
-        name_lookup, id_lookup = load_indexes_v1(catalog_dir)
+    name_lookup, id_lookup = load_indexes(catalog_dir)
 
     if not id_lookup:
         warnings.warn("No entity catalogs found. Producing empty context.")
@@ -401,7 +310,7 @@ def build_context(
     mentioned_ids = find_mentions(turn_text, name_lookup, id_lookup)
 
     # Step C: One-hop expansion
-    expanded_ids = expand_one_hop(mentioned_ids, catalog_dir, id_lookup, fmt)
+    expanded_ids = expand_one_hop(mentioned_ids, catalog_dir, id_lookup)
     all_scene_ids = mentioned_ids | expanded_ids
 
     # Step D: Load full detail
@@ -410,10 +319,7 @@ def build_context(
     location_ids_from_volatile: set[str] = set()
 
     for eid in sorted(all_scene_ids):
-        if fmt == "v2":
-            entity = load_entity_file(catalog_dir, eid, id_lookup)
-        else:
-            entity = load_entity_v1(catalog_dir, eid)
+        entity = load_entity_file(catalog_dir, eid, id_lookup)
         if not entity:
             continue
 
@@ -432,10 +338,7 @@ def build_context(
 
     # Load locations referenced by volatile_state
     for loc_id in sorted(location_ids_from_volatile):
-        if fmt == "v2":
-            loc_entity = load_entity_file(catalog_dir, loc_id, id_lookup)
-        else:
-            loc_entity = load_entity_v1(catalog_dir, loc_id)
+        loc_entity = load_entity_file(catalog_dir, loc_id, id_lookup)
         if loc_entity:
             scene_locations.append(build_scene_location(loc_entity))
             all_scene_ids.add(loc_id)

@@ -271,7 +271,7 @@ class TestOneHopExpansion:
         mentioned = find_mentions(turn_text, name_lookup, id_lookup)
         assert "char-player" in mentioned
 
-        expanded = expand_one_hop(mentioned, v2_fixture["catalogs"], id_lookup, "v2")
+        expanded = expand_one_hop(mentioned, v2_fixture["catalogs"], id_lookup)
         # char-elder should be expanded via active relationship
         assert "char-elder" in expanded
 
@@ -284,7 +284,7 @@ class TestOneHopExpansion:
         name_lookup, id_lookup = load_indexes(v2_fixture["catalogs"])
         turn_text = read_turn_text(v2_fixture["session"], "turn-078")
         mentioned = find_mentions(turn_text, name_lookup, id_lookup)
-        expanded = expand_one_hop(mentioned, v2_fixture["catalogs"], id_lookup, "v2")
+        expanded = expand_one_hop(mentioned, v2_fixture["catalogs"], id_lookup)
         # char-ghost has dormant relationship — should NOT be expanded
         assert "char-ghost" not in expanded
 

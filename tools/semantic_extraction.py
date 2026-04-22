@@ -29,11 +29,11 @@ from catalog_merger import (
     get_next_event_id,
     mark_dormant_relationships,
     normalize_entity_id,
-    TYPE_TO_CATALOG_V1,
+    TYPE_TO_CATALOG,
     _infer_type_from_prefix,
     _strip_any_prefix,
     _levenshtein,
-    _V1_FILENAMES,
+    CATALOG_KEYS,
 )
 from llm_client import LLMClient, LLMExtractionError
 
@@ -98,13 +98,9 @@ def _should_skip_pc(consecutive_failures: int, turns_since_cooldown: int) -> boo
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
-    """Strip non-allowed attribute keys from char-player entities.
-
-    Handles both V2 (stable_attributes) and V1 (attributes) formats.
-    """
+    """Strip non-allowed attribute keys from char-player entities."""
     if entity_data.get("id") != "char-player":
         return entity_data
-    # V2: stable_attributes
     sa = entity_data.get("stable_attributes", {})
     if sa:
         disallowed = {k for k in sa if k not in PC_ALLOWED_ATTRS}
@@ -114,15 +110,6 @@ def _filter_pc_attributes(entity_data: dict) -> dict:
                 file=sys.stderr,
             )
             entity_data["stable_attributes"] = {k: v for k, v in sa.items() if k in PC_ALLOWED_ATTRS}
-    # V1: attributes (backward compat)
-    attrs = entity_data.get("attributes", {})
-    disallowed = {k for k in attrs if k not in PC_ALLOWED_ATTRS}
-    if disallowed:
-        print(
-            f"  WARNING: Dropping non-allowed char-player attributes: {sorted(disallowed)}",
-            file=sys.stderr,
-        )
-        entity_data["attributes"] = {k: v for k, v in attrs.items() if k in PC_ALLOWED_ATTRS}
     return entity_data
 
 
@@ -130,13 +117,11 @@ def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
     """Purge non-allowed attribute keys from the stored char-player catalog entry.
 
     Ensures historical action-sprawl attributes are cleaned up even if they
-    were merged before the filter was in place.  Handles both V2
-    (stable_attributes) and V1 (attributes) formats.
+    were merged before the filter was in place.
     """
     for entity in catalogs.get("characters.json", []):
         if entity.get("id") != "char-player":
             continue
-        # V2: stable_attributes
         sa = entity.get("stable_attributes", {})
         if sa:
             disallowed = {k for k in sa if k not in PC_ALLOWED_ATTRS}
@@ -146,15 +131,6 @@ def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
                     file=sys.stderr,
                 )
                 entity["stable_attributes"] = {k: v for k, v in sa.items() if k in PC_ALLOWED_ATTRS}
-        # V1: attributes
-        attrs = entity.get("attributes", {})
-        disallowed = {k for k in attrs if k not in PC_ALLOWED_ATTRS}
-        if disallowed:
-            print(
-                f"  WARNING: Purging stale char-player catalog attributes: {sorted(disallowed)}",
-                file=sys.stderr,
-            )
-            entity["attributes"] = {k: v for k, v in attrs.items() if k in PC_ALLOWED_ATTRS}
         break
 
 # Directory containing prompt templates (relative to repo root)
@@ -250,10 +226,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         entity_data["relationships"] = [rels]
         print("  COERCE: relationships dict → single-element array", file=sys.stderr)
 
-    # --- V1 → V2 coercion ---
-    # Strip "_new" suffix from non-schema keys (#172) BEFORE V1→V2 mapping
+    # --- LLM output normalization ---
+    # Strip "_new" suffix from non-schema keys (#172) BEFORE field mapping
     # so that e.g. "description_new" becomes "description" and is then
-    # handled by the description → identity fallback below.
+    # handled by the description → identity mapping below.
     _schema_keys = {
         "id", "name", "type", "identity", "current_status",
         "status_updated_turn", "stable_attributes", "volatile_state",
@@ -271,19 +247,19 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 print(f"  COERCE: discarded delta key '{key}' (base '{base}' exists)", file=sys.stderr)
 
     # If LLM returned "description" but not "identity", map description → identity.
-    # Always strip the V1-only "description" field afterward so mixed V1/V2
-    # payloads still validate against the V2 schema (additionalProperties: false).
+    # Always strip the non-schema "description" field afterward so the entity
+    # validates against the V2 schema (additionalProperties: false).
     if "description" in entity_data:
         if "identity" not in entity_data:
             entity_data["identity"] = entity_data["description"]
             if "current_status" not in entity_data:
                 entity_data["current_status"] = ""
-            print("  COERCE: description → identity (V1→V2 fallback)", file=sys.stderr)
+            print("  COERCE: description → identity (LLM field normalization)", file=sys.stderr)
         entity_data.pop("description", None)
 
     # If LLM returned flat "attributes" but not "stable_attributes", classify them.
-    # Always strip the V1-only "attributes" field afterward so mixed V1/V2
-    # payloads still validate against the V2 schema.
+    # Always strip the non-schema "attributes" field afterward so the entity
+    # validates against the V2 schema.
     if "attributes" in entity_data:
         attrs = entity_data.pop("attributes")
         if "stable_attributes" not in entity_data and isinstance(attrs, dict) and attrs:
@@ -321,7 +297,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 if has_valid_turn:
                     volatile["last_updated_turn"] = turn_id
                 entity_data["volatile_state"] = volatile
-            print("  COERCE: flat attributes → stable_attributes/volatile_state (V1→V2)", file=sys.stderr)
+            print("  COERCE: flat attributes → stable_attributes/volatile_state (LLM normalization)", file=sys.stderr)
 
     # --- Remap non-standard top-level keys into V2 slots (#170, #172) ---
     # The LLM often returns useful data under keys that don't exist in the
@@ -438,7 +414,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     if isinstance(vs, dict) and "last_updated_turn" not in vs and has_valid_turn:
         vs["last_updated_turn"] = turn_id
 
-    # Coerce V1 relationship fields to V2 format
+    # Coerce LLM relationship fields to V2 format
     for rel in entity_data.get("relationships", []):
         if "relationship" in rel and "current_relationship" not in rel:
             rel["current_relationship"] = rel.pop("relationship")
@@ -712,8 +688,7 @@ def _format_prior_entity_context(
     """Format the prior entity state for injection into the detail prompt.
 
     Extracts identity, current_status, stable_attributes, and volatile_state
-    from the existing entity (V2 fields).  Falls back to V1 description and
-    attributes when V2 fields are absent.
+    from the existing entity.
 
     For ``char-player``, trims the context to keep prompt size manageable:
     - Always includes identity and current_status
@@ -789,11 +764,6 @@ def _format_prior_entity_context(
             compact_rels.append(trimmed)
         prior["relationships"] = compact_rels
 
-    # V1 fallback: keep description/attributes if no V2 counterparts
-    if "identity" not in prior and "description" in current_entry:
-        prior["description"] = current_entry["description"]
-    if "stable_attributes" not in prior and "attributes" in current_entry:
-        prior["attributes"] = current_entry["attributes"]
     # Always include basic metadata
     for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn", "notes"):
         if key in current_entry:
@@ -1055,7 +1025,7 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
         # Build a human-readable name: strip prefix, replace hyphens, title-case
         inferred_name = stem.replace("-", " ").title()
 
-        catalog_file = TYPE_TO_CATALOG_V1.get(inferred_type)
+        catalog_file = TYPE_TO_CATALOG.get(inferred_type)
         if not catalog_file:
             catalog_file = "characters.json"  # default fallback
 
@@ -1663,7 +1633,7 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
 
         inferred_type = _infer_type_from_prefix(eid)
         inferred_name = stem.replace("-", " ").title()
-        catalog_file = TYPE_TO_CATALOG_V1.get(inferred_type, "characters.json")
+        catalog_file = TYPE_TO_CATALOG.get(inferred_type, "characters.json")
 
         # Sort turn IDs numerically to get the true first turn
         valid_turns = [t for t in turn_ids if t]
@@ -2509,7 +2479,7 @@ def _dedup_events(events):
 
 def _reconcile_segments(segments):
     """Merge catalogs and events from multiple extraction segments."""
-    merged_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    merged_catalogs = {fn: [] for fn in CATALOG_KEYS}
     merged_events = []
 
     # Entity reconciliation: match across segments by ID and name
@@ -2562,7 +2532,7 @@ def _reconcile_segments(segments):
         target_file = entity.pop("_catalog_file", None)
         if not target_file:
             etype = entity.get("type", "character")
-            target_file = TYPE_TO_CATALOG_V1.get(etype, "characters.json")
+            target_file = TYPE_TO_CATALOG.get(etype, "characters.json")
         merged_catalogs[target_file].append(entity)
 
     # Deduplicate events by (source_turn, description hash)
@@ -2600,7 +2570,7 @@ def _extract_segmented(
         )
 
         # Fresh catalog for each segment
-        seg_catalogs = {fn: [] for fn in _V1_FILENAMES}
+        seg_catalogs = {fn: [] for fn in CATALOG_KEYS}
         seg_events = []
 
         # Pre-seed player character (always present)

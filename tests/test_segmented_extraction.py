@@ -12,7 +12,7 @@ from semantic_extraction import (
     _reconcile_segments,
     _ensure_player_character,
     extract_semantic_batch,
-    _V1_FILENAMES,
+    CATALOG_KEYS,
 )
 
 
@@ -299,8 +299,8 @@ def test_reconcile_preserves_first_seen_turn():
 def test_reconcile_events_deduplicated():
     seg1_events = [_make_event("evt-001", "Kael draws his sword", "turn-050")]
     seg2_events = [_make_event("evt-010", "Kael draws his sword", "turn-050")]
-    seg1_catalogs = {fn: [] for fn in _V1_FILENAMES}
-    seg2_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    seg1_catalogs = {fn: [] for fn in CATALOG_KEYS}
+    seg2_catalogs = {fn: [] for fn in CATALOG_KEYS}
     segments = [
         _make_segment("segment-1", seg1_catalogs, seg1_events, ("turn-001", "turn-100")),
         _make_segment("segment-2", seg2_catalogs, seg2_events, ("turn-101", "turn-200")),
@@ -342,11 +342,11 @@ def test_segment_size_zero_uses_legacy(monkeypatch):
     # Also mock LLMClient to avoid needing config
     from unittest.mock import MagicMock
     monkeypatch.setattr("semantic_extraction.LLMClient", lambda *a, **kw: MagicMock())
-    monkeypatch.setattr("semantic_extraction.load_catalogs", lambda d: {fn: [] for fn in _V1_FILENAMES})
+    monkeypatch.setattr("semantic_extraction.load_catalogs", lambda d: {fn: [] for fn in CATALOG_KEYS})
     monkeypatch.setattr("semantic_extraction.load_events", lambda d: [])
     monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
     monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
-    monkeypatch.setattr("semantic_extraction.extract_and_merge", lambda *a, **kw: ({fn: [] for fn in _V1_FILENAMES}, []))
+    monkeypatch.setattr("semantic_extraction.extract_and_merge", lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
     monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
     monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
 
@@ -375,7 +375,7 @@ def test_segment_size_partitions_correctly():
 
 def test_player_character_seeded_each_segment():
     """char-player should be seeded in every segment's catalog."""
-    seg_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    seg_catalogs = {fn: [] for fn in CATALOG_KEYS}
     _ensure_player_character(seg_catalogs, "turn-101")
     chars = seg_catalogs["characters.json"]
     pc = [e for e in chars if e["id"] == "char-player"]
@@ -383,7 +383,7 @@ def test_player_character_seeded_each_segment():
     assert pc[0]["first_seen_turn"] == "turn-101"
 
     # Second segment
-    seg_catalogs2 = {fn: [] for fn in _V1_FILENAMES}
+    seg_catalogs2 = {fn: [] for fn in CATALOG_KEYS}
     _ensure_player_character(seg_catalogs2, "turn-201")
     chars2 = seg_catalogs2["characters.json"]
     pc2 = [e for e in chars2 if e["id"] == "char-player"]
@@ -468,7 +468,7 @@ def test_reconcile_events_sorted_numerically():
         _make_event("evt-002", "Event at 1000", "turn-1000"),
         _make_event("evt-003", "Event at 50", "turn-050"),
     ]
-    seg_catalogs = {fn: [] for fn in _V1_FILENAMES}
+    seg_catalogs = {fn: [] for fn in CATALOG_KEYS}
     segments = [
         _make_segment("segment-1", seg_catalogs, events_input, ("turn-001", "turn-1000")),
     ]

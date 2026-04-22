@@ -56,18 +56,6 @@ SCHEMA_MAP = {
 ENTITY_CATALOG_DIRS = {"characters", "locations", "factions", "items", "creatures", "concepts"}
 
 
-def _is_v1_entity(data) -> bool:
-    """Check if data looks like a V1 entity (has 'description' or 'attributes' field)."""
-    if isinstance(data, dict):
-        return "description" in data or "attributes" in data
-    if isinstance(data, list):
-        return any(
-            isinstance(item, dict) and ("description" in item or "attributes" in item)
-            for item in data
-        )
-    return False
-
-
 def load_schema(schema_path: str) -> dict:
     with open(schema_path, "r", encoding="utf-8") as f:
         return json.load(f)
@@ -86,14 +74,6 @@ def validate_file(json_path: str, schema_path: str, syntax_only: bool = False) -
 
     if syntax_only:
         return []  # Caller explicitly requested syntax-only checks
-
-    # V1 entity format detection
-    if "entity.schema.json" in schema_path and _is_v1_entity(data):
-        errors.append(
-            "V1 entity format detected (has 'description' or 'attributes' field). "
-            "Run migration to convert to V2 format (identity/stable_attributes)."
-        )
-        return errors
 
     try:
         schema = load_schema(schema_path)

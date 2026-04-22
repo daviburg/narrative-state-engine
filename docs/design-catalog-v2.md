@@ -874,7 +874,6 @@ Additions to `state.schema.json` `player_state`:
 | Relationship consolidation: merge by (source_id, target_id) pair, update `current_relationship` | Dedup logic rewrite |
 | Dormancy marking: set `status: dormant` on relationships where neither entity appeared for N turns | New post-merge pass |
 | Type-to-directory mapping replaces type-to-file mapping | Configuration change |
-| Support both V1 (flat) and V2 (per-entity) formats during migration | Temporary compatibility layer |
 
 ### 4.2 `tools/semantic_extraction.py` — **Moderate changes**
 
@@ -942,40 +941,38 @@ Additions to `state.schema.json` `player_state`:
 
 ## 5. Migration Path
 
+> **Status: Completed.** All sessions have been migrated to V2. The migration
+> tool (`tools/migrate_catalogs_v2.py`) and V1 backward-compatibility code were
+> removed in #167. The phases below are preserved for historical context.
+
+<details>
+<summary>Historical migration phases (click to expand)</summary>
+
 ### Phase 1: Schema migration (one-time script)
 
 Write `tools/migrate_catalogs_v2.py` that:
 
 1. **Reads existing flat catalog files** (`characters.json`, `locations.json`, etc.).
-2. **Splits each entity into a per-entity file:**
-   - `framework/catalogs/characters/char-player.json`
-   - `framework/catalogs/locations/loc-camp-light.json`
-   - etc.
-3. **Converts `description` → `identity` + `current_status`:**
-   - `identity`: copy existing description (imperfect, but preserves data).
-   - `current_status`: set to `"Status unknown — migrated from V1 catalog."` (requires LLM pass or manual update to populate properly).
-4. **Converts `attributes` → `stable_attributes` + `volatile_state`:**
-   - Known stable keys (`race`, `class`, `appearance`, `role`, `aliases`): move to `stable_attributes` with `inference: true/false` parsed from `[inference]` tag.
-   - Known volatile keys (`condition`, `status`, `equipment`, `hp_change`): move to `volatile_state`.
-   - Unknown keys: default to `stable_attributes`.
-5. **Consolidates relationships per (source, target) pair:**
-   - For each pair, keeps the most recent `relationship` string as `current_relationship`.
-   - Moves all others to `history` array.
-   - Sets `status: active` for relationships from the last 10 turns; `dormant` for older.
+2. **Splits each entity into a per-entity file.**
+3. **Converts `description` → `identity` + `current_status`.**
+4. **Converts `attributes` → `stable_attributes` + `volatile_state`.**
+5. **Consolidates relationships per (source, target) pair.**
 6. **Generates `index.json` files** for each entity type.
 7. **Preserves original flat files** as `characters.v1.json` etc. (backup, not delete).
 
 ### Phase 2: Template updates
 
-Update extraction templates to produce V2 output. Old templates remain available for sessions that haven't migrated.
+Update extraction templates to produce V2 output.
 
 ### Phase 3: Tool updates
 
-Update `catalog_merger.py`, `semantic_extraction.py`, and `analyze_next_move.py` to work with V2 format. Add format detection: if per-entity directory exists, use V2; if flat file exists, use V1. This allows gradual migration.
+Update `catalog_merger.py`, `semantic_extraction.py`, and `analyze_next_move.py` to work with V2 format.
 
 ### Phase 4: LLM re-extraction (optional)
 
-For best quality, re-run extraction on the full transcript with V2 templates. The one-time migration produces structurally correct but content-imperfect data (especially `identity` and `current_status`). A full re-extraction produces holistic descriptions.
+For best quality, re-run extraction on the full transcript with V2 templates.
+
+</details>
 
 ### What doesn't need to change
 
@@ -1107,4 +1104,4 @@ P2-12: Full re-extraction (optional)
 P2-13: Relationship type enum revision
 ```
 
-Each milestone produces a testable, self-contained state. The V1 format remains supported until all sessions are migrated.
+Each milestone produces a testable, self-contained state.

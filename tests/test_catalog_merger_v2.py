@@ -3,7 +3,6 @@ dormancy marking, and index generation."""
 import json
 import os
 import sys
-import warnings
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -14,7 +13,6 @@ from catalog_merger import (
     _parse_turn_number,
     _read_v2_entities,
     _write_v2_entity,
-    detect_format,
     load_catalogs,
     mark_dormant_relationships,
     merge_entity,
@@ -39,55 +37,6 @@ def _make_v2_entity(id_, name, etype="character", turn="turn-001", **kwargs):
     }
     entity.update(kwargs)
     return entity
-
-
-def _make_v1_entity(id_, name, etype="character", turn="turn-001"):
-    """Create a V1-shaped entity dict."""
-    return {
-        "id": id_,
-        "name": name,
-        "type": etype,
-        "description": f"{name} description.",
-        "attributes": {},
-        "first_seen_turn": turn,
-        "last_updated_turn": turn,
-        "relationships": [],
-    }
-
-
-# ---------------------------------------------------------------------------
-# Format detection
-# ---------------------------------------------------------------------------
-
-class TestFormatDetection:
-    def test_v2_detected_when_all_directories_exist(self, tmp_path):
-        for d in ["characters", "locations", "factions", "items"]:
-            (tmp_path / d).mkdir()
-        assert detect_format(str(tmp_path)) == "v2"
-
-    def test_v1_detected_when_no_directories(self, tmp_path):
-        (tmp_path / "characters.json").write_text("[]")
-        assert detect_format(str(tmp_path)) == "v1"
-
-    def test_v2_detected_with_partial_dirs_no_v1_files(self, tmp_path):
-        (tmp_path / "locations").mkdir()
-        assert detect_format(str(tmp_path)) == "v2"
-
-    def test_v1_on_empty_dir(self, tmp_path):
-        assert detect_format(str(tmp_path)) == "v1"
-
-    def test_mixed_layout_falls_back_to_v1(self, tmp_path):
-        """If some V2 dirs exist but V1 flat files also remain, use V1."""
-        (tmp_path / "characters").mkdir()
-        (tmp_path / "locations.json").write_text("[]")
-        assert detect_format(str(tmp_path)) == "v1"
-
-    def test_all_dirs_overrides_v1_files(self, tmp_path):
-        """If all V2 dirs exist, use V2 even if stale flat files remain."""
-        for d in ["characters", "locations", "factions", "items"]:
-            (tmp_path / d).mkdir()
-        (tmp_path / "characters.json").write_text("[]")  # stale leftover
-        assert detect_format(str(tmp_path)) == "v2"
 
 
 # ---------------------------------------------------------------------------
@@ -158,30 +107,6 @@ class TestV2WritePerEntityFiles:
         # Check 2-space indent (not 4)
         assert '  "id"' in text
         assert '    "id"' not in text
-
-
-# ---------------------------------------------------------------------------
-# V1 fallback read
-# ---------------------------------------------------------------------------
-
-class TestV1FallbackRead:
-    def test_reads_flat_file(self, tmp_path):
-        entities = [_make_v1_entity("char-alpha", "Alpha")]
-        (tmp_path / "characters.json").write_text(json.dumps(entities), encoding="utf-8")
-        with warnings.catch_warnings(record=True) as w:
-            warnings.simplefilter("always")
-            catalogs = load_catalogs(str(tmp_path))
-            assert len(w) == 1
-            assert "V1 flat catalog" in str(w[0].message)
-        assert len(catalogs["characters.json"]) == 1
-        assert catalogs["characters.json"][0]["id"] == "char-alpha"
-
-    def test_v1_returns_empty_for_missing_files(self, tmp_path):
-        with warnings.catch_warnings(record=True):
-            warnings.simplefilter("always")
-            catalogs = load_catalogs(str(tmp_path))
-        for filename in ["characters.json", "locations.json", "factions.json", "items.json"]:
-            assert catalogs[filename] == []
 
 
 # ---------------------------------------------------------------------------
@@ -328,7 +253,7 @@ class TestRelationshipNewPair:
         assert existing_rels[0]["target_id"] == "char-gamma"
         assert existing_rels[0]["status"] == "active"
 
-    def test_v1_relationship_field_becomes_current_relationship(self):
+    def test_relationship_field_becomes_current_relationship(self):
         existing_rels = []
         new_rels = [
             {
@@ -582,44 +507,6 @@ class TestSaveCatalogsCleanStart:
 
         assert os.path.isdir(os.path.join(catalog_dir, "characters"))
         assert os.path.isfile(os.path.join(catalog_dir, "characters", "char-test.json"))
-
-    def test_real_v1_data_stays_v1(self, tmp_path):
-        """When real V1 data exists, save_catalogs should stay V1 for backward compat."""
-        catalog_dir = str(tmp_path / "catalogs")
-        os.makedirs(catalog_dir, exist_ok=True)
-        # Write V1 flat file with real data
-        with open(os.path.join(catalog_dir, "characters.json"), "w") as f:
-            json.dump([{"id": "char-old", "name": "Old", "type": "character",
-                        "description": "An old format entity"}], f)
-        for name in ["locations.json", "factions.json", "items.json"]:
-            with open(os.path.join(catalog_dir, name), "w") as f:
-                json.dump([], f)
-
-        catalogs = {"characters.json": [{"id": "char-old", "name": "Old", "type": "character",
-                                         "description": "An old format entity"}],
-                    "locations.json": [], "factions.json": [], "items.json": []}
-        save_catalogs(catalog_dir, catalogs)
-
-        # Should NOT have created V2 directory — V1 data exists
-        assert not os.path.isdir(os.path.join(catalog_dir, "characters"))
-
-    def test_prefer_v2_false_stays_v1(self, tmp_path):
-        """When prefer_v2=False, clean start stays V1."""
-        catalog_dir = str(tmp_path / "catalogs")
-        os.makedirs(catalog_dir, exist_ok=True)
-        for name in ["characters.json", "locations.json", "factions.json", "items.json"]:
-            with open(os.path.join(catalog_dir, name), "w") as f:
-                json.dump([], f)
-
-        catalogs = {
-            "characters.json": [{"id": "char-test", "name": "Test", "type": "character",
-                                 "identity": "Test", "first_seen_turn": "turn-001"}],
-            "locations.json": [], "factions.json": [], "items.json": [],
-        }
-        save_catalogs(catalog_dir, catalogs, prefer_v2=False)
-
-        # Should NOT have created V2 directory
-        assert not os.path.isdir(os.path.join(catalog_dir, "characters"))
 
     def test_index_status_summary_truncated(self, tmp_path):
         edir = tmp_path / "characters"
