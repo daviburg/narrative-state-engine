@@ -409,6 +409,16 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             entity_data.pop(dk)
             print(f"  COERCE: discarded non-schema key '{dk}'", file=sys.stderr)
 
+    # Strip stable_attributes entries where the LLM returned null for value (#178).
+    # The schema requires value to be string or string[] — null is not valid.
+    sa = entity_data.get("stable_attributes")
+    if isinstance(sa, dict):
+        null_keys = [k for k, v in sa.items()
+                     if isinstance(v, dict) and v.get("value") is None]
+        for k in null_keys:
+            del sa[k]
+            print(f"  COERCE: stable_attributes.{k}.value was null — removed", file=sys.stderr)
+
     # Ensure volatile_state has last_updated_turn if we populated it
     vs = entity_data.get("volatile_state")
     if isinstance(vs, dict) and "last_updated_turn" not in vs and has_valid_turn:
