@@ -46,6 +46,7 @@ Post-extraction quality passes include:
 - **Stub backfill** — re-extracts hollow stub entities using gathered context; runs by default (#128, #131)
 - **PC alias merge** — detects character entities that are aliases of char-player and merges them (#134)
 - **PC consecutive-failure logging** — warns when PC extraction fails for ≥10 consecutive turns (#133)
+- **Extraction validation** — post-extraction ground truth comparison that catches false alias merges, missing entities, coreference fragmentation, and staleness (#159). Uses curated fixtures in `tests/fixtures/` and runs via `tools/validate_extraction.py`.
 
 **Timeline tracking** (#137): The pipeline extracts temporal signals (season transitions,
 biological markers, construction milestones) and estimates in-game day offsets from a

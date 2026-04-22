@@ -153,6 +153,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/update_state.py` | Regenerate session-local derived scaffolds, turn summaries, and structured extraction outputs |
 | `tools/analyze_next_move.py` | Generate next-move analysis and prompt candidates |
 | `tools/validate.py` | Validate all JSON files against schemas |
+| `tools/validate_extraction.py` | Post-extraction validation against curated ground truth (alias merges, missing entities, staleness) |
 | `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |
 | `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
