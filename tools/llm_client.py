@@ -112,11 +112,9 @@ class LLMClient:
                 if timeout is not None:
                     kwargs["timeout"] = timeout
                 if self._is_ollama:
-                    options = {}
+                    options = dict(self.ollama_options) if self.ollama_options else {}
                     if self.context_length:
                         options["num_ctx"] = self.context_length
-                    if self.ollama_options:
-                        options.update(self.ollama_options)
                     if options:
                         kwargs["extra_body"] = {"options": options}
 
@@ -209,11 +207,9 @@ class LLMClient:
                 if timeout is not None:
                     kwargs["timeout"] = timeout
                 if self._is_ollama:
-                    options = {}
+                    options = dict(self.ollama_options) if self.ollama_options else {}
                     if self.context_length:
                         options["num_ctx"] = self.context_length
-                    if self.ollama_options:
-                        options.update(self.ollama_options)
                     if options:
                         kwargs["extra_body"] = {"options": options}
 
