@@ -9,6 +9,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from semantic_extraction import (
     _coerce_entity_fields,
+    _coerce_event_fields,
     _filter_concept_prefix_from_items,
     _format_prior_entity_context,
     _collect_existing_relationships,
@@ -957,3 +958,36 @@ def test_coerce_stable_attributes_null_value_removed():
     assert "race" in sa
     assert "alignment" in sa
     assert "class" not in sa  # null value stripped
+
+
+# ---------------------------------------------------------------------------
+# _coerce_event_fields tests (#198)
+# ---------------------------------------------------------------------------
+
+def test_coerce_event_type_known_remap():
+    """Known invalid type 'acquisition' is remapped to 'discovery'."""
+    event = {"type": "acquisition", "description": "Obtained a sword"}
+    result = _coerce_event_fields(event)
+    assert result["type"] == "discovery"
+
+
+def test_coerce_event_type_unknown_falls_back_to_other():
+    """Completely unknown type falls back to 'other'."""
+    event = {"type": "completely_unknown_type", "description": "Something happened"}
+    result = _coerce_event_fields(event)
+    assert result["type"] == "other"
+
+
+def test_coerce_event_type_valid_unchanged():
+    """Valid event type is left unchanged."""
+    event = {"type": "encounter", "description": "Met a stranger"}
+    result = _coerce_event_fields(event)
+    assert result["type"] == "encounter"
+
+
+def test_coerce_event_type_missing_unchanged():
+    """Event with no 'type' key is returned unchanged."""
+    event = {"description": "Something with no type"}
+    result = _coerce_event_fields(event)
+    assert "type" not in result
+

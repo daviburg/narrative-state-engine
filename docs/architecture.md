@@ -104,6 +104,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - `config/llm.json` configures the LLM provider, model, and endpoint
 - All extracted entities are validated against `schemas/entity.schema.json` before merging
 - Entities below a confidence threshold are logged but not cataloged
+- **Event type coercion** (#198): Before schema validation, `_coerce_event_fields()` remaps invalid event `type` values to the nearest valid enum value using `_EVENT_TYPE_REMAP`. For example, `"acquisition"` → `"discovery"`, `"conflict"` → `"encounter"`. Unknown types fall back to `"other"`. This prevents valid events from being silently dropped when the LLM produces a type not in the schema enum.
 - Batch mode checkpoints progress every 50 turns for resume after interruption
 - **Segmented extraction** (`--segment-size N`): For long sessions (300+ turns), extraction runs in segments of N turns, each starting with a fresh catalog. This prevents context window saturation in the entity discovery prompt, which includes the full known-entities table. After all segments complete, a reconciliation pass merges entities by ID and name, stitches event timelines, and joins relationships across segment boundaries. Segment size should be tuned to the model's effective context capacity (recommended: 100-150 for 14B models with 32K context).
 - Birth events trigger automatic entity creation for named children, with child IDs added to event `related_entities`
