@@ -4,6 +4,8 @@ import os
 import sys
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 # Ensure `import openai` succeeds even when the package is not installed.
@@ -12,7 +14,7 @@ if "openai" not in sys.modules:
     _mock_openai.OpenAI = MagicMock
     sys.modules["openai"] = _mock_openai
 
-from llm_client import LLMClient
+from llm_client import LLMClient, LLMExtractionError
 
 
 def _write_config(tmp_dir, overrides=None):
@@ -69,11 +71,9 @@ class TestGeminiProviderConfig:
         env = os.environ.copy()
         env.pop("GEMINI_API_KEY", None)
         with patch.dict(os.environ, env, clear=True):
-            try:
+            with pytest.raises(LLMExtractionError) as exc_info:
                 LLMClient(path)
-                assert False, "Should have raised"
-            except Exception as e:
-                assert "GEMINI_API_KEY" in str(e)
+            assert "GEMINI_API_KEY" in str(exc_info.value)
 
     def test_gemini_context_length_not_injected(self, tmp_path):
         """context_length should be stored but not cause Ollama extra_body."""
