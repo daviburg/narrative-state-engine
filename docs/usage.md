@@ -176,6 +176,7 @@ models.
 | `pc_max_tokens` | Max output tokens for **PC entity extraction** only. Defaults to `max_tokens` if omitted. The player-character entity accumulates context over many turns and may need a higher token limit to avoid truncation. |
 | `entity_refresh_interval` | Every N turns, find and re-extract stale entities whose `last_updated_turn` has fallen behind by more than N turns. Default: `50`. Set to `0` to disable. |
 | `entity_refresh_batch_size` | Base number of stale entities to refresh per interval. Default: `10`. For catalogs with 60+ entities the effective batch scales to `max(batch_size, catalog_size // 5)`, capped at 25. Refresh slots are allocated proportionally by type (characters 50%, locations 20%, items 20%, factions 10%) with overflow redistribution. Entities are prioritized by staleness (most stale first) with event-frequency tiebreaking. |
+| `checkpoint_interval` | Save extraction progress to disk every N turns. Default: `25`. Lower values reduce data loss on OOM interruptions at the cost of more frequent disk writes. |
 | `context_length` | Context window size in tokens. Passed to Ollama via `extra_body.options.num_ctx` (#175). The Modelfile variant is the primary mechanism for setting context size; this field provides a runtime override. |
 | `timeout_seconds` | HTTP timeout per LLM call in seconds. PC extraction uses the greater of `2×` this value and `120` seconds. |
 | `retry_attempts` | Number of retries on LLM call failure. |
@@ -337,7 +338,7 @@ The pipeline processes each turn through four agents:
 3. **Relationship Mapper** — identify cross-entity relationships
 4. **Event Extractor** — identify narrative events
 
-Progress is checkpointed every 50 turns and can resume after interruption.
+Progress is checkpointed every `checkpoint_interval` turns (default 25, configurable in `config/llm.json`) and can resume after interruption.
 
 ### Detached Batch Execution (Recommended)
 
