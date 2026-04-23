@@ -60,6 +60,12 @@ _PC_FAILURE_WARN_THRESHOLD = 10
 _PC_SKIP_COOLDOWN = 50       # Skip PC extraction for this many turns after threshold failures
 _PC_RETRY_WINDOW = 5         # Retry for this many turns before entering cooldown again
 _PC_SKIP_THRESHOLD = 20      # Enter cooldown after this many consecutive failures (#149)
+_PC_DEBUG_LOG = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "..",
+    "framework-local",
+    "pc-extraction-debug.jsonl",
+)
 
 # Schema-compliant turn ID pattern (matches e.g. turn-001, turn-1234)
 _TURN_ID_RE = re.compile(r"^turn-[0-9]{3,}$")
@@ -96,6 +102,33 @@ def _should_skip_pc(consecutive_failures: int, turns_since_cooldown: int) -> boo
         return False
     cycle_position = turns_since_cooldown % (_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW)
     return cycle_position < _PC_SKIP_COOLDOWN
+
+
+def _write_pc_debug_record(
+    turn_id: str,
+    failure_reason: str,
+    response_keys: list | str,
+    partial_data_preview: str,
+    merge_result: bool | None = None,
+) -> None:
+    """Write a debug record for a PC extraction failure to a JSONL file (#199)."""
+    import json as _json
+
+    record = {
+        "turn_id": turn_id,
+        "failure_reason": failure_reason,
+        "response_keys": response_keys,
+        "partial_entity_data_preview": partial_data_preview,
+        "merge_result": merge_result,
+    }
+    try:
+        debug_path = os.path.abspath(_PC_DEBUG_LOG)
+        os.makedirs(os.path.dirname(debug_path), exist_ok=True)
+        with open(debug_path, "a", encoding="utf-8") as fh:
+            fh.write(_json.dumps(record, default=str) + "\n")
+    except (OSError, TypeError, ValueError):
+        # Debug logging must never interrupt extraction.
+        return
 
 
 def _filter_pc_attributes(entity_data: dict) -> dict:
@@ -1466,15 +1499,37 @@ def extract_and_merge(
                     pc_updated = True
                 elif entity_data is not None:
                     # Validation failed — attempt partial merge fallback (#107)
-                    # Log structure of the raw response to aid diagnosis (#125)
-                    _data_keys = sorted(entity_data.keys()) if isinstance(entity_data, dict) else "non-dict"
+                    # Log structure and partial values of the raw response to aid diagnosis (#125, #199)
+                    if isinstance(entity_data, dict):
+                        try:
+                            _data_keys = sorted(entity_data.keys())
+                        except Exception:
+                            _data_keys = list(map(str, entity_data.keys()))
+                        try:
+                            _data_preview = json.dumps(entity_data, default=str)[:500]
+                        except Exception:
+                            _data_preview = repr(entity_data)[:500]
+                    else:
+                        _data_keys = "non-dict"
+                        _data_preview = str(entity_data)[:500]
                     print(
                         f"  PC detail extraction: validation failed at {turn_id}, "
                         f"response keys={_data_keys}, falling back to partial merge",
                         file=sys.stderr,
                     )
+                    print(
+                        f"  PC detail extraction: raw response preview (500 chars): {_data_preview}",
+                        file=sys.stderr,
+                    )
                     # Partial merge success counts as an update (#133)
                     pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
+                    _write_pc_debug_record(
+                        turn_id,
+                        "validation_failed",
+                        _data_keys,
+                        _data_preview,
+                        merge_result=pc_updated,
+                    )
                 else:
                     # entity_data is None — extraction returned nothing (#133)
                     print(
@@ -1482,6 +1537,7 @@ def extract_and_merge(
                         f"Consecutive failures: {_pc_consecutive_failures + 1}",
                         file=sys.stderr,
                     )
+                    _write_pc_debug_record(turn_id, "none_returned", [], "", merge_result=False)
             except LLMExtractionError as e:
                 print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
 
