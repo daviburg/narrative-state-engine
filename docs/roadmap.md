@@ -83,7 +83,7 @@ Goals:
 Remaining work:
 - Fallback provider chain in `tools/llm_client.py` (local → cloud)
 - CLI `--provider` override for per-run provider selection
-- Batch processing mode for unattended overnight extraction
+- Batch processing mode for unattended overnight extraction (**partially implemented** via detached helper scripts: `tools/start_extraction_detached.ps1`, `tools/watch_extraction_detached.ps1`, `tools/stop_extraction_detached.ps1`)
 - Provider setup documentation in `docs/usage.md`
 - Quality validation of `qwen2.5:7b` as a faster alternative to 14B
 - **Segmented extraction** (#141): Long sessions (300+ turns) are extracted in configurable segments to stay within model context limits. Each segment starts with a clean entity catalog; a reconciliation pass merges the results. Naturally parallelizable across GPU instances.

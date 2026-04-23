@@ -339,6 +339,67 @@ The pipeline processes each turn through four agents:
 
 Progress is checkpointed every 50 turns and can resume after interruption.
 
+### Detached Batch Execution (Recommended)
+
+For long extraction runs, launch extraction in a detached process so work in
+other VS Code chat sessions does not affect the running job.
+
+Use the helper script from the repository root:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/start_extraction_detached.ps1 `
+  -Session sessions/session-import `
+  -TranscriptFile sessions/_import/session-import-full-transcript.txt `
+  -SegmentSize 100
+```
+
+The script writes:
+- stdout log: `run-logs/extract-<timestamp>.log`
+- stderr log: `run-logs/extract-<timestamp>.err.log`
+- PID file: `run-logs/extract-<timestamp>.pid`
+- command helper: `run-logs/extract-<timestamp>.cmd.txt`
+
+Monitor/status a detached run (latest run by default):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/watch_extraction_detached.ps1
+```
+
+Follow live stdout for a specific run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/watch_extraction_detached.ps1 `
+  -PidFile run-logs/extract-<timestamp>.pid `
+  -Follow
+```
+
+Manual monitoring (without helper script):
+
+```powershell
+Get-Content run-logs/extract-<timestamp>.log -Tail 80
+Get-Content run-logs/extract-<timestamp>.err.log -Tail 80
+Get-Process -Id (Get-Content run-logs/extract-<timestamp>.pid)
+```
+
+Stop a detached run (latest run by default):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/stop_extraction_detached.ps1
+```
+
+Stop a specific run:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File tools/stop_extraction_detached.ps1 `
+  -PidFile run-logs/extract-<timestamp>.pid
+```
+
+Manual stop (without helper script):
+
+```powershell
+Stop-Process -Id (Get-Content run-logs/extract-<timestamp>.pid)
+```
+
 ### Segmented Extraction
 
 For sessions with 200+ turns on models with ≤32K context windows, use
