@@ -338,7 +338,7 @@ The pipeline processes each turn through four agents:
 3. **Relationship Mapper** — identify cross-entity relationships
 4. **Event Extractor** — identify narrative events
 
-Progress is checkpointed every 50 turns and can resume after interruption.
+Progress is checkpointed every `checkpoint_interval` turns (default 25, configurable in `config/llm.json`) and can resume after interruption.
 
 ### Detached Batch Execution (Recommended)
 

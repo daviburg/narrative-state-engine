@@ -2061,6 +2061,31 @@ def backfill_stubs(
 _DEFAULT_REFRESH_INTERVAL = 50
 _DEFAULT_REFRESH_BATCH_SIZE = 10
 _MAX_REFRESH_BATCH_SIZE = 25
+_DEFAULT_CHECKPOINT_INTERVAL = 25
+
+
+def _read_checkpoint_interval(llm_config: dict) -> int:
+    """Return checkpoint interval from config dict, with validation.
+
+    Falls back to _DEFAULT_CHECKPOINT_INTERVAL on missing, invalid, or
+    non-positive values and prints a warning to stderr.
+    """
+    raw = llm_config.get("checkpoint_interval", _DEFAULT_CHECKPOINT_INTERVAL) if isinstance(llm_config, dict) else _DEFAULT_CHECKPOINT_INTERVAL
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        print(
+            f"  WARNING: Invalid checkpoint_interval {raw!r}; using default {_DEFAULT_CHECKPOINT_INTERVAL}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_CHECKPOINT_INTERVAL
+    if value < 1:
+        print(
+            f"  WARNING: checkpoint_interval must be >= 1, got {value!r}; using default {_DEFAULT_CHECKPOINT_INTERVAL}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_CHECKPOINT_INTERVAL
+    return value
 
 # Type-aware slot allocation shares (must sum to 1.0)
 _REFRESH_TYPE_SHARES: dict[str, float] = {
@@ -3064,7 +3089,7 @@ def extract_semantic_batch(
     _refresh_cfg = getattr(llm, "config", None) or {}
     refresh_interval = _refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
     refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
-    checkpoint_interval = int(_refresh_cfg.get("checkpoint_interval", 25)) if isinstance(_refresh_cfg, dict) else 25
+    checkpoint_interval = _read_checkpoint_interval(_refresh_cfg)
 
     for i in range(start_from, total):
         turn = turn_dicts[i]

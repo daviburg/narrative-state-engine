@@ -5,6 +5,8 @@ import types
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
+from semantic_extraction import _read_checkpoint_interval
+
 
 def _make_llm_client(config_dict):
     """Create a minimal mock LLMClient with a .config attribute."""
@@ -12,22 +14,29 @@ def _make_llm_client(config_dict):
     return client
 
 
-def _read_checkpoint_interval(llm_config):
-    """Mirror the logic in extract_semantic_batch."""
-    _refresh_cfg = getattr(llm_config, "config", None) or {}
-    return int(_refresh_cfg.get("checkpoint_interval", 25)) if isinstance(_refresh_cfg, dict) else 25
-
-
 def test_checkpoint_interval_defaults_to_25():
     """When checkpoint_interval is absent, default is 25."""
-    llm = _make_llm_client({})
-    assert _read_checkpoint_interval(llm) == 25
+    assert _read_checkpoint_interval({}) == 25
 
 
 def test_checkpoint_interval_reads_config_value():
     """When checkpoint_interval is set to 10, it reads 10."""
-    llm = _make_llm_client({"checkpoint_interval": 10})
-    assert _read_checkpoint_interval(llm) == 10
+    assert _read_checkpoint_interval({"checkpoint_interval": 10}) == 10
+
+
+def test_checkpoint_interval_invalid_string_falls_back_to_default():
+    """Non-numeric string falls back to default 25."""
+    assert _read_checkpoint_interval({"checkpoint_interval": "bad"}) == 25
+
+
+def test_checkpoint_interval_zero_falls_back_to_default():
+    """Zero is invalid (<1) and falls back to default 25."""
+    assert _read_checkpoint_interval({"checkpoint_interval": 0}) == 25
+
+
+def test_checkpoint_interval_negative_falls_back_to_default():
+    """Negative value falls back to default 25."""
+    assert _read_checkpoint_interval({"checkpoint_interval": -5}) == 25
 
 
 def test_checkpoint_interval_value_in_llm_json():
