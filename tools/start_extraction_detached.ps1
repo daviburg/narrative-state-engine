@@ -4,8 +4,7 @@ param(
     [int]$SegmentSize = 100,
     [string]$Model = "",
     [string]$LogsDir = "run-logs",
-    [switch]$Overwrite,
-    [switch]$NoExtract
+    [switch]$Overwrite
 )
 
 Set-StrictMode -Version Latest
@@ -39,10 +38,6 @@ if (-not (Test-Path -Path $TranscriptFile)) {
 
 $args += @("--file", $TranscriptFile)
 
-if (-not $NoExtract) {
-    $args += "--extract"
-}
-
 if ($SegmentSize -gt 0) {
     $args += @("--segment-size", $SegmentSize)
 }
@@ -59,7 +54,12 @@ $process = Start-Process -FilePath "python" -ArgumentList $args -RedirectStandar
 
 $process.Id | Set-Content -Path $pidPath
 
-$argString = $args -join " "
+function Format-QuotedArg {
+    param([string]$Value)
+    return "'" + $Value.Replace("'", "''") + "'"
+}
+
+$argString = ($args | ForEach-Object { Format-QuotedArg $_ }) -join " "
 @(
     "python $argString",
     "",
