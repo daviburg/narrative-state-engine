@@ -2070,11 +2070,24 @@ def _merge_pc_aliases(
 
     # Strip any blocklisted aliases from the PC entity (#186)
     sa = pc_entry.get("stable_attributes", {})
-    aliases_attr = sa.get("aliases", {})
-    alias_list = aliases_attr.get("value", [])
-    if isinstance(alias_list, list):
-        cleaned = [a for a in alias_list if a.lower() not in _PC_ALIAS_BLOCKLIST]
-        if len(cleaned) != len(alias_list):
+    aliases_attr = sa.get("aliases")
+    if isinstance(aliases_attr, dict):
+        alias_value = aliases_attr.get("value", [])
+        # Normalize to list of strings (handles str, comma-separated str, list)
+        if isinstance(alias_value, str):
+            normalized = [p.strip() for p in alias_value.split(",") if p.strip()]
+        elif isinstance(alias_value, list):
+            normalized = []
+            for item in alias_value:
+                if item is None:
+                    continue
+                text = str(item).strip()
+                if text:
+                    normalized.append(text)
+        else:
+            normalized = []
+        cleaned = [a for a in normalized if a.lower() not in _PC_ALIAS_BLOCKLIST]
+        if cleaned != normalized:
             aliases_attr["value"] = cleaned
 
     # Collect text from events that reference char-player

@@ -644,3 +644,32 @@ class TestPCAliasBlocklist:
         assert "Fenouille Moonwind" in alias_list
         assert "player character" not in alias_list
         assert "protagonist" not in alias_list
+
+    def test_strips_blocklist_from_string_aliases(self):
+        """Blocklisted aliases stored as comma-separated string should be cleaned."""
+        catalogs = {
+            "characters.json": [
+                {
+                    "id": "char-player",
+                    "name": "Hero",
+                    "type": "character",
+                    "identity": "The player character.",
+                    "first_seen_turn": "turn-001",
+                    "last_updated_turn": "turn-100",
+                    "stable_attributes": {
+                        "aliases": {
+                            "value": "Fenouille Moonwind, player character, protagonist",
+                            "source_turn": "turn-050",
+                        }
+                    },
+                },
+            ]
+        }
+        events = []
+        _merge_pc_aliases(catalogs, events, "")
+        pc = catalogs["characters.json"][0]
+        alias_list = pc["stable_attributes"]["aliases"]["value"]
+        assert isinstance(alias_list, list)
+        assert "Fenouille Moonwind" in alias_list
+        assert "player character" not in alias_list
+        assert "protagonist" not in alias_list

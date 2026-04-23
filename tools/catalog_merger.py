@@ -537,7 +537,8 @@ def _dedup_relationships(relationships: list) -> list:
     """Consolidate duplicate relationship entries by target_id.
 
     If multiple entries share the same target_id, keep the one with the
-    latest last_updated_turn and merge history arrays.
+    latest last_updated_turn, preserve the earliest first_seen_turn, and
+    merge history arrays (deduplicated by (turn, description) pair).
     """
     seen: dict[str, dict] = {}
     for rel in relationships:
@@ -547,14 +548,34 @@ def _dedup_relationships(relationships: list) -> list:
             if (_parse_turn_number(rel.get("last_updated_turn"))
                     or 0) > (_parse_turn_number(existing.get("last_updated_turn"))
                              or 0):
-                # Merge history from existing into rel
-                old_history = existing.get("history", [])
-                rel.setdefault("history", []).extend(old_history)
-                seen[tid] = rel
+                winner, loser = rel, existing
             else:
-                # Merge history from rel into existing
-                old_history = rel.get("history", [])
-                existing.setdefault("history", []).extend(old_history)
+                winner, loser = existing, rel
+
+            # Preserve the earliest first_seen_turn
+            w_first = _parse_turn_number(winner.get("first_seen_turn"))
+            l_first = _parse_turn_number(loser.get("first_seen_turn"))
+            if l_first is not None and (w_first is None or l_first < w_first):
+                winner["first_seen_turn"] = loser["first_seen_turn"]
+
+            # Merge and deduplicate history by (turn, description)
+            merged_history = list(winner.get("history", []))
+            existing_keys = {
+                (h.get("turn"), h.get("description")) for h in merged_history
+            }
+            for h in loser.get("history", []):
+                key = (h.get("turn"), h.get("description"))
+                if key not in existing_keys:
+                    merged_history.append(h)
+                    existing_keys.add(key)
+            # Sort chronologically
+            merged_history.sort(
+                key=lambda h: _parse_turn_number(h.get("turn")) or 0
+            )
+            if merged_history:
+                winner["history"] = merged_history
+
+            seen[tid] = winner
         else:
             seen[tid] = rel
     return list(seen.values())

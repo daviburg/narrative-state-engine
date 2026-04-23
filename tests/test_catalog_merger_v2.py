@@ -605,6 +605,40 @@ class TestDedupRelationships:
         assert len(result) == 1
         history = result[0].get("history", [])
         assert len(history) == 2  # both histories merged
+        # Should be chronologically sorted
+        turns = [h.get("turn") for h in history]
+        assert turns == ["turn-005", "turn-015"]
+
+    def test_deduplicates_identical_history(self):
+        """Identical history entries should not be duplicated."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "last_updated_turn": "turn-010",
+             "history": [{"turn": "turn-005", "description": "acquaintance"}]},
+            {"target_id": "char-bob", "current_relationship": "friend",
+             "type": "social", "last_updated_turn": "turn-020",
+             "history": [{"turn": "turn-005", "description": "acquaintance"}]},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 1
+        history = result[0].get("history", [])
+        assert len(history) == 1  # duplicates removed
+
+    def test_preserves_earliest_first_seen_turn(self):
+        """The earliest first_seen_turn should be kept."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "first_seen_turn": "turn-005",
+             "last_updated_turn": "turn-010"},
+            {"target_id": "char-bob", "current_relationship": "friend",
+             "type": "social", "first_seen_turn": "turn-020",
+             "last_updated_turn": "turn-030"},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 1
+        # Winner (turn-030) should adopt the earlier first_seen_turn
+        assert result[0]["first_seen_turn"] == "turn-005"
+        assert result[0]["last_updated_turn"] == "turn-030"
 
     def test_preserves_distinct_targets(self):
         """Relationships with different target_ids should not be merged."""
