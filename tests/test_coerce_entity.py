@@ -442,6 +442,126 @@ def test_relationship_context_assembly():
     assert parsed["char-elder"][0]["target_id"] == "char-player"
 
 
+# --- Run 11 coercion regression tests (#196) ---
+
+def test_run11_abilities_and_traits_mapped_to_stable_attributes():
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "abilities_and_traits": ["swordsmanship", "leadership"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "abilities_and_traits" not in result
+    assert result["stable_attributes"]["abilities"]["value"] == ["swordsmanship", "leadership"]
+    assert result["stable_attributes"]["abilities"]["inference"] is False
+
+
+def test_run11_additional_items_equipped_appended_to_equipment():
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "volatile_state": {"equipment": ["sword"], "location": "village"},
+        "additional_items_equipped": ["shield", "helm"],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "additional_items_equipped" not in result
+    assert "shield" in result["volatile_state"]["equipment"]
+    assert "helm" in result["volatile_state"]["equipment"]
+    assert "sword" in result["volatile_state"]["equipment"]
+
+
+def test_run11_locations_remapped_to_volatile_state_location():
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "locations": "the market",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "locations" not in result
+    assert result["volatile_state"]["location"] == "the market"
+
+
+def test_run11_stable_remap_age_gender_occupation():
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "age": "30",
+        "gender": "male",
+        "occupation": "blacksmith",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "age" not in result
+    assert "gender" not in result
+    assert "occupation" not in result
+    assert result["stable_attributes"]["age"]["value"] == "30"
+    assert result["stable_attributes"]["gender"]["value"] == "male"
+    assert result["stable_attributes"]["occupation"]["value"] == "blacksmith"
+
+
+def test_run11_discard_keys_removed():
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "recent_activities": "training",
+        "current_activities": "resting",
+        "updated_turn": "turn-010",
+        "history_highlights": ["won a battle"],
+        "goals": "become champion",
+        "background": "grew up in the north",
+        "abilities_description": "very strong",
+        "status_updated_turn": "turn-010",
+    }
+    result = _coerce_entity_fields(entity)
+    for key in ("recent_activities", "current_activities", "updated_turn",
+                "history_highlights", "goals", "background",
+                "abilities_description"):
+        assert key not in result, f"Expected '{key}' to be discarded"
+    # status_updated_turn is schema-valid at top level — it must be preserved
+    assert result["status_updated_turn"] == "turn-010"
+
+
+def test_run11_status_updated_turn_stripped_from_volatile_state():
+    """When status_updated_turn is nested in volatile_state, strip it and promote to top level."""
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "volatile_state": {
+            "location": "castle",
+            "status_updated_turn": "turn-010",
+            "last_updated_turn": "turn-011",
+        },
+    }
+    result = _coerce_entity_fields(entity)
+    assert "status_updated_turn" not in result["volatile_state"]
+    assert result["volatile_state"]["location"] == "castle"
+    # Should be promoted to top level since it was absent there
+    assert result["status_updated_turn"] == "turn-010"
+
+
+def test_run11_status_updated_turn_not_overwritten_if_already_top_level():
+    """When status_updated_turn exists at top level and also in volatile_state, just strip the nested one."""
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "status_updated_turn": "turn-011",
+        "volatile_state": {
+            "location": "castle",
+            "status_updated_turn": "turn-010",
+            "last_updated_turn": "turn-011",
+        },
+    }
+    result = _coerce_entity_fields(entity)
+    assert "status_updated_turn" not in result["volatile_state"]
+    # Top-level value must not be overwritten
+    assert result["status_updated_turn"] == "turn-011"
+
+
 def test_relationship_context_empty():
     """No existing relationships returns empty string."""
     catalogs = {

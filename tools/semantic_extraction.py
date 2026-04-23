@@ -316,6 +316,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "item_inventory": "equipment",
         "location": "location",
         "current_location": "location",
+        "locations": "location",
         "status": "condition",
         "current_situation": "condition",
         "emotional_state": "condition",
@@ -351,6 +352,9 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "name_aliases": "aliases",
         "alignment": "alignment",
         "weaknesses": "weaknesses",
+        "age": "age",
+        "gender": "gender",
+        "occupation": "occupation",
     }
     for src_key, sa_key in _stable_remap.items():
         if src_key in entity_data:
@@ -375,6 +379,44 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                     entry["source_turn"] = turn_id
                 sa[sa_key] = entry
             print(f"  COERCE: {src_key} → stable_attributes.{sa_key}", file=sys.stderr)
+
+    # abilities_and_traits → stable_attributes.abilities (Run 11 variant)
+    if "abilities_and_traits" in entity_data:
+        val = entity_data.pop("abilities_and_traits")
+        if "stable_attributes" not in entity_data:
+            entity_data["stable_attributes"] = {}
+        sa = entity_data["stable_attributes"]
+        if "abilities" not in sa and val:
+            if isinstance(val, list):
+                attr_val = [str(v) for v in val]
+            elif isinstance(val, str):
+                attr_val = val
+            else:
+                attr_val = str(val)
+            entry: dict = {"value": attr_val, "inference": False, "confidence": 1.0}
+            if has_valid_turn:
+                entry["source_turn"] = turn_id
+            sa["abilities"] = entry
+        print("  COERCE: abilities_and_traits → stable_attributes.abilities", file=sys.stderr)
+
+    # additional_items_equipped → volatile_state.equipment (append, don't overwrite)
+    if "additional_items_equipped" in entity_data:
+        val = entity_data.pop("additional_items_equipped")
+        if isinstance(val, str):
+            val = [v.strip() for v in val.split(",") if v.strip()]
+        elif isinstance(val, list):
+            val = [str(v) for v in val]
+        else:
+            val = [str(val)]
+        if "volatile_state" not in entity_data:
+            entity_data["volatile_state"] = {}
+        vs = entity_data["volatile_state"]
+        existing = vs.get("equipment", [])
+        if isinstance(existing, list):
+            vs["equipment"] = existing + [v for v in val if v not in existing]
+        else:
+            vs["equipment"] = val
+        print("  COERCE: additional_items_equipped → volatile_state.equipment (appended)", file=sys.stderr)
 
     # Relationship key variants → relationships
     _rel_keys = ["relations", "character_relations", "faction_relations",
@@ -404,11 +446,25 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "recent_relationship_changes", "name_changes",
         "equipment_history", "faction_relations_history",
         "relationships_history",
+        # Added in #196: ephemeral / history keys observed in Run 11
+        "recent_activities", "current_activities", "updated_turn",
+        "history_highlights", "goals", "background", "abilities_description",
     }
     for dk in list(entity_data.keys()):
         if dk in _discard_keys:
             entity_data.pop(dk)
             print(f"  COERCE: discarded non-schema key '{dk}'", file=sys.stderr)
+
+    # Strip status_updated_turn from volatile_state if present — it belongs at top level only.
+    # If the LLM nested it under volatile_state and top-level is missing, promote it first.
+    vs = entity_data.get("volatile_state")
+    if isinstance(vs, dict) and "status_updated_turn" in vs:
+        nested_status_updated_turn = vs.pop("status_updated_turn")
+        if "status_updated_turn" not in entity_data:
+            entity_data["status_updated_turn"] = nested_status_updated_turn
+            print("  COERCE: promoted volatile_state.status_updated_turn → top-level status_updated_turn", file=sys.stderr)
+        else:
+            print("  COERCE: stripped status_updated_turn from volatile_state (top-level only)", file=sys.stderr)
 
     # Strip stable_attributes entries where the LLM returned null for value (#178).
     # The schema requires value to be string or string[] — null is not valid.
