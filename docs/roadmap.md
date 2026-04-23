@@ -73,7 +73,7 @@ Goals:
 - Offline-capable (no internet dependency during play)
 - Faster turnaround for frequent small-context tasks (catalog updates, summary refreshes)
 
-**Status:** Partially achieved. The semantic extraction pipeline (#43) already supports local models via Ollama. Tested with `qwen2.5:14b` on RTX 4070 at 60.61 tok/s (acceptable quality) and `qwen2.5:3b` (unusable quality — see #53, #63). The `config/llm.json` design decouples the pipeline from any specific provider. Context window configuration uses Modelfile variants with `context_length` as a runtime override via `extra_body.options.num_ctx` (#175).
+**Status:** Partially achieved. The semantic extraction pipeline (#43) already supports local models via Ollama. Tested with `qwen2.5:14b` on RTX 4070 at 60.61 tok/s (acceptable quality) and `qwen2.5:3b` (unusable quality — see #53, #63). The `config/llm.json` design decouples the pipeline from any specific provider. Context window configuration primarily uses Modelfile variants; the code also sends `context_length` as `extra_body.options.num_ctx` (#175), but Ollama's OpenAI-compatible `/v1` endpoint may ignore that runtime override.
 
 **NPU investigation (#65):** AMD XDNA1 (Phoenix) NPU cannot run LLM inference — AMD only supports LLMs on Strix Point (XDNA2) and newer. The Radeon 780M iGPU (~10-15 tok/s) is too slow to be useful. A dedicated GPU server (e.g., used RTX 3090 in a separate machine) is the viable path to exceed RTX 4070 performance.
 
