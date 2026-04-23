@@ -1472,14 +1472,17 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
 
     # Pre-pass: normalize turn-tagged entity IDs so that e.g.
     # char-shaman-turn-082 is rewritten to char-shaman when the canonical
-    # form already exists (or the tagged form is the only one).
+    # form is already present in the known IDs; otherwise the tagged ID is
+    # left unchanged.
     known_ids = _collect_all_entity_ids(catalogs)
+    normalize_map: dict[str, str] = {}  # old_id -> normalized_id
     for _filename, entities in catalogs.items():
         for entity in entities:
             eid = entity.get("id", "")
             normalized = _normalize_entity_id(eid, known_ids)
             if normalized != eid:
                 entity["id"] = normalized
+                normalize_map[eid] = normalized
 
     merged_count = 0
     merge_map: dict[str, str] = {}
@@ -1625,6 +1628,11 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
 
         if to_remove:
             catalogs[filename] = [e for i, e in enumerate(entities) if i not in to_remove]
+
+    # Include turn-tag normalizations in merge_map so _rewrite_stale_ids
+    # can update event related_entities and relationship source/target IDs.
+    for old_id, new_id in normalize_map.items():
+        merge_map.setdefault(old_id, new_id)
 
     return merged_count, merge_map
 

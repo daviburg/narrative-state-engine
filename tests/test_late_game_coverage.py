@@ -48,6 +48,21 @@ class TestSeasonCoercion:
     def test_deep_summer(self):
         assert _normalize_season("deep summer") == "summer"
 
+    def test_mid_summer_not_in_enum(self):
+        """mid-summer / mid summer -> summer (mid_summer is not a schema enum)."""
+        assert _normalize_season("mid-summer") == "summer"
+
+    def test_mid_spring_not_in_enum(self):
+        """mid-spring / mid spring -> spring (mid_spring is not a schema enum)."""
+        assert _normalize_season("mid spring") == "spring"
+
+    def test_mid_fall_not_in_enum(self):
+        """mid-fall / mid fall -> fall (mid_fall is not a schema enum)."""
+        assert _normalize_season("mid-fall") == "fall"
+
+    def test_mid_autumn_to_fall(self):
+        assert _normalize_season("mid autumn") == "fall"
+
 
 # ---------------------------------------------------------------------------
 # Ground truth glob matching tests

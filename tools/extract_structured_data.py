@@ -166,6 +166,24 @@ YEAR_PATTERN_ORDINAL = re.compile(
     r"(?:the\s+)?(" + "|".join(ORDINAL_MAP) + r")\s+year",
     re.IGNORECASE,
 )
+# Module-level season alias map — maps non-schema season names to valid enum values
+_SEASON_ALIASES = {
+    "autumn": "fall",
+    "early_autumn": "early_fall",
+    "mid_autumn": "fall",
+    "late_autumn": "late_fall",
+    "mid_spring": "spring",
+    "mid_summer": "summer",
+    "mid_fall": "fall",
+    "midwinter": "mid_winter",
+    "midsummer": "summer",
+    "midspring": "spring",
+    "midfall": "fall",
+    "deep_winter": "mid_winter",
+    "deep_summer": "summer",
+}
+
+
 def _normalize_season(name: str) -> str:
     """Normalize season name to a state-schema-compliant enum value.
 
@@ -175,19 +193,6 @@ def _normalize_season(name: str) -> str:
     """
     name = name.lower().strip().replace(" ", "_").replace("-", "_")
 
-    # Colloquial / compound mappings
-    _SEASON_ALIASES = {
-        "autumn": "fall",
-        "early_autumn": "early_fall",
-        "mid_autumn": "fall",
-        "late_autumn": "late_fall",
-        "midwinter": "mid_winter",
-        "midsummer": "summer",
-        "midspring": "spring",
-        "midfall": "fall",
-        "deep_winter": "mid_winter",
-        "deep_summer": "summer",
-    }
     if name in _SEASON_ALIASES:
         return _SEASON_ALIASES[name]
 
