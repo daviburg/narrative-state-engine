@@ -1905,14 +1905,15 @@ def find_stale_entities(
     """Find entities whose ``last_updated_turn`` is stale and that are still
     mentioned in the transcript since their last update.
 
-    Returns up to *batch_size* ``(catalog_file, entity)`` tuples sorted by
-    staleness (most stale first) with type-aware slot allocation so that
+    Returns up to *effective_batch* ``(catalog_file, entity)`` tuples sorted
+    by staleness (most stale first) with type-aware slot allocation so that
     narratively important entity types (characters) get proportional refresh
     priority.  The player character (``char-player``) is excluded because it
     is already extracted every turn.
 
-    Dynamic scaling: when the catalog has 60+ entities the effective batch
-    size is ``max(batch_size, catalog_size // 5)`` capped at
+    The effective batch size equals *batch_size* for catalogs with fewer than
+    60 entities.  For larger catalogs it scales to
+    ``max(batch_size, catalog_size // 5)`` capped at
     ``_MAX_REFRESH_BATCH_SIZE``.
 
     If *events_list* is provided, entities referenced in more events win
@@ -1961,12 +1962,28 @@ def find_stale_entities(
             by_type.setdefault(filename, []).append((gap, neg_events, filename, entity))
 
     # --- Type-aware slot allocation ---
+    # Compute per-type slots so the sum equals effective_batch exactly.
+    # Floor each share, then distribute the remainder by largest fractional
+    # part (largest-remainder method).  Types may receive 0 slots when the
+    # batch is very small.
+    type_order = list(_REFRESH_TYPE_SHARES.keys())
+    raw = [(t, effective_batch * _REFRESH_TYPE_SHARES[t]) for t in type_order]
+    floors = [(t, int(v)) for t, v in raw]
+    remainder = effective_batch - sum(f for _, f in floors)
+    fracs = sorted(
+        [(t, v - int(v)) for t, v in raw],
+        key=lambda x: x[1],
+        reverse=True,
+    )
+    bonus = {t for t, _ in fracs[:remainder]}
+    type_slots = {t: f + (1 if t in bonus else 0) for t, f in floors}
+
     # First pass: allocate slots proportionally per type
     selected: set[str] = set()  # entity IDs already selected
     result: list[tuple[int, int, str, dict]] = []
 
-    for type_file, share in _REFRESH_TYPE_SHARES.items():
-        slots = max(1, round(effective_batch * share))
+    for type_file in type_order:
+        slots = type_slots[type_file]
         candidates = by_type.get(type_file, [])
         # Sort: staleness descending, then event count descending
         candidates.sort(key=lambda x: (-x[0], x[1]))

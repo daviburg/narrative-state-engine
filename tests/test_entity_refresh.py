@@ -401,6 +401,40 @@ class TestTypeAwareAllocation:
         assert "item" in types_present
         assert "faction" in types_present
 
+    def test_batch_size_1_characters_win(self):
+        """With batch_size=1, a character should win the single slot."""
+        char = _make_entity("char-c0", "Char0", "character", "turn-001", "turn-001")
+        loc = _make_entity("loc-l0", "Loc0", "location", "turn-001", "turn-001")
+        item = _make_entity("item-i0", "Item0", "item", "turn-001", "turn-001")
+        fac = _make_entity("fac-f0", "Fac0", "faction", "turn-001", "turn-001")
+
+        all_entities = [char, loc, item, fac]
+        turns = [_make_turn(i, " ".join(e["name"] for e in all_entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*all_entities)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=1)
+        assert len(stale) == 1
+
+    def test_batch_size_3_slot_sum_matches(self):
+        """With batch_size=3, exactly 3 entities should be returned."""
+        chars = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                 for i in range(5)]
+        locs = [_make_entity(f"loc-l{i}", f"Loc{i}", "location", "turn-001", "turn-001")
+                for i in range(3)]
+        items = [_make_entity(f"item-i{i}", f"Item{i}", "item", "turn-001", "turn-001")
+                 for i in range(3)]
+        factions = [_make_entity(f"fac-f{i}", f"Fac{i}", "faction", "turn-001", "turn-001")
+                    for i in range(2)]
+
+        all_entities = chars + locs + items + factions
+        turns = [_make_turn(i, " ".join(e["name"] for e in all_entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*all_entities)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=3)
+        assert len(stale) == 3
+
 
 class TestDynamicScaling:
     def test_small_catalog_uses_configured_batch(self):
