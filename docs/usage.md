@@ -185,6 +185,26 @@ models.
 
 **PC extraction cooldown:** If PC extraction fails for 20 consecutive turns (`_PC_SKIP_THRESHOLD`), it enters a cooldown cycle: skipping 50 turns, then retrying for 5 turns, repeating until a success resets the counter (#133, #168). An end-of-run summary reports how many turns were skipped.
 
+### PC Entity Extraction - Context Constraints
+
+Player-character extraction uses a trimmed prior-context payload to stay within
+effective context limits on long campaigns. The allowlist is defined in
+`tools/semantic_extraction.py` as `_PC_KEY_STABLE_ATTRS` and currently includes:
+
+- `species`
+- `race`
+- `class`
+- `aliases`
+
+This list is intentionally small. Many PC-facing fields (for example: level,
+background, equipment, condition, quest, and status) are excluded from prior
+context because they are volatile and increase token pressure in late-turn
+extraction.
+
+If you need to preserve and extract additional PC attributes more reliably,
+use segmented extraction (`--segment-size`) to reduce late-turn context bloat,
+then revisit the allowlist size.
+
 Or use CLI overrides for one-off runs:
 
 ```bash
