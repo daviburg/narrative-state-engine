@@ -50,9 +50,12 @@ class TestGeminiProviderConfig:
         assert client.model == "gemini-2.5-flash"
 
     def test_gemini_base_url_preserved(self, tmp_path):
+        from urllib.parse import urlparse
+
         path = _write_config(str(tmp_path))
         client = LLMClient(path)
-        assert "generativelanguage.googleapis.com" in client.config["base_url"]
+        parsed = urlparse(client.config["base_url"])
+        assert parsed.hostname == "generativelanguage.googleapis.com"
 
     def test_gemini_api_key_env_loading(self, tmp_path):
         path = _write_config(str(tmp_path), {"api_key_env": "GEMINI_API_KEY"})
