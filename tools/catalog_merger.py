@@ -520,9 +520,93 @@ def _update_existing_entity(current: dict, update: dict) -> None:
             current["relationships"] = []
         _merge_entity_relationships(current["relationships"], update["relationships"])
 
+    # Final safety dedup — collapse any lingering duplicates (#183)
+    if current.get("relationships"):
+        current["relationships"] = _dedup_relationships(current["relationships"])
+
 
 # Public alias for cross-module use (e.g. post-batch dedup in semantic_extraction)
 dedup_merge_entity = _update_existing_entity
+
+
+# ---------------------------------------------------------------------------
+# Relationship dedup / dangling cleanup (#183, #184)
+# ---------------------------------------------------------------------------
+
+def _dedup_relationships(relationships: list) -> list:
+    """Consolidate duplicate relationship entries by target_id.
+
+    If multiple entries share the same target_id, keep the one with the
+    latest last_updated_turn, preserve the earliest first_seen_turn, and
+    merge history arrays (deduplicated by (turn, description) pair).
+    """
+    seen: dict[str, dict] = {}
+    for rel in relationships:
+        tid = rel.get("target_id", "")
+        if tid in seen:
+            existing = seen[tid]
+            if (_parse_turn_number(rel.get("last_updated_turn"))
+                    or 0) > (_parse_turn_number(existing.get("last_updated_turn"))
+                             or 0):
+                winner, loser = rel, existing
+            else:
+                winner, loser = existing, rel
+
+            # Preserve the earliest first_seen_turn
+            w_first = _parse_turn_number(winner.get("first_seen_turn"))
+            l_first = _parse_turn_number(loser.get("first_seen_turn"))
+            if l_first is not None and (w_first is None or l_first < w_first):
+                winner["first_seen_turn"] = loser["first_seen_turn"]
+
+            # Merge and deduplicate history by (turn, description)
+            merged_history = list(winner.get("history", []))
+            existing_keys = {
+                (h.get("turn"), h.get("description")) for h in merged_history
+            }
+            for h in loser.get("history", []):
+                key = (h.get("turn"), h.get("description"))
+                if key not in existing_keys:
+                    merged_history.append(h)
+                    existing_keys.add(key)
+            # Sort chronologically
+            merged_history.sort(
+                key=lambda h: _parse_turn_number(h.get("turn")) or 0
+            )
+            if merged_history:
+                winner["history"] = merged_history
+
+            seen[tid] = winner
+        else:
+            seen[tid] = rel
+    return list(seen.values())
+
+
+def cleanup_dangling_relationships(catalogs: dict) -> dict[str, list[str]]:
+    """Remove relationships whose target_id doesn't exist in any catalog.
+
+    Returns a dict of entity_id -> list of removed target_ids for logging.
+    """
+    known_ids: set[str] = set()
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            known_ids.add(entity.get("id", ""))
+
+    removed: dict[str, list[str]] = {}
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            eid = entity.get("id", "")
+            rels = entity.get("relationships", [])
+            clean = []
+            for rel in rels:
+                tid = rel.get("target_id", "")
+                if tid in known_ids:
+                    clean.append(rel)
+                else:
+                    removed.setdefault(eid, []).append(tid)
+            if len(clean) != len(rels):
+                entity["relationships"] = clean
+
+    return removed
 
 
 # ---------------------------------------------------------------------------

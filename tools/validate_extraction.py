@@ -387,6 +387,97 @@ def check_staleness(
     return results
 
 
+def check_dangling_relationships(catalog_dir: Path) -> list[Result]:
+    """Check G: relationships should not target non-existent entities."""
+    results: list[Result] = []
+
+    # Collect all known entity IDs across all catalog subdirectories
+    known_ids: set[str] = set()
+    for subdir in catalog_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+        for f in subdir.iterdir():
+            if (
+                f.suffix == ".json"
+                and not f.name.endswith(".synthesis.json")
+                and not f.name.endswith(".arcs.json")
+                and f.name != "index.json"
+            ):
+                known_ids.add(f.stem)
+
+    # Scan all entities for relationship targets
+    for subdir in catalog_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+        for f in subdir.iterdir():
+            if (
+                f.suffix != ".json"
+                or f.name.endswith(".synthesis.json")
+                or f.name.endswith(".arcs.json")
+                or f.name == "index.json"
+            ):
+                continue
+            try:
+                data = _load_json(f)
+            except Exception:
+                results.append(Result(
+                    Result.WARN, f.stem,
+                    f"could not load entity file: {f.name}",
+                ))
+                continue
+            eid = data.get("id", f.stem)
+            for rel in data.get("relationships", []):
+                tid = rel.get("target_id", "")
+                if tid and tid not in known_ids:
+                    results.append(Result(
+                        Result.WARN, eid,
+                        f"relationship targets non-existent '{tid}'",
+                    ))
+
+    if not results:
+        results.append(Result(Result.PASS, "all", "no dangling relationship targets"))
+
+    return results
+
+
+def check_duplicate_relationships(catalog_dir: Path) -> list[Result]:
+    """Check H: entities should not have duplicate relationships by target_id."""
+    results: list[Result] = []
+
+    for subdir in catalog_dir.iterdir():
+        if not subdir.is_dir():
+            continue
+        for f in subdir.iterdir():
+            if (
+                f.suffix != ".json"
+                or f.name.endswith(".synthesis.json")
+                or f.name.endswith(".arcs.json")
+                or f.name == "index.json"
+            ):
+                continue
+            try:
+                data = _load_json(f)
+            except Exception:
+                continue
+            eid = data.get("id", f.stem)
+            seen_targets: dict[str, int] = {}
+            for rel in data.get("relationships", []):
+                tid = rel.get("target_id", "")
+                if tid:
+                    seen_targets[tid] = seen_targets.get(tid, 0) + 1
+            for tid, count in seen_targets.items():
+                if count > 1:
+                    results.append(Result(
+                        Result.WARN, eid,
+                        f"duplicate relationship to '{tid}' ({count} entries)",
+                    ))
+
+    if not results:
+        results.append(Result(Result.PASS, "all", "no duplicate relationships"))
+
+    return results
+
+
 def check_locations(
     ground_truth: dict, catalog_dir: Path,
 ) -> list[Result]:
@@ -528,6 +619,16 @@ def validate(catalog_dir: Path, ground_truth_path: Path) -> int:
             "Staleness",
             None,
             check_staleness(gt, catalog_dir),
+        ),
+        (
+            "Dangling Relationships",
+            None,
+            check_dangling_relationships(catalog_dir),
+        ),
+        (
+            "Duplicate Relationships",
+            None,
+            check_duplicate_relationships(catalog_dir),
         ),
         (
             "Locations (late-game)",

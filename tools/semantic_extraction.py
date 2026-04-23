@@ -29,6 +29,7 @@ from catalog_merger import (
     get_next_event_id,
     mark_dormant_relationships,
     normalize_entity_id,
+    cleanup_dangling_relationships,
     TYPE_TO_CATALOG,
     _infer_type_from_prefix,
     _strip_any_prefix,
@@ -998,6 +999,13 @@ _GENERIC_STEMS = {
     # Pronouns — should never become entity IDs
     "she", "he", "they", "it", "her", "him", "them",
     "his", "hers", "its", "their", "theirs",
+}
+
+# Meta-labels that should never be accepted as PC aliases (#186)
+_PC_ALIAS_BLOCKLIST = {
+    "player character", "pc", "player", "the player",
+    "main character", "protagonist", "the protagonist",
+    "hero", "the hero", "adventurer", "the adventurer",
 }
 
 
@@ -2060,6 +2068,28 @@ def _merge_pc_aliases(
         return []
     _, pc_entry = pc_result
 
+    # Strip any blocklisted aliases from the PC entity (#186)
+    sa = pc_entry.get("stable_attributes", {})
+    aliases_attr = sa.get("aliases")
+    if isinstance(aliases_attr, dict):
+        alias_value = aliases_attr.get("value", [])
+        # Normalize to list of strings (handles str, comma-separated str, list)
+        if isinstance(alias_value, str):
+            normalized = [p.strip() for p in alias_value.split(",") if p.strip()]
+        elif isinstance(alias_value, list):
+            normalized = []
+            for item in alias_value:
+                if item is None:
+                    continue
+                text = str(item).strip()
+                if text:
+                    normalized.append(text)
+        else:
+            normalized = []
+        cleaned = [a for a in normalized if a.lower() not in _PC_ALIAS_BLOCKLIST]
+        if cleaned != normalized:
+            aliases_attr["value"] = cleaned
+
     # Collect text from events that reference char-player
     pc_events = [
         e for e in events_list
@@ -2089,6 +2119,10 @@ def _merge_pc_aliases(
 
         name = entity.get("name", "")
         if not name or len(name) < 3:
+            continue
+
+        # Skip meta-labels that aren't real character names (#186)
+        if name.lower() in _PC_ALIAS_BLOCKLIST:
             continue
 
         # Count whole-name occurrences in PC event text, case-insensitively,
@@ -2655,6 +2689,12 @@ def _extract_segmented(
         _rewrite_stale_ids(final_catalogs, final_events, merge_map)
         print(f"  Post-reconciliation dedup merged {dupes_merged} duplicate(s)")
 
+    # Clean up dangling relationship targets (#184)
+    dangling_removed = cleanup_dangling_relationships(final_catalogs)
+    if dangling_removed:
+        total_removed = sum(len(v) for v in dangling_removed.values())
+        print(f"  Removed {total_removed} dangling relationship target(s)")
+
     orphan_stubs = _post_batch_orphan_sweep(final_catalogs, final_events)
     if orphan_stubs:
         print(f"  Post-reconciliation orphan sweep: {orphan_stubs} stub(s)")
@@ -2815,6 +2855,12 @@ def extract_semantic_batch(
         _rewrite_stale_ids(catalogs, events_list, merge_map)
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch dedup merged {dupes_merged} duplicate(s); {entities_after} entities remain")
+
+    # Clean up dangling relationship targets (#184)
+    dangling_removed = cleanup_dangling_relationships(catalogs)
+    if dangling_removed:
+        total_removed = sum(len(v) for v in dangling_removed.values())
+        print(f"  Removed {total_removed} dangling relationship target(s) from {len(dangling_removed)} entit(ies)")
 
     # Apply coreference hints (manual merge rules, #162)
     hints_path = os.path.join(session_dir, "coreference-hints.json")
