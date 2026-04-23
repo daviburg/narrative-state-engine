@@ -991,3 +991,25 @@ def test_coerce_event_type_missing_unchanged():
     result = _coerce_event_fields(event)
     assert "type" not in result
 
+
+def test_coerce_event_type_non_string_falls_back_to_other():
+    """Non-string or unhashable event types are coerced to 'other'."""
+    for bad_type in (["encounter"], {"kind": "encounter"}, 123):
+        event = {"type": bad_type, "description": "Something happened"}
+        result = _coerce_event_fields(event)
+        assert result["type"] == "other"
+
+
+def test_coerce_event_returns_none_for_non_dict():
+    """Non-dict event items return None."""
+    assert _coerce_event_fields(["not", "a", "dict"]) is None
+    assert _coerce_event_fields("just a string") is None
+    assert _coerce_event_fields(42) is None
+
+
+def test_coerce_event_type_strip_lower_normalization():
+    """Whitespace and casing in type values are normalized."""
+    event = {"type": " Encounter ", "description": "Met someone"}
+    result = _coerce_event_fields(event)
+    assert result["type"] == "encounter"
+

@@ -501,20 +501,44 @@ _EVENT_TYPE_REMAP: dict[str, str] = {
 }
 
 
-def _coerce_event_fields(event: dict) -> dict:
+def _coerce_event_fields(event: dict) -> dict | None:
     """Coerce invalid event field values to schema-valid equivalents.
 
     Currently handles: type remapping for invalid enum values.
     If type cannot be remapped to a valid value, falls back to 'other'.
+    Returns None for non-dict events (caller should skip them).
     """
-    event_type = event.get("type")
-    if event_type is not None and event_type not in _VALID_EVENT_TYPES:
-        remapped = _EVENT_TYPE_REMAP.get(event_type, "other")
+    if not isinstance(event, dict):
         print(
-            f"  COERCE: event type '{event_type}' → '{remapped}'",
+            f"  COERCE: non-dict event {event!r} → skipped",
             file=sys.stderr,
         )
-        event["type"] = remapped
+        return None
+
+    event_type = event.get("type")
+    if event_type is None:
+        return event
+
+    if not isinstance(event_type, str):
+        print(
+            f"  COERCE: non-string event type {event_type!r} → 'other'",
+            file=sys.stderr,
+        )
+        event["type"] = "other"
+        return event
+
+    normalized_type = event_type.strip().lower()
+    if normalized_type in _VALID_EVENT_TYPES:
+        if normalized_type != event_type:
+            event["type"] = normalized_type
+        return event
+
+    remapped = _EVENT_TYPE_REMAP.get(normalized_type, "other")
+    print(
+        f"  COERCE: event type '{event_type}' → '{remapped}'",
+        file=sys.stderr,
+    )
+    event["type"] = remapped
     return event
 
 
@@ -1488,7 +1512,7 @@ def extract_and_merge(
                     normalize_entity_id(eid, known_ids) for eid in related
                 ]
 
-        valid_events = [e for e in (_coerce_event_fields(ev) for ev in new_events) if _validate_event(e)]
+        valid_events = [e for e in (_coerce_event_fields(ev) for ev in new_events) if e is not None and _validate_event(e)]
 
         # --- Phase 2: Create stub entities for orphan IDs (#106) ---
         if valid_events:
