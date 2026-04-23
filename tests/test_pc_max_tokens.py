@@ -360,7 +360,7 @@ class TestPCSkipIntegration:
         assert record["failure_reason"] == "validation_failed"
         assert "identity" in record["response_keys"]
         assert 'nested value forces validation failure' in record["partial_entity_data_preview"]
-        assert record["merge_result"] is None
+        assert record["merge_result"] is False
 
 
 class TestPCSkipLogNoise:
