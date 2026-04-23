@@ -39,7 +39,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 
 - **Minimum**: 7B parameters — basic entity extraction works but expect some ID format errors and weak coreference resolution
 - **Recommended**: 14B+ parameters — reliable JSON output, good coreference, accurate entity classification
-- **Best**: GPT-4o or equivalent cloud model — highest accuracy but requires API key and costs per token
+- **Best**: GPT-4o, Gemini Flash, or equivalent cloud model — highest accuracy but requires API key and costs per token
 
 ### Tested Models
 
@@ -47,6 +47,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 |---|---|---|---|---|
 | `qwen2.5:3b` | 3B | Q4_K_M | ~2.5 GB | Poor — 0% item recall, frequent hallucinations, ID format violations |
 | `qwen2.5:14b` | 14B | Q4_K_M | ~9 GB | Good — reliable entity classification, items extracted, acceptable coreference |
+| `gemini-2.5-flash` (Google) | Unknown | N/A | Cloud | Very good — fast, low cost (~$0.30/run), 1M token context, strong JSON mode |
 | `gpt-4o` (OpenAI) | Unknown | N/A | Cloud | Best — accurate structured JSON, strong coreference, minimal hallucination |
 
 ### VRAM Quick Reference
@@ -65,6 +66,45 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 - Items rarely or never extracted
 - Location/character/faction type confusion
 - Hallucinated entities not present in the source text
+
+### Using Google Gemini
+
+Google Gemini models are accessible via an OpenAI-compatible endpoint. Set up
+an API key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey),
+then configure `config/llm.json`:
+
+```json
+{
+  "provider": "openai",
+  "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+  "model": "gemini-2.5-flash",
+  "api_key_env": "GEMINI_API_KEY",
+  "temperature": 0.0,
+  "max_tokens": 4096,
+  "pc_max_tokens": 8192,
+  "timeout_seconds": 60,
+  "retry_attempts": 3,
+  "batch_delay_ms": 100
+}
+```
+
+Set the environment variable before running extraction:
+
+```powershell
+# PowerShell — persist across sessions
+[Environment]::SetEnvironmentVariable("GEMINI_API_KEY", "your-key-here", "User")
+```
+
+```bash
+# Bash / sh
+export GEMINI_API_KEY="your-key-here"
+```
+
+> **Note:** Gemini uses the same OpenAI-compatible client path as GPT-4o.
+> No Ollama-specific options are needed. The `context_length` field is
+> ignored for cloud providers (Gemini manages context internally with up
+> to 1M tokens). Set `batch_delay_ms` to `100` or lower — cloud APIs
+> handle concurrent requests without GPU contention.
 
 ### Using a Local Model
 
