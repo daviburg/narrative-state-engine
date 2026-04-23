@@ -406,6 +406,8 @@ Stop-Process -Id (Get-Content run-logs/extract-<timestamp>.pid)
 For sessions with more than 150 turns on models with <=32K context windows,
 use segmented extraction to prevent quality degradation in late turns:
 
+Explicit segmented extraction command:
+
 ```bash
 python tools/bootstrap_session.py \
   --session sessions/session-001 \
@@ -421,13 +423,12 @@ As of issue #197, when `--segment-size` is omitted the bootstrap tool
 automatically applies `--segment-size 100` for sessions larger than 150 turns.
 Pass `--segment-size 0` explicitly to disable segmentation.
 
-Recommended command for large sessions (>150 turns):
+Equivalent command relying on the auto-default (>150 turns):
 
 ```bash
 python tools/bootstrap_session.py \
   --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt \
-  --segment-size 100
+  --file sessions/_import/session-001-full-transcript.txt
 ```
 
 Recommended segment sizes:
