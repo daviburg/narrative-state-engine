@@ -99,8 +99,7 @@
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [175, 180],
       "expected_last_updated_min": 300,
-      "optional": true,
-      "notes": "Minor character. May not appear in enough events for stub creation."
+      "notes": "Kiln apprentice turn-178. Mentioned in 16+ turns. Accepts Faelan's tutelage turn-324."
     },
     {
       "name": "The Healer",
@@ -154,8 +153,7 @@
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [194, 196],
       "expected_last_updated_min": 194,
-      "optional": true,
-      "notes": "Minor character. May not appear in enough events for stub creation."
+      "notes": "Accompanies PC on eastern expedition. Mentioned in turns 195, 202, 257+."
     }
   ],
 
