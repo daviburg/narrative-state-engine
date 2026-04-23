@@ -86,7 +86,7 @@ Remaining work:
 - Batch processing mode for unattended overnight extraction (**partially implemented** via detached helper scripts: `tools/start_extraction_detached.ps1`, `tools/watch_extraction_detached.ps1`, `tools/stop_extraction_detached.ps1`)
 - Provider setup documentation in `docs/usage.md`
 - Quality validation of `qwen2.5:7b` as a faster alternative to 14B
-- **Segmented extraction** (#141): Long sessions (300+ turns) are extracted in configurable segments to stay within model context limits. Each segment starts with a clean entity catalog; a reconciliation pass merges the results. Naturally parallelizable across GPU instances.
+- **Segmented extraction** (#141, #197): Long sessions are extracted in configurable segments to stay within model context limits. Each segment starts with a clean entity catalog; a reconciliation pass merges the results. The bootstrap default now auto-enables `--segment-size 100` when session size exceeds 150 turns (pass `--segment-size 0` to disable).
 
 Design implications for earlier phases:
 - Keep context loading modular (catalog-first) so smaller local models can handle targeted tasks

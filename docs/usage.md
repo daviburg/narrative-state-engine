@@ -403,8 +403,8 @@ Stop-Process -Id (Get-Content run-logs/extract-<timestamp>.pid)
 
 ### Segmented Extraction
 
-For sessions with 200+ turns on models with ≤32K context windows, use
-segmented extraction to prevent quality degradation in late turns:
+For sessions with more than 150 turns on models with <=32K context windows,
+use segmented extraction to prevent quality degradation in late turns:
 
 ```bash
 python tools/bootstrap_session.py \
@@ -417,12 +417,25 @@ Each segment processes turns with a fresh entity catalog. After all segments
 complete, entities are automatically reconciled across segment boundaries by
 ID and name matching.
 
+As of issue #197, when `--segment-size` is omitted the bootstrap tool
+automatically applies `--segment-size 100` for sessions larger than 150 turns.
+Pass `--segment-size 0` explicitly to disable segmentation.
+
+Recommended command for large sessions (>150 turns):
+
+```bash
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt \
+  --segment-size 100
+```
+
 Recommended segment sizes:
 - 7B models (8K context): 50 turns
 - 14B models (32K context): 100-150 turns
 - 70B+ models (128K context): 300+ turns (may not need segmentation)
 
-Segment size 0 (the default) runs a single-pass extraction without segmentation.
+Segment size 0 runs a single-pass extraction without segmentation.
 
 ### Coreference Hints
 

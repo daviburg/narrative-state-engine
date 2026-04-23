@@ -483,11 +483,25 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--segment-size",
         type=int,
-        default=0,
+        default=None,
         help="Extract in segments of N turns with fresh catalogs, then reconcile. "
-             "0 = no segmentation (legacy behavior). Recommended: 100-150 for 14B models.",
+             "If omitted, sessions with >150 turns auto-default to 100. "
+             "Pass 0 to disable segmentation.",
     )
     return parser
+
+
+_AUTO_SEGMENT_THRESHOLD = 150
+_AUTO_SEGMENT_SIZE = 100
+
+
+def _resolve_segment_size(requested_segment_size: int | None, turn_count: int) -> tuple[int, bool]:
+    """Resolve effective segment size and whether auto-defaulting was applied."""
+    if requested_segment_size is not None:
+        return requested_segment_size, False
+    if turn_count > _AUTO_SEGMENT_THRESHOLD:
+        return _AUTO_SEGMENT_SIZE, True
+    return 0, False
 
 
 def main() -> None:
@@ -619,6 +633,18 @@ def main() -> None:
         for t in turns
     ]
 
+    effective_segment_size, auto_segment_enabled = _resolve_segment_size(
+        args.segment_size,
+        len(turn_dicts),
+    )
+    if auto_segment_enabled:
+        print(
+            f"  INFO: Auto-enabled --segment-size {_AUTO_SEGMENT_SIZE} "
+            f"(session has {len(turn_dicts)} turns, threshold is {_AUTO_SEGMENT_THRESHOLD}). "
+            "Pass --segment-size 0 explicitly to disable.",
+            file=sys.stderr,
+        )
+
     # Extract structured data from all turns (#21, #27, #28)
     try:
         from extract_structured_data import (
@@ -669,7 +695,7 @@ def main() -> None:
         extract_semantic_batch(
             turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run,
             overrides=llm_overrides or None,
-            segment_size=args.segment_size,
+            segment_size=effective_segment_size,
         )
 
         # Stub backfill pass (#128, #131 — now runs by default)
