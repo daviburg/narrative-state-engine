@@ -10,6 +10,7 @@ from semantic_extraction import (
     _pc_partial_merge,
     _format_prior_entity_context,
     _post_batch_orphan_sweep,
+    _normalize_entity_id,
     format_detail_prompt,
     _extract_turn_number,
     _extract_themes,
@@ -964,3 +965,90 @@ class TestPCCompactingIntegration:
         prompt_raw = format_detail_prompt(turn, pc_ref, pc_entry, arcs_data=None)
 
         assert len(prompt_compact) < len(prompt_raw)
+
+
+# ---------------------------------------------------------------------------
+# Type-specific orphan threshold tests (#185)
+# ---------------------------------------------------------------------------
+
+class TestOrphanThresholdByType:
+    """Post-batch orphan sweep uses type-specific reference thresholds."""
+
+    def _empty_catalogs(self):
+        return {
+            "characters.json": [],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+
+    def test_location_threshold_2(self):
+        """Location stubs are created at 2 event refs (not 3)."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["loc-mountain-pass"], "turn_id": "turn-200"},
+            {"id": "evt-2", "related_entities": ["loc-mountain-pass"], "turn_id": "turn-201"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 1
+        ids = {e["id"] for e in catalogs["locations.json"]}
+        assert "loc-mountain-pass" in ids
+
+    def test_faction_threshold_1(self):
+        """Faction stubs are created at 1 event ref."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["faction-ironwood-clan"], "turn_id": "turn-314"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 1
+        ids = {e["id"] for e in catalogs["factions.json"]}
+        assert "faction-ironwood-clan" in ids
+
+    def test_character_threshold_still_3(self):
+        """Characters still require 3 event refs (unchanged)."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["char-someone-new"], "turn_id": "turn-100"},
+            {"id": "evt-2", "related_entities": ["char-someone-new"], "turn_id": "turn-101"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 0
+
+    def test_location_below_threshold_skipped(self):
+        """Location with only 1 ref is not created (threshold is 2)."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["loc-remote-cave"], "turn_id": "turn-100"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Entity ID turn-tag normalization tests (#185)
+# ---------------------------------------------------------------------------
+
+class TestNormalizeEntityId:
+    """Turn-tag suffix stripping via _normalize_entity_id."""
+
+    def test_strips_turn_tag_when_canonical_exists(self):
+        known = {"char-shaman"}
+        assert _normalize_entity_id("char-shaman-turn-082", known) == "char-shaman"
+
+    def test_strips_turn_tag_when_neither_form_known(self):
+        known = {"char-other"}
+        assert _normalize_entity_id("char-shaman-turn-082", known) == "char-shaman"
+
+    def test_keeps_turn_tag_when_tagged_form_is_known(self):
+        known = {"char-shaman-turn-082"}
+        assert _normalize_entity_id("char-shaman-turn-082", known) == "char-shaman-turn-082"
+
+    def test_no_change_without_turn_tag(self):
+        known = {"char-kael"}
+        assert _normalize_entity_id("char-kael", known) == "char-kael"
+
+    def test_no_change_for_short_turn_numbers(self):
+        """Suffix must have 3+ digits to match (turn-01 should NOT match)."""
+        known = set()
+        assert _normalize_entity_id("char-foo-turn-01", known) == "char-foo-turn-01"

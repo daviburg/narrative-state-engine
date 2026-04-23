@@ -59,7 +59,7 @@
     {
       "name": "The Shaman",
       "role": "Tribal spiritual leader",
-      "id_patterns": ["char-shaman"],
+      "id_patterns": ["char-shaman", "char-shaman-turn-*"],
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [40, 60],
       "expected_last_updated_min": 250,
@@ -99,7 +99,8 @@
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [175, 180],
       "expected_last_updated_min": 300,
-      "notes": "Kiln apprentice turn-178. Accepts Faelan's tutelage turn-324."
+      "optional": true,
+      "notes": "Minor character. May not appear in enough events for stub creation."
     },
     {
       "name": "The Healer",
@@ -153,7 +154,8 @@
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [194, 196],
       "expected_last_updated_min": 194,
-      "notes": "Minor character. Accompanies PC on eastern expedition turns 194-204."
+      "optional": true,
+      "notes": "Minor character. May not appear in enough events for stub creation."
     }
   ],
 

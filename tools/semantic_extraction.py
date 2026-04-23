@@ -1008,6 +1008,21 @@ _PC_ALIAS_BLOCKLIST = {
     "hero", "the hero", "adventurer", "the adventurer",
 }
 
+# Turn-tag suffix pattern appended by LLMs to entity IDs (e.g. "char-shaman-turn-082")
+_TURN_TAG_RE = re.compile(r"-turn-\d{3,}$")
+
+
+def _normalize_entity_id(eid: str, known_ids: set[str]) -> str:
+    """Strip turn-tag suffix if canonical ID exists or turn-tagged form is unknown.
+
+    E.g., 'char-shaman-turn-082' -> 'char-shaman' if 'char-shaman' exists in
+    *known_ids*, or if 'char-shaman-turn-082' itself is not in *known_ids*.
+    """
+    canonical = _TURN_TAG_RE.sub("", eid)
+    if canonical != eid and (canonical in known_ids or eid not in known_ids):
+        return canonical
+    return eid
+
 
 def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
                         all_events: list | None = None) -> None:
@@ -1025,9 +1040,17 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
 
     orphan_ids: set[str] = set()
     for event in events:
+        new_related = []
         for eid in event.get("related_entities", []):
-            if eid and eid not in known_ids and eid not in _SKIP_STUB_IDS:
+            if not eid:
+                new_related.append(eid)
+                continue
+            # Normalize turn-tagged IDs before orphan check
+            eid = _normalize_entity_id(eid, known_ids)
+            new_related.append(eid)
+            if eid not in known_ids and eid not in _SKIP_STUB_IDS:
                 orphan_ids.add(eid)
+        event["related_entities"] = new_related
 
     for eid in sorted(orphan_ids):
         # Skip concept-prefix entities — abstract concepts, not catalogue entities
@@ -1447,6 +1470,17 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
     """
     from catalog_merger import dedup_merge_entity
 
+    # Pre-pass: normalize turn-tagged entity IDs so that e.g.
+    # char-shaman-turn-082 is rewritten to char-shaman when the canonical
+    # form already exists (or the tagged form is the only one).
+    known_ids = _collect_all_entity_ids(catalogs)
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            eid = entity.get("id", "")
+            normalized = _normalize_entity_id(eid, known_ids)
+            if normalized != eid:
+                entity["id"] = normalized
+
     merged_count = 0
     merge_map: dict[str, str] = {}
 
@@ -1616,11 +1650,13 @@ def _rewrite_stale_ids(catalogs: dict, events_list: list, merge_map: dict[str, s
 
 
 # Minimum number of event references for an orphan ID to warrant a post-batch stub
-_POST_BATCH_ORPHAN_MIN_REFS = 3
+_POST_BATCH_ORPHAN_MIN_REFS = 3          # Default for characters
+_POST_BATCH_ORPHAN_MIN_REFS_LOC = 2      # Locations (appear less often in events)
+_POST_BATCH_ORPHAN_MIN_REFS_FACTION = 1  # Factions (rare, usually named once)
 
 
 def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
-    """Create stub entities for orphan event IDs that appear in 3+ events.
+    """Create stub entities for orphan event IDs that exceed type-specific thresholds.
 
     Runs after dedup to catch any remaining orphan IDs that weren't resolved
     by per-turn normalization or the dedup merge map.
@@ -1634,14 +1670,15 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
     for event in events_list:
         turn_id = event.get("turn_id", "")
         for eid in event.get("related_entities", []):
-            if eid and eid not in known_ids and eid not in _SKIP_STUB_IDS:
+            if not eid or eid in _SKIP_STUB_IDS:
+                continue
+            # Normalize turn-tagged IDs before counting
+            eid = _normalize_entity_id(eid, known_ids)
+            if eid not in known_ids:
                 orphan_counts.setdefault(eid, []).append(turn_id)
 
     stubs_created = 0
     for eid, turn_ids in sorted(orphan_counts.items()):
-        if len(turn_ids) < _POST_BATCH_ORPHAN_MIN_REFS:
-            continue
-
         # Skip concept-prefix entities
         if eid.startswith("concept-"):
             continue
@@ -1650,6 +1687,17 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             continue
 
         inferred_type = _infer_type_from_prefix(eid)
+
+        # Type-specific thresholds
+        if inferred_type == "location":
+            min_refs = _POST_BATCH_ORPHAN_MIN_REFS_LOC
+        elif inferred_type == "faction":
+            min_refs = _POST_BATCH_ORPHAN_MIN_REFS_FACTION
+        else:
+            min_refs = _POST_BATCH_ORPHAN_MIN_REFS
+
+        if len(turn_ids) < min_refs:
+            continue
         inferred_name = stem.replace("-", " ").title()
         catalog_file = TYPE_TO_CATALOG.get(inferred_type, "characters.json")
 

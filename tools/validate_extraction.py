@@ -13,6 +13,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
 import re
 import sys
@@ -120,11 +121,19 @@ def check_independent_characters(
     for entry in ground_truth.get("expected_independent_characters", []):
         name = entry["name"]
         patterns = entry.get("id_patterns", [])
+        is_optional = entry.get("optional", False)
         found_id = None
 
         for pat in patterns:
-            if pat in all_ids:
+            # Support glob patterns (e.g. "char-shaman-turn-*")
+            if "*" in pat or "?" in pat or "[" in pat:
+                for cid in all_ids:
+                    if fnmatch.fnmatch(cid, pat):
+                        found_id = cid
+                        break
+            elif pat in all_ids:
                 found_id = pat
+            if found_id:
                 break
 
         if not found_id:
@@ -134,7 +143,8 @@ def check_independent_characters(
                     Result.FAIL, name, "NOT FOUND — merged as PC alias",
                 ))
             else:
-                results.append(Result(Result.FAIL, name, "NOT FOUND"))
+                severity = Result.WARN if is_optional else Result.FAIL
+                results.append(Result(severity, name, "NOT FOUND"))
             continue
 
         # Check staleness
