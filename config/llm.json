@@ -11,5 +11,6 @@
   "batch_delay_ms": 200,
   "context_length": 32768,
   "entity_refresh_interval": 50,
-  "entity_refresh_batch_size": 10
+  "entity_refresh_batch_size": 10,
+  "checkpoint_interval": 25
 }

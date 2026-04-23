@@ -104,7 +104,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - `config/llm.json` configures the LLM provider, model, and endpoint
 - All extracted entities are validated against `schemas/entity.schema.json` before merging
 - Entities below a confidence threshold are logged but not cataloged
-- Batch mode checkpoints progress every 50 turns for resume after interruption
+- Batch mode checkpoints progress every 25 turns (configurable via `config/llm.json` `checkpoint_interval`, default 25) for resume after interruption
 - **Segmented extraction** (`--segment-size N`): For long sessions (300+ turns), extraction runs in segments of N turns, each starting with a fresh catalog. This prevents context window saturation in the entity discovery prompt, which includes the full known-entities table. After all segments complete, a reconciliation pass merges entities by ID and name, stitches event timelines, and joins relationships across segment boundaries. Segment size should be tuned to the model's effective context capacity (recommended: 100-150 for 14B models with 32K context).
 - Birth events trigger automatic entity creation for named children, with child IDs added to event `related_entities`
 - Stub backfill gathers context from both `related_entities` references and entity name mentions in event descriptions

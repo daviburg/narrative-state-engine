@@ -3064,6 +3064,7 @@ def extract_semantic_batch(
     _refresh_cfg = getattr(llm, "config", None) or {}
     refresh_interval = _refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
     refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
+    checkpoint_interval = int(_refresh_cfg.get("checkpoint_interval", 25)) if isinstance(_refresh_cfg, dict) else 25
 
     for i in range(start_from, total):
         turn = turn_dicts[i]
@@ -3105,8 +3106,8 @@ def extract_semantic_batch(
                 if refreshed:
                     print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
-        # Checkpoint every 50 turns
-        if (i + 1) % 50 == 0:
+        # Checkpoint every N turns (configurable via config/llm.json checkpoint_interval, default 25)
+        if (i + 1) % checkpoint_interval == 0:
             _save_progress(progress_file, turn_id, total, catalogs, dry_run)
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
