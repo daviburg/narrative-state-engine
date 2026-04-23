@@ -724,7 +724,7 @@ def format_discovery_prompt(turn: dict, known_entities: str) -> str:
     )
 
 
-# Stable attribute keys always included in trimmed PC prior context.
+# Stable attribute keys considered when trimming PC prior context.
 #
 # Why these are included:
 # - species/race/class: high-signal identity anchors that improve continuity.
@@ -733,8 +733,8 @@ def format_discovery_prompt(turn: dict, known_entities: str) -> str:
 # Why many keys are excluded here (for example: level, background, deity,
 # equipment, hp_change, condition, quest, allegiance, status): they are either
 # volatile, frequently rewritten by the model, or expensive in token budget.
-# The detail prompt must only promise keys present in this set to avoid
-# fabricated "carried-forward" attributes.
+# The detail prompt must only promise keys from this set to avoid fabricated
+# "carried-forward" attributes.
 _PC_KEY_STABLE_ATTRS = {"species", "race", "class", "aliases"}
 
 # Maximum number of volatile_state snapshots to include for PC
