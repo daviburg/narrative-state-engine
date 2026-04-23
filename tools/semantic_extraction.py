@@ -1882,7 +1882,16 @@ def backfill_stubs(
 
 # Defaults used when config keys are absent
 _DEFAULT_REFRESH_INTERVAL = 50
-_DEFAULT_REFRESH_BATCH_SIZE = 5
+_DEFAULT_REFRESH_BATCH_SIZE = 10
+_MAX_REFRESH_BATCH_SIZE = 25
+
+# Type-aware slot allocation shares (must sum to 1.0)
+_REFRESH_TYPE_SHARES: dict[str, float] = {
+    "characters.json": 0.5,
+    "locations.json": 0.2,
+    "items.json": 0.2,
+    "factions.json": 0.1,
+}
 
 
 def find_stale_entities(
@@ -1891,18 +1900,44 @@ def find_stale_entities(
     turn_dicts: list,
     refresh_interval: int = _DEFAULT_REFRESH_INTERVAL,
     batch_size: int = _DEFAULT_REFRESH_BATCH_SIZE,
+    events_list: list | None = None,
 ) -> list[tuple[str, dict]]:
     """Find entities whose ``last_updated_turn`` is stale and that are still
     mentioned in the transcript since their last update.
 
     Returns up to *batch_size* ``(catalog_file, entity)`` tuples sorted by
-    staleness (most stale first).  The player character (``char-player``) is
-    excluded because it is already extracted every turn.
-    """
-    stale: list[tuple[int, str, dict]] = []  # (gap, catalog_file, entity)
+    staleness (most stale first) with type-aware slot allocation so that
+    narratively important entity types (characters) get proportional refresh
+    priority.  The player character (``char-player``) is excluded because it
+    is already extracted every turn.
 
+    Dynamic scaling: when the catalog has 60+ entities the effective batch
+    size is ``max(batch_size, catalog_size // 5)`` capped at
+    ``_MAX_REFRESH_BATCH_SIZE``.
+
+    If *events_list* is provided, entities referenced in more events win
+    ties between entities with similar staleness gaps.
+    """
     if refresh_interval <= 0:
         return []
+
+    # --- Dynamic batch scaling ---
+    catalog_size = sum(len(v) for v in catalogs.values())
+    effective_batch = batch_size
+    if catalog_size >= 60:
+        effective_batch = max(batch_size, catalog_size // 5)
+    effective_batch = min(effective_batch, _MAX_REFRESH_BATCH_SIZE)
+
+    # --- Build event-count index for tiebreaking ---
+    event_counts: dict[str, int] = {}
+    if events_list:
+        for ev in events_list:
+            for ref in ev.get("related_entities", []):
+                event_counts[ref] = event_counts.get(ref, 0) + 1
+
+    # --- Collect stale entities grouped by catalog type ---
+    # Tuple: (gap, -event_count, filename, entity)
+    by_type: dict[str, list[tuple[int, int, str, dict]]] = {}
 
     for filename, entities in catalogs.items():
         for entity in entities:
@@ -1922,11 +1957,42 @@ def find_stale_entities(
             if not _entity_mentioned_since(entity_id, entity_name, last_turn, turn_dicts):
                 continue
 
-            stale.append((gap, filename, entity))
+            neg_events = -(event_counts.get(entity_id, 0))
+            by_type.setdefault(filename, []).append((gap, neg_events, filename, entity))
 
-    # Sort by staleness descending (highest gap first) and limit
-    stale.sort(key=lambda x: x[0], reverse=True)
-    return [(fn, ent) for _gap, fn, ent in stale[:batch_size]]
+    # --- Type-aware slot allocation ---
+    # First pass: allocate slots proportionally per type
+    selected: set[str] = set()  # entity IDs already selected
+    result: list[tuple[int, int, str, dict]] = []
+
+    for type_file, share in _REFRESH_TYPE_SHARES.items():
+        slots = max(1, round(effective_batch * share))
+        candidates = by_type.get(type_file, [])
+        # Sort: staleness descending, then event count descending
+        candidates.sort(key=lambda x: (-x[0], x[1]))
+        for c in candidates[:slots]:
+            eid = c[3].get("id", "")
+            if eid not in selected:
+                result.append(c)
+                selected.add(eid)
+
+    # Second pass: fill remaining capacity from all stale entities not yet taken
+    if len(result) < effective_batch:
+        remaining: list[tuple[int, int, str, dict]] = []
+        for candidates in by_type.values():
+            for c in candidates:
+                eid = c[3].get("id", "")
+                if eid not in selected:
+                    remaining.append(c)
+        remaining.sort(key=lambda x: (-x[0], x[1]))
+        for c in remaining:
+            if len(result) >= effective_batch:
+                break
+            result.append(c)
+
+    # Final sort by staleness, then event count
+    result.sort(key=lambda x: (-x[0], x[1]))
+    return [(fn, ent) for _gap, _neg_ev, fn, ent in result[:effective_batch]]
 
 
 def _entity_mentioned_since(
@@ -2653,6 +2719,7 @@ def _extract_segmented(
                     seg_turn_number, seg_catalogs, segment_turns[:i + 1],
                     refresh_interval=seg_refresh_interval,
                     batch_size=seg_refresh_batch,
+                    events_list=seg_events,
                 )
                 if stale:
                     print(f"  REFRESH: {len(stale)} stale entity/entities at {turn_id}")
@@ -2830,6 +2897,7 @@ def extract_semantic_batch(
                 current_turn_number, catalogs, turn_dicts[:i + 1],
                 refresh_interval=refresh_interval,
                 batch_size=refresh_batch_size,
+                events_list=events_list,
             )
             if stale:
                 print(f"  REFRESH: {len(stale)} stale entity/entities at {turn_id}")

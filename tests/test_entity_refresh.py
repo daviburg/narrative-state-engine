@@ -11,6 +11,8 @@ from semantic_extraction import (
     _entity_mentioned_since,
     _DEFAULT_REFRESH_INTERVAL,
     _DEFAULT_REFRESH_BATCH_SIZE,
+    _MAX_REFRESH_BATCH_SIZE,
+    _REFRESH_TYPE_SHARES,
 )
 
 
@@ -39,11 +41,12 @@ def _make_turn(turn_num, text, speaker="DM"):
 
 def _make_catalogs(*entities):
     """Build a catalogs dict from a flat list of entity dicts."""
-    catalogs = {"characters.json": [], "locations.json": [], "items.json": []}
+    catalogs = {"characters.json": [], "locations.json": [], "items.json": [], "factions.json": []}
     type_map = {
         "character": "characters.json",
         "location": "locations.json",
         "item": "items.json",
+        "faction": "factions.json",
     }
     for e in entities:
         cat = type_map.get(e["type"], "characters.json")
@@ -191,7 +194,7 @@ class TestConfigDefaults:
         assert _DEFAULT_REFRESH_INTERVAL == 50
 
     def test_default_refresh_batch_size(self):
-        assert _DEFAULT_REFRESH_BATCH_SIZE == 5
+        assert _DEFAULT_REFRESH_BATCH_SIZE == 10
 
     def test_config_contains_refresh_keys(self):
         config_path = os.path.join(os.path.dirname(__file__), "..", "config", "llm.json")
@@ -200,7 +203,7 @@ class TestConfigDefaults:
         assert "entity_refresh_interval" in config
         assert "entity_refresh_batch_size" in config
         assert config["entity_refresh_interval"] == 50
-        assert config["entity_refresh_batch_size"] == 5
+        assert config["entity_refresh_batch_size"] == 10
 
 
 # ---------------------------------------------------------------------------
@@ -332,3 +335,180 @@ class TestRefreshEntities:
             # Check that first_seen_turn was preserved as turn-005
             merged_entity = mock_merge.call_args[0][1]
             assert merged_entity["first_seen_turn"] == "turn-005"
+
+
+# ---------------------------------------------------------------------------
+# Type-aware allocation and dynamic scaling (#182)
+# ---------------------------------------------------------------------------
+
+class TestTypeAwareAllocation:
+    def test_characters_get_proportional_slots(self):
+        """Characters should receive ~50% of refresh slots."""
+        chars = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                 for i in range(10)]
+        locs = [_make_entity(f"loc-l{i}", f"Loc{i}", "location", "turn-001", "turn-001")
+                for i in range(4)]
+        items = [_make_entity(f"item-i{i}", f"Item{i}", "item", "turn-001", "turn-001")
+                 for i in range(4)]
+        factions = [_make_entity(f"fac-f{i}", f"Fac{i}", "faction", "turn-001", "turn-001")
+                    for i in range(2)]
+
+        all_entities = chars + locs + items + factions
+        turns = [_make_turn(i, " ".join(e["name"] for e in all_entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*all_entities)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=10)
+        # With 10 slots: chars get 5, locs get 2, items get 2, factions get 1
+        char_ids = {e["id"] for _, e in stale if e["type"] == "character"}
+        assert len(char_ids) >= 4  # at least ~50% of 10 slots
+
+    def test_overflow_redistribution(self):
+        """Unused faction slots should overflow to other types."""
+        chars = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                 for i in range(10)]
+        # No factions at all — those slots should redistribute
+        turns = [_make_turn(i, " ".join(e["name"] for e in chars))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*chars)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=10)
+        # All 10 slots should be filled with characters since overflow from
+        # empty location/item/faction buckets goes to character bucket
+        assert len(stale) == 10
+
+    def test_mixed_types_all_represented(self):
+        """When all types have stale entities, each type should get some slots."""
+        chars = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                 for i in range(6)]
+        locs = [_make_entity(f"loc-l{i}", f"Loc{i}", "location", "turn-001", "turn-001")
+                for i in range(3)]
+        items = [_make_entity(f"item-i{i}", f"Item{i}", "item", "turn-001", "turn-001")
+                 for i in range(3)]
+        factions = [_make_entity(f"fac-f{i}", f"Fac{i}", "faction", "turn-001", "turn-001")
+                    for i in range(2)]
+
+        all_entities = chars + locs + items + factions
+        turns = [_make_turn(i, " ".join(e["name"] for e in all_entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*all_entities)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=10)
+        types_present = {e["type"] for _, e in stale}
+        # All types should be represented
+        assert "character" in types_present
+        assert "location" in types_present
+        assert "item" in types_present
+        assert "faction" in types_present
+
+
+class TestDynamicScaling:
+    def test_small_catalog_uses_configured_batch(self):
+        """Catalog with <60 entities should use the configured batch_size."""
+        entities = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                    for i in range(10)]
+        turns = [_make_turn(i, " ".join(e["name"] for e in entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*entities)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=5)
+        assert len(stale) == 5
+
+    def test_large_catalog_scales_up(self):
+        """Catalog with 60+ entities should scale batch to catalog_size // 5."""
+        chars = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                 for i in range(40)]
+        locs = [_make_entity(f"loc-l{i}", f"Loc{i}", "location", "turn-001", "turn-001")
+                for i in range(15)]
+        items = [_make_entity(f"item-i{i}", f"Item{i}", "item", "turn-001", "turn-001")
+                 for i in range(10)]
+
+        all_entities = chars + locs + items  # 65 total
+        turns = [_make_turn(i, " ".join(e["name"] for e in all_entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*all_entities)
+
+        # batch_size=10 but catalog_size//5 = 13 → effective batch = 13
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=10)
+        assert len(stale) == 13
+
+    def test_dynamic_scaling_caps_at_max(self):
+        """Even very large catalogs should be capped at _MAX_REFRESH_BATCH_SIZE."""
+        # 150 entities → 150 // 5 = 30, but max is 25
+        chars = [_make_entity(f"char-c{i}", f"Char{i}", "character", "turn-001", "turn-001")
+                 for i in range(80)]
+        locs = [_make_entity(f"loc-l{i}", f"Loc{i}", "location", "turn-001", "turn-001")
+                for i in range(40)]
+        items = [_make_entity(f"item-i{i}", f"Item{i}", "item", "turn-001", "turn-001")
+                 for i in range(30)]
+
+        all_entities = chars + locs + items  # 150 total
+        turns = [_make_turn(i, " ".join(e["name"] for e in all_entities))
+                 for i in range(1, 201)]
+        catalogs = _make_catalogs(*all_entities)
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50, batch_size=10)
+        assert len(stale) == _MAX_REFRESH_BATCH_SIZE
+
+    def test_backward_compatible_small_catalog(self):
+        """Small catalog with explicit batch_size should behave as before."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        turns = [_make_turn(i, "The Elder speaks" if i % 10 == 0 else "Nothing")
+                 for i in range(1, 101)]
+        catalogs = _make_catalogs(elder)
+
+        stale = find_stale_entities(100, catalogs, turns, refresh_interval=50, batch_size=5)
+        assert len(stale) == 1
+        assert stale[0][1]["id"] == "char-elder"
+
+
+class TestEventFrequencyTiebreaker:
+    def test_event_rich_entity_wins_tie(self):
+        """Between two entities with equal staleness, the one with more events wins."""
+        e1 = _make_entity("char-minor", "Minor", "character", "turn-001", "turn-001")
+        e2 = _make_entity("char-major", "Major", "character", "turn-001", "turn-001")
+        turns = [_make_turn(i, "Minor and Major both here") for i in range(1, 201)]
+        catalogs = _make_catalogs(e1, e2)
+
+        # Major has many events, Minor has few
+        events = [
+            {"related_entities": ["char-major"]} for _ in range(16)
+        ] + [
+            {"related_entities": ["char-minor"]} for _ in range(2)
+        ]
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50,
+                                    batch_size=2, events_list=events)
+        assert len(stale) == 2
+        # Both have gap=199, but Major has 16 events vs Minor's 2
+        assert stale[0][1]["id"] == "char-major"
+        assert stale[1][1]["id"] == "char-minor"
+
+    def test_staleness_still_primary_sort(self):
+        """Staleness gap should still be the primary sort key, not event count."""
+        e1 = _make_entity("char-old", "OldChar", "character", "turn-001", "turn-001")
+        e2 = _make_entity("char-recent", "RecentChar", "character", "turn-001", "turn-100")
+        turns = [_make_turn(i, "OldChar and RecentChar here") for i in range(1, 201)]
+        catalogs = _make_catalogs(e1, e2)
+
+        # RecentChar has more events but OldChar is more stale
+        events = [
+            {"related_entities": ["char-recent"]} for _ in range(20)
+        ] + [
+            {"related_entities": ["char-old"]} for _ in range(1)
+        ]
+
+        stale = find_stale_entities(200, catalogs, turns, refresh_interval=50,
+                                    batch_size=2, events_list=events)
+        # OldChar gap=199, RecentChar gap=100 → OldChar first despite fewer events
+        assert stale[0][1]["id"] == "char-old"
+
+    def test_no_events_list_still_works(self):
+        """When events_list is not provided, function should still work."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        turns = [_make_turn(i, "The Elder speaks") for i in range(1, 101)]
+        catalogs = _make_catalogs(elder)
+
+        stale = find_stale_entities(100, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 1
+        assert stale[0][1]["id"] == "char-elder"
