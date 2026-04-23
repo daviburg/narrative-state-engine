@@ -168,7 +168,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
 | `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, Google Gemini, etc.) |
-| `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files |
+| `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files; supports `-Framework`/`-PlayerLabel` passthrough and safe argument quoting for values with spaces |
 | `tools/watch_extraction_detached.ps1` | Show status and tail logs for detached extraction runs |
 | `tools/stop_extraction_detached.ps1` | Stop detached extraction runs by PID file |
 

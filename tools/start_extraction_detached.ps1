@@ -3,6 +3,8 @@ param(
     [string]$TranscriptFile = "",
     [int]$SegmentSize = 100,
     [string]$Model = "",
+    [string]$Framework = "",
+    [string]$PlayerLabel = "",
     [string]$LogsDir = "run-logs",
     [switch]$Overwrite
 )
@@ -46,20 +48,41 @@ if ($Model) {
     $args += @("--model", $Model)
 }
 
+if ($Framework) {
+    $args += @("--framework", $Framework)
+}
+
+if ($PlayerLabel) {
+    $args += @("--player-label", $PlayerLabel)
+}
+
 if ($Overwrite) {
     $args += "--overwrite"
 }
 
-$process = Start-Process -FilePath "python" -ArgumentList $args -RedirectStandardOutput $logPath -RedirectStandardError $errPath -PassThru
+function Format-WindowsProcessArgument {
+    param([string]$Value)
+
+    if ([string]::IsNullOrEmpty($Value)) {
+        return '""'
+    }
+
+    if ($Value -notmatch '[\s"]') {
+        return $Value
+    }
+
+    $escaped = $Value -replace '(\\*)"', '$1$1\\"'
+    $escaped = $escaped -replace '(\\+)$', '$1$1'
+    return '"' + $escaped + '"'
+}
+
+$argumentString = (($args | ForEach-Object { Format-WindowsProcessArgument ([string]$_) }) -join " ")
+
+$process = Start-Process -FilePath "python" -ArgumentList $argumentString -RedirectStandardOutput $logPath -RedirectStandardError $errPath -PassThru
 
 $process.Id | Set-Content -Path $pidPath
 
-function Format-QuotedArg {
-    param([string]$Value)
-    return "'" + $Value.Replace("'", "''") + "'"
-}
-
-$argString = ($args | ForEach-Object { Format-QuotedArg $_ }) -join " "
+$argString = ($args | ForEach-Object { Format-WindowsProcessArgument ([string]$_) }) -join " "
 @(
     "python $argString",
     "",
