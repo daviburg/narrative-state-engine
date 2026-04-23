@@ -308,6 +308,60 @@ class TestPCSkipIntegration:
         )
         assert se._pc_consecutive_failures == 0
 
+    def test_validation_failure_logs_raw_preview_and_debug_record(self, monkeypatch, tmp_path, capsys):
+        """Validation failures should log a preview and write a JSONL debug record."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        monkeypatch.setattr(se, "_PC_DEBUG_LOG", str(tmp_path / "pc-extraction-debug.jsonl"))
+        monkeypatch.setattr(se, "_pc_partial_merge", lambda catalogs, entity_data, turn_id: False)
+        se._reset_pc_failure_tracking()
+
+        llm = MagicMock()
+        llm.default_timeout = 10
+        llm.pc_max_tokens = 4096
+        llm.delay = MagicMock()
+
+        def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None,
+                          schema=None):
+            if "discover" in system_prompt.lower() or "discovery" in system_prompt.lower():
+                return {"entities": []}
+            if "detail" in system_prompt.lower():
+                return {"entity": {
+                    "id": "char-player",
+                    "name": "Player Character",
+                    "type": "character",
+                    "identity": {"summary": "nested value forces validation failure"},
+                    "first_seen_turn": "turn-001",
+                    "last_updated_turn": "turn-001",
+                }}
+            if "relationship" in system_prompt.lower():
+                return {"relationships": []}
+            if "event" in system_prompt.lower():
+                return {"events": []}
+            return {}
+
+        llm.extract_json = MagicMock(side_effect=_extract_json)
+
+        catalogs = _fresh_catalogs()
+        events = []
+        turn = {"turn_id": "turn-001", "speaker": "dm", "text": "The DM describes the PC."}
+
+        se.extract_and_merge(turn, catalogs, events, llm, min_confidence=0.6)
+
+        captured = capsys.readouterr()
+        assert "raw response preview (500 chars):" in captured.err
+        assert '"summary": "nested value forces validation failure"' in captured.err
+
+        debug_path = tmp_path / "pc-extraction-debug.jsonl"
+        assert debug_path.exists()
+        records = debug_path.read_text(encoding="utf-8").strip().splitlines()
+        assert len(records) == 1
+        record = json.loads(records[0])
+        assert record["turn_id"] == "turn-001"
+        assert record["failure_reason"] == "validation_failed"
+        assert "identity" in record["response_keys"]
+        assert 'nested value forces validation failure' in record["partial_entity_data_preview"]
+        assert record["merge_result"] is None
+
 
 class TestPCSkipLogNoise:
     """Verify log noise is reduced (#153): warnings only at threshold crossings."""
