@@ -517,11 +517,14 @@ def test_run11_discard_keys_removed():
     result = _coerce_entity_fields(entity)
     for key in ("recent_activities", "current_activities", "updated_turn",
                 "history_highlights", "goals", "background",
-                "abilities_description", "status_updated_turn"):
+                "abilities_description"):
         assert key not in result, f"Expected '{key}' to be discarded"
+    # status_updated_turn is schema-valid at top level — it must be preserved
+    assert result["status_updated_turn"] == "turn-010"
 
 
 def test_run11_status_updated_turn_stripped_from_volatile_state():
+    """When status_updated_turn is nested in volatile_state, strip it and promote to top level."""
     entity = {
         "name": "Kael",
         "type": "character",
@@ -535,6 +538,27 @@ def test_run11_status_updated_turn_stripped_from_volatile_state():
     result = _coerce_entity_fields(entity)
     assert "status_updated_turn" not in result["volatile_state"]
     assert result["volatile_state"]["location"] == "castle"
+    # Should be promoted to top level since it was absent there
+    assert result["status_updated_turn"] == "turn-010"
+
+
+def test_run11_status_updated_turn_not_overwritten_if_already_top_level():
+    """When status_updated_turn exists at top level and also in volatile_state, just strip the nested one."""
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "last_updated_turn": "turn-011",
+        "status_updated_turn": "turn-011",
+        "volatile_state": {
+            "location": "castle",
+            "status_updated_turn": "turn-010",
+            "last_updated_turn": "turn-011",
+        },
+    }
+    result = _coerce_entity_fields(entity)
+    assert "status_updated_turn" not in result["volatile_state"]
+    # Top-level value must not be overwritten
+    assert result["status_updated_turn"] == "turn-011"
 
 
 def test_relationship_context_empty():

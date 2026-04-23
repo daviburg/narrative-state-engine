@@ -449,18 +449,22 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         # Added in #196: ephemeral / history keys observed in Run 11
         "recent_activities", "current_activities", "updated_turn",
         "history_highlights", "goals", "background", "abilities_description",
-        "status_updated_turn",
     }
     for dk in list(entity_data.keys()):
         if dk in _discard_keys:
             entity_data.pop(dk)
             print(f"  COERCE: discarded non-schema key '{dk}'", file=sys.stderr)
 
-    # Strip status_updated_turn from volatile_state if present — it belongs at top level only
+    # Strip status_updated_turn from volatile_state if present — it belongs at top level only.
+    # If the LLM nested it under volatile_state and top-level is missing, promote it first.
     vs = entity_data.get("volatile_state")
     if isinstance(vs, dict) and "status_updated_turn" in vs:
-        vs.pop("status_updated_turn")
-        print("  COERCE: stripped status_updated_turn from volatile_state (top-level only)", file=sys.stderr)
+        nested_status_updated_turn = vs.pop("status_updated_turn")
+        if "status_updated_turn" not in entity_data:
+            entity_data["status_updated_turn"] = nested_status_updated_turn
+            print("  COERCE: promoted volatile_state.status_updated_turn → top-level status_updated_turn", file=sys.stderr)
+        else:
+            print("  COERCE: stripped status_updated_turn from volatile_state (top-level only)", file=sys.stderr)
 
     # Strip stable_attributes entries where the LLM returned null for value (#178).
     # The schema requires value to be string or string[] — null is not valid.
