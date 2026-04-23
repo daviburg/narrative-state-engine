@@ -349,6 +349,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "item_inventory": "equipment",
         "location": "location",
         "current_location": "location",
+        "locations": "location",
         "status": "condition",
         "current_situation": "condition",
         "emotional_state": "condition",
@@ -384,6 +385,9 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "name_aliases": "aliases",
         "alignment": "alignment",
         "weaknesses": "weaknesses",
+        "age": "age",
+        "gender": "gender",
+        "occupation": "occupation",
     }
     for src_key, sa_key in _stable_remap.items():
         if src_key in entity_data:
@@ -408,6 +412,44 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                     entry["source_turn"] = turn_id
                 sa[sa_key] = entry
             print(f"  COERCE: {src_key} → stable_attributes.{sa_key}", file=sys.stderr)
+
+    # abilities_and_traits → stable_attributes.abilities (Run 11 variant)
+    if "abilities_and_traits" in entity_data:
+        val = entity_data.pop("abilities_and_traits")
+        if "stable_attributes" not in entity_data:
+            entity_data["stable_attributes"] = {}
+        sa = entity_data["stable_attributes"]
+        if "abilities" not in sa and val:
+            if isinstance(val, list):
+                attr_val = [str(v) for v in val]
+            elif isinstance(val, str):
+                attr_val = val
+            else:
+                attr_val = str(val)
+            entry: dict = {"value": attr_val, "inference": False, "confidence": 1.0}
+            if has_valid_turn:
+                entry["source_turn"] = turn_id
+            sa["abilities"] = entry
+        print("  COERCE: abilities_and_traits → stable_attributes.abilities", file=sys.stderr)
+
+    # additional_items_equipped → volatile_state.equipment (append, don't overwrite)
+    if "additional_items_equipped" in entity_data:
+        val = entity_data.pop("additional_items_equipped")
+        if isinstance(val, str):
+            val = [v.strip() for v in val.split(",") if v.strip()]
+        elif isinstance(val, list):
+            val = [str(v) for v in val]
+        else:
+            val = [str(val)]
+        if "volatile_state" not in entity_data:
+            entity_data["volatile_state"] = {}
+        vs = entity_data["volatile_state"]
+        existing = vs.get("equipment", [])
+        if isinstance(existing, list):
+            vs["equipment"] = existing + [v for v in val if v not in existing]
+        else:
+            vs["equipment"] = val
+        print("  COERCE: additional_items_equipped → volatile_state.equipment (appended)", file=sys.stderr)
 
     # Relationship key variants → relationships
     _rel_keys = ["relations", "character_relations", "faction_relations",
@@ -437,11 +479,25 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "recent_relationship_changes", "name_changes",
         "equipment_history", "faction_relations_history",
         "relationships_history",
+        # Added in #196: ephemeral / history keys observed in Run 11
+        "recent_activities", "current_activities", "updated_turn",
+        "history_highlights", "goals", "background", "abilities_description",
     }
     for dk in list(entity_data.keys()):
         if dk in _discard_keys:
             entity_data.pop(dk)
             print(f"  COERCE: discarded non-schema key '{dk}'", file=sys.stderr)
+
+    # Strip status_updated_turn from volatile_state if present — it belongs at top level only.
+    # If the LLM nested it under volatile_state and top-level is missing, promote it first.
+    vs = entity_data.get("volatile_state")
+    if isinstance(vs, dict) and "status_updated_turn" in vs:
+        nested_status_updated_turn = vs.pop("status_updated_turn")
+        if "status_updated_turn" not in entity_data:
+            entity_data["status_updated_turn"] = nested_status_updated_turn
+            print("  COERCE: promoted volatile_state.status_updated_turn → top-level status_updated_turn", file=sys.stderr)
+        else:
+            print("  COERCE: stripped status_updated_turn from volatile_state (top-level only)", file=sys.stderr)
 
     # Strip stable_attributes entries where the LLM returned null for value (#178).
     # The schema requires value to be string or string[] — null is not valid.
@@ -502,6 +558,77 @@ def _validate_entity(entity_data: dict) -> bool:
     except jsonschema.ValidationError as e:
         print(f"  WARNING: Entity failed schema validation: {e.message}", file=sys.stderr)
         return False
+
+
+# Valid event types from event.schema.json / event-extractor template
+_VALID_EVENT_TYPES = {
+    "birth", "death", "arrival", "departure", "construction", "decision",
+    "encounter", "recruitment", "discovery", "anomaly", "capture", "trap",
+    "ritual", "healing", "communication", "examination", "release",
+    "offering", "other",
+}
+
+# Map of invalid type values → nearest valid type
+_EVENT_TYPE_REMAP: dict[str, str] = {
+    "acquisition": "discovery",
+    "trade": "offering",
+    "purchase": "offering",
+    "sale": "offering",
+    "injury": "other",
+    "conflict": "encounter",
+    "combat": "encounter",
+    "negotiation": "decision",
+    "exploration": "discovery",
+    "investigation": "examination",
+    "rest": "other",
+    "travel": "arrival",
+    "reward": "other",
+    "quest": "other",
+    "interaction": "encounter",
+    "observation": "examination",
+    "transformation": "other",
+}
+
+
+def _coerce_event_fields(event: dict) -> dict | None:
+    """Coerce invalid event field values to schema-valid equivalents.
+
+    Currently handles: type remapping for invalid enum values.
+    If type cannot be remapped to a valid value, falls back to 'other'.
+    Returns None for non-dict events (caller should skip them).
+    """
+    if not isinstance(event, dict):
+        print(
+            f"  COERCE: non-dict event {event!r} → skipped",
+            file=sys.stderr,
+        )
+        return None
+
+    event_type = event.get("type")
+    if event_type is None:
+        return event
+
+    if not isinstance(event_type, str):
+        print(
+            f"  COERCE: non-string event type {event_type!r} → 'other'",
+            file=sys.stderr,
+        )
+        event["type"] = "other"
+        return event
+
+    normalized_type = event_type.strip().lower()
+    if normalized_type in _VALID_EVENT_TYPES:
+        if normalized_type != event_type:
+            event["type"] = normalized_type
+        return event
+
+    remapped = _EVENT_TYPE_REMAP.get(normalized_type, "other")
+    print(
+        f"  COERCE: event type '{event_type}' → '{remapped}'",
+        file=sys.stderr,
+    )
+    event["type"] = remapped
+    return event
 
 
 def _validate_event(event_data: dict) -> bool:
@@ -1497,7 +1624,7 @@ def extract_and_merge(
                     normalize_entity_id(eid, known_ids) for eid in related
                 ]
 
-        valid_events = [e for e in new_events if _validate_event(e)]
+        valid_events = [e for e in (_coerce_event_fields(ev) for ev in new_events) if e is not None and _validate_event(e)]
 
         # --- Phase 2: Create stub entities for orphan IDs (#106) ---
         if valid_events:
@@ -2117,6 +2244,31 @@ def backfill_stubs(
 _DEFAULT_REFRESH_INTERVAL = 50
 _DEFAULT_REFRESH_BATCH_SIZE = 10
 _MAX_REFRESH_BATCH_SIZE = 25
+_DEFAULT_CHECKPOINT_INTERVAL = 25
+
+
+def _read_checkpoint_interval(llm_config: dict) -> int:
+    """Return checkpoint interval from config dict, with validation.
+
+    Falls back to _DEFAULT_CHECKPOINT_INTERVAL on missing, invalid, or
+    non-positive values and prints a warning to stderr.
+    """
+    raw = llm_config.get("checkpoint_interval", _DEFAULT_CHECKPOINT_INTERVAL) if isinstance(llm_config, dict) else _DEFAULT_CHECKPOINT_INTERVAL
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        print(
+            f"  WARNING: Invalid checkpoint_interval {raw!r}; using default {_DEFAULT_CHECKPOINT_INTERVAL}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_CHECKPOINT_INTERVAL
+    if value < 1:
+        print(
+            f"  WARNING: checkpoint_interval must be >= 1, got {value!r}; using default {_DEFAULT_CHECKPOINT_INTERVAL}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_CHECKPOINT_INTERVAL
+    return value
 
 # Type-aware slot allocation shares (must sum to 1.0)
 _REFRESH_TYPE_SHARES: dict[str, float] = {
@@ -3120,6 +3272,7 @@ def extract_semantic_batch(
     _refresh_cfg = getattr(llm, "config", None) or {}
     refresh_interval = _refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
     refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
+    checkpoint_interval = _read_checkpoint_interval(_refresh_cfg)
 
     for i in range(start_from, total):
         turn = turn_dicts[i]
@@ -3161,8 +3314,8 @@ def extract_semantic_batch(
                 if refreshed:
                     print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
-        # Checkpoint every 50 turns
-        if (i + 1) % 50 == 0:
+        # Checkpoint every N turns (configurable via config/llm.json checkpoint_interval, default 25)
+        if (i + 1) % checkpoint_interval == 0:
             _save_progress(progress_file, turn_id, total, catalogs, dry_run)
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
