@@ -572,3 +572,75 @@ class TestPCAliasMerge:
         merged = _merge_pc_aliases(catalogs, events, "")
         assert "char-fenouille-moonwind" in merged
         assert len(catalogs["characters.json"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# #186 — PC alias blocklist
+# ---------------------------------------------------------------------------
+
+class TestPCAliasBlocklist:
+    """Verify _merge_pc_aliases rejects meta-labels like 'player character'."""
+
+    def test_blocklist_filters_player_character(self):
+        """Entity named 'Player Character' should NOT be merged as alias."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-player-character", "Player Character",
+                             "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Player Character enters the cave",
+                        ["char-player"], "turn-100"),
+            _make_event("evt-2", "Player Character attacks the goblin",
+                        ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-player-character" not in merged
+
+    def test_blocklist_allows_valid_names(self):
+        """A real character name like 'Fenouille Moonwind' should still be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-fenouille", "Fenouille Moonwind",
+                             "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Fenouille Moonwind draws her sword",
+                        ["char-player"], "turn-253"),
+            _make_event("evt-2", "You are Fenouille Moonwind",
+                        ["char-player"], "turn-313"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille" in merged
+
+    def test_strips_existing_blocklisted_aliases(self):
+        """Blocklisted alias already on PC entity should be cleaned."""
+        catalogs = {
+            "characters.json": [
+                {
+                    "id": "char-player",
+                    "name": "Hero",
+                    "type": "character",
+                    "identity": "The player character.",
+                    "first_seen_turn": "turn-001",
+                    "last_updated_turn": "turn-100",
+                    "stable_attributes": {
+                        "aliases": {
+                            "value": ["Fenouille Moonwind", "player character", "protagonist"],
+                            "source_turn": "turn-050",
+                        }
+                    },
+                },
+            ]
+        }
+        events = []
+        _merge_pc_aliases(catalogs, events, "")
+        pc = catalogs["characters.json"][0]
+        alias_list = pc["stable_attributes"]["aliases"]["value"]
+        assert "Fenouille Moonwind" in alias_list
+        assert "player character" not in alias_list
+        assert "protagonist" not in alias_list

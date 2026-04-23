@@ -8,11 +8,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from catalog_merger import (
     _consolidate_relationship,
+    _dedup_relationships,
     _generate_index,
     _merge_entity_relationships,
     _parse_turn_number,
     _read_v2_entities,
     _write_v2_entity,
+    cleanup_dangling_relationships,
     load_catalogs,
     mark_dormant_relationships,
     merge_entity,
@@ -568,3 +570,118 @@ class TestParseTurnNumber:
 
     def test_large_number(self):
         assert _parse_turn_number("turn-345") == 345
+
+
+# ---------------------------------------------------------------------------
+# _dedup_relationships (#183)
+# ---------------------------------------------------------------------------
+
+class TestDedupRelationships:
+    def test_consolidates_duplicates(self):
+        """Two entries for the same target_id should be collapsed to one."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "last_updated_turn": "turn-010"},
+            {"target_id": "char-bob", "current_relationship": "friend",
+             "type": "social", "last_updated_turn": "turn-020"},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 1
+        assert result[0]["target_id"] == "char-bob"
+        # The later turn should win
+        assert result[0]["last_updated_turn"] == "turn-020"
+
+    def test_preserves_history(self):
+        """History arrays from both entries should be merged."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "last_updated_turn": "turn-010",
+             "history": [{"turn": "turn-005", "description": "acquaintance"}]},
+            {"target_id": "char-bob", "current_relationship": "friend",
+             "type": "social", "last_updated_turn": "turn-020",
+             "history": [{"turn": "turn-015", "description": "ally"}]},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 1
+        history = result[0].get("history", [])
+        assert len(history) == 2  # both histories merged
+
+    def test_preserves_distinct_targets(self):
+        """Relationships with different target_ids should not be merged."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "last_updated_turn": "turn-010"},
+            {"target_id": "char-alice", "current_relationship": "rival",
+             "type": "adversarial", "last_updated_turn": "turn-020"},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 2
+
+    def test_empty_list(self):
+        assert _dedup_relationships([]) == []
+
+
+# ---------------------------------------------------------------------------
+# cleanup_dangling_relationships (#184)
+# ---------------------------------------------------------------------------
+
+class TestCleanupDanglingRelationships:
+    def test_removes_missing_targets(self):
+        """Relationships targeting non-existent entities should be removed."""
+        catalogs = {
+            "characters.json": [
+                {
+                    "id": "char-alice",
+                    "name": "Alice",
+                    "relationships": [
+                        {"target_id": "char-bob", "type": "social"},
+                        {"target_id": "char-nonexistent", "type": "social"},
+                    ],
+                },
+                {"id": "char-bob", "name": "Bob", "relationships": []},
+            ]
+        }
+        removed = cleanup_dangling_relationships(catalogs)
+        assert "char-alice" in removed
+        assert "char-nonexistent" in removed["char-alice"]
+        # Only valid relationship kept
+        assert len(catalogs["characters.json"][0]["relationships"]) == 1
+        assert catalogs["characters.json"][0]["relationships"][0]["target_id"] == "char-bob"
+
+    def test_keeps_valid_targets(self):
+        """All relationships targeting existing entities should be preserved."""
+        catalogs = {
+            "characters.json": [
+                {
+                    "id": "char-alice",
+                    "name": "Alice",
+                    "relationships": [
+                        {"target_id": "char-bob", "type": "social"},
+                    ],
+                },
+                {"id": "char-bob", "name": "Bob", "relationships": []},
+            ]
+        }
+        removed = cleanup_dangling_relationships(catalogs)
+        assert removed == {}
+        assert len(catalogs["characters.json"][0]["relationships"]) == 1
+
+    def test_cross_catalog_targets(self):
+        """Targets in a different catalog file should be considered valid."""
+        catalogs = {
+            "characters.json": [
+                {
+                    "id": "char-alice",
+                    "name": "Alice",
+                    "relationships": [
+                        {"target_id": "loc-town", "type": "other"},
+                    ],
+                },
+            ],
+            "locations.json": [
+                {"id": "loc-town", "name": "Town", "relationships": []},
+            ],
+        }
+        removed = cleanup_dangling_relationships(catalogs)
+        assert removed == {}
+        assert len(catalogs["characters.json"][0]["relationships"]) == 1
