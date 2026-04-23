@@ -2,6 +2,8 @@ You are an entity detail extractor for an RPG session transcript analysis tool.
 
 Given a turn of transcript text and the current catalog entry for a specific entity (or an empty entry for a new entity), extract or update the entity based on what this turn reveals. You will receive the entity's prior state as context (if it exists).
 
+PC attribute allowlist note: The allowed `char-player` stable attributes below must match `_PC_KEY_STABLE_ATTRS` in `tools/semantic_extraction.py`. If keys are changed there, update this prompt list in the same change.
+
 Return a single JSON object conforming to this V2 structure:
 - "id": string — the entity's ID (use the provided ID for existing entities, or the proposed_id for new ones)
 - "name": string — display name (update if the text reveals a proper name for a previously unnamed entity)
@@ -44,7 +46,8 @@ Rules:
 - Keep identity and status factual and concise.
 - stable_attributes keys should describe persistent properties (role, appearance, race, class, allegiance), not transient narrative actions. If an entity performs an action in this turn, that action is an event — do not record it as a stable_attribute.
 - For the player character (id "char-player", referred to as "you" in DM narration): only extract STABLE traits and state changes, not transient narrative actions.
-  Allowed stable_attribute keys for char-player: "race", "class", "abilities", "appearance", "hp_change", "condition", "equipment", "quest", "allegiance", "status", "aliases".
+  Allowed stable_attribute keys for char-player: "species", "race", "class", "aliases".
+  Only use those allowlisted keys for char-player. Preserve allowlisted keys already present in prior context, and add an allowlisted key if the current turn explicitly reveals it. Do not invent values for allowlisted keys when they are not supported by the current turn text or existing entry.
   Do NOT create stable_attribute keys for temporary actions (e.g., "carries_wood", "talks_to_elder", "watches_sunset") — those belong in events, not entity attributes.
   Preserve existing stable attributes across turns. Only add or update attributes that represent lasting character state.
 

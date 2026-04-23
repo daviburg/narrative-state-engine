@@ -724,7 +724,17 @@ def format_discovery_prompt(turn: dict, known_entities: str) -> str:
     )
 
 
-# Stable attribute keys always included in trimmed PC context
+# Stable attribute keys considered when trimming PC prior context.
+#
+# Why these are included:
+# - species/race/class: high-signal identity anchors that improve continuity.
+# - aliases: needed so newly revealed names can merge back into char-player.
+#
+# Why many keys are excluded here (for example: level, background, deity,
+# equipment, hp_change, condition, quest, allegiance, status): they are either
+# volatile, frequently rewritten by the model, or expensive in token budget.
+# The detail prompt must only promise keys from this set to avoid fabricated
+# "carried-forward" attributes.
 _PC_KEY_STABLE_ATTRS = {"species", "race", "class", "aliases"}
 
 # Maximum number of volatile_state snapshots to include for PC
@@ -863,7 +873,7 @@ def _format_prior_entity_context(
 
     For ``char-player``, trims the context to keep prompt size manageable:
     - Always includes identity and current_status
-    - Only key stable_attributes (species, class, aliases)
+    - Only key stable_attributes (species, race, class, aliases)
     - Last 3 volatile_state snapshots only
     - Relationship histories replaced with arc summaries when available (#120)
     - Old volatile state entries digested into count + themes (#121)
