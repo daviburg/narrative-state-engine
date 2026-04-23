@@ -1,5 +1,9 @@
 # narrative-state-engine
 
+<p align="center">
+  <img src="assets/artwork.png" alt="Narrative State Engine" width="800">
+</p>
+
 A player-side assistant framework for AI-driven RPG and interactive fiction sessions.
 
 This system captures DM responses and player prompts, preserves full transcripts, extracts structured narrative state, maintains catalogs and storyline continuity, tracks player objectives, analyzes strategy, and generates suggested next player prompts.

@@ -6,7 +6,7 @@ The goal at each phase is to keep the system **practical and usable**, not to ac
 
 ---
 
-## Phase 1 — Current: VS Code Copilot Chat (v1 scaffold)
+## Phase 1 — Current: VS Code Copilot Chat
 
 **Status:** In progress.
 
@@ -47,7 +47,7 @@ Post-extraction quality passes include:
 - **PC alias merge** — detects character entities that are aliases of char-player and merges them (#134)
 - **PC consecutive-failure logging** — warns when PC extraction fails for ≥10 consecutive turns; cooldown-based skip after 20 failures (50 turn skip, 5 turn retry cycle) (#133, #168)
 - **Entity envelope unwrapping** (#168) — accepts both wrapped and flat entity responses from the LLM, fixing PC extraction regression with smaller models
-- **Non-standard key coercion** (#170, #172) — remaps common non-standard LLM keys into their correct V2 schema slots before validation. Extended in #172 to cover 26+ additional keys observed in Run 10a, including `_new` suffix normalization for diff-format LLM outputs
+- **Non-standard key coercion** (#170, #172, #178) — remaps common non-standard LLM keys into their correct V2 schema slots before validation. Extended in #172 to cover 26+ additional keys observed in Run 10a, including `_new` suffix normalization for diff-format LLM outputs. Null values in `stable_attributes` are stripped before validation (#178).
 - **Extraction validation** — post-extraction ground truth comparison that catches false alias merges, missing entities, coreference fragmentation, and staleness (#159). Uses curated fixtures in `tests/fixtures/` and runs via `tools/validate_extraction.py`.
 - **Periodic entity refresh** (#161) — re-extracts stale entities every N turns (`entity_refresh_interval`, default 50) using recent transcript context. Up to `entity_refresh_batch_size` (default 5) entities are refreshed per interval, prioritized by staleness. Prevents entities from going permanently stale in long extractions.
 
@@ -73,7 +73,7 @@ Goals:
 - Offline-capable (no internet dependency during play)
 - Faster turnaround for frequent small-context tasks (catalog updates, summary refreshes)
 
-**Status:** Partially achieved. The semantic extraction pipeline (#43) already supports local models via Ollama. Tested with `qwen2.5:14b` on RTX 4070 at 60.61 tok/s (acceptable quality) and `qwen2.5:3b` (unusable quality — see #53, #63). The `config/llm.json` design decouples the pipeline from any specific provider.
+**Status:** Partially achieved. The semantic extraction pipeline (#43) already supports local models via Ollama. Tested with `qwen2.5:14b` on RTX 4070 at 60.61 tok/s (acceptable quality) and `qwen2.5:3b` (unusable quality — see #53, #63). The `config/llm.json` design decouples the pipeline from any specific provider. Context window configuration primarily uses Modelfile variants; the code also sends `context_length` as `extra_body.options.num_ctx` (#175), but Ollama's OpenAI-compatible `/v1` endpoint may ignore that runtime override.
 
 **NPU investigation (#65):** AMD XDNA1 (Phoenix) NPU cannot run LLM inference — AMD only supports LLMs on Strix Point (XDNA2) and newer. The Radeon 780M iGPU (~10-15 tok/s) is too slow to be useful. A dedicated GPU server (e.g., used RTX 3090 in a separate machine) is the viable path to exceed RTX 4070 performance.
 
