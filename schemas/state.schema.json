@@ -159,7 +159,12 @@
         "current_season": {
           "type": "string",
           "description": "The current in-game season.",
-          "enum": ["spring", "summer", "fall", "winter"]
+          "enum": [
+            "early_spring", "spring", "late_spring",
+            "early_summer", "summer", "late_summer",
+            "early_fall", "fall", "late_fall",
+            "early_winter", "mid_winter", "winter", "late_winter"
+          ]
         },
         "current_year": {
           "type": "integer",

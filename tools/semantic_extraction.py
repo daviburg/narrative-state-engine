@@ -1008,6 +1008,21 @@ _PC_ALIAS_BLOCKLIST = {
     "hero", "the hero", "adventurer", "the adventurer",
 }
 
+# Turn-tag suffix pattern appended by LLMs to entity IDs (e.g. "char-shaman-turn-082")
+_TURN_TAG_RE = re.compile(r"-turn-\d{3,}$")
+
+
+def _normalize_entity_id(eid: str, known_ids: set[str]) -> str:
+    """Strip turn-tag suffix if canonical ID exists or turn-tagged form is unknown.
+
+    E.g., 'char-shaman-turn-082' -> 'char-shaman' if 'char-shaman' exists in
+    *known_ids*, or if 'char-shaman-turn-082' itself is not in *known_ids*.
+    """
+    canonical = _TURN_TAG_RE.sub("", eid)
+    if canonical != eid and (canonical in known_ids or eid not in known_ids):
+        return canonical
+    return eid
+
 
 def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
                         all_events: list | None = None) -> None:
@@ -1025,9 +1040,17 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
 
     orphan_ids: set[str] = set()
     for event in events:
+        new_related = []
         for eid in event.get("related_entities", []):
-            if eid and eid not in known_ids and eid not in _SKIP_STUB_IDS:
+            if not eid:
+                new_related.append(eid)
+                continue
+            # Normalize turn-tagged IDs before orphan check
+            eid = _normalize_entity_id(eid, known_ids)
+            new_related.append(eid)
+            if eid not in known_ids and eid not in _SKIP_STUB_IDS:
                 orphan_ids.add(eid)
+        event["related_entities"] = new_related
 
     for eid in sorted(orphan_ids):
         # Skip concept-prefix entities — abstract concepts, not catalogue entities
@@ -1447,6 +1470,20 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
     """
     from catalog_merger import dedup_merge_entity
 
+    # Pre-pass: normalize turn-tagged entity IDs so that e.g.
+    # char-shaman-turn-082 is rewritten to char-shaman when the canonical
+    # form is already present in the known IDs; otherwise the tagged ID is
+    # left unchanged.
+    known_ids = _collect_all_entity_ids(catalogs)
+    normalize_map: dict[str, str] = {}  # old_id -> normalized_id
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            eid = entity.get("id", "")
+            normalized = _normalize_entity_id(eid, known_ids)
+            if normalized != eid:
+                entity["id"] = normalized
+                normalize_map[eid] = normalized
+
     merged_count = 0
     merge_map: dict[str, str] = {}
 
@@ -1592,6 +1629,11 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
         if to_remove:
             catalogs[filename] = [e for i, e in enumerate(entities) if i not in to_remove]
 
+    # Include turn-tag normalizations in merge_map so _rewrite_stale_ids
+    # can update event related_entities and relationship source/target IDs.
+    for old_id, new_id in normalize_map.items():
+        merge_map.setdefault(old_id, new_id)
+
     return merged_count, merge_map
 
 
@@ -1616,11 +1658,13 @@ def _rewrite_stale_ids(catalogs: dict, events_list: list, merge_map: dict[str, s
 
 
 # Minimum number of event references for an orphan ID to warrant a post-batch stub
-_POST_BATCH_ORPHAN_MIN_REFS = 3
+_POST_BATCH_ORPHAN_MIN_REFS = 3          # Default for characters
+_POST_BATCH_ORPHAN_MIN_REFS_LOC = 2      # Locations (appear less often in events)
+_POST_BATCH_ORPHAN_MIN_REFS_FACTION = 1  # Factions (rare, usually named once)
 
 
 def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
-    """Create stub entities for orphan event IDs that appear in 3+ events.
+    """Create stub entities for orphan event IDs that exceed type-specific thresholds.
 
     Runs after dedup to catch any remaining orphan IDs that weren't resolved
     by per-turn normalization or the dedup merge map.
@@ -1634,14 +1678,15 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
     for event in events_list:
         turn_id = event.get("turn_id", "")
         for eid in event.get("related_entities", []):
-            if eid and eid not in known_ids and eid not in _SKIP_STUB_IDS:
+            if not eid or eid in _SKIP_STUB_IDS:
+                continue
+            # Normalize turn-tagged IDs before counting
+            eid = _normalize_entity_id(eid, known_ids)
+            if eid not in known_ids:
                 orphan_counts.setdefault(eid, []).append(turn_id)
 
     stubs_created = 0
     for eid, turn_ids in sorted(orphan_counts.items()):
-        if len(turn_ids) < _POST_BATCH_ORPHAN_MIN_REFS:
-            continue
-
         # Skip concept-prefix entities
         if eid.startswith("concept-"):
             continue
@@ -1650,6 +1695,17 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             continue
 
         inferred_type = _infer_type_from_prefix(eid)
+
+        # Type-specific thresholds
+        if inferred_type == "location":
+            min_refs = _POST_BATCH_ORPHAN_MIN_REFS_LOC
+        elif inferred_type == "faction":
+            min_refs = _POST_BATCH_ORPHAN_MIN_REFS_FACTION
+        else:
+            min_refs = _POST_BATCH_ORPHAN_MIN_REFS
+
+        if len(turn_ids) < min_refs:
+            continue
         inferred_name = stem.replace("-", " ").title()
         catalog_file = TYPE_TO_CATALOG.get(inferred_type, "characters.json")
 
@@ -1675,6 +1731,126 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
     return stubs_created
 
 
+# Minimum event-description mentions for name-mention discovery to create a stub
+_NAME_MENTION_MIN_EVENTS = 2
+
+# Words that are common titles/roles but NOT character names — skip these
+_NAME_MENTION_STOPWORDS = {
+    "the", "a", "an", "and", "but", "or", "for", "with", "from",
+    "this", "that", "they", "their", "them", "there", "then",
+    "what", "when", "where", "which", "while", "who", "whom",
+    "have", "has", "had", "been", "being", "does", "did",
+    "will", "would", "could", "should", "shall", "might",
+    "into", "upon", "about", "after", "before", "between",
+    "through", "during", "above", "below", "each", "every",
+    "some", "many", "much", "more", "most", "less", "few",
+    "also", "just", "only", "still", "even", "already",
+    "here", "however", "perhaps", "though", "yet", "both",
+}
+
+
+def _name_mention_discovery(catalogs: dict, events_list: list) -> int:
+    """Create stubs for proper names found in event descriptions but not in catalogs.
+
+    Scans all event descriptions for capitalized words (potential character
+    names) that do not match any existing entity name or alias.  Names appearing
+    in >= _NAME_MENTION_MIN_EVENTS distinct events get a character stub.
+
+    Returns the number of stubs created.
+    """
+    # Build a set of known names (lowercased) from all catalog entries
+    known_names: set[str] = set()
+    known_ids = _collect_all_entity_ids(catalogs)
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            name = entity.get("name", "").strip().lower()
+            if name:
+                known_names.add(name)
+            # Also collect aliases
+            aliases_str = entity.get("attributes", {}).get("aliases", "")
+            if aliases_str and isinstance(aliases_str, str):
+                for a in aliases_str.split(","):
+                    a = a.strip().lower()
+                    if a:
+                        known_names.add(a)
+            sa = entity.get("stable_attributes", {}).get("aliases")
+            if isinstance(sa, dict):
+                val = sa.get("value", "")
+                if isinstance(val, list):
+                    for a in val:
+                        if isinstance(a, str):
+                            known_names.add(a.strip().lower())
+                elif isinstance(val, str) and val:
+                    for a in val.split(","):
+                        known_names.add(a.strip().lower())
+
+    # Scan event descriptions for capitalized proper names
+    # Pattern: a capitalized word that looks like a name (not all-caps, not short)
+    name_re = re.compile(r"\b([A-Z][a-z]{2,})\b")
+
+    name_events: dict[str, set[str]] = {}  # lowered name -> set of event IDs
+    name_canonical: dict[str, str] = {}     # lowered name -> original casing
+
+    for event in events_list:
+        desc = event.get("description", "")
+        if not desc:
+            continue
+        event_id = event.get("id", event.get("turn_id", ""))
+        for match in name_re.finditer(desc):
+            word = match.group(1)
+            word_lower = word.lower()
+            if word_lower in _NAME_MENTION_STOPWORDS:
+                continue
+            if word_lower in _GENERIC_STEMS:
+                continue
+            if word_lower in known_names:
+                continue
+            name_events.setdefault(word_lower, set()).add(event_id)
+            if word_lower not in name_canonical:
+                name_canonical[word_lower] = word
+
+    stubs_created = 0
+    for name_lower, event_ids in sorted(name_events.items()):
+        if len(event_ids) < _NAME_MENTION_MIN_EVENTS:
+            continue
+
+        canonical = name_canonical[name_lower]
+        char_id = f"char-{name_lower}"
+
+        # Skip if this ID already exists
+        if char_id in known_ids:
+            continue
+
+        # Determine first_seen turn from events
+        first_turn = ""
+        first_num: int | None = None
+        for event in events_list:
+            eid = event.get("id", event.get("turn_id", ""))
+            if eid in event_ids:
+                turn = event.get("turn_id", "")
+                t_num = _parse_turn_number(turn) if turn else None
+                if t_num is not None and (first_num is None or t_num < first_num):
+                    first_num = t_num
+                    first_turn = turn
+
+        stub = {
+            "id": char_id,
+            "name": canonical,
+            "type": "character",
+            "identity": f"Character mentioned by name in {len(event_ids)} event descriptions (stub — auto-created by name-mention discovery).",
+            "first_seen_turn": first_turn,
+            "last_updated_turn": first_turn,
+            "notes": "Auto-created by name-mention-discovery.",
+        }
+        catalogs.setdefault("characters.json", []).append(stub)
+        known_ids.add(char_id)
+        known_names.add(name_lower)
+        stubs_created += 1
+        print(f"  NAME-MENTION STUB: '{char_id}' ({canonical}), {len(event_ids)} event desc mentions")
+
+    return stubs_created
+
+
 # ---------------------------------------------------------------------------
 # Stub backfill (#128)
 # ---------------------------------------------------------------------------
@@ -1685,6 +1861,7 @@ _STUB_NOTE_MARKERS = {
     "auto-created by event-stub.",
     "auto-created by post-batch orphan sweep.",
     "auto-created by post-batch-orphan-sweep.",
+    "auto-created by name-mention-discovery.",
 }
 
 # Notes to clear from enriched entities (#152) — includes backfill markers
@@ -2783,6 +2960,11 @@ def _extract_segmented(
     if orphan_stubs:
         print(f"  Post-reconciliation orphan sweep: {orphan_stubs} stub(s)")
 
+    # Name-mention discovery (#185) — catch named characters missed by LLM
+    name_stubs = _name_mention_discovery(final_catalogs, final_events)
+    if name_stubs:
+        print(f"  Post-reconciliation name-mention discovery: {name_stubs} stub(s)")
+
     entities_final = sum(len(v) for v in final_catalogs.values())
     print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events")
 
@@ -2960,6 +3142,12 @@ def extract_semantic_batch(
     if orphan_stubs:
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch orphan sweep created {orphan_stubs} stub(s); {entities_after} entities now")
+
+    # --- Phase 4b: Name-mention discovery (#185) ---
+    name_stubs = _name_mention_discovery(catalogs, events_list)
+    if name_stubs:
+        entities_after = sum(len(v) for v in catalogs.values())
+        print(f"  Name-mention discovery created {name_stubs} stub(s); {entities_after} entities now")
 
     # Report if PC extraction was skipped due to consecutive failures (#149)
     if _pc_skipped_turns > 0:

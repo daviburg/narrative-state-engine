@@ -219,3 +219,17 @@ def test_single_turn_extraction_calls_dormancy():
         from semantic_extraction import extract_semantic_single
         extract_semantic_single("turn-001", "dm", "Test text", "session-test", "framework-test")
         mock_dormancy.assert_called_once()
+
+
+def test_dedup_normalize_map_in_merge_map():
+    """Turn-tagged IDs normalized during dedup pre-pass appear in merge_map."""
+    catalogs = {
+        "characters.json": [
+            _make_entity("char-shaman", "The Shaman", "turn-059"),
+            _make_entity("char-shaman-turn-082", "The Shaman", "turn-082"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    # The turn-tagged entity gets normalized + deduped; its old ID is in merge_map
+    assert "char-shaman-turn-082" in merge_map
+    assert merge_map["char-shaman-turn-082"] == "char-shaman"

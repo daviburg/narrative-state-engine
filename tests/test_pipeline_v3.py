@@ -10,6 +10,8 @@ from semantic_extraction import (
     _pc_partial_merge,
     _format_prior_entity_context,
     _post_batch_orphan_sweep,
+    _name_mention_discovery,
+    _normalize_entity_id,
     format_detail_prompt,
     _extract_turn_number,
     _extract_themes,
@@ -964,3 +966,220 @@ class TestPCCompactingIntegration:
         prompt_raw = format_detail_prompt(turn, pc_ref, pc_entry, arcs_data=None)
 
         assert len(prompt_compact) < len(prompt_raw)
+
+
+# ---------------------------------------------------------------------------
+# Type-specific orphan threshold tests (#185)
+# ---------------------------------------------------------------------------
+
+class TestOrphanThresholdByType:
+    """Post-batch orphan sweep uses type-specific reference thresholds."""
+
+    def _empty_catalogs(self):
+        return {
+            "characters.json": [],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+
+    def test_location_threshold_2(self):
+        """Location stubs are created at 2 event refs (not 3)."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["loc-mountain-pass"], "turn_id": "turn-200"},
+            {"id": "evt-2", "related_entities": ["loc-mountain-pass"], "turn_id": "turn-201"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 1
+        ids = {e["id"] for e in catalogs["locations.json"]}
+        assert "loc-mountain-pass" in ids
+
+    def test_faction_threshold_1(self):
+        """Faction stubs are created at 1 event ref."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["faction-ironwood-clan"], "turn_id": "turn-314"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 1
+        ids = {e["id"] for e in catalogs["factions.json"]}
+        assert "faction-ironwood-clan" in ids
+
+    def test_character_threshold_still_3(self):
+        """Characters still require 3 event refs (unchanged)."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["char-someone-new"], "turn_id": "turn-100"},
+            {"id": "evt-2", "related_entities": ["char-someone-new"], "turn_id": "turn-101"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 0
+
+    def test_location_below_threshold_skipped(self):
+        """Location with only 1 ref is not created (threshold is 2)."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "related_entities": ["loc-remote-cave"], "turn_id": "turn-100"},
+        ]
+        count = _post_batch_orphan_sweep(catalogs, events)
+        assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Entity ID turn-tag normalization tests (#185)
+# ---------------------------------------------------------------------------
+
+class TestNormalizeEntityId:
+    """Turn-tag suffix stripping via _normalize_entity_id."""
+
+    def test_strips_turn_tag_when_canonical_exists(self):
+        known = {"char-shaman"}
+        assert _normalize_entity_id("char-shaman-turn-082", known) == "char-shaman"
+
+    def test_strips_turn_tag_when_neither_form_known(self):
+        known = {"char-other"}
+        assert _normalize_entity_id("char-shaman-turn-082", known) == "char-shaman"
+
+    def test_keeps_turn_tag_when_tagged_form_is_known(self):
+        known = {"char-shaman-turn-082"}
+        assert _normalize_entity_id("char-shaman-turn-082", known) == "char-shaman-turn-082"
+
+    def test_no_change_without_turn_tag(self):
+        known = {"char-kael"}
+        assert _normalize_entity_id("char-kael", known) == "char-kael"
+
+    def test_no_change_for_short_turn_numbers(self):
+        """Suffix must have 3+ digits to match (turn-01 should NOT match)."""
+        known = set()
+        assert _normalize_entity_id("char-foo-turn-01", known) == "char-foo-turn-01"
+
+
+# ---------------------------------------------------------------------------
+# Name-mention discovery tests (#185)
+# ---------------------------------------------------------------------------
+
+class TestNameMentionDiscovery:
+    """Name-mention discovery creates stubs for proper names in event descriptions."""
+
+    def _empty_catalogs(self):
+        return {
+            "characters.json": [],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+
+    def test_creates_stub_for_named_character(self):
+        """A proper name appearing in 2+ event descriptions gets a stub."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "description": "Borin works the kiln.", "turn_id": "turn-178",
+             "related_entities": []},
+            {"id": "evt-2", "description": "Borin fires the clay pot.", "turn_id": "turn-210",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 1
+        ids = {e["id"] for e in catalogs["characters.json"]}
+        assert "char-borin" in ids
+
+    def test_skips_name_below_threshold(self):
+        """A name appearing in only 1 event is not stubbed."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "description": "Borin works the kiln.", "turn_id": "turn-178",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 0
+
+    def test_skips_known_entity_name(self):
+        """A name already in catalogs is not stubbed again."""
+        catalogs = self._empty_catalogs()
+        catalogs["characters.json"].append(
+            {"id": "char-borin", "name": "Borin", "type": "character"}
+        )
+        events = [
+            {"id": "evt-1", "description": "Borin works the kiln.", "turn_id": "turn-178",
+             "related_entities": []},
+            {"id": "evt-2", "description": "Borin fires clay.", "turn_id": "turn-210",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 0
+
+    def test_skips_generic_stems(self):
+        """Words in _GENERIC_STEMS are not stubbed even if capitalized and frequent."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "description": "The Stranger approaches.", "turn_id": "turn-100",
+             "related_entities": []},
+            {"id": "evt-2", "description": "Stranger speaks cryptically.", "turn_id": "turn-101",
+             "related_entities": []},
+            {"id": "evt-3", "description": "The Stranger departs.", "turn_id": "turn-102",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 0
+
+    def test_elder_lyra_discovered(self):
+        """Elder Lyra gets discovered when mentioned by name in event descriptions."""
+        catalogs = self._empty_catalogs()
+        catalogs["characters.json"].append(
+            {"id": "char-elder-figure-by-fire", "name": "The Elder", "type": "character"}
+        )
+        events = [
+            {"id": "evt-1", "description": "Elder Lyra speaks to the council.", "turn_id": "turn-314",
+             "related_entities": ["char-elder-figure-by-fire"]},
+            {"id": "evt-2", "description": "Lyra examines the records.", "turn_id": "turn-320",
+             "related_entities": []},
+            {"id": "evt-3", "description": "Lyra and the shaman discuss rituals.", "turn_id": "turn-322",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 1
+        ids = {e["id"] for e in catalogs["characters.json"]}
+        assert "char-lyra" in ids
+
+    def test_does_not_create_duplicate_id(self):
+        """If char-lyra already exists, no duplicate is created."""
+        catalogs = self._empty_catalogs()
+        catalogs["characters.json"].append(
+            {"id": "char-lyra", "name": "Lyra", "type": "character"}
+        )
+        events = [
+            {"id": "evt-1", "description": "Lyra speaks.", "turn_id": "turn-314",
+             "related_entities": []},
+            {"id": "evt-2", "description": "Lyra examines.", "turn_id": "turn-320",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 0
+
+    def test_first_seen_turn_set_correctly(self):
+        """Stub's first_seen_turn reflects the earliest event mention."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-2", "description": "Borin fires clay.", "turn_id": "turn-210",
+             "related_entities": []},
+            {"id": "evt-1", "description": "Borin works the kiln.", "turn_id": "turn-178",
+             "related_entities": []},
+        ]
+        _name_mention_discovery(catalogs, events)
+        stub = catalogs["characters.json"][0]
+        assert stub["first_seen_turn"] == "turn-178"
+
+    def test_stopwords_not_stubbed(self):
+        """Common English words appearing capitalized at sentence start are not stubbed."""
+        catalogs = self._empty_catalogs()
+        events = [
+            {"id": "evt-1", "description": "Through the forest they ran.", "turn_id": "turn-100",
+             "related_entities": []},
+            {"id": "evt-2", "description": "Through the valley they marched.", "turn_id": "turn-101",
+             "related_entities": []},
+            {"id": "evt-3", "description": "Through the gate.", "turn_id": "turn-102",
+             "related_entities": []},
+        ]
+        count = _name_mention_discovery(catalogs, events)
+        assert count == 0
