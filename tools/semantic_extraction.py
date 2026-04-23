@@ -527,6 +527,77 @@ def _validate_entity(entity_data: dict) -> bool:
         return False
 
 
+# Valid event types from event.schema.json / event-extractor template
+_VALID_EVENT_TYPES = {
+    "birth", "death", "arrival", "departure", "construction", "decision",
+    "encounter", "recruitment", "discovery", "anomaly", "capture", "trap",
+    "ritual", "healing", "communication", "examination", "release",
+    "offering", "other",
+}
+
+# Map of invalid type values → nearest valid type
+_EVENT_TYPE_REMAP: dict[str, str] = {
+    "acquisition": "discovery",
+    "trade": "offering",
+    "purchase": "offering",
+    "sale": "offering",
+    "injury": "other",
+    "conflict": "encounter",
+    "combat": "encounter",
+    "negotiation": "decision",
+    "exploration": "discovery",
+    "investigation": "examination",
+    "rest": "other",
+    "travel": "arrival",
+    "reward": "other",
+    "quest": "other",
+    "interaction": "encounter",
+    "observation": "examination",
+    "transformation": "other",
+}
+
+
+def _coerce_event_fields(event: dict) -> dict | None:
+    """Coerce invalid event field values to schema-valid equivalents.
+
+    Currently handles: type remapping for invalid enum values.
+    If type cannot be remapped to a valid value, falls back to 'other'.
+    Returns None for non-dict events (caller should skip them).
+    """
+    if not isinstance(event, dict):
+        print(
+            f"  COERCE: non-dict event {event!r} → skipped",
+            file=sys.stderr,
+        )
+        return None
+
+    event_type = event.get("type")
+    if event_type is None:
+        return event
+
+    if not isinstance(event_type, str):
+        print(
+            f"  COERCE: non-string event type {event_type!r} → 'other'",
+            file=sys.stderr,
+        )
+        event["type"] = "other"
+        return event
+
+    normalized_type = event_type.strip().lower()
+    if normalized_type in _VALID_EVENT_TYPES:
+        if normalized_type != event_type:
+            event["type"] = normalized_type
+        return event
+
+    remapped = _EVENT_TYPE_REMAP.get(normalized_type, "other")
+    print(
+        f"  COERCE: event type '{event_type}' → '{remapped}'",
+        file=sys.stderr,
+    )
+    event["type"] = remapped
+    return event
+
+
 def _validate_event(event_data: dict) -> bool:
     """Validate an event dict against event.schema.json. Returns True if valid."""
     schema = _load_schema("event.schema.json")
@@ -1497,7 +1568,7 @@ def extract_and_merge(
                     normalize_entity_id(eid, known_ids) for eid in related
                 ]
 
-        valid_events = [e for e in new_events if _validate_event(e)]
+        valid_events = [e for e in (_coerce_event_fields(ev) for ev in new_events) if e is not None and _validate_event(e)]
 
         # --- Phase 2: Create stub entities for orphan IDs (#106) ---
         if valid_events:
