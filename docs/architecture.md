@@ -100,7 +100,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - Prompt templates in `templates/extraction/` define each agent's behavior
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`; includes per-pair relationship consolidation, `_dedup_relationships()` safety net (#183), and `cleanup_dangling_relationships()` to remove refs to non-existent entities (#184)
-- `tools/llm_client.py` provides a provider-agnostic LLM wrapper (OpenAI, Ollama, etc.)
+- `tools/llm_client.py` provides a provider-agnostic LLM wrapper (OpenAI, Ollama, Google Gemini, etc.)
 - `config/llm.json` configures the LLM provider, model, and endpoint
 - All extracted entities are validated against `schemas/entity.schema.json` before merging
 - Entities below a confidence threshold are logged but not cataloged
@@ -166,7 +166,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |
 | `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
-| `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, etc.) |
+| `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, Google Gemini, etc.) |
 
 ---
 
