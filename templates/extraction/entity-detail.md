@@ -20,6 +20,7 @@ Return a single JSON object conforming to this V2 structure:
   - "condition": string — current physical/mental condition
   - "equipment": array of strings — currently carried/worn items
   - "location": string — current location
+  - "current_activity": string — what the entity is currently doing (prefer updating this key over creating new per-turn keys)
   - "last_updated_turn": string — set to the current turn ID
   - Additional fields allowed as needed.
 - "first_seen_turn": string — the turn ID when this entity was first seen (preserve from existing entry, or use current turn for new entities)

@@ -169,19 +169,22 @@ def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
             # Filter aliases (#214)
             aliases_attr = sa.get("aliases")
             if isinstance(aliases_attr, dict):
-                raw = aliases_attr.get("value", [])
-                if isinstance(raw, list):
-                    aliases_attr["value"] = _filter_pc_aliases(raw)
+                aliases_attr["value"] = _filter_pc_aliases(aliases_attr.get("value", []))
         # Prune volatile_state (#214)
         _prune_pc_volatile_state(entity)
         break
 
 
-def _filter_pc_aliases(aliases: list[str]) -> list[str]:
+def _filter_pc_aliases(aliases: list[str] | str) -> list[str]:
     """Remove invalid PC aliases: blocklisted words, too-short, common words (#214).
 
-    Returns the filtered list (capped at _PC_ALIAS_MAX_COUNT).
+    Accepts either a list of aliases or a comma-separated string and returns
+    a consistently filtered list (capped at _PC_ALIAS_MAX_COUNT).
     """
+    if isinstance(aliases, str):
+        aliases = [part.strip() for part in aliases.split(",") if part.strip()]
+    elif not isinstance(aliases, list):
+        aliases = []
     cleaned = []
     for alias in aliases:
         if not isinstance(alias, str) or not alias.strip():
@@ -216,7 +219,8 @@ def _prune_pc_volatile_state(pc_entity: dict) -> None:
     if len(non_core) > budget:
         # Keep only the last `budget` keys (insertion order ≈ recency in Python 3.7+)
         keep_keys = list(non_core.keys())[-budget:]
-        dropped = [k for k in non_core if k not in set(keep_keys)]
+        keep_set = set(keep_keys)
+        dropped = [k for k in non_core if k not in keep_set]
         non_core = {k: non_core[k] for k in keep_keys}
         print(
             f"  PRUNE: Removed {len(dropped)} stale volatile_state keys from PC "
