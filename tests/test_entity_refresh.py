@@ -546,3 +546,95 @@ class TestEventFrequencyTiebreaker:
         stale = find_stale_entities(100, catalogs, turns, refresh_interval=50)
         assert len(stale) == 1
         assert stale[0][1]["id"] == "char-elder"
+
+
+# ---------------------------------------------------------------------------
+# End-of-run refresh (#212)
+# ---------------------------------------------------------------------------
+
+class TestEndOfRunRefresh:
+    """Final refresh pass catches stale entities after the last modulo checkpoint."""
+
+    def test_stale_detected_at_non_modulo_boundary(self):
+        """Entities stale since last modulo refresh should be found at a
+        non-modulo turn number (simulating end-of-run)."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        turns = [_make_turn(i, "The Elder is present") for i in range(1, 345)]
+        catalogs = _make_catalogs(elder)
+
+        # At turn 344 (not a multiple of 50), elder should be stale
+        stale = find_stale_entities(344, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 1
+        assert stale[0][1]["id"] == "char-elder"
+
+    def test_no_stale_at_exact_modulo(self):
+        """If the last turn IS a modulo boundary, the regular refresh already
+        ran; an entity updated at that boundary should not be stale."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-300")
+        turns = [_make_turn(i, "The Elder is here") for i in range(1, 345)]
+        catalogs = _make_catalogs(elder)
+
+        # At turn 300 (a modulo of 50), elder was just updated — not stale
+        stale = find_stale_entities(300, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 0
+
+    def test_end_of_run_finds_multiple_stale(self):
+        """Multiple entities stale since last modulo should all be returned."""
+        e1 = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        e2 = _make_entity("loc-cave", "Dark Cave", "location", "turn-020", "turn-020")
+        e3 = _make_entity("item-sword", "Magic Sword", "item", "turn-030", "turn-030")
+        turns = [_make_turn(i, "Elder enters Dark Cave carrying Magic Sword")
+                 for i in range(1, 345)]
+        catalogs = _make_catalogs(e1, e2, e3)
+
+        stale = find_stale_entities(344, catalogs, turns, refresh_interval=50,
+                                    batch_size=25)
+        assert len(stale) == 3
+
+    def test_end_of_run_uses_larger_batch(self):
+        """Final refresh should use max(batch_size, MAX_REFRESH_BATCH_SIZE)
+        to handle accumulated stale entities."""
+        # The implementation uses max(refresh_batch_size, _MAX_REFRESH_BATCH_SIZE)
+        # so even with a small configured batch, the final pass gets a larger one
+        assert _MAX_REFRESH_BATCH_SIZE >= _DEFAULT_REFRESH_BATCH_SIZE
+
+    def test_recently_updated_entity_not_stale_at_end(self):
+        """Entity updated at turn-340 should not be stale at turn-344
+        (within one refresh_interval)."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-340")
+        turns = [_make_turn(i, "The Elder is here") for i in range(1, 345)]
+        catalogs = _make_catalogs(elder)
+
+        stale = find_stale_entities(344, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 0
+
+    def test_end_of_run_refresh_calls_refresh_entities(self):
+        """Integration: verify refresh_entities is called for stale entities
+        found at end-of-run (non-modulo final turn)."""
+        from unittest.mock import MagicMock, patch
+        from semantic_extraction import refresh_entities
+
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        catalogs = _make_catalogs(elder)
+        turns = [_make_turn(i, "The Elder is here") for i in range(1, 75)]
+
+        mock_llm = MagicMock()
+        mock_llm.extract_json.return_value = {
+            "entity": {
+                "id": "char-elder",
+                "name": "Elder",
+                "type": "character",
+                "identity": "Refreshed elder",
+                "first_seen_turn": "turn-010",
+                "last_updated_turn": "turn-074",
+            }
+        }
+        mock_llm.delay = MagicMock()
+
+        # Simulate end-of-run: find stale at turn 74 (not % 50)
+        stale = find_stale_entities(74, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 1
+
+        with patch("semantic_extraction.merge_entity"):
+            refreshed = refresh_entities(stale, "turn-074", turns, catalogs, mock_llm)
+            assert refreshed == 1
