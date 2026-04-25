@@ -1120,6 +1120,94 @@ def test_coerce_event_type_non_string_falls_back_to_other():
         assert result["type"] == "other"
 
 
+def test_relationship_type_coercion_known_phrase():
+    """'knowledge exchange' should map to 'mentorship' (#218)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "relationships": [{"target_id": "char-other", "type": "knowledge exchange",
+                           "current_relationship": "shares knowledge"}]
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["relationships"][0]["type"] == "mentorship"
+
+
+def test_relationship_type_coercion_unknown_fallback():
+    """Unknown relationship types should fall back to 'other' (#218)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "relationships": [{"target_id": "char-other", "type": "cosmic alignment",
+                           "current_relationship": "aligned"}]
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["relationships"][0]["type"] == "other"
+
+
+def test_relationship_type_valid_unchanged():
+    """Valid relationship types should not be modified (#218)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "relationships": [{"target_id": "char-other", "type": "social",
+                           "current_relationship": "friend"}]
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["relationships"][0]["type"] == "social"
+
+
+def test_stable_attributes_list_wrapped():
+    """List value in stable_attributes should be wrapped to attribute object (#219)."""
+    entity = {
+        "id": "char-player", "name": "PC", "type": "character",
+        "identity": "Player", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "stable_attributes": {
+            "aliases": ["Player Character"]  # raw list, not {value: [...]}
+        }
+    }
+    result = _coerce_entity_fields(entity)
+    attr = result["stable_attributes"]["aliases"]
+    assert isinstance(attr, dict)
+    assert attr["value"] == ["Player Character"]
+
+
+def test_stable_attributes_string_wrapped():
+    """String value in stable_attributes should be wrapped to attribute object (#219)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "stable_attributes": {
+            "race": "Elf"  # raw string, not {value: "Elf", ...}
+        }
+    }
+    result = _coerce_entity_fields(entity)
+    attr = result["stable_attributes"]["race"]
+    assert isinstance(attr, dict)
+    assert attr["value"] == "Elf"
+
+
+def test_stable_attributes_existing_object_unchanged():
+    """Properly shaped stable_attributes values should not be re-wrapped (#219)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "stable_attributes": {
+            "race": {"value": "Elf", "inference": False, "confidence": 1.0}
+        }
+    }
+    result = _coerce_entity_fields(entity)
+    attr = result["stable_attributes"]["race"]
+    assert attr["value"] == "Elf"
+    assert attr["inference"] is False
+    assert attr["confidence"] == 1.0
+
+
 def test_coerce_event_returns_none_for_non_dict():
     """Non-dict event items return None."""
     assert _coerce_event_fields(["not", "a", "dict"]) is None
