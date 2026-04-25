@@ -1159,6 +1159,33 @@ def test_relationship_type_valid_unchanged():
     assert result["relationships"][0]["type"] == "social"
 
 
+def test_relationship_type_coercion_trims_and_normalizes_case():
+    """Relationship types should be normalized for common LLM casing/whitespace variants."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "relationships": [{"target_id": "char-other", "type": " Social ",
+                           "current_relationship": "friend"}]
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["relationships"][0]["type"] == "social"
+
+
+def test_relationship_type_non_string_falls_back_to_other():
+    """Non-string relationship types should safely fall back to 'other'."""
+    for bad_type in (["social"], {"kind": "social"}, 123, None):
+        entity = {
+            "id": "char-test", "name": "Test", "type": "character",
+            "identity": "Test", "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+            "relationships": [{"target_id": "char-other", "type": bad_type,
+                               "current_relationship": "friend"}]
+        }
+        result = _coerce_entity_fields(entity)
+        assert result["relationships"][0]["type"] == "other"
+
+
 def test_stable_attributes_list_wrapped():
     """List value in stable_attributes should be wrapped to attribute object (#219)."""
     entity = {
@@ -1189,6 +1216,37 @@ def test_stable_attributes_string_wrapped():
     attr = result["stable_attributes"]["race"]
     assert isinstance(attr, dict)
     assert attr["value"] == "Elf"
+
+
+def test_stable_attributes_list_elements_coerced_to_str():
+    """Non-string list elements in stable_attributes should be coerced to str (#219)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "stable_attributes": {
+            "scores": [1, 2, 3]
+        }
+    }
+    result = _coerce_entity_fields(entity)
+    attr = result["stable_attributes"]["scores"]
+    assert isinstance(attr, dict)
+    assert attr["value"] == ["1", "2", "3"]
+
+
+def test_stable_attributes_wrapped_includes_source_turn():
+    """Wrapped stable_attributes should include source_turn when turn ID is valid (#219)."""
+    entity = {
+        "id": "char-test", "name": "Test", "type": "character",
+        "identity": "Test", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+        "stable_attributes": {
+            "race": "Elf"
+        }
+    }
+    result = _coerce_entity_fields(entity)
+    attr = result["stable_attributes"]["race"]
+    assert attr["source_turn"] == "turn-001"
 
 
 def test_stable_attributes_existing_object_unchanged():

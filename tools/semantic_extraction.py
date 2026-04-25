@@ -517,11 +517,19 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 continue  # handled above
             if not isinstance(v, dict):
                 # Wrap raw value (string, list, int, etc.) in attribute object
+                if isinstance(v, str):
+                    wrapped_value = v
+                elif isinstance(v, list):
+                    wrapped_value = [str(item) for item in v]
+                else:
+                    wrapped_value = str(v)
                 wrapped = {
-                    "value": v if isinstance(v, (str, list)) else str(v),
+                    "value": wrapped_value,
                     "inference": True,
                     "confidence": 0.5,
                 }
+                if has_valid_turn:
+                    wrapped["source_turn"] = turn_id
                 sa[k] = wrapped
                 print(f"  COERCE: stable_attributes.{k} was {type(v).__name__} — wrapped to attribute object", file=sys.stderr)
 
@@ -573,14 +581,23 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"}
     for rel in entity_data.get("relationships", []):
         rt = rel.get("type", "")
-        if rt and rt.lower() not in _VALID_REL_TYPES:
-            mapped = _REL_TYPE_MAP.get(rt.lower())
-            if mapped:
-                rel["type"] = mapped
-                print(f"  COERCE: relationship type '{rt}' → '{mapped}'", file=sys.stderr)
+        if isinstance(rt, str):
+            normalized_rt = rt.strip().lower()
+            if normalized_rt in _VALID_REL_TYPES:
+                mapped = normalized_rt
+            elif normalized_rt:
+                mapped = _REL_TYPE_MAP.get(normalized_rt, "other")
             else:
-                rel["type"] = "other"
+                mapped = "other"
+        else:
+            mapped = "other"
+
+        if rel.get("type") != mapped:
+            rel["type"] = mapped
+            if mapped == "other":
                 print(f"  COERCE: relationship type '{rt}' → 'other' (unmapped)", file=sys.stderr)
+            else:
+                print(f"  COERCE: relationship type '{rt}' → '{mapped}'", file=sys.stderr)
 
     return entity_data
 
