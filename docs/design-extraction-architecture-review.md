@@ -21,7 +21,7 @@ The problem has several properties that distinguish it from standard IE benchmar
 
 - **Narrative coreference is harder than newswire coreference.** The same character may be referred to as "the elder", "Fern", "the shaman", "the old woman", or simply implied by context. Fantasy names have no pretrained entity priors.
 - **The document is stateful.** A character captured in turn-007 is freed in turn-029. The extraction system must track state transitions, not just entity mentions.
-- **Scale is moderate for text but large for LLM call volume.** 345 turns × 4 agents = ~2,000 LLM calls minimum. This is a systems engineering problem, not a pure NLP problem.
+- **Scale is moderate for text but large for LLM call volume.** 345 turns × 4 agents gives a 1,380-call baseline, but entity detail extraction runs once per discovered entity per turn (not once per turn), pushing real runs above 2,000 calls before refresh and finalization passes. This is a systems engineering problem, not a pure NLP problem.
 - **Ground truth is sparse.** There is no labeled training set. Validation relies on curated ground-truth files and manual inspection.
 
 The closest analogues in the literature and in practice are:
@@ -63,8 +63,8 @@ Turn text (from transcript)
     ▼
     Coercion → Validation → Merge into in-memory catalogs
     │
-    ├── every 25 turns: checkpoint progress to extraction-progress.json
-    ├── every 50 turns: refresh stale entities (re-extract with recent context)
+    ├── every N turns (default 25, configurable): checkpoint progress + persist catalogs and events
+    ├── every M turns (default 50, configurable): refresh stale entities (re-extract with recent context)
     ├── end of run: final refresh pass + orphan sweep + dedup + name-mention discovery
     └── save catalogs to per-entity files + index.json
 ```
@@ -87,13 +87,13 @@ The entity discovery template sends a compact table of all known entities to the
 
 **Where it breaks (Qwen 14B, 8K context):**
 
-By turn 100, the known-entity table reaches ~2,900 tokens. Combined with the system prompt (~800 tokens) and turn text (~500–2,000 tokens), the total input exceeds 8,192 tokens. Evidence from Run 12: entity discovery found 27 new entities in turns 1–25 but zero new entities in turns 126–345 (see [templates exploration, issue #106](#) — 219 consecutive turns with no discovery). The model's output quality collapsed as the input exceeded its effective context window.
+By turn 100, the known-entity table reaches ~2,900 tokens. Combined with the system prompt (~800 tokens) and turn text (~500–2,000 tokens), the total input exceeds 8,192 tokens. Evidence from Run 12: entity discovery found 27 new entities in turns 1–25 but zero new entities in turns 126–345 (issue #106 — 219 consecutive turns with no discovery). The model's output quality collapsed as the input exceeded its effective context window.
 
 **Where it holds (Gemini 2.5 Flash, 1M context):**
 
 With a 1M-token context window, the known-entity table never becomes a constraint. Gemini continued discovering entities through turn 301. The failure mode was infrastructure (API quota exhaustion), not context.
 
-**Implication:** The pipeline's core loop — send all known entities every turn — works for large-context models but is structurally incompatible with models that have context windows under ~32K tokens (see [semantic_extraction.py `format_known_entities()`](../tools/semantic_extraction.py)).
+**Implication:** The pipeline's core loop — send all known entities every turn — works for large-context models but is structurally incompatible with models that have context windows under ~32K tokens (see [catalog_merger.py `format_known_entities()`](../tools/catalog_merger.py)).
 
 #### Assumption 2: Per-turn extraction accumulates accurately over 300+ turns
 
@@ -102,7 +102,7 @@ The pipeline processes each turn independently, merging results into a growing c
 **Where it breaks:**
 
 - **Coercion load scales with turns.** Run 12 (Qwen) logged 38 unique coercion types. Each coercion is an ad-hoc fix for a model output that doesn't match the schema. At 345 turns × ~3 entities per turn, the coercion layer processes ~1,000 entity responses. The coercion map in [semantic_extraction.py lines 340–430](../tools/semantic_extraction.py) contains ~50 remappings — evidence that the model's output format diverges significantly from the schema.
-- **Entity staleness is structural.** An entity first seen at turn-010 and not mentioned again until turn-300 has a 290-turn gap. The periodic refresh (every 50 turns) mitigates this but cannot prevent it — the refresh batch size (10–25 entities) is smaller than the number of entities that go stale. Run 12 (Gemini) showed 25 entities with 50+ turn staleness gaps at run end (see [run reports](#)).
+- **Entity staleness is structural.** An entity first seen at turn-010 and not mentioned again until turn-300 has a 290-turn gap. The periodic refresh (every 50 turns) mitigates this but cannot prevent it — the refresh batch size (10–25 entities) is smaller than the number of entities that go stale. Run 12 (Gemini) showed 25 entities with 50+ turn staleness gaps at run end.
 - **Relationship accumulation is quadratic in the worst case.** The `char-player` entity accumulated 37 relationships including 14 near-synonyms with a single NPC (documented in [design-catalog-v2.md](design-catalog-v2.md)). Per-pair consolidation (added post-V2) reduces this but depends on the LLM consistently using `current_relationship` rather than creating new entries.
 
 **Where it works:**
@@ -120,7 +120,7 @@ API quota exhaustion is not transient within a run. Turns 302–344 all failed a
 
 **Where it breaks (Qwen, progressive degradation):**
 
-PC extraction had a 100% validation failure rate across 62 attempts. This is not a transient failure — it is a systematic incompatibility between the PC's context size and the model's capability. The cooldown mechanism (skip 50 turns, retry 5) assumes the failure is temporary, but the PC's context only grows over time (see [run12 report — PC stalls at turn-054](../framework-local/test-report-run12.md)).
+PC extraction had a 100% validation failure rate across 62 attempts. This is not a transient failure — it is a systematic incompatibility between the PC's context size and the model's capability. The cooldown mechanism (skip 50 turns, retry 5) assumes the failure is temporary, but the PC's context only grows over time (Run 12 Qwen report: PC stalls at turn-054).
 
 ### 2.3 What the Pipeline Does Well
 
@@ -229,7 +229,7 @@ These are issues that can be addressed through targeted changes to existing code
 
 1. **Known-entity list context exhaustion (#221).** Replace full-roster forwarding in the discovery prompt with a tiered approach: full details for entities mentioned in recent turns (e.g., last 10), names-only for others, omit entities dormant for 50+ turns. This requires changes to `format_known_entities()` and the discovery template but not to the pipeline's sequential turn-processing model.
 
-2. **Checkpoint not persisting entity data (#220).** The checkpoint saves `extraction-progress.json` but catalogs are only written at the end of the run (or per segment). Adding a `save_catalogs()` call at each checkpoint interval is a localized fix.
+2. **Checkpoint entity persistence (#220).** This was a Run 12-era gap where checkpoints only saved `extraction-progress.json`, not catalogs. The current code now persists catalogs and events at each checkpoint interval and on error (`extract_semantic_batch()` calls `save_catalogs()` at each checkpoint). This issue is resolved in the current codebase.
 
 3. **API quota exhaustion (#211).** Adding quota-aware pacing (e.g., monitor 429 response frequency, insert delays, split runs across days) is an infrastructure improvement that doesn't change the extraction logic.
 
@@ -479,23 +479,23 @@ Turn text → Event extraction (no catalog context needed)
 
 | Claim | Source |
 |-------|--------|
-| Qwen: zero entities on disk after 24h run | [test-report-run12.md](../framework-local/test-report-run12.md) |
-| Qwen: zero new entities after turn 126 | [test-report-run12.md](../framework-local/test-report-run12.md), entity discovery counts by turn range |
-| Qwen: 100% PC validation failure (62 attempts) | [test-report-run12.md](../framework-local/test-report-run12.md) |
-| Qwen: 38 unique coercion types | [test-report-run12.md](../framework-local/test-report-run12.md) |
-| Qwen: 76 concept-prefix hallucinations | [test-report-run12.md](../framework-local/test-report-run12.md) |
+| Qwen: zero entities on disk after 24h run | Run 12 local model report (test-report-run12.md, untracked) |
+| Qwen: zero new entities after turn 126 | Run 12 local model report, entity discovery counts by turn range |
+| Qwen: 100% PC validation failure (62 attempts) | Run 12 local model report |
+| Qwen: 38 unique coercion types | Run 12 local model report |
+| Qwen: 76 concept-prefix hallucinations | Run 12 local model report |
 | Qwen: context exhaustion math (8K window) | System prompt ~800 + entities ~7,700 + turn ~500 > 8,192 |
-| Gemini: 210 entities, 404 events, zero parse failures | [test-report-run12-gemini.md](../framework-local/test-report-run12-gemini.md) |
-| Gemini: turns 302–344 zero output (quota exhaustion) | [test-report-run12-gemini.md](../framework-local/test-report-run12-gemini.md) |
-| Gemini: 5 named characters never extracted | [test-report-run12-gemini.md](../framework-local/test-report-run12-gemini.md) (Rune, Gorok, Chief Thorne, Elder Lyra, Maelis) |
-| Gemini: 10 false PC aliases | [test-report-run12-gemini.md](../framework-local/test-report-run12-gemini.md) |
-| Gemini: 25 stale entities at run end | [test-report-run12-gemini.md](../framework-local/test-report-run12-gemini.md) |
-| Gemini: $20.25 total cost | [test-report-run12-gemini.md](../framework-local/test-report-run12-gemini.md) |
+| Gemini: 210 entities, 404 events, zero parse failures | Run 12 cloud model report (test-report-run12-gemini.md, untracked) |
+| Gemini: turns 302–344 zero output (quota exhaustion) | Run 12 cloud model report |
+| Gemini: 5 named characters never extracted | Run 12 cloud model report (Rune, Gorok, Chief Thorne, Elder Lyra, Maelis) |
+| Gemini: 10 false PC aliases | Run 12 cloud model report |
+| Gemini: 25 stale entities at run end | Run 12 cloud model report |
+| Gemini: $20.25 total cost | Run 12 cloud model report |
 | char-player 37 relationships / 14 synonyms | [design-catalog-v2.md](design-catalog-v2.md) §2 |
 | char-player → char-young-hunter 14 separate entries | [design-catalog-v2.md](design-catalog-v2.md) §5 |
 | 50+ field-name coercion remaps | [semantic_extraction.py](../tools/semantic_extraction.py) lines 340–430 |
 | Four-agent pipeline design | [semantic-extraction-design.md](semantic-extraction-design.md) §4 |
-| Known-entity format: ID \| name \| type \| identity | [semantic_extraction.py](../tools/semantic_extraction.py) `format_known_entities()` |
+| Known-entity format: ID \| name \| type \| identity | [catalog_merger.py](../tools/catalog_merger.py) `format_known_entities()` |
 | Entity discovery stops finding entities (issue #106) | [design-entity-pipeline-v3.md](design-entity-pipeline-v3.md) |
 | Event extractor fabricates IDs (34 orphans / 53% of events) | [design-entity-pipeline-v3.md](design-entity-pipeline-v3.md), issue #108 |
 | Narrative is a state machine, not a story | [Extraction-Lessons.md](Extraction-Lessons.md) §1.1 |
