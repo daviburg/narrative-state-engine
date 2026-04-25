@@ -76,8 +76,11 @@ class TestExtractAndMergeLogRecord:
         assert log["discovery_error"] is None
         assert log["events_ok"] is True
         assert log["events_error"] is None
-        assert log["relationships_ok"] is True
+        # Only char-player is mentioned (<2 entities), so relationships phase is skipped
+        assert log["relationships_ok"] is None
         assert log["relationships_error"] is None
+        # PC extraction ran and succeeded
+        assert log["pc_ok"] is True
         assert isinstance(log["elapsed_ms"], int)
         assert log["elapsed_ms"] >= 0
         assert "timestamp" in log

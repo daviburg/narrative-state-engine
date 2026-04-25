@@ -8,12 +8,65 @@ via configurable base_url in config/llm.json.
 
 import json
 import os
+import random
 import re
+import sys
 import time
 
 
 class LLMExtractionError(Exception):
     """Raised when the LLM response cannot be parsed or validated."""
+
+
+class QuotaExhaustedError(LLMExtractionError):
+    """Raised when consecutive rate-limit (429) errors suggest daily quota exhaustion."""
+
+
+class RetryStats:
+    """Track API call statistics across an LLMClient session."""
+
+    def __init__(self):
+        self.total_requests = 0
+        self.successful_requests = 0
+        self.retried_requests = 0
+        self.errors_by_status: dict[int | str, int] = {}
+        self.retry_after_seen = 0
+        self.consecutive_rate_limits = 0
+        self._max_consecutive_rate_limits = 0
+
+    def record_success(self):
+        self.total_requests += 1
+        self.successful_requests += 1
+        self.consecutive_rate_limits = 0
+
+    def record_error(self, status_code: int | str | None, retry_after_present: bool = False):
+        self.total_requests += 1
+        key = status_code if status_code is not None else "unknown"
+        self.errors_by_status[key] = self.errors_by_status.get(key, 0) + 1
+        if retry_after_present:
+            self.retry_after_seen += 1
+        if key == 429:
+            self.consecutive_rate_limits += 1
+            self._max_consecutive_rate_limits = max(
+                self._max_consecutive_rate_limits, self.consecutive_rate_limits)
+        else:
+            self.consecutive_rate_limits = 0
+
+    def record_retry(self):
+        self.retried_requests += 1
+
+    def summary(self) -> dict:
+        return {
+            "total_requests": self.total_requests,
+            "successful_requests": self.successful_requests,
+            "retried_requests": self.retried_requests,
+            "error_breakdown": dict(self.errors_by_status),
+            "retry_after_headers_seen": self.retry_after_seen,
+            "max_consecutive_rate_limits": self._max_consecutive_rate_limits,
+        }
+
+    def has_errors(self) -> bool:
+        return bool(self.errors_by_status)
 
 
 class LLMClient:
@@ -44,10 +97,14 @@ class LLMClient:
                     f"Set it or configure a local provider in {config_path}."
                 )
 
+        # Disable SDK-level retries — we handle retries ourselves to avoid
+        # the SDK's max_retries (default 2) multiplying with our retry_attempts,
+        # which caused up to 9 attempts per call and wasted quota (#215).
         self.client = OpenAI(
             base_url=self.config.get("base_url", "https://api.openai.com/v1"),
             api_key=api_key or "not-needed",
             timeout=self.config.get("timeout_seconds", 60),
+            max_retries=0,
         )
         self.model = self.config.get("model", "gpt-4o")
         self.temperature = self.config.get("temperature", 0.0)
@@ -58,6 +115,9 @@ class LLMClient:
         self.default_timeout = self.config.get("timeout_seconds", 60)
         self.context_length = self.config.get("context_length", None)
         self.ollama_options = self.config.get("ollama_options", None)
+        self.consecutive_rate_limit_threshold = self.config.get(
+            "consecutive_rate_limit_threshold", 10)
+        self.stats = RetryStats()
 
     @property
     def _is_ollama(self) -> bool:
@@ -67,6 +127,86 @@ class LLMClient:
             self.config.get("provider", "").lower() == "ollama"
             or ":11434" in base_url
         )
+
+    @property
+    def _is_cloud_provider(self) -> bool:
+        """True when the configured provider appears to be a cloud API."""
+        if self._is_ollama:
+            return False
+        base_url = self.config.get("base_url", "")
+        return not any(local in base_url for local in [
+            "localhost", "127.0.0.1", "0.0.0.0", "[::1]",
+        ])
+
+    @staticmethod
+    def _classify_error(e: Exception) -> tuple[int | None, float | None]:
+        """Classify an API error and extract retry timing.
+
+        Returns:
+            (status_code, retry_after_seconds) where either can be None.
+        """
+        status_code = getattr(e, "status_code", None)
+        retry_after = None
+
+        response = getattr(e, "response", None)
+        if response is not None:
+            headers = getattr(response, "headers", {})
+            # Check for Retry-After header (seconds)
+            ra = headers.get("retry-after")
+            if ra is not None:
+                try:
+                    retry_after = float(ra)
+                except (ValueError, TypeError):
+                    pass  # Non-numeric Retry-After (e.g. HTTP-date); ignore
+            # Check for retry-after-ms header (milliseconds)
+            ra_ms = headers.get("retry-after-ms")
+            if ra_ms is not None and retry_after is None:
+                try:
+                    retry_after = float(ra_ms) / 1000.0
+                except (ValueError, TypeError):
+                    pass  # Non-numeric retry-after-ms; ignore
+
+        # Detect RESOURCE_EXHAUSTED in message body as a 429 equivalent
+        if status_code is None and "RESOURCE_EXHAUSTED" in str(e):
+            status_code = 429
+
+        return status_code, retry_after
+
+    def _handle_retry(self, attempt: int, e: Exception, context: str = "") -> None:
+        """Classify error, record stats, compute backoff, and sleep.
+
+        Raises QuotaExhaustedError if consecutive rate limits exceed threshold.
+        """
+        status_code, retry_after = self._classify_error(e)
+        has_retry_after = retry_after is not None
+        self.stats.record_error(status_code, has_retry_after)
+
+        # Log rate-limit errors with Retry-After visibility (#215)
+        if status_code == 429:
+            ra_msg = f"Retry-After: {retry_after:.1f}s" if has_retry_after else "no Retry-After header"
+            print(f"  Rate limited (429), {ra_msg}{context}", file=sys.stderr)
+
+            if self.stats.consecutive_rate_limits >= self.consecutive_rate_limit_threshold:
+                raise QuotaExhaustedError(
+                    f"Quota appears exhausted: {self.stats.consecutive_rate_limits} "
+                    f"consecutive 429 errors. Stopping to avoid wasting requests."
+                ) from e
+        elif status_code in (503, 504):
+            print(
+                f"  Server error ({status_code}), retrying{context}",
+                file=sys.stderr,
+            )
+
+        if attempt < self.retry_attempts - 1:
+            self.stats.record_retry()
+            if retry_after is not None and retry_after <= 60:
+                backoff = retry_after
+            else:
+                backoff = min((2 ** attempt) * 1.0, 60.0)
+            # Add jitter for cloud providers to avoid thundering herd
+            if self._is_cloud_provider:
+                backoff += random.uniform(0, 1)
+            time.sleep(backoff)
 
     def extract_json(
         self,
@@ -137,13 +277,12 @@ class LLMClient:
                     import jsonschema
                     jsonschema.validate(parsed, schema)
 
+                self.stats.record_success()
                 return parsed
 
             except Exception as e:
                 last_error = e
-                if attempt < self.retry_attempts - 1:
-                    backoff = (2 ** attempt) * 1.0
-                    time.sleep(backoff)
+                self._handle_retry(attempt, e)
 
         raise LLMExtractionError(
             f"Failed after {self.retry_attempts} attempts. Last error: {last_error}"
@@ -219,19 +358,25 @@ class LLMClient:
                 if not raw_text:
                     raise LLMExtractionError("Empty response from LLM.")
 
+                self.stats.record_success()
                 return raw_text.strip()
 
             except Exception as e:
                 last_error = e
-                if attempt < self.retry_attempts - 1:
-                    backoff = (2 ** attempt) * 1.0
-                    time.sleep(backoff)
+                self._handle_retry(attempt, e)
 
         raise LLMExtractionError(
             f"Failed after {self.retry_attempts} attempts. Last error: {last_error}"
         )
 
     def delay(self) -> None:
-        """Apply the configured batch delay between API calls."""
-        if self.batch_delay_ms > 0:
-            time.sleep(self.batch_delay_ms / 1000.0)
+        """Apply the configured batch delay between API calls.
+
+        For cloud providers, enforces a minimum delay of 2000ms to avoid
+        hitting per-minute rate limits (#215).
+        """
+        delay_ms = self.batch_delay_ms
+        if self._is_cloud_provider:
+            delay_ms = max(delay_ms, 2000)
+        if delay_ms > 0:
+            time.sleep(delay_ms / 1000.0)
