@@ -8,7 +8,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 from semantic_extraction import (
     _filter_pc_aliases,
     _prune_pc_volatile_state,
-    _PC_ALIAS_MIN_LENGTH,
     _PC_ALIAS_MAX_COUNT,
     _PC_VOLATILE_STATE_MAX_KEYS,
     _PC_VOLATILE_STATE_CORE_KEYS,
