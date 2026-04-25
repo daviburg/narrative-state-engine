@@ -3,9 +3,9 @@
 import json
 import os
 import sys
+from pathlib import Path
 
-import pytest
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -172,7 +172,7 @@ class TestExtractionLogFile:
         log_path = os.path.join(framework_dir, "extraction-log.jsonl")
         assert os.path.isfile(log_path), "extraction-log.jsonl not created"
 
-        lines = open(log_path, "r", encoding="utf-8").read().strip().splitlines()
+        lines = Path(log_path).read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 3
 
         for i, line in enumerate(lines):
@@ -273,7 +273,7 @@ class TestExtractionLogFile:
         )
 
         log_path = os.path.join(framework_dir, "extraction-log.jsonl")
-        lines = open(log_path, "r", encoding="utf-8").read().strip().splitlines()
+        lines = Path(log_path).read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 3
 
         # Second turn should record the failure
@@ -330,7 +330,7 @@ class TestExtractionLogFile:
         )
 
         log_path = os.path.join(framework_dir, "extraction-log.jsonl")
-        lines = open(log_path, "r", encoding="utf-8").read().strip().splitlines()
+        lines = Path(log_path).read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 3
 
         # Second turn crashed — log record should indicate failure
@@ -351,7 +351,7 @@ class TestWriteExtractionLogHelper:
         se._write_extraction_log(log_path, record1)
         se._write_extraction_log(log_path, record2)
 
-        lines = open(log_path, "r", encoding="utf-8").read().strip().splitlines()
+        lines = Path(log_path).read_text(encoding="utf-8").strip().splitlines()
         assert len(lines) == 2
         assert json.loads(lines[0])["turn_id"] == "turn-001"
         assert json.loads(lines[1])["turn_id"] == "turn-002"
