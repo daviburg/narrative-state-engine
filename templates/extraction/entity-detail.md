@@ -36,6 +36,7 @@ MERGE RULES:
 - ALWAYS update "current_status" with what the entity is doing/experiencing in this turn.
 - For "stable_attributes": add new traits, update changed traits (with new source_turn). Never remove traits unless explicitly contradicted.
 - For "volatile_state": overwrite with current state. This is a snapshot, not a history.
+  For volatile_state, reuse existing keys where possible. Do not create new keys for transient actions — update `current_activity` instead. The following core keys should always be present when applicable: condition, equipment, location.
 
 Rules:
 - Only include information supported by the provided turn text and existing entry.
