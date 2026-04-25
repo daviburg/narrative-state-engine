@@ -130,6 +130,93 @@ class LLMClient:
         )
 
     @property
+    def _use_ollama_streaming(self) -> bool:
+        """True when we should use Ollama's native streaming API.
+
+        Streaming via the native ``/api/chat`` endpoint avoids the
+        non-streaming hang that occurs with qwen3.5 thinking-mode models
+        when ``format=json`` or ``response_format`` is used through the
+        OpenAI-compatible ``/v1`` endpoint.
+        """
+        return self._is_ollama and bool(self.ollama_format)
+
+    @property
+    def _ollama_native_url(self) -> str:
+        """Derive the Ollama native chat endpoint from the configured base_url."""
+        base = self.config.get("base_url", "http://localhost:11434/v1")
+        # Strip /v1 suffix to get Ollama root, then append /api/chat
+        if base.rstrip("/").endswith("/v1"):
+            base = base.rstrip("/")[:-3]
+        return base.rstrip("/") + "/api/chat"
+
+    def _ollama_streaming_chat(
+        self,
+        messages: list[dict],
+        max_tokens: int | None = None,
+        timeout: int | None = None,
+    ) -> str:
+        """Call Ollama's native /api/chat with streaming.
+
+        Returns the assembled visible content (with <think> blocks stripped).
+        Raises LLMExtractionError on empty response or timeout.
+        """
+        import httpx
+
+        body: dict = {
+            "model": self.model,
+            "messages": messages,
+            "stream": True,
+            "options": {
+                "temperature": self.temperature,
+                "num_predict": max_tokens or self.max_tokens,
+            },
+        }
+        if self.context_length:
+            body["options"]["num_ctx"] = self.context_length
+        if self.ollama_options:
+            body["options"].update(self.ollama_options)
+        if self.ollama_format:
+            body["format"] = self.ollama_format
+
+        effective_timeout = timeout or self.default_timeout
+        # Allow generous read timeout — streaming sends chunks continuously
+        # so the read timeout is per-chunk, not total.
+        httpx_timeout = httpx.Timeout(
+            connect=10.0,
+            read=float(effective_timeout),
+            write=10.0,
+            pool=10.0,
+        )
+
+        content_parts: list[str] = []
+        start = time.time()
+        hard_limit = effective_timeout * 3  # total wall-clock limit
+
+        with httpx.stream(
+            "POST", self._ollama_native_url, json=body, timeout=httpx_timeout,
+        ) as resp:
+            for line in resp.iter_lines():
+                if time.time() - start > hard_limit:
+                    break
+                if not line.strip():
+                    continue
+                try:
+                    chunk = json.loads(line)
+                except json.JSONDecodeError:
+                    continue
+                if chunk.get("done"):
+                    break
+                msg = chunk.get("message", {})
+                part = msg.get("content", "")
+                if part:
+                    content_parts.append(part)
+
+        raw = "".join(content_parts)
+        if not raw:
+            raise LLMExtractionError("Empty response from LLM.")
+        return raw
+
+    @property
     def _skip_response_format(self) -> bool:
         """True when response_format should be omitted (e.g. qwen3.5 on Ollama)."""
         if self.config.get("skip_response_format"):
@@ -253,39 +340,45 @@ class LLMClient:
         last_error = None
         for attempt in range(self.retry_attempts):
             try:
-                kwargs = {
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": self.temperature,
-                    "max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
-                }
-                # Ollama hangs when response_format=json_object is used with
-                # qwen3.5 models (thinking-mode conflict).  Skip it for those.
-                if not self._skip_response_format:
-                    kwargs["response_format"] = {"type": "json_object"}
-                if timeout is not None:
-                    kwargs["timeout"] = timeout
-                if self._is_ollama:
-                    options = dict(self.ollama_options) if self.ollama_options else {}
-                    if self.context_length:
-                        options["num_ctx"] = self.context_length
-                    extra_body: dict = {}
-                    if options:
-                        extra_body["options"] = options
-                    # Ollama native format parameter — distinct from OpenAI
-                    # response_format.  Use "json" to constrain output to
-                    # valid JSON without the thinking-mode hang seen with
-                    # response_format on qwen3.5 models.
-                    if self.ollama_format:
-                        extra_body["format"] = self.ollama_format
-                    if extra_body:
-                        kwargs["extra_body"] = extra_body
+                effective_max = max_tokens if max_tokens is not None else self.max_tokens
 
-                response = self.client.chat.completions.create(**kwargs)
-                raw_text = response.choices[0].message.content
+                # Ollama streaming path — uses native /api/chat with
+                # format=json to avoid the non-streaming empty-response
+                # problem on thinking-mode models (qwen3.5).
+                if self._use_ollama_streaming:
+                    raw_text = self._ollama_streaming_chat(
+                        messages, max_tokens=effective_max, timeout=timeout,
+                    )
+                else:
+                    kwargs = {
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": self.temperature,
+                        "max_tokens": effective_max,
+                    }
+                    # Ollama hangs when response_format=json_object is used with
+                    # qwen3.5 models (thinking-mode conflict).  Skip it for those.
+                    if not self._skip_response_format:
+                        kwargs["response_format"] = {"type": "json_object"}
+                    if timeout is not None:
+                        kwargs["timeout"] = timeout
+                    if self._is_ollama:
+                        options = dict(self.ollama_options) if self.ollama_options else {}
+                        if self.context_length:
+                            options["num_ctx"] = self.context_length
+                        extra_body: dict = {}
+                        if options:
+                            extra_body["options"] = options
+                        if self.ollama_format:
+                            extra_body["format"] = self.ollama_format
+                        if extra_body:
+                            kwargs["extra_body"] = extra_body
 
-                if not raw_text:
-                    raise LLMExtractionError("Empty response from LLM.")
+                    response = self.client.chat.completions.create(**kwargs)
+                    raw_text = response.choices[0].message.content
+
+                    if not raw_text:
+                        raise LLMExtractionError("Empty response from LLM.")
 
                 parsed = self._parse_json_response(raw_text)
 
@@ -363,31 +456,36 @@ class LLMClient:
         last_error = None
         for attempt in range(self.retry_attempts):
             try:
-                kwargs = {
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": self.temperature,
-                    "max_tokens": self.max_tokens,
-                }
-                if timeout is not None:
-                    kwargs["timeout"] = timeout
-                if self._is_ollama:
-                    options = dict(self.ollama_options) if self.ollama_options else {}
-                    if self.context_length:
-                        options["num_ctx"] = self.context_length
-                    extra_body_raw: dict = {}
-                    if options:
-                        extra_body_raw["options"] = options
-                    if self.ollama_format:
-                        extra_body_raw["format"] = self.ollama_format
-                    if extra_body_raw:
-                        kwargs["extra_body"] = extra_body_raw
+                if self._use_ollama_streaming:
+                    raw_text = self._ollama_streaming_chat(
+                        messages, timeout=timeout,
+                    )
+                else:
+                    kwargs = {
+                        "model": self.model,
+                        "messages": messages,
+                        "temperature": self.temperature,
+                        "max_tokens": self.max_tokens,
+                    }
+                    if timeout is not None:
+                        kwargs["timeout"] = timeout
+                    if self._is_ollama:
+                        options = dict(self.ollama_options) if self.ollama_options else {}
+                        if self.context_length:
+                            options["num_ctx"] = self.context_length
+                        extra_body_raw: dict = {}
+                        if options:
+                            extra_body_raw["options"] = options
+                        if self.ollama_format:
+                            extra_body_raw["format"] = self.ollama_format
+                        if extra_body_raw:
+                            kwargs["extra_body"] = extra_body_raw
 
-                response = self.client.chat.completions.create(**kwargs)
-                raw_text = response.choices[0].message.content
+                    response = self.client.chat.completions.create(**kwargs)
+                    raw_text = response.choices[0].message.content
 
-                if not raw_text:
-                    raise LLMExtractionError("Empty response from LLM.")
+                    if not raw_text:
+                        raise LLMExtractionError("Empty response from LLM.")
 
                 self.stats.record_success()
                 return raw_text.strip()
