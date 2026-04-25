@@ -24,6 +24,7 @@ from catalog_merger import (
     save_catalogs,
     save_events,
     format_known_entities,
+    format_known_entities_bounded,
     find_entity_by_id,
     merge_entity,
     merge_relationships,
@@ -1555,7 +1556,18 @@ def extract_and_merge(
 
     # --- 1. Entity Discovery ---
     turn_failed = False
-    known = format_known_entities(catalogs)
+    current_turn_num = _parse_turn_number(turn_id)
+    _ctx_len = getattr(llm, "context_length", None)
+    if not isinstance(_ctx_len, int):
+        _ctx_len = None
+    _cfg = getattr(llm, "config", None)
+    _entity_budget = _cfg.get("entity_context_budget") if isinstance(_cfg, dict) else None
+    known = format_known_entities_bounded(
+        catalogs,
+        current_turn=current_turn_num,
+        context_length=_ctx_len,
+        entity_context_budget=_entity_budget,
+    )
     try:
         discovery_result = llm.extract_json(
             system_prompt=load_template("entity-discovery"),

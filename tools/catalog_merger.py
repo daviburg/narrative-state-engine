@@ -235,6 +235,145 @@ def format_known_entities(catalogs: dict) -> str:
     return "\n".join(lines)
 
 
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate: ~4 characters per token."""
+    return max(1, len(text) // 4)
+
+
+def _format_entity_full(entity: dict) -> str:
+    """Format a single entity with full detail (ID, name, type, identity, aliases)."""
+    desc = entity.get("identity", "")
+    aliases = ""
+    sa = entity.get("stable_attributes", {}).get("aliases")
+    if sa:
+        val = sa.get("value", "") if isinstance(sa, dict) else sa
+        if isinstance(val, list):
+            aliases = ", ".join(val)
+        else:
+            aliases = str(val)
+    extra = ""
+    if desc:
+        extra += f" — {desc}"
+    if aliases:
+        extra += f" (aliases: {aliases})"
+    return f"{entity['id']} | {entity['name']} | {entity['type']}{extra}"
+
+
+def _format_entity_brief(entity: dict) -> str:
+    """Format a single entity with minimal detail (ID, name, type only)."""
+    return f"{entity['id']} | {entity['name']} | {entity['type']}"
+
+
+# Default number of recent turns for which entities get full detail
+_DEFAULT_RECENCY_WINDOW = 10
+
+# Default fraction of context_length allocated to the entity list
+_DEFAULT_ENTITY_BUDGET_FRACTION = 0.25
+
+
+def format_known_entities_bounded(
+    catalogs: dict,
+    *,
+    current_turn: int | None = None,
+    context_length: int | None = None,
+    entity_context_budget: int | None = None,
+    recency_window: int | None = None,
+) -> str:
+    """Format known entities with a configurable token budget.
+
+    Entities active within *recency_window* turns get full detail (identity +
+    aliases).  Remaining entities get a brief format (ID | name | type).  If
+    the result still exceeds the budget, dormant entities are omitted and a
+    note is appended.
+
+    When no budget constraint applies (budget is None / large enough, or there
+    are few entities), this produces the same output as
+    ``format_known_entities()``.
+
+    Args:
+        catalogs: Dict keyed by catalog filename → list of entity dicts.
+        current_turn: The numeric turn being processed (e.g. 150 for
+            ``turn-150``).  Used to determine recency.  If ``None``, all
+            entities are treated as recent.
+        context_length: The model's total context window in tokens.  Used to
+            derive a default budget when *entity_context_budget* is not set.
+        entity_context_budget: Explicit token budget for the entity section.
+            Overrides the fraction-based default.
+        recency_window: Number of recent turns for which entities get full
+            detail.  Defaults to ``_DEFAULT_RECENCY_WINDOW``.
+
+    Returns:
+        Formatted entity list string, possibly with a truncation note.
+    """
+    if recency_window is None:
+        recency_window = _DEFAULT_RECENCY_WINDOW
+
+    # Derive budget
+    budget: int | None = entity_context_budget
+    if budget is None and context_length is not None:
+        budget = int(context_length * _DEFAULT_ENTITY_BUDGET_FRACTION)
+
+    # Flatten all entities
+    all_entities: list[dict] = []
+    for entities in catalogs.values():
+        all_entities.extend(entities)
+
+    if not all_entities:
+        return "(none — empty catalog)"
+
+    # If no budget or very few entities, fall back to unbounded format
+    if budget is None:
+        return format_known_entities(catalogs)
+
+    # Partition into recent vs dormant based on last_updated_turn
+    recent: list[dict] = []
+    dormant: list[dict] = []
+    for entity in all_entities:
+        turn_num = _parse_turn_number(entity.get("last_updated_turn"))
+        if current_turn is None or turn_num is None:
+            # If we can't determine recency, treat as recent (safe default)
+            recent.append(entity)
+        elif current_turn - turn_num <= recency_window:
+            recent.append(entity)
+        else:
+            dormant.append(entity)
+
+    # Sort dormant by last_updated_turn descending so most-recently-seen
+    # are added first when budget allows
+    dormant.sort(
+        key=lambda e: _parse_turn_number(e.get("last_updated_turn")) or 0,
+        reverse=True,
+    )
+
+    # Phase 1: Recent entities always get full detail
+    lines: list[str] = [_format_entity_full(e) for e in recent]
+    used = _estimate_tokens("\n".join(lines)) if lines else 0
+
+    # Phase 2: Add dormant entities in brief format while within budget
+    omitted = 0
+    for entity in dormant:
+        line = _format_entity_brief(entity)
+        line_cost = _estimate_tokens(line + "\n")
+        if used + line_cost <= budget:
+            lines.append(line)
+            used += line_cost
+        else:
+            omitted += 1
+
+    result = "\n".join(lines)
+
+    if omitted > 0:
+        note = (
+            f"\n\n(Note: {omitted} additional entities exist in the catalog "
+            f"but are not shown due to context limits. If a mention in the "
+            f"turn text might refer to an unlisted entity, mark it as is_new "
+            f"and the system will resolve duplicates.)"
+        )
+        result += note
+
+    return result
+
+
 # ---------------------------------------------------------------------------
 # ID prefix validation and correction
 # ---------------------------------------------------------------------------
