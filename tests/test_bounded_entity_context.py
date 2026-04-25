@@ -96,15 +96,17 @@ class TestBoundedFormatRecentPrioritization:
                                 aliases=["D", "Dormy"],
                                 last_updated_turn="turn-010")]
         catalogs = _make_catalogs(recent + dormant)
+        # Budget of 20 tokens is below unbounded size (31 tokens), so
+        # the fast-path won't apply and tiering kicks in.
         result = format_known_entities_bounded(
-            catalogs, current_turn=100, context_length=32768,
+            catalogs, current_turn=100,
+            entity_context_budget=20,
             recency_window=10)
         # Recent entity should have full detail
         assert "Active hero" in result
         assert "aliases: R" in result
         # Dormant entity should be brief (no identity/aliases) because
-        # it's outside the recency window. With a large budget it still
-        # appears but without detail.
+        # it's outside the recency window and budget is tight.
         lines = [l for l in result.strip().split("\n") if l.startswith("char-d")]
         assert len(lines) == 1
         assert "Old NPC" not in lines[0]
@@ -142,9 +144,6 @@ class TestBoundedFormatBudgetEnforcement:
             catalogs, current_turn=200,
             entity_context_budget=500,  # very tight budget
             recency_window=5)
-        tokens = _estimate_tokens(result)
-        # Budget is for the entity lines; the note is overhead.
-        # The total should be reasonable — not wildly over budget.
         # Recent entities (turns 195-200 = 6 entities) must appear.
         assert "char-0199" in result  # most recent
         assert "char-0195" in result  # edge of recency window
@@ -259,3 +258,67 @@ class TestDiscoveryPromptIntegration:
         turn = {"turn_id": "turn-101", "speaker": "DM", "text": "Test."}
         prompt = format_discovery_prompt(turn, known)
         assert "additional entities exist" in prompt
+
+
+class TestFastPathUnbounded:
+    """When full output fits within budget, return unbounded (all full detail)."""
+
+    def test_full_output_within_budget_matches_unbounded(self):
+        """Even dormant entities get full detail if it all fits."""
+        recent = [_make_entity("char-r", "Recent", identity="Hero",
+                               last_updated_turn="turn-098")]
+        dormant = [_make_entity("char-d", "Dormant", identity="Old friend",
+                                last_updated_turn="turn-010")]
+        catalogs = _make_catalogs(recent + dormant)
+        unbounded = format_known_entities(catalogs)
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100,
+            context_length=100000,  # huge budget
+            recency_window=5)
+        assert result == unbounded
+        # Dormant entity should have full detail since it fits
+        assert "Old friend" in result
+
+
+class TestRecentTierOverflow:
+    """When recent entities alone exceed budget, they degrade to brief."""
+
+    def test_recent_degraded_when_over_budget(self):
+        """Oldest recent entities should lose identity/aliases."""
+        # Create entities all within recency window but with big descriptions
+        entities = [
+            _make_entity(f"char-{i}", f"Char{i}",
+                         identity="Very long description " * 20,
+                         aliases=[f"alias-{i}"],
+                         last_updated_turn=f"turn-{90 + i:03d}")
+            for i in range(10)
+        ]
+        catalogs = _make_catalogs(entities)
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100,
+            entity_context_budget=200,  # very tight
+            recency_window=15)
+        # All 10 are recent, but budget is small.
+        # Most recent should keep detail, oldest recent should be brief.
+        # All entities should still appear (not omitted).
+        for i in range(10):
+            assert f"char-{i}" in result
+        # The result should have at least some entities in brief format
+        # (no identity) to stay within budget
+        brief_lines = [l for l in result.strip().split("\n")
+                       if l and "Very long description" not in l
+                       and l.startswith("char-")]
+        assert len(brief_lines) > 0, "Some recent entities should be degraded to brief"
+
+    def test_single_recent_entity_not_degraded(self):
+        """A single recent entity should not trigger degradation loop."""
+        entity = _make_entity("char-solo", "Solo",
+                              identity="Big description " * 50,
+                              last_updated_turn="turn-100")
+        catalogs = _make_catalogs([entity])
+        # Budget is tiny but only 1 recent entity — should not crash
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100,
+            entity_context_budget=10,
+            recency_window=5)
+        assert "char-solo" in result

@@ -321,9 +321,15 @@ def format_known_entities_bounded(
     if not all_entities:
         return "(none — empty catalog)"
 
-    # If no budget or very few entities, fall back to unbounded format
+    # If no budget constraint, fall back to unbounded format
     if budget is None:
         return format_known_entities(catalogs)
+
+    # Fast-path: if full unbounded output fits within budget, return it
+    # directly so that no entities are needlessly degraded to brief format.
+    unbounded = format_known_entities(catalogs)
+    if _estimate_tokens(unbounded) <= budget:
+        return unbounded
 
     # Partition into recent vs dormant based on last_updated_turn
     recent: list[dict] = []
@@ -345,9 +351,28 @@ def format_known_entities_bounded(
         reverse=True,
     )
 
-    # Phase 1: Recent entities always get full detail
+    # Phase 1: Recent entities in full detail
     lines: list[str] = [_format_entity_full(e) for e in recent]
     used = _estimate_tokens("\n".join(lines)) if lines else 0
+
+    # Phase 1b: If recent tier alone exceeds budget, degrade the oldest
+    # recent entities to brief format until we fit.
+    if used > budget and len(recent) > 1:
+        # Sort recent by recency (most recent first) so we keep detailed
+        # entries for the newest entities and degrade older ones.
+        indexed = sorted(
+            range(len(recent)),
+            key=lambda i: _parse_turn_number(
+                recent[i].get("last_updated_turn")) or 0,
+            reverse=True,
+        )
+        # Rebuild lines: try full first, degrade from oldest-recent inward
+        lines = [_format_entity_full(e) for e in recent]
+        for idx in reversed(indexed):  # oldest-recent first
+            lines[idx] = _format_entity_brief(recent[idx])
+            used = _estimate_tokens("\n".join(lines))
+            if used <= budget:
+                break
 
     # Phase 2: Add dormant entities in brief format while within budget
     omitted = 0
