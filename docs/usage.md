@@ -371,14 +371,23 @@ Use the helper script from the repository root:
 powershell -ExecutionPolicy Bypass -File tools/start_extraction_detached.ps1 `
   -Session sessions/session-import `
   -TranscriptFile sessions/_import/session-import-full-transcript.txt `
+  -Framework framework-local `
+  -PlayerLabel "Fenouille Moonwind" `
   -SegmentSize 100
 ```
+
+The helper safely quotes argument values passed to `Start-Process`, so values
+with spaces (for example `-PlayerLabel "Fenouille Moonwind"`) are passed as a
+single argument to `bootstrap_session.py`.
 
 The script writes:
 - stdout log: `run-logs/extract-<timestamp>.log`
 - stderr log: `run-logs/extract-<timestamp>.err.log`
 - PID file: `run-logs/extract-<timestamp>.pid`
 - command helper: `run-logs/extract-<timestamp>.cmd.txt`
+
+Optional detached-launch flags include `-Model`, `-Framework`,
+`-PlayerLabel`, and `-Overwrite`.
 
 Monitor/status a detached run (latest run by default):
 
