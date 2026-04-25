@@ -517,6 +517,26 @@ python tools/ingest_turn.py \
 
 See [`docs/semantic-extraction-design.md`](semantic-extraction-design.md) for full pipeline design.
 
+### Extraction Log
+
+During extraction (batch, segmented, or single-turn), the pipeline writes a per-turn log to `<framework-dir>/extraction-log.jsonl`. Each line is a JSON object recording:
+
+- `turn_id` — which turn was processed
+- `timestamp` — UTC wall-clock time
+- `discovery_ok`, `detail_ok`, `pc_ok`, `relationships_ok`, `events_ok` — per-phase success flags
+- `*_error` — error message when a phase failed (null on success)
+- `new_entities`, `new_events` — counts of entities/events added by this turn
+- `elapsed_ms` — wall-clock time for the turn
+
+The file is append-only and survives interruptions. To diagnose a failed run:
+
+```bash
+# Show all failed turns
+python -c "import json,sys; [print(json.loads(l)['turn_id'],json.loads(l).get('discovery_error','')) for l in open('framework/extraction-log.jsonl') if not json.loads(l)['discovery_ok']]"
+```
+
+The log is not written in `--dry-run` mode.
+
 ---
 
 ## Generating Next-Move Analysis

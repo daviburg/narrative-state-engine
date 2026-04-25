@@ -655,7 +655,7 @@ def _monkeypatch_batch_env(monkeypatch, *, config_overrides=None):
     monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
     monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
     monkeypatch.setattr("semantic_extraction.extract_and_merge",
-                        lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
+                        lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, [], False, {}))
     monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
     monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
     monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
@@ -773,7 +773,7 @@ class TestEndOfSegmentRefreshIntegration:
         monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
         monkeypatch.setattr("semantic_extraction.refresh_entities", lambda *a, **kw: 0)
         monkeypatch.setattr("semantic_extraction.extract_and_merge",
-                            lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
+                            lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, [], False, {}))
         monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
         monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
         monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
@@ -813,7 +813,7 @@ class TestEndOfSegmentRefreshIntegration:
         monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
         monkeypatch.setattr("semantic_extraction.refresh_entities", lambda *a, **kw: 0)
         monkeypatch.setattr("semantic_extraction.extract_and_merge",
-                            lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
+                            lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, [], False, {}))
         monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
         monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
         monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
