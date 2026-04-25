@@ -3141,6 +3141,26 @@ def _extract_segmented(
                     if refreshed:
                         print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
+        # --- Final entity refresh for segment — catch entities stale since last modulo checkpoint (#212) ---
+        if seg_refresh_interval > 0 and segment_turns:
+            seg_final_number = _parse_turn_number(segment_turns[-1]["turn_id"])
+            if seg_final_number is not None and (seg_final_number % seg_refresh_interval != 0):
+                seg_final_batch = max(seg_refresh_batch, _MAX_REFRESH_BATCH_SIZE)
+                seg_final_stale = find_stale_entities(
+                    current_turn_number=seg_final_number,
+                    catalogs=seg_catalogs,
+                    turn_dicts=segment_turns,
+                    refresh_interval=seg_refresh_interval,
+                    batch_size=seg_final_batch,
+                    events_list=seg_events,
+                )
+                if seg_final_stale:
+                    print(f"  REFRESH: {len(seg_final_stale)} stale entity/entities at end of {segment_id}")
+                    refreshed = refresh_entities(seg_final_stale, segment_turns[-1]["turn_id"],
+                                                 segment_turns, seg_catalogs, llm)
+                    if refreshed:
+                        print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities at end of {segment_id}")
+
         seg_entity_count = sum(len(v) for v in seg_catalogs.values())
         print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events")
 
@@ -3330,6 +3350,28 @@ def extract_semantic_batch(
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
+
+    # --- Final entity refresh — catch entities stale since last modulo checkpoint (#212) ---
+    if refresh_interval > 0 and turn_dicts:
+        final_turn_number = _parse_turn_number(turn_dicts[-1]["turn_id"])
+        if final_turn_number is not None and (final_turn_number % refresh_interval != 0):
+            final_batch = max(refresh_batch_size, _MAX_REFRESH_BATCH_SIZE)
+            final_stale = find_stale_entities(
+                current_turn_number=final_turn_number,
+                catalogs=catalogs,
+                turn_dicts=turn_dicts,
+                refresh_interval=refresh_interval,
+                batch_size=final_batch,
+                events_list=events_list,
+            )
+            if final_stale:
+                print(f"\n  REFRESH: {len(final_stale)} stale entity/entities at end-of-run (after {turn_dicts[-1]['turn_id']})")
+                refreshed = refresh_entities(final_stale, turn_dicts[-1]["turn_id"],
+                                             turn_dicts, catalogs, llm)
+                if refreshed:
+                    print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities at end-of-run")
+            else:
+                print("\n  REFRESH: No stale entities at end-of-run")
 
     # Final save
     entities_after = sum(len(v) for v in catalogs.values())

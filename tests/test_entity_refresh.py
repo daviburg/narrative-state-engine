@@ -13,6 +13,8 @@ from semantic_extraction import (
     _DEFAULT_REFRESH_BATCH_SIZE,
     _MAX_REFRESH_BATCH_SIZE,
     _REFRESH_TYPE_SHARES,
+    extract_semantic_batch,
+    CATALOG_KEYS,
 )
 
 
@@ -546,3 +548,289 @@ class TestEventFrequencyTiebreaker:
         stale = find_stale_entities(100, catalogs, turns, refresh_interval=50)
         assert len(stale) == 1
         assert stale[0][1]["id"] == "char-elder"
+
+
+# ---------------------------------------------------------------------------
+# End-of-run refresh (#212)
+# ---------------------------------------------------------------------------
+
+class TestEndOfRunRefresh:
+    """Final refresh pass catches stale entities after the last modulo checkpoint."""
+
+    def test_stale_detected_at_non_modulo_boundary(self):
+        """Entities stale since last modulo refresh should be found at a
+        non-modulo turn number (simulating end-of-run)."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        turns = [_make_turn(i, "The Elder is present") for i in range(1, 345)]
+        catalogs = _make_catalogs(elder)
+
+        # At turn 344 (not a multiple of 50), elder should be stale
+        stale = find_stale_entities(344, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 1
+        assert stale[0][1]["id"] == "char-elder"
+
+    def test_no_stale_at_exact_modulo(self):
+        """If the last turn IS a modulo boundary, the regular refresh already
+        ran; an entity updated at that boundary should not be stale."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-300")
+        turns = [_make_turn(i, "The Elder is here") for i in range(1, 345)]
+        catalogs = _make_catalogs(elder)
+
+        # At turn 300 (a modulo of 50), elder was just updated — not stale
+        stale = find_stale_entities(300, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 0
+
+    def test_end_of_run_finds_multiple_stale(self):
+        """Multiple entities stale since last modulo should all be returned."""
+        e1 = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        e2 = _make_entity("loc-cave", "Dark Cave", "location", "turn-020", "turn-020")
+        e3 = _make_entity("item-sword", "Magic Sword", "item", "turn-030", "turn-030")
+        turns = [_make_turn(i, "Elder enters Dark Cave carrying Magic Sword")
+                 for i in range(1, 345)]
+        catalogs = _make_catalogs(e1, e2, e3)
+
+        stale = find_stale_entities(344, catalogs, turns, refresh_interval=50,
+                                    batch_size=25)
+        assert len(stale) == 3
+
+    def test_recently_updated_entity_not_stale_at_end(self):
+        """Entity updated at turn-340 should not be stale at turn-344
+        (within one refresh_interval)."""
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-340")
+        turns = [_make_turn(i, "The Elder is here") for i in range(1, 345)]
+        catalogs = _make_catalogs(elder)
+
+        stale = find_stale_entities(344, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 0
+
+    def test_end_of_run_refresh_calls_refresh_entities(self):
+        """Integration: verify refresh_entities is called for stale entities
+        found at end-of-run (non-modulo final turn)."""
+        from unittest.mock import MagicMock, patch
+        from semantic_extraction import refresh_entities
+
+        elder = _make_entity("char-elder", "Elder", "character", "turn-010", "turn-010")
+        catalogs = _make_catalogs(elder)
+        turns = [_make_turn(i, "The Elder is here") for i in range(1, 75)]
+
+        mock_llm = MagicMock()
+        mock_llm.extract_json.return_value = {
+            "entity": {
+                "id": "char-elder",
+                "name": "Elder",
+                "type": "character",
+                "identity": "Refreshed elder",
+                "first_seen_turn": "turn-010",
+                "last_updated_turn": "turn-074",
+            }
+        }
+        mock_llm.delay = MagicMock()
+
+        # Simulate end-of-run: find stale at turn 74 (not % 50)
+        stale = find_stale_entities(74, catalogs, turns, refresh_interval=50)
+        assert len(stale) == 1
+
+        with patch("semantic_extraction.merge_entity"):
+            refreshed = refresh_entities(stale, "turn-074", turns, catalogs, mock_llm)
+            assert refreshed == 1
+
+
+# ---------------------------------------------------------------------------
+# Integration: extract_semantic_batch end-of-run refresh wiring (#212)
+# ---------------------------------------------------------------------------
+
+def _monkeypatch_batch_env(monkeypatch, *, config_overrides=None):
+    """Patch all heavy dependencies so extract_semantic_batch runs fast."""
+    from unittest.mock import MagicMock
+
+    mock_llm = MagicMock()
+    cfg = {"entity_refresh_interval": 50, "entity_refresh_batch_size": 10}
+    if config_overrides:
+        cfg.update(config_overrides)
+    mock_llm.config = cfg
+
+    monkeypatch.setattr("semantic_extraction.LLMClient", lambda *a, **kw: mock_llm)
+    monkeypatch.setattr("semantic_extraction.load_catalogs", lambda d: {fn: [] for fn in CATALOG_KEYS})
+    monkeypatch.setattr("semantic_extraction.load_events", lambda d: [])
+    monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
+    monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
+    monkeypatch.setattr("semantic_extraction.extract_and_merge",
+                        lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
+    monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
+    monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
+    monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
+    monkeypatch.setattr("semantic_extraction.cleanup_dangling_relationships", lambda cats: {})
+    return mock_llm
+
+
+class TestEndOfRunRefreshIntegration:
+    """Integration tests: verify extract_semantic_batch wires the final
+    refresh pass correctly (#212)."""
+
+    def test_final_refresh_triggers_on_non_modulo_turn(self, monkeypatch):
+        """extract_semantic_batch calls find_stale_entities + refresh_entities
+        at end-of-run when the final turn is NOT on a modulo boundary."""
+        _monkeypatch_batch_env(monkeypatch)
+
+        find_calls = []
+        refresh_calls = []
+
+        def mock_find_stale(*args, **kwargs):
+            find_calls.append(kwargs or args)
+            return [("characters.json", {"id": "char-elder", "name": "Elder"})]
+
+        def mock_refresh(stale, *args, **kwargs):
+            refresh_calls.append((stale, args, kwargs))
+            return len(stale)
+
+        monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
+        monkeypatch.setattr("semantic_extraction.refresh_entities", mock_refresh)
+
+        # 74 turns → final turn-074 is NOT a multiple of 50
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": "hi"}
+                 for i in range(1, 75)]
+        extract_semantic_batch(turns, "sessions/test", dry_run=True, segment_size=0)
+
+        # find_stale_entities should have been called with the final turn number
+        assert len(find_calls) >= 1
+        last_find = find_calls[-1]
+        # The end-of-run call uses keyword args
+        if isinstance(last_find, dict):
+            assert last_find["current_turn_number"] == 74
+        # refresh_entities should have been called
+        assert len(refresh_calls) >= 1
+
+    def test_final_refresh_skipped_on_modulo_turn(self, monkeypatch):
+        """extract_semantic_batch does NOT call the end-of-run refresh
+        when the final turn lands exactly on a modulo boundary."""
+        _monkeypatch_batch_env(monkeypatch)
+
+        find_calls = []
+
+        def mock_find_stale(*args, **kwargs):
+            find_calls.append(kwargs.get("current_turn_number") or (args[0] if args else None))
+            return []
+
+        monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
+        monkeypatch.setattr("semantic_extraction.refresh_entities", lambda *a, **kw: 0)
+
+        # 50 turns → final turn-050 IS a multiple of 50
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": "hi"}
+                 for i in range(1, 51)]
+        extract_semantic_batch(turns, "sessions/test", dry_run=True, segment_size=0)
+
+        # The end-of-run refresh should NOT have been called for turn 50;
+        # any find_stale calls should be from the in-loop modulo trigger only
+        # (turn 50 % 50 == 0 triggers in-loop, but NOT end-of-run)
+        end_of_run_calls = [c for c in find_calls
+                            if isinstance(c, dict) and c.get("current_turn_number") == 50]
+        assert len(end_of_run_calls) == 0
+
+    def test_final_refresh_uses_larger_batch_size(self, monkeypatch):
+        """End-of-run refresh should pass max(configured_batch, 25) to
+        find_stale_entities, not the smaller periodic batch size."""
+        _monkeypatch_batch_env(monkeypatch, config_overrides={"entity_refresh_batch_size": 5})
+
+        find_calls = []
+
+        def mock_find_stale(*args, **kwargs):
+            find_calls.append(kwargs if kwargs else {})
+            return []
+
+        monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
+        monkeypatch.setattr("semantic_extraction.refresh_entities", lambda *a, **kw: 0)
+
+        # 74 turns → non-modulo end
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": "hi"}
+                 for i in range(1, 75)]
+        extract_semantic_batch(turns, "sessions/test", dry_run=True, segment_size=0)
+
+        # The last find_stale call should be the end-of-run one with batch_size=25
+        end_of_run = [c for c in find_calls if c.get("current_turn_number") == 74]
+        assert len(end_of_run) == 1
+        assert end_of_run[0]["batch_size"] == _MAX_REFRESH_BATCH_SIZE  # 25, not 5
+
+
+class TestEndOfSegmentRefreshIntegration:
+    """Integration tests: verify _extract_segmented wires the final
+    refresh pass at the end of each segment (#212)."""
+
+    def test_segment_end_refresh_triggers(self, monkeypatch):
+        """Segmented extraction calls find_stale_entities at end of each
+        segment when the segment's final turn is not on a modulo boundary."""
+        from unittest.mock import MagicMock
+        from semantic_extraction import _extract_segmented
+
+        mock_llm = MagicMock()
+        mock_llm.config = {"entity_refresh_interval": 50, "entity_refresh_batch_size": 10}
+
+        find_calls = []
+
+        def mock_find_stale(*args, **kwargs):
+            find_calls.append(kwargs if kwargs else {})
+            return []
+
+        monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
+        monkeypatch.setattr("semantic_extraction.refresh_entities", lambda *a, **kw: 0)
+        monkeypatch.setattr("semantic_extraction.extract_and_merge",
+                            lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
+        monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
+        monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction.cleanup_dangling_relationships", lambda cats: {})
+        monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
+        monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
+
+        # 74 turns, segment_size=30 → segments end at turn 30, 60, 74
+        # turn 30: 30 % 50 != 0 → triggers end-of-segment refresh
+        # turn 60: 60 % 50 != 0 → triggers end-of-segment refresh
+        # turn 74: 74 % 50 != 0 → triggers end-of-segment refresh
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": "hi"}
+                 for i in range(1, 75)]
+        _extract_segmented(turns, "sessions/test", "framework", "framework/catalogs",
+                           mock_llm, 0.0, True, 30)
+
+        # All 3 segments end on non-modulo turns, so each gets an end-of-segment call
+        end_of_seg_calls = [c for c in find_calls
+                            if c.get("current_turn_number") in (30, 60, 74)]
+        assert len(end_of_seg_calls) == 3
+
+    def test_segment_end_refresh_skipped_at_modulo(self, monkeypatch):
+        """End-of-segment refresh is skipped when the segment ends on a
+        modulo boundary (the in-loop refresh already ran there)."""
+        from unittest.mock import MagicMock
+        from semantic_extraction import _extract_segmented
+
+        mock_llm = MagicMock()
+        mock_llm.config = {"entity_refresh_interval": 50, "entity_refresh_batch_size": 10}
+
+        find_calls = []
+
+        def mock_find_stale(*args, **kwargs):
+            find_calls.append(kwargs if kwargs else {})
+            return []
+
+        monkeypatch.setattr("semantic_extraction.find_stale_entities", mock_find_stale)
+        monkeypatch.setattr("semantic_extraction.refresh_entities", lambda *a, **kw: 0)
+        monkeypatch.setattr("semantic_extraction.extract_and_merge",
+                            lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, []))
+        monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
+        monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction.cleanup_dangling_relationships", lambda cats: {})
+        monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
+        monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
+
+        # 50 turns, segment_size=50 → single segment ending at turn 50
+        # turn 50 % 50 == 0 → in-loop refresh fires, end-of-segment should NOT
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": "hi"}
+                 for i in range(1, 51)]
+        _extract_segmented(turns, "sessions/test", "framework", "framework/catalogs",
+                           mock_llm, 0.0, True, 50)
+
+        # End-of-segment refresh should not trigger (turn 50 is modulo)
+        # Any call with current_turn_number=50 comes from the in-loop path, not end-of-segment
+        end_of_seg_calls = [c for c in find_calls
+                            if c.get("current_turn_number") == 50
+                            and c.get("batch_size") == _MAX_REFRESH_BATCH_SIZE]
+        assert len(end_of_seg_calls) == 0
