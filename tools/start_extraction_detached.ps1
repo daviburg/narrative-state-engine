@@ -82,9 +82,8 @@ $process = Start-Process -FilePath "python" -ArgumentList $argumentString -Redir
 
 $process.Id | Set-Content -Path $pidPath
 
-$argString = ($args | ForEach-Object { Format-WindowsProcessArgument ([string]$_) }) -join " "
 @(
-    "python $argString",
+    "python $argumentString",
     "",
     "Monitor/status:",
     "  powershell -ExecutionPolicy Bypass -File tools/watch_extraction_detached.ps1 -PidFile '$pidPath'",
