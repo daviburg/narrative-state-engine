@@ -157,14 +157,14 @@ class LLMClient:
                 try:
                     retry_after = float(ra)
                 except (ValueError, TypeError):
-                    pass
+                    pass  # Non-numeric Retry-After (e.g. HTTP-date); ignore
             # Check for retry-after-ms header (milliseconds)
             ra_ms = headers.get("retry-after-ms")
             if ra_ms is not None and retry_after is None:
                 try:
                     retry_after = float(ra_ms) / 1000.0
                 except (ValueError, TypeError):
-                    pass
+                    pass  # Non-numeric retry-after-ms; ignore
 
         # Detect RESOURCE_EXHAUSTED in message body as a 429 equivalent
         if status_code is None and "RESOURCE_EXHAUSTED" in str(e):
