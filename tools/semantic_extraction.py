@@ -3158,11 +3158,6 @@ def _extract_segmented(
 
             # Intra-segment checkpoint: persist catalogs periodically (#220)
             if (i + 1) % seg_checkpoint_interval == 0 and not dry_run:
-                _save_progress(
-                    progress_file, turn_id, total, seg_catalogs, dry_run,
-                    metadata={"segment": segment_id, "mode": "segmented",
-                              "completed": False},
-                )
                 interim = segments + [{
                     "id": f"{segment_id}-partial",
                     "catalogs": seg_catalogs,
@@ -3170,6 +3165,11 @@ def _extract_segmented(
                     "turn_range": (segment_turns[0]["turn_id"], turn_id),
                 }]
                 interim_catalogs, interim_events = _reconcile_segments(interim)
+                _save_progress(
+                    progress_file, turn_id, total, interim_catalogs, dry_run,
+                    metadata={"segment": segment_id, "mode": "segmented",
+                              "completed": False},
+                )
                 save_catalogs(catalog_dir, interim_catalogs)
                 save_events(catalog_dir, interim_events)
 
