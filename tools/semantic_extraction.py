@@ -1345,8 +1345,8 @@ def extract_and_merge(
             arc sidecar files for relationship compaction (#120).
 
     Returns:
-        Tuple of (catalogs, events_list, discovery_failed) where
-        discovery_failed is True when entity discovery encountered an
+        Tuple of (catalogs, events_list, turn_failed) where
+        turn_failed is True when any extraction agent encountered an
         LLM error (e.g. 429, quota exhaustion, timeout).
     """
     global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
@@ -1371,7 +1371,7 @@ def extract_and_merge(
                 break
 
     # --- 1. Entity Discovery ---
-    discovery_failed = False
+    turn_failed = False
     known = format_known_entities(catalogs)
     try:
         discovery_result = llm.extract_json(
@@ -1381,11 +1381,12 @@ def extract_and_merge(
     except LLMExtractionError as e:
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
         discovery_result = {"entities": []}
-        discovery_failed = True
+        turn_failed = True
 
     if not isinstance(discovery_result, dict):
         print(f"  WARNING: Discovery returned non-dict for {turn_id}, skipping", file=sys.stderr)
         discovery_result = {"entities": []}
+        turn_failed = True
 
     discovered = discovery_result.get("entities", [])
 
@@ -1442,6 +1443,7 @@ def extract_and_merge(
             )
         except LLMExtractionError as e:
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
+            turn_failed = True
             continue
 
         entity_data = _unwrap_entity_response(detail_result)
@@ -1614,6 +1616,7 @@ def extract_and_merge(
                 merge_relationships(catalogs, relationships, turn_id)
         except LLMExtractionError as e:
             print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}", file=sys.stderr)
+            turn_failed = True
 
     # --- 4. Event Extraction ---
     next_evt_id = get_next_event_id(events_list)
@@ -1650,9 +1653,10 @@ def extract_and_merge(
         _ensure_birth_entities(events_list, catalogs)
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
+        turn_failed = True
 
     llm.delay()
-    return catalogs, events_list, discovery_failed
+    return catalogs, events_list, turn_failed
 
 
 def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
@@ -3118,15 +3122,15 @@ def _extract_segmented(
                 print(f"  ... {turn_id} ({start + i + 1}/{total}, {entities_now} entities)")
 
             try:
-                seg_catalogs, seg_events, seg_disc_failed = extract_and_merge(
+                seg_catalogs, seg_events, seg_turn_failed = extract_and_merge(
                     turn, seg_catalogs, seg_events, llm, min_confidence,
                     catalog_dir=None,
                 )
             except Exception as e:
                 print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
-                seg_disc_failed = True
+                seg_turn_failed = True
 
-            if seg_disc_failed:
+            if seg_turn_failed:
                 seg_failed_turns.append(turn_id)
                 continue
 
@@ -3311,8 +3315,13 @@ def extract_semantic_batch(
             previously_failed = prev_progress.get("failed_turns", [])
             if previously_failed:
                 print(f"  Re-attempting {len(previously_failed)} previously failed turn(s)...")
-        except (json.JSONDecodeError, KeyError, OSError):
-            pass
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            print(
+                f"  WARNING: Could not load previously failed turns from progress file: {e}. "
+                "Continuing without retry list.",
+                file=sys.stderr,
+            )
+            previously_failed = []
 
     print(f"  Processing {total - start_from} turns for semantic extraction...")
 
@@ -3351,20 +3360,21 @@ def extract_semantic_batch(
             entities_now = sum(len(v) for v in catalogs.values())
             print(f"  ... {turn_id} ({i + 1}/{total}, {entities_now} entities)")
 
-        disc_failed = False
+        turn_failed = False
         try:
-            catalogs, events_list, disc_failed = extract_and_merge(
+            catalogs, events_list, turn_failed = extract_and_merge(
                 turn, catalogs, events_list, llm, min_confidence,
                 catalog_dir=catalog_dir,
             )
         except Exception as e:
             print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
-            disc_failed = True
+            turn_failed = True
             # Save progress and continue
             _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
-                           total, catalogs, dry_run)
+                           total, catalogs, dry_run,
+                           metadata={"failed_turns": failed_turns} if failed_turns else None)
 
-        if disc_failed:
+        if turn_failed:
             failed_turns.append(turn_id)
             continue
 
@@ -3390,7 +3400,8 @@ def extract_semantic_batch(
 
         # Checkpoint every N turns (configurable via config/llm.json checkpoint_interval, default 25)
         if (i + 1) % checkpoint_interval == 0:
-            _save_progress(progress_file, turn_id, total, catalogs, dry_run)
+            _save_progress(progress_file, turn_id, total, catalogs, dry_run,
+                           metadata={"failed_turns": failed_turns} if failed_turns else None)
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
@@ -3504,7 +3515,7 @@ def extract_semantic_single(
     turn = {"turn_id": turn_id, "speaker": speaker, "text": text}
 
     print(f"  Running semantic extraction for {turn_id}...")
-    catalogs, events_list, _disc_failed = extract_and_merge(
+    catalogs, events_list, _turn_failed = extract_and_merge(
         turn, catalogs, events_list, llm, min_confidence,
         catalog_dir=catalog_dir,
     )

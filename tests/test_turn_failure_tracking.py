@@ -8,15 +8,10 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 from unittest.mock import MagicMock
 
 import semantic_extraction as se
-from semantic_extraction import (
-    extract_semantic_batch,
-    CATALOG_KEYS,
-    LLMExtractionError,
-)
 
 
 def _fresh_catalogs():
-    return {fn: [] for fn in CATALOG_KEYS}
+    return {fn: [] for fn in se.CATALOG_KEYS}
 
 
 def _make_stub_llm(fail_on_turns=None):
@@ -28,12 +23,16 @@ def _make_stub_llm(fail_on_turns=None):
     llm.delay = MagicMock()
     llm.config = {"checkpoint_interval": 100}
 
+    def _is_discovery_prompt(system_prompt):
+        prompt = system_prompt.lower()
+        return "entity-discovery" in prompt or "discovery" in prompt
+
     def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None):
         # Detect which turn we're processing from the user prompt
         for tid in fail_on_turns:
-            if tid in user_prompt and "discover" in system_prompt.lower():
-                raise LLMExtractionError(f"429 quota exhausted for {tid}")
-        if "discover" in system_prompt.lower():
+            if tid in user_prompt and _is_discovery_prompt(system_prompt):
+                raise se.LLMExtractionError(f"429 quota exhausted for {tid}")
+        if _is_discovery_prompt(system_prompt):
             return {"entities": []}
         if "detail" in system_prompt.lower():
             return {"entity": {
@@ -54,10 +53,10 @@ def _make_stub_llm(fail_on_turns=None):
     return llm
 
 
-# --- extract_and_merge returns discovery_failed ---
+# --- extract_and_merge returns turn_failed ---
 
-class TestExtractAndMergeDiscoveryFailed:
-    """extract_and_merge should return discovery_failed=True on LLM failure."""
+class TestExtractAndMergeTurnFailed:
+    """extract_and_merge should return turn_failed=True on LLM failure."""
 
     def test_discovery_success_returns_false(self, monkeypatch):
         monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
@@ -120,7 +119,7 @@ class TestBatchFailedTurnTracking:
         monkeypatch.setattr(se, "_post_batch_orphan_sweep", lambda cats, evts: 0)
         monkeypatch.setattr(se, "_name_mention_discovery", lambda cats, evts: 0)
 
-        extract_semantic_batch(
+        se.extract_semantic_batch(
             turns, session_dir, framework_dir=framework_dir,
         )
 
@@ -159,7 +158,7 @@ class TestBatchFailedTurnTracking:
         monkeypatch.setattr(se, "_post_batch_orphan_sweep", lambda cats, evts: 0)
         monkeypatch.setattr(se, "_name_mention_discovery", lambda cats, evts: 0)
 
-        extract_semantic_batch(
+        se.extract_semantic_batch(
             turns, session_dir, framework_dir=framework_dir,
         )
 
@@ -196,7 +195,7 @@ class TestBatchFailedTurnTracking:
         monkeypatch.setattr(se, "_post_batch_orphan_sweep", lambda cats, evts: 0)
         monkeypatch.setattr(se, "_name_mention_discovery", lambda cats, evts: 0)
 
-        extract_semantic_batch(
+        se.extract_semantic_batch(
             turns, session_dir, framework_dir=framework_dir,
         )
 
@@ -249,7 +248,7 @@ class TestResumeRetry:
         monkeypatch.setattr(se, "_post_batch_orphan_sweep", lambda cats, evts: 0)
         monkeypatch.setattr(se, "_name_mention_discovery", lambda cats, evts: 0)
 
-        extract_semantic_batch(
+        se.extract_semantic_batch(
             turns, session_dir, framework_dir=framework_dir,
         )
 
