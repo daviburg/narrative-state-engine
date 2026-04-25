@@ -103,8 +103,11 @@ export GEMINI_API_KEY="your-key-here"
 > **Note:** Gemini uses the same OpenAI-compatible client path as GPT-4o.
 > No Ollama-specific options are needed. The `context_length` field is
 > ignored for cloud providers (Gemini manages context internally with up
-> to 1M tokens). Set `batch_delay_ms` to `100` or lower — cloud APIs
-> handle concurrent requests without GPU contention.
+> to 1M tokens). The pipeline auto-detects cloud providers and enforces
+> a minimum 2000ms inter-call delay to avoid per-minute rate limits.
+> If consecutive 429 errors hit the `consecutive_rate_limit_threshold`
+> (default 10), the pipeline stops and saves progress rather than burning
+> through daily quota on retries.
 
 ### Using a Local Model
 
@@ -180,7 +183,8 @@ models.
 | `context_length` | Context window size in tokens. Passed to Ollama via `extra_body.options.num_ctx` (#175). The Modelfile variant is the primary mechanism for setting context size; this field provides a runtime override. |
 | `timeout_seconds` | HTTP timeout per LLM call in seconds. PC extraction uses the greater of `2×` this value and `120` seconds. |
 | `retry_attempts` | Number of retries on LLM call failure. |
-| `batch_delay_ms` | Delay between consecutive LLM calls in milliseconds. Prevents GPU thrashing. |
+| `batch_delay_ms` | Delay between consecutive LLM calls in milliseconds. Prevents GPU thrashing. For cloud providers, a minimum of 2000ms is enforced automatically to avoid hitting per-minute rate limits. |
+| `consecutive_rate_limit_threshold` | Number of consecutive HTTP 429 errors before the pipeline stops to preserve quota. Default: `10`. Set higher for APIs with aggressive but transient rate limiting. |
 | `ollama_options` | Optional dict of Ollama-specific parameters (e.g., `{"num_gpu": 99}`). Merged into `extra_body.options` alongside `num_ctx`. `context_length` takes precedence over `num_ctx` in this dict. |
 
 **PC extraction cooldown:** If PC extraction fails for 20 consecutive turns (`_PC_SKIP_THRESHOLD`), it enters a cooldown cycle: skipping 50 turns, then retrying for 5 turns, repeating until a success resets the counter (#133, #168). An end-of-run summary reports how many turns were skipped.

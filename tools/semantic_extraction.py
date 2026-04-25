@@ -36,7 +36,7 @@ from catalog_merger import (
     _levenshtein,
     CATALOG_KEYS,
 )
-from llm_client import LLMClient, LLMExtractionError
+from llm_client import LLMClient, LLMExtractionError, QuotaExhaustedError
 
 try:
     import jsonschema
@@ -1541,6 +1541,8 @@ def extract_and_merge(
             system_prompt=load_template("entity-discovery"),
             user_prompt=format_discovery_prompt(turn, known),
         )
+    except QuotaExhaustedError:
+        raise
     except LLMExtractionError as e:
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
         discovery_result = {"entities": []}
@@ -1604,6 +1606,8 @@ def extract_and_merge(
                 user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                                  arcs_data=entity_arcs),
             )
+        except QuotaExhaustedError:
+            raise
         except LLMExtractionError as e:
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
@@ -1717,6 +1721,8 @@ def extract_and_merge(
                         file=sys.stderr,
                     )
                     _write_pc_debug_record(turn_id, "none_returned", [], "", merge_result=False)
+            except QuotaExhaustedError:
+                raise
             except LLMExtractionError as e:
                 print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
 
@@ -1777,6 +1783,8 @@ def extract_and_merge(
             relationships = rel_result.get("relationships", [])
             if relationships:
                 merge_relationships(catalogs, relationships, turn_id)
+        except QuotaExhaustedError:
+            raise
         except LLMExtractionError as e:
             print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
@@ -1814,6 +1822,8 @@ def extract_and_merge(
 
         # --- Phase 3: Create entities for birth events (#136) ---
         _ensure_birth_entities(events_list, catalogs)
+    except QuotaExhaustedError:
+        raise
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
         turn_failed = True
@@ -2403,6 +2413,8 @@ def backfill_stubs(
                     merged[1]["notes"] = "Backfilled from stub."
                 backfilled += 1
                 print(f"  Backfill: successfully enriched stub '{entity_id}'")
+        except QuotaExhaustedError:
+            raise
         except LLMExtractionError as e:
             print(f"  WARNING: Backfill failed for {entity_id}: {e}", file=sys.stderr)
 
@@ -2691,6 +2703,8 @@ def refresh_entities(
                 refreshed += 1
                 print(f"  REFRESH: Updated stale entity '{entity_id}' "
                       f"(was stuck at {entity.get('last_updated_turn', '?')})")
+        except QuotaExhaustedError:
+            raise
         except LLMExtractionError as e:
             print(f"  WARNING: Refresh failed for {entity_id}: {e}", file=sys.stderr)
 
@@ -3243,6 +3257,33 @@ def _reconcile_segments(segments):
     return merged_catalogs, merged_events
 
 
+def _print_retry_stats(llm) -> None:
+    """Print API retry statistics from the LLM client (#215)."""
+    stats = getattr(llm, "stats", None)
+    if stats is None or not hasattr(stats, "summary"):
+        return
+    summary = stats.summary()
+    if summary["total_requests"] == 0:
+        return
+    total = summary["total_requests"]
+    ok = summary["successful_requests"]
+    retried = summary["retried_requests"]
+    errors = summary["error_breakdown"]
+    error_total = sum(errors.values())
+    if error_total > 0:
+        error_rate = error_total / total * 100
+        parts = [f"{k}: {v}" for k, v in sorted(errors.items(), key=lambda x: -x[1])]
+        print(f"\n  API stats: {total} requests, {ok} succeeded, "
+              f"{error_total} errors ({error_rate:.1f}%), {retried} retried")
+        print(f"  Error breakdown: {', '.join(parts)}")
+        if summary["retry_after_headers_seen"]:
+            print(f"  Retry-After headers seen: {summary['retry_after_headers_seen']}")
+        if summary["max_consecutive_rate_limits"] > 0:
+            print(f"  Max consecutive rate limits: {summary['max_consecutive_rate_limits']}")
+    else:
+        print(f"\n  API stats: {total} requests, all succeeded")
+
+
 def _extract_segmented(
     turn_dicts, session_dir, framework_dir, catalog_dir,
     llm, min_confidence, dry_run, segment_size,
@@ -3251,6 +3292,7 @@ def _extract_segmented(
     segments = []
     total = len(turn_dicts)
     progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+    quota_exhausted = False
 
     for start in range(0, total, segment_size):
         end = min(start + segment_size, total)
@@ -3290,6 +3332,15 @@ def _extract_segmented(
                     turn, seg_catalogs, seg_events, llm, min_confidence,
                     catalog_dir=None,
                 )
+            except QuotaExhaustedError as e:
+                print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
+                print(f"  Stopping extraction to preserve quota.", file=sys.stderr)
+                seg_failed_turns.append(turn_id)
+                # Mark remaining turns in this segment as failed
+                for j in range(i + 1, len(segment_turns)):
+                    seg_failed_turns.append(segment_turns[j]["turn_id"])
+                quota_exhausted = True
+                break
             except Exception as e:
                 print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
                 seg_turn_failed = True
@@ -3337,7 +3388,8 @@ def _extract_segmented(
                 save_events(catalog_dir, interim_events)
 
         # --- Final entity refresh for segment — catch entities stale since last modulo checkpoint (#212) ---
-        if seg_refresh_interval > 0 and segment_turns:
+        # Skip refresh if quota was exhausted — no further LLM calls (#215)
+        if not quota_exhausted and seg_refresh_interval > 0 and segment_turns:
             seg_final_number = _parse_turn_number(segment_turns[-1]["turn_id"])
             if seg_final_number is not None and (seg_final_number % seg_refresh_interval != 0):
                 seg_final_batch = max(seg_refresh_batch, _MAX_REFRESH_BATCH_SIZE)
@@ -3383,6 +3435,18 @@ def _extract_segmented(
             save_catalogs(catalog_dir, interim_catalogs)
             save_events(catalog_dir, interim_events)
 
+        # Stop processing further segments if quota was exhausted (#215)
+        if quota_exhausted:
+            # Mark all turns in remaining segments as failed
+            for future_start in range(end, total, segment_size):
+                future_end = min(future_start + segment_size, total)
+                for t in turn_dicts[future_start:future_end]:
+                    # Append to the last segment's failed list for reporting
+                    seg_failed_turns.append(t["turn_id"])
+            # Update the segment record with any additional failed turns
+            segments[-1]["failed_turns"] = seg_failed_turns
+            break
+
     # Reconcile all segments into a single catalog
     print(f"\n  === Reconciliation: merging {len(segments)} segments ===")
     final_catalogs, final_events = _reconcile_segments(segments)
@@ -3421,6 +3485,9 @@ def _extract_segmented(
         print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
     print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events")
+
+    # Report API retry statistics (#215)
+    _print_retry_stats(llm)
 
     if not dry_run:
         save_catalogs(catalog_dir, final_catalogs)
@@ -3513,6 +3580,7 @@ def extract_semantic_batch(
 
     total = len(turn_dicts)
     failed_turns: list[str] = []
+    quota_exhausted = False
 
     # Re-attempt turns that failed in a previous run (e.g. due to quota exhaustion)
     previously_failed = []
@@ -3556,9 +3624,28 @@ def extract_semantic_batch(
                     print(f"  Retry still failed for {retry_tid}", file=sys.stderr)
                 else:
                     print(f"  Retry succeeded for {retry_tid}")
+            except QuotaExhaustedError as e:
+                print(f"\n  QUOTA EXHAUSTED during retry of {retry_tid}: {e}", file=sys.stderr)
+                failed_turns.append(retry_tid)
+                quota_exhausted = True
+                break
             except Exception as e:
                 print(f"  Retry ERROR for {retry_tid}: {e}", file=sys.stderr)
                 failed_turns.append(retry_tid)
+
+    # If quota was exhausted during retries, mark all remaining turns as failed,
+    # save progress, and skip the main extraction loop entirely (#215).
+    if quota_exhausted:
+        for i in range(start_from, total):
+            failed_turns.append(turn_dicts[i]["turn_id"])
+        _save_progress(progress_file, turn_dicts[start_from - 1]["turn_id"] if start_from > 0 else "",
+                       total, catalogs, dry_run,
+                       metadata={"failed_turns": failed_turns} if failed_turns else None)
+        if not dry_run:
+            save_catalogs(catalog_dir, catalogs)
+            save_events(catalog_dir, events_list)
+        _print_retry_stats(llm)
+        return
 
     for i in range(start_from, total):
         turn = turn_dicts[i]
@@ -3574,6 +3661,22 @@ def extract_semantic_batch(
                 turn, catalogs, events_list, llm, min_confidence,
                 catalog_dir=catalog_dir,
             )
+        except QuotaExhaustedError as e:
+            print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
+            print(f"  Stopping extraction to preserve quota.", file=sys.stderr)
+            failed_turns.append(turn_id)
+            # Mark remaining turns as failed
+            for j in range(i + 1, total):
+                failed_turns.append(turn_dicts[j]["turn_id"])
+            # Save progress so interrupted run can resume (#220)
+            _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
+                           total, catalogs, dry_run,
+                           metadata={"failed_turns": failed_turns} if failed_turns else None)
+            if not dry_run:
+                save_catalogs(catalog_dir, catalogs)
+                save_events(catalog_dir, events_list)
+            quota_exhausted = True
+            break
         except Exception as e:
             print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
@@ -3618,7 +3721,8 @@ def extract_semantic_batch(
                 save_events(catalog_dir, events_list)
 
     # --- Final entity refresh — catch entities stale since last modulo checkpoint (#212) ---
-    if refresh_interval > 0 and turn_dicts:
+    # Skip refresh if quota was exhausted — no further LLM calls (#215)
+    if not quota_exhausted and refresh_interval > 0 and turn_dicts:
         final_turn_number = _parse_turn_number(turn_dicts[-1]["turn_id"])
         if final_turn_number is not None and (final_turn_number % refresh_interval != 0):
             final_batch = max(refresh_batch_size, _MAX_REFRESH_BATCH_SIZE)
@@ -3693,6 +3797,9 @@ def extract_semantic_batch(
         )
 
     print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
+
+    # Report API retry statistics (#215)
+    _print_retry_stats(llm)
 
     if not dry_run:
         # Skip dormancy pass in batch mode — the threshold is too small relative
