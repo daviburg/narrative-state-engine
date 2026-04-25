@@ -148,10 +148,11 @@ def _filter_pc_attributes(entity_data: dict) -> dict:
 
 
 def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
-    """Purge non-allowed attribute keys from the stored char-player catalog entry.
+    """Purge non-allowed attribute keys and invalid aliases from char-player.
 
     Ensures historical action-sprawl attributes are cleaned up even if they
-    were merged before the filter was in place.
+    were merged before the filter was in place.  Also prunes volatile_state
+    keys and validates aliases (#214).
     """
     for entity in catalogs.get("characters.json", []):
         if entity.get("id") != "char-player":
@@ -165,7 +166,70 @@ def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
                     file=sys.stderr,
                 )
                 entity["stable_attributes"] = {k: v for k, v in sa.items() if k in PC_ALLOWED_ATTRS}
+            # Filter aliases (#214)
+            aliases_attr = sa.get("aliases")
+            if isinstance(aliases_attr, dict):
+                aliases_attr["value"] = _filter_pc_aliases(aliases_attr.get("value", []))
+        # Prune volatile_state (#214)
+        _prune_pc_volatile_state(entity)
         break
+
+
+def _filter_pc_aliases(aliases: list[str] | str) -> list[str]:
+    """Remove invalid PC aliases: blocklisted words, too-short, common words (#214).
+
+    Accepts either a list of aliases or a comma-separated string and returns
+    a consistently filtered list (capped at _PC_ALIAS_MAX_COUNT).
+    """
+    if isinstance(aliases, str):
+        aliases = [part.strip() for part in aliases.split(",") if part.strip()]
+    elif not isinstance(aliases, list):
+        aliases = []
+    cleaned = []
+    for alias in aliases:
+        if not isinstance(alias, str) or not alias.strip():
+            continue
+        alias = alias.strip()
+        low = alias.lower()
+        if low in _PC_ALIAS_BLOCKLIST:
+            print(f"  COERCE: rejected PC alias '{alias}' (meta-label)", file=sys.stderr)
+            continue
+        if low in _PC_ALIAS_WORD_BLOCKLIST:
+            print(f"  COERCE: rejected PC alias '{alias}' (common word)", file=sys.stderr)
+            continue
+        if len(alias) < _PC_ALIAS_MIN_LENGTH:
+            print(f"  COERCE: rejected PC alias '{alias}' (too short)", file=sys.stderr)
+            continue
+        cleaned.append(alias)
+    if len(cleaned) > _PC_ALIAS_MAX_COUNT:
+        cleaned = cleaned[-_PC_ALIAS_MAX_COUNT:]
+    return cleaned
+
+
+def _prune_pc_volatile_state(pc_entity: dict) -> None:
+    """Prune PC volatile_state to max keys, keeping core keys and most recent (#214)."""
+    vs = pc_entity.get("volatile_state")
+    if not isinstance(vs, dict) or len(vs) <= _PC_VOLATILE_STATE_MAX_KEYS:
+        return
+
+    core = {k: v for k, v in vs.items() if k in _PC_VOLATILE_STATE_CORE_KEYS}
+    non_core = {k: v for k, v in vs.items() if k not in _PC_VOLATILE_STATE_CORE_KEYS}
+
+    budget = _PC_VOLATILE_STATE_MAX_KEYS - len(core)
+    if len(non_core) > budget:
+        # Keep only the last `budget` keys (insertion order ≈ recency in Python 3.7+)
+        keep_keys = list(non_core.keys())[-budget:]
+        keep_set = set(keep_keys)
+        dropped = [k for k in non_core if k not in keep_set]
+        non_core = {k: non_core[k] for k in keep_keys}
+        print(
+            f"  PRUNE: Removed {len(dropped)} stale volatile_state keys from PC "
+            f"(kept {len(core) + len(non_core)})",
+            file=sys.stderr,
+        )
+
+    pc_entity["volatile_state"] = {**core, **non_core}
+
 
 # Directory containing prompt templates (relative to repo root)
 TEMPLATES_DIR = os.path.join(
@@ -1203,6 +1267,12 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> bool:
         pc_entry["last_updated_turn"] = turn_id
         if entity_data.get("status_updated_turn"):
             pc_entry["status_updated_turn"] = entity_data["status_updated_turn"]
+        # Post-merge quality guards (#214)
+        _prune_pc_volatile_state(pc_entry)
+        sa_entry = pc_entry.get("stable_attributes", {})
+        aliases_attr = sa_entry.get("aliases")
+        if isinstance(aliases_attr, dict) and isinstance(aliases_attr.get("value"), list):
+            aliases_attr["value"] = _filter_pc_aliases(aliases_attr["value"])
         print(
             f"  PC partial merge: merged {merged_fields} at {turn_id} "
             f"(attempted: {attempted_fields}, last_updated_turn => {turn_id})",
@@ -1247,6 +1317,28 @@ _PC_ALIAS_BLOCKLIST = {
     "player character", "pc", "player", "the player",
     "main character", "protagonist", "the protagonist",
     "hero", "the hero", "adventurer", "the adventurer",
+}
+
+# Minimum alias length — single short words are unlikely to be real aliases (#214)
+_PC_ALIAS_MIN_LENGTH = 3
+# Maximum number of aliases retained for the PC entity (#214)
+_PC_ALIAS_MAX_COUNT = 10
+
+# Common English words that appear in RPG narratives but are not character names (#214)
+_PC_ALIAS_WORD_BLOCKLIST = {
+    "broken", "disruption", "hunters", "method", "one", "pattern",
+    "plague", "precision", "protocol", "treatment",
+    "the", "a", "an", "this", "that", "it", "you", "me",
+    "attack", "defense", "move", "action", "skill", "ability",
+    "fire", "water", "earth", "wind", "light", "dark", "shadow",
+    "death", "life", "blood", "spirit", "soul", "magic",
+}
+
+# Maximum volatile_state keys retained for PC after merge (#214)
+_PC_VOLATILE_STATE_MAX_KEYS = 30
+# Core volatile_state keys that are always preserved during pruning (#214)
+_PC_VOLATILE_STATE_CORE_KEYS = {
+    "condition", "equipment", "location", "current_activity", "last_updated_turn",
 }
 
 # Turn-tag suffix pattern appended by LLMs to entity IDs (e.g. "char-shaman-turn-082")
@@ -2625,7 +2717,7 @@ def _merge_pc_aliases(
         return []
     _, pc_entry = pc_result
 
-    # Strip any blocklisted aliases from the PC entity (#186)
+    # Strip any blocklisted/invalid aliases from the PC entity (#186, #214)
     sa = pc_entry.get("stable_attributes", {})
     aliases_attr = sa.get("aliases")
     if isinstance(aliases_attr, dict):
@@ -2643,7 +2735,7 @@ def _merge_pc_aliases(
                     normalized.append(text)
         else:
             normalized = []
-        cleaned = [a for a in normalized if a.lower() not in _PC_ALIAS_BLOCKLIST]
+        cleaned = _filter_pc_aliases(normalized)
         if cleaned != normalized:
             aliases_attr["value"] = cleaned
 

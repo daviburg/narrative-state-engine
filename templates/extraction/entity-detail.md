@@ -20,6 +20,7 @@ Return a single JSON object conforming to this V2 structure:
   - "condition": string — current physical/mental condition
   - "equipment": array of strings — currently carried/worn items
   - "location": string — current location
+  - "current_activity": string — what the entity is currently doing (prefer updating this key over creating new per-turn keys)
   - "last_updated_turn": string — set to the current turn ID
   - Additional fields allowed as needed.
 - "first_seen_turn": string — the turn ID when this entity was first seen (preserve from existing entry, or use current turn for new entities)
@@ -36,6 +37,7 @@ MERGE RULES:
 - ALWAYS update "current_status" with what the entity is doing/experiencing in this turn.
 - For "stable_attributes": add new traits, update changed traits (with new source_turn). Never remove traits unless explicitly contradicted.
 - For "volatile_state": overwrite with current state. This is a snapshot, not a history.
+  For volatile_state, reuse existing keys where possible. Do not create new keys for transient actions — update `current_activity` instead. The following core keys should always be present when applicable: condition, equipment, location.
 
 Rules:
 - Only include information supported by the provided turn text and existing entry.
