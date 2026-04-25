@@ -573,6 +573,30 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             del sa[k]
             print(f"  COERCE: stable_attributes.{k}.value was null — removed", file=sys.stderr)
 
+    # Coerce non-object stable_attributes values to proper attribute objects (#219)
+    sa = entity_data.get("stable_attributes")
+    if isinstance(sa, dict):
+        for k, v in list(sa.items()):
+            if v is None:
+                continue  # handled above
+            if not isinstance(v, dict):
+                # Wrap raw value (string, list, int, etc.) in attribute object
+                if isinstance(v, str):
+                    wrapped_value = v
+                elif isinstance(v, list):
+                    wrapped_value = [str(item) for item in v]
+                else:
+                    wrapped_value = str(v)
+                wrapped = {
+                    "value": wrapped_value,
+                    "inference": True,
+                    "confidence": 0.5,
+                }
+                if has_valid_turn:
+                    wrapped["source_turn"] = turn_id
+                sa[k] = wrapped
+                print(f"  COERCE: stable_attributes.{k} was {type(v).__name__} — wrapped to attribute object", file=sys.stderr)
+
     # Ensure volatile_state has last_updated_turn if we populated it
     vs = entity_data.get("volatile_state")
     if isinstance(vs, dict) and "last_updated_turn" not in vs and has_valid_turn:
@@ -591,6 +615,53 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 rel["first_seen_turn"] = source_turn
             if "last_updated_turn" not in rel:
                 rel["last_updated_turn"] = source_turn
+
+    # Coerce relationship type values to schema enum (#218)
+    _REL_TYPE_MAP = {
+        "knowledge exchange": "mentorship",
+        "knowledge sharing": "mentorship",
+        "teaching": "mentorship",
+        "learning": "mentorship",
+        "trade": "social",
+        "trading": "social",
+        "alliance": "political",
+        "rivalry": "adversarial",
+        "enemy": "adversarial",
+        "friend": "social",
+        "friendship": "social",
+        "family": "kinship",
+        "parent": "kinship",
+        "child": "kinship",
+        "sibling": "kinship",
+        "spouse": "romantic",
+        "lover": "romantic",
+        "companion": "social",
+        "follower": "factional",
+        "leader": "political",
+        "subordinate": "factional",
+        "protector": "social",
+        "caretaker": "social",
+    }
+    _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"}
+    for rel in entity_data.get("relationships", []):
+        rt = rel.get("type", "")
+        if isinstance(rt, str):
+            normalized_rt = rt.strip().lower()
+            if normalized_rt in _VALID_REL_TYPES:
+                mapped = normalized_rt
+            elif normalized_rt:
+                mapped = _REL_TYPE_MAP.get(normalized_rt, "other")
+            else:
+                mapped = "other"
+        else:
+            mapped = "other"
+
+        if rel.get("type") != mapped:
+            rel["type"] = mapped
+            if mapped == "other":
+                print(f"  COERCE: relationship type '{rt}' → 'other' (unmapped)", file=sys.stderr)
+            else:
+                print(f"  COERCE: relationship type '{rt}' → '{mapped}'", file=sys.stderr)
 
     return entity_data
 
