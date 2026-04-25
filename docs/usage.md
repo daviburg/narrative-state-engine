@@ -451,8 +451,7 @@ The check estimates peak context usage based on:
 **Example warning output:**
 ```
   === Pre-flight Context Check (model: qwen2.5:14b) ===
-  WARNING: Estimated peak usage (10,916 tokens) exceeds context window
-  (8,192 tokens) by 2,724 tokens.
+  WARNING: Estimated peak usage (10,916 tokens) exceeds context window (8,192 tokens) by 2,724 tokens.
   Suggestions:
     - Increase context_length in config/llm.json (32K+ recommended for sessions over 100 turns).
     - Enable segmented extraction (--segment-size 100) to limit entity accumulation per segment.

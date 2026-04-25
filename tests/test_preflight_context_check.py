@@ -129,7 +129,6 @@ class TestEstimatePeakContext:
 
     def test_tight_headroom_warns(self):
         """Headroom under 15% should produce a warning even if sufficient."""
-        # Find a context_length that gives ~10% headroom
         # With 50 turns, 0 entities: peak ~ 2000+100+600+300+4096 = 7096
         # context = 7800 → headroom = 700/7800 ≈ 9%
         result = estimate_peak_context(
@@ -138,10 +137,13 @@ class TestEstimatePeakContext:
             max_tokens=4096,
             existing_entity_count=0,
         )
-        if result["sufficient"] and result["headroom_pct"] < 15:
-            assert len(result["warnings"]) > 0
-            assert any("tight" in w.lower() or "headroom" in w.lower()
-                       for w in result["warnings"])
+        assert result["sufficient"]
+        assert result["headroom_pct"] < 15
+        assert len(result["warnings"]) > 0
+        assert any(
+            "tight" in w.lower() or "headroom" in w.lower()
+            for w in result["warnings"]
+        )
 
 
 class TestPreflightContextCheck:

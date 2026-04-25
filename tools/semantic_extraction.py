@@ -12,6 +12,7 @@ Works in both batch (bootstrap) and incremental (ingest) modes.
 """
 
 import json
+import math
 import os
 import re
 import sys
@@ -3373,11 +3374,12 @@ def _extract_segmented(
 
         # Pre-flight context check for first segment only (#222)
         if start == 0:
+            seg_entity_count = sum(len(v) for v in seg_catalogs.values())
             preflight_context_check(
                 turn_count=total,
                 context_length=llm.context_length,
                 max_tokens=llm.max_tokens,
-                existing_entity_count=0,
+                existing_entity_count=seg_entity_count,
                 segment_size=segment_size,
                 model=llm.model,
             )
@@ -3598,7 +3600,6 @@ def _extract_segmented(
 # ---------------------------------------------------------------------------
 
 # Estimation constants — intentionally conservative (over-estimate usage)
-_TOKENS_PER_CHAR = 1.3 / 4  # ~1.3 tokens per word, ~4 chars per word ≈ 0.325
 _ENTITY_TOKENS = 30          # Avg tokens per entity line in discovery prompt
 _ENTITY_GROWTH_RATE = 0.4    # Avg new entities discovered per turn
 _TURN_TEXT_TOKENS = 300      # Avg tokens for a typical DM turn text
@@ -3637,7 +3638,7 @@ def estimate_peak_context(
 
     # When segmentation is enabled, entities accumulate only within each segment
     effective_turns = segment_size if segment_size > 0 else turn_count
-    projected_entities = existing_entity_count + int(effective_turns * _ENTITY_GROWTH_RATE)
+    projected_entities = existing_entity_count + math.ceil(effective_turns * _ENTITY_GROWTH_RATE)
 
     # Peak demand: system template + entity roster + turn text + output reserve
     entity_tokens = projected_entities * _ENTITY_TOKENS
