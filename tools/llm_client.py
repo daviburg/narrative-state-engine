@@ -115,6 +115,7 @@ class LLMClient:
         self.default_timeout = self.config.get("timeout_seconds", 60)
         self.context_length = self.config.get("context_length", None)
         self.ollama_options = self.config.get("ollama_options", None)
+        self.ollama_format = self.config.get("ollama_format", None)
         self.consecutive_rate_limit_threshold = self.config.get(
             "consecutive_rate_limit_threshold", 10)
         self.stats = RetryStats()
@@ -127,6 +128,16 @@ class LLMClient:
             self.config.get("provider", "").lower() == "ollama"
             or ":11434" in base_url
         )
+
+    @property
+    def _skip_response_format(self) -> bool:
+        """True when response_format should be omitted (e.g. qwen3.5 on Ollama)."""
+        if self.config.get("skip_response_format"):
+            return True
+        # Ollama + qwen3.5 hangs with response_format=json_object
+        if self._is_ollama and "qwen3.5" in self.model:
+            return True
+        return False
 
     @property
     def _is_cloud_provider(self) -> bool:
@@ -247,16 +258,28 @@ class LLMClient:
                     "messages": messages,
                     "temperature": self.temperature,
                     "max_tokens": max_tokens if max_tokens is not None else self.max_tokens,
-                    "response_format": {"type": "json_object"},
                 }
+                # Ollama hangs when response_format=json_object is used with
+                # qwen3.5 models (thinking-mode conflict).  Skip it for those.
+                if not self._skip_response_format:
+                    kwargs["response_format"] = {"type": "json_object"}
                 if timeout is not None:
                     kwargs["timeout"] = timeout
                 if self._is_ollama:
                     options = dict(self.ollama_options) if self.ollama_options else {}
                     if self.context_length:
                         options["num_ctx"] = self.context_length
+                    extra_body: dict = {}
                     if options:
-                        kwargs["extra_body"] = {"options": options}
+                        extra_body["options"] = options
+                    # Ollama native format parameter — distinct from OpenAI
+                    # response_format.  Use "json" to constrain output to
+                    # valid JSON without the thinking-mode hang seen with
+                    # response_format on qwen3.5 models.
+                    if self.ollama_format:
+                        extra_body["format"] = self.ollama_format
+                    if extra_body:
+                        kwargs["extra_body"] = extra_body
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
@@ -291,6 +314,9 @@ class LLMClient:
     def _parse_json_response(self, raw_text: str) -> dict | list:
         """Parse JSON from LLM response text, handling markdown fences."""
         text = raw_text.strip()
+
+        # Strip <think>...</think> blocks (qwen3.5 thinking mode output)
+        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
 
         # Strip markdown code fences if present
         fence_match = re.match(r"^```(?:json)?\s*\n(.*)\n```\s*$", text, re.DOTALL)
@@ -349,8 +375,13 @@ class LLMClient:
                     options = dict(self.ollama_options) if self.ollama_options else {}
                     if self.context_length:
                         options["num_ctx"] = self.context_length
+                    extra_body_raw: dict = {}
                     if options:
-                        kwargs["extra_body"] = {"options": options}
+                        extra_body_raw["options"] = options
+                    if self.ollama_format:
+                        extra_body_raw["format"] = self.ollama_format
+                    if extra_body_raw:
+                        kwargs["extra_body"] = extra_body_raw
 
                 response = self.client.chat.completions.create(**kwargs)
                 raw_text = response.choices[0].message.content
