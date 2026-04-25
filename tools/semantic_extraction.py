@@ -3371,6 +3371,17 @@ def _extract_segmented(
         # Pre-seed player character (always present)
         _ensure_player_character(seg_catalogs, segment_turns[0]["turn_id"])
 
+        # Pre-flight context check for first segment only (#222)
+        if start == 0:
+            preflight_context_check(
+                turn_count=total,
+                context_length=llm.context_length,
+                max_tokens=llm.max_tokens,
+                existing_entity_count=0,
+                segment_size=segment_size,
+                model=llm.model,
+            )
+
         # Entity refresh config (#161)
         _seg_refresh_cfg = getattr(llm, "config", None) or {}
         seg_refresh_interval = _seg_refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
@@ -3582,6 +3593,160 @@ def _extract_segmented(
                        metadata={"failed_turns": all_failed_turns} if all_failed_turns else None)
 
 
+# ---------------------------------------------------------------------------
+# Pre-flight context window sufficiency check (#222)
+# ---------------------------------------------------------------------------
+
+# Estimation constants — intentionally conservative (over-estimate usage)
+_TOKENS_PER_CHAR = 1.3 / 4  # ~1.3 tokens per word, ~4 chars per word ≈ 0.325
+_ENTITY_TOKENS = 30          # Avg tokens per entity line in discovery prompt
+_ENTITY_GROWTH_RATE = 0.4    # Avg new entities discovered per turn
+_TURN_TEXT_TOKENS = 300      # Avg tokens for a typical DM turn text
+_TEMPLATE_OVERHEAD_TOKENS = 2000  # System prompt template tokens (discovery is ~1900)
+_PROMPT_FRAMING_TOKENS = 100     # Tokens for the user prompt structure (headers, etc.)
+
+
+def estimate_peak_context(
+    turn_count: int,
+    context_length: int | None,
+    max_tokens: int,
+    existing_entity_count: int = 0,
+    segment_size: int = 0,
+) -> dict:
+    """Estimate peak context window usage for an extraction run.
+
+    Returns a dict with estimation details:
+        - ``estimated_peak_tokens``: projected worst-case token usage
+        - ``context_length``: the configured context window
+        - ``sufficient``: whether the context window appears sufficient
+        - ``headroom_pct``: percentage of context window remaining at peak
+        - ``projected_entity_count``: estimated entity count at peak
+        - ``warnings``: list of human-readable warning strings
+        - ``suggestions``: list of actionable mitigation suggestions
+    """
+    if context_length is None or not isinstance(context_length, (int, float)):
+        return {
+            "estimated_peak_tokens": 0,
+            "context_length": None,
+            "sufficient": True,
+            "headroom_pct": 100.0,
+            "projected_entity_count": existing_entity_count,
+            "warnings": [],
+            "suggestions": [],
+        }
+
+    # When segmentation is enabled, entities accumulate only within each segment
+    effective_turns = segment_size if segment_size > 0 else turn_count
+    projected_entities = existing_entity_count + int(effective_turns * _ENTITY_GROWTH_RATE)
+
+    # Peak demand: system template + entity roster + turn text + output reserve
+    entity_tokens = projected_entities * _ENTITY_TOKENS
+    peak_input = (
+        _TEMPLATE_OVERHEAD_TOKENS
+        + _PROMPT_FRAMING_TOKENS
+        + entity_tokens
+        + _TURN_TEXT_TOKENS
+    )
+    estimated_peak = peak_input + max_tokens
+
+    headroom = context_length - estimated_peak
+    headroom_pct = (headroom / context_length * 100) if context_length > 0 else 0.0
+
+    warnings = []
+    suggestions = []
+    sufficient = True
+
+    if headroom_pct < 0:
+        sufficient = False
+        warnings.append(
+            f"Estimated peak usage ({estimated_peak:,} tokens) exceeds "
+            f"context window ({context_length:,} tokens) by "
+            f"{-headroom:,} tokens."
+        )
+        warnings.append(
+            f"Projected ~{projected_entities} entities after "
+            f"{effective_turns} turns would consume ~{entity_tokens:,} "
+            f"tokens in the discovery prompt alone."
+        )
+    elif headroom_pct < 15:
+        warnings.append(
+            f"Tight context budget: estimated peak {estimated_peak:,} tokens "
+            f"leaves only {headroom_pct:.0f}% headroom in "
+            f"{context_length:,}-token window."
+        )
+
+    if not sufficient or headroom_pct < 15:
+        if context_length < 32768:
+            suggestions.append(
+                "Increase context_length in config/llm.json (32K+ recommended "
+                "for sessions over 100 turns)."
+            )
+        if segment_size == 0 and turn_count > 100:
+            suggestions.append(
+                "Enable segmented extraction (--segment-size 100) to limit "
+                "entity accumulation per segment."
+            )
+        if not sufficient:
+            suggestions.append(
+                "Use a model with a larger context window, or reduce the "
+                "session size."
+            )
+
+    return {
+        "estimated_peak_tokens": estimated_peak,
+        "context_length": context_length,
+        "sufficient": sufficient,
+        "headroom_pct": round(headroom_pct, 1),
+        "projected_entity_count": projected_entities,
+        "warnings": warnings,
+        "suggestions": suggestions,
+    }
+
+
+def preflight_context_check(
+    turn_count: int,
+    context_length: int | None,
+    max_tokens: int,
+    existing_entity_count: int = 0,
+    segment_size: int = 0,
+    model: str = "",
+) -> dict:
+    """Run a pre-flight context window sufficiency check.
+
+    Prints warnings to stderr if the configuration looks insufficient.
+    Returns the estimation dict from :func:`estimate_peak_context`.
+    """
+    result = estimate_peak_context(
+        turn_count=turn_count,
+        context_length=context_length,
+        max_tokens=max_tokens,
+        existing_entity_count=existing_entity_count,
+        segment_size=segment_size,
+    )
+
+    if result["warnings"]:
+        model_info = f" (model: {model})" if model else ""
+        print(
+            f"\n  === Pre-flight Context Check{model_info} ===",
+            file=sys.stderr,
+        )
+        for w in result["warnings"]:
+            print(f"  WARNING: {w}", file=sys.stderr)
+        if result["suggestions"]:
+            print("  Suggestions:", file=sys.stderr)
+            for s in result["suggestions"]:
+                print(f"    - {s}", file=sys.stderr)
+        if not result["sufficient"]:
+            print(
+                "  The extraction will proceed, but quality may degrade as "
+                "context fills up.",
+                file=sys.stderr,
+            )
+        print(file=sys.stderr)
+
+    return result
+
+
 def extract_semantic_batch(
     turn_dicts: list,
     session_dir: str,
@@ -3686,6 +3851,17 @@ def extract_semantic_batch(
             previously_failed = []
 
     print(f"  Processing {total - start_from} turns for semantic extraction...")
+
+    # Pre-flight context window sufficiency check (#222)
+    existing_entity_count = sum(len(ents) for ents in catalogs.values())
+    preflight_context_check(
+        turn_count=total - start_from,
+        context_length=llm.context_length,
+        max_tokens=llm.max_tokens,
+        existing_entity_count=existing_entity_count,
+        segment_size=segment_size,
+        model=llm.model,
+    )
 
     # Entity refresh config (#161)
     _refresh_cfg = getattr(llm, "config", None) or {}

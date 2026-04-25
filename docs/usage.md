@@ -434,6 +434,44 @@ Manual stop (without helper script):
 Stop-Process -Id (Get-Content run-logs/extract-<timestamp>.pid)
 ```
 
+### Pre-flight Context Window Check
+
+Before extraction begins, the pipeline estimates whether the configured
+`context_length` can sustain extraction for the session. This catches
+misconfigured runs (e.g., an 8K context window for a 300+ turn session) before
+committing to a multi-hour extraction.
+
+The check estimates peak context usage based on:
+- Number of turns remaining to process
+- Projected entity growth (~0.4 new entities per turn)
+- Existing entity count (when resuming from a checkpoint)
+- Output token reservation (`max_tokens`)
+- System prompt template overhead
+
+**Example warning output:**
+```
+  === Pre-flight Context Check (model: qwen2.5:14b) ===
+  WARNING: Estimated peak usage (10,916 tokens) exceeds context window
+  (8,192 tokens) by 2,724 tokens.
+  Suggestions:
+    - Increase context_length in config/llm.json (32K+ recommended for sessions over 100 turns).
+    - Enable segmented extraction (--segment-size 100) to limit entity accumulation per segment.
+  The extraction will proceed, but quality may degrade as context fills up.
+```
+
+The check is a **warning only** — extraction proceeds regardless so advanced
+users can run with tight configurations intentionally. To resolve warnings:
+
+1. **Increase `context_length`** in `config/llm.json` to match your model's
+   actual context window (32K+ recommended for sessions over 100 turns)
+2. **Enable segmented extraction** with `--segment-size 100` to reset entity
+   accumulation per segment
+3. **Use a model with a larger context window** for very large sessions
+
+When segmented extraction is enabled, the check accounts for the segment size
+rather than the total turn count, since entities only accumulate within each
+segment.
+
 ### Segmented Extraction
 
 For sessions with more than 150 turns on models with <=32K context windows,
