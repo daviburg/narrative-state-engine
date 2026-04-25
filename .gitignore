@@ -37,3 +37,4 @@ framework-local/
 
 # Test artifacts — relative-path framework dirs created by unit tests
 tools/framework-test/
+framework-test/
