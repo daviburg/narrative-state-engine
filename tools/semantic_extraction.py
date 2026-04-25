@@ -3110,6 +3110,7 @@ def _extract_segmented(
         _seg_refresh_cfg = getattr(llm, "config", None) or {}
         seg_refresh_interval = _seg_refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
         seg_refresh_batch = _seg_refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
+        seg_checkpoint_interval = _read_checkpoint_interval(_seg_refresh_cfg)
 
         seg_failed_turns: list[str] = []
 
@@ -3155,6 +3156,23 @@ def _extract_segmented(
                     if refreshed:
                         print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
+            # Intra-segment checkpoint: persist catalogs periodically (#220)
+            if (i + 1) % seg_checkpoint_interval == 0 and not dry_run:
+                _save_progress(
+                    progress_file, turn_id, total, seg_catalogs, dry_run,
+                    metadata={"segment": segment_id, "mode": "segmented",
+                              "completed": False},
+                )
+                interim = segments + [{
+                    "id": f"{segment_id}-partial",
+                    "catalogs": seg_catalogs,
+                    "events": seg_events,
+                    "turn_range": (segment_turns[0]["turn_id"], turn_id),
+                }]
+                interim_catalogs, interim_events = _reconcile_segments(interim)
+                save_catalogs(catalog_dir, interim_catalogs)
+                save_events(catalog_dir, interim_events)
+
         # --- Final entity refresh for segment — catch entities stale since last modulo checkpoint (#212) ---
         if seg_refresh_interval > 0 and segment_turns:
             seg_final_number = _parse_turn_number(segment_turns[-1]["turn_id"])
@@ -3194,6 +3212,13 @@ def _extract_segmented(
                        seg_catalogs, dry_run,
                        metadata={"segment": segment_id, "mode": "segmented",
                                  "completed": False})
+
+        # Persist reconciled catalogs after each completed segment (#220)
+        # so interrupted runs retain entities from all finished segments.
+        if not dry_run:
+            interim_catalogs, interim_events = _reconcile_segments(segments)
+            save_catalogs(catalog_dir, interim_catalogs)
+            save_events(catalog_dir, interim_events)
 
     # Reconcile all segments into a single catalog
     print(f"\n  === Reconciliation: merging {len(segments)} segments ===")
@@ -3389,10 +3414,13 @@ def extract_semantic_batch(
         except Exception as e:
             print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
-            # Save progress and continue
+            # Save progress and catalogs so entities survive interruption (#220)
             _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
                            total, catalogs, dry_run,
                            metadata={"failed_turns": failed_turns} if failed_turns else None)
+            if not dry_run:
+                save_catalogs(catalog_dir, catalogs)
+                save_events(catalog_dir, events_list)
 
         if turn_failed:
             failed_turns.append(turn_id)
