@@ -346,7 +346,7 @@ def test_segment_size_zero_uses_legacy(monkeypatch):
     monkeypatch.setattr("semantic_extraction.load_events", lambda d: [])
     monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
     monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
-    monkeypatch.setattr("semantic_extraction.extract_and_merge", lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, [], False))
+    monkeypatch.setattr("semantic_extraction.extract_and_merge", lambda *a, **kw: ({fn: [] for fn in CATALOG_KEYS}, [], False, {}))
     monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
     monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
 

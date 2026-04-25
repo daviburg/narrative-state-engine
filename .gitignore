@@ -34,3 +34,6 @@ sessions/test-*/
 # The empty templates in framework/ stay tracked; if you run extraction
 # with --framework pointed elsewhere, those outputs land here instead.
 framework-local/
+
+# Test artifacts — relative-path framework dirs created by unit tests
+tools/framework-test/

@@ -65,7 +65,7 @@ class TestExtractAndMergeTurnFailed:
         catalogs = _fresh_catalogs()
         events = []
         turn = {"turn_id": "turn-001", "speaker": "dm", "text": "Hello world."}
-        catalogs, events, failed = se.extract_and_merge(
+        catalogs, events, failed, _log = se.extract_and_merge(
             turn, catalogs, events, llm, min_confidence=0.6,
         )
         assert failed is False
@@ -77,7 +77,7 @@ class TestExtractAndMergeTurnFailed:
         catalogs = _fresh_catalogs()
         events = []
         turn = {"turn_id": "turn-001", "speaker": "dm", "text": "turn-001 Hello world."}
-        catalogs, events, failed = se.extract_and_merge(
+        catalogs, events, failed, _log = se.extract_and_merge(
             turn, catalogs, events, llm, min_confidence=0.6,
         )
         assert failed is True

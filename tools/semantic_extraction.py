@@ -15,6 +15,8 @@ import json
 import os
 import re
 import sys
+import time
+from datetime import datetime, timezone
 
 from catalog_merger import (
     load_catalogs,
@@ -1495,7 +1497,7 @@ def extract_and_merge(
     llm: LLMClient,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     catalog_dir: str | None = None,
-) -> tuple[dict, list, bool]:
+) -> tuple[dict, list, bool, dict]:
     """Process one turn through all extraction agents.
 
     Args:
@@ -1508,12 +1510,30 @@ def extract_and_merge(
             arc sidecar files for relationship compaction (#120).
 
     Returns:
-        Tuple of (catalogs, events_list, turn_failed) where
-        turn_failed is True when any extraction agent encountered an
-        LLM error (e.g. 429, quota exhaustion, timeout).
+        Tuple of (catalogs, events_list, turn_failed, log_record) where
+        turn_failed is True when a non-PC extraction agent encountered an
+        LLM error (e.g. 429, quota exhaustion, timeout).  PC extraction
+        failures are tracked separately via ``_pc_consecutive_failures``
+        and the ``pc_ok`` / ``pc_error`` fields in log_record.
+        log_record is a dict summarising per-phase outcomes for this turn;
+        phases that were skipped have their ``*_ok`` field set to None.
     """
     global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
+    _t0 = time.monotonic()
+    _entities_before = sum(len(v) for v in catalogs.values())
+    _events_before = len(events_list)
+
+    # Per-phase tracking for extraction log (#217)
+    # Phases that can be skipped start as None so the log does not report
+    # a successful extraction when that phase never actually ran.
+    _phase_log: dict = {
+        "discovery_ok": True, "discovery_error": None,
+        "detail_ok": True, "detail_error": None,
+        "pc_ok": None, "pc_error": None,
+        "relationships_ok": None, "relationships_error": None,
+        "events_ok": True, "events_error": None,
+    }
 
     # Load arc sidecar for PC relationship compaction (#120)
     # V2 layout stores per-entity files under <catalog_dir>/characters/;
@@ -1547,11 +1567,15 @@ def extract_and_merge(
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
         discovery_result = {"entities": []}
         turn_failed = True
+        _phase_log["discovery_ok"] = False
+        _phase_log["discovery_error"] = str(e)
 
     if not isinstance(discovery_result, dict):
         print(f"  WARNING: Discovery returned non-dict for {turn_id}, skipping", file=sys.stderr)
         discovery_result = {"entities": []}
         turn_failed = True
+        _phase_log["discovery_ok"] = False
+        _phase_log["discovery_error"] = _phase_log["discovery_error"] or "non-dict response"
 
     discovered = discovery_result.get("entities", [])
 
@@ -1611,6 +1635,8 @@ def extract_and_merge(
         except LLMExtractionError as e:
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
+            _phase_log["detail_ok"] = False
+            _phase_log["detail_error"] = str(e)
             continue
 
         entity_data = _unwrap_entity_response(detail_result)
@@ -1725,12 +1751,18 @@ def extract_and_merge(
                 raise
             except LLMExtractionError as e:
                 print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
+                _phase_log["pc_ok"] = False
+                _phase_log["pc_error"] = str(e)
 
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
+                _phase_log["pc_ok"] = True
                 _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
                 _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
             else:
+                _phase_log["pc_ok"] = False
+                if not _phase_log["pc_error"]:
+                    _phase_log["pc_error"] = "validation_failed_or_none"
                 _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
                 if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
                     print(
@@ -1783,11 +1815,14 @@ def extract_and_merge(
             relationships = rel_result.get("relationships", [])
             if relationships:
                 merge_relationships(catalogs, relationships, turn_id)
+            _phase_log["relationships_ok"] = True
         except QuotaExhaustedError:
             raise
         except LLMExtractionError as e:
             print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
+            _phase_log["relationships_ok"] = False
+            _phase_log["relationships_error"] = str(e)
 
     # --- 4. Event Extraction ---
     next_evt_id = get_next_event_id(events_list)
@@ -1827,9 +1862,33 @@ def extract_and_merge(
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
         turn_failed = True
+        _phase_log["events_ok"] = False
+        _phase_log["events_error"] = str(e)
 
     llm.delay()
-    return catalogs, events_list, turn_failed
+
+    # Build extraction log record (#217)
+    _elapsed_ms = int((time.monotonic() - _t0) * 1000)
+    _entities_after = sum(len(v) for v in catalogs.values())
+    _events_after = len(events_list)
+    _log_record = {
+        "turn_id": turn_id,
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "discovery_ok": _phase_log["discovery_ok"],
+        "discovery_error": _phase_log["discovery_error"],
+        "detail_ok": _phase_log["detail_ok"],
+        "detail_error": _phase_log["detail_error"],
+        "pc_ok": _phase_log["pc_ok"],
+        "pc_error": _phase_log["pc_error"],
+        "relationships_ok": _phase_log["relationships_ok"],
+        "relationships_error": _phase_log["relationships_error"],
+        "events_ok": _phase_log["events_ok"],
+        "events_error": _phase_log["events_error"],
+        "new_entities": max(0, _entities_after - _entities_before),
+        "new_events": max(0, _events_after - _events_before),
+        "elapsed_ms": _elapsed_ms,
+    }
+    return catalogs, events_list, turn_failed, _log_record
 
 
 def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
@@ -3292,6 +3351,7 @@ def _extract_segmented(
     segments = []
     total = len(turn_dicts)
     progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+    extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     quota_exhausted = False
 
     for start in range(0, total, segment_size):
@@ -3328,7 +3388,7 @@ def _extract_segmented(
                 print(f"  ... {turn_id} ({start + i + 1}/{total}, {entities_now} entities)")
 
             try:
-                seg_catalogs, seg_events, seg_turn_failed = extract_and_merge(
+                seg_catalogs, seg_events, seg_turn_failed, seg_turn_log = extract_and_merge(
                     turn, seg_catalogs, seg_events, llm, min_confidence,
                     catalog_dir=None,
                 )
@@ -3339,11 +3399,36 @@ def _extract_segmented(
                 # Mark remaining turns in this segment as failed
                 for j in range(i + 1, len(segment_turns)):
                     seg_failed_turns.append(segment_turns[j]["turn_id"])
+                if not dry_run:
+                    _write_extraction_log(extraction_log_path, {
+                        "turn_id": turn_id,
+                        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "discovery_ok": False, "discovery_error": f"QuotaExhaustedError: {e}",
+                        "detail_ok": False, "detail_error": None,
+                        "pc_ok": False, "pc_error": None,
+                        "relationships_ok": False, "relationships_error": None,
+                        "events_ok": False, "events_error": None,
+                        "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                    })
                 quota_exhausted = True
                 break
             except Exception as e:
                 print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
                 seg_turn_failed = True
+                seg_turn_log = {
+                    "turn_id": turn_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "discovery_ok": False, "discovery_error": str(e),
+                    "detail_ok": False, "detail_error": None,
+                    "pc_ok": False, "pc_error": None,
+                    "relationships_ok": False, "relationships_error": None,
+                    "events_ok": False, "events_error": None,
+                    "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                }
+
+            # Write per-turn extraction log (#217)
+            if not dry_run:
+                _write_extraction_log(extraction_log_path, seg_turn_log)
 
             if seg_turn_failed:
                 seg_failed_turns.append(turn_id)
@@ -3535,6 +3620,7 @@ def extract_semantic_batch(
         return
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
+    extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
 
     # Segmented extraction: process in chunks with fresh catalogs, then reconcile
     if segment_size > 0 and len(turn_dicts) > segment_size:
@@ -3615,10 +3701,12 @@ def extract_semantic_batch(
             if not retry_turn:
                 continue
             try:
-                catalogs, events_list, retry_disc_failed = extract_and_merge(
+                catalogs, events_list, retry_disc_failed, retry_log = extract_and_merge(
                     retry_turn, catalogs, events_list, llm, min_confidence,
                     catalog_dir=catalog_dir,
                 )
+                if not dry_run:
+                    _write_extraction_log(extraction_log_path, retry_log)
                 if retry_disc_failed:
                     failed_turns.append(retry_tid)
                     print(f"  Retry still failed for {retry_tid}", file=sys.stderr)
@@ -3627,6 +3715,17 @@ def extract_semantic_batch(
             except QuotaExhaustedError as e:
                 print(f"\n  QUOTA EXHAUSTED during retry of {retry_tid}: {e}", file=sys.stderr)
                 failed_turns.append(retry_tid)
+                if not dry_run:
+                    _write_extraction_log(extraction_log_path, {
+                        "turn_id": retry_tid,
+                        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        "discovery_ok": False, "discovery_error": f"QuotaExhaustedError: {e}",
+                        "detail_ok": False, "detail_error": None,
+                        "pc_ok": False, "pc_error": None,
+                        "relationships_ok": False, "relationships_error": None,
+                        "events_ok": False, "events_error": None,
+                        "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                    })
                 quota_exhausted = True
                 break
             except Exception as e:
@@ -3656,8 +3755,9 @@ def extract_semantic_batch(
             print(f"  ... {turn_id} ({i + 1}/{total}, {entities_now} entities)")
 
         turn_failed = False
+        _turn_log = None
         try:
-            catalogs, events_list, turn_failed = extract_and_merge(
+            catalogs, events_list, turn_failed, _turn_log = extract_and_merge(
                 turn, catalogs, events_list, llm, min_confidence,
                 catalog_dir=catalog_dir,
             )
@@ -3675,11 +3775,31 @@ def extract_semantic_batch(
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
+                _write_extraction_log(extraction_log_path, {
+                    "turn_id": turn_id,
+                    "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                    "discovery_ok": False, "discovery_error": f"QuotaExhaustedError: {e}",
+                    "detail_ok": False, "detail_error": None,
+                    "pc_ok": False, "pc_error": None,
+                    "relationships_ok": False, "relationships_error": None,
+                    "events_ok": False, "events_error": None,
+                    "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                })
             quota_exhausted = True
             break
         except Exception as e:
             print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
             turn_failed = True
+            _turn_log = {
+                "turn_id": turn_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "discovery_ok": False, "discovery_error": str(e),
+                "detail_ok": False, "detail_error": None,
+                "pc_ok": False, "pc_error": None,
+                "relationships_ok": False, "relationships_error": None,
+                "events_ok": False, "events_error": None,
+                "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+            }
             # Save progress and catalogs so entities survive interruption (#220)
             _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
                            total, catalogs, dry_run,
@@ -3687,6 +3807,10 @@ def extract_semantic_batch(
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
+
+        # Write per-turn extraction log (#217)
+        if _turn_log and not dry_run:
+            _write_extraction_log(extraction_log_path, _turn_log)
 
         if turn_failed:
             failed_turns.append(turn_id)
@@ -3846,6 +3970,7 @@ def extract_semantic_single(
         return
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
+    extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
 
@@ -3855,10 +3980,29 @@ def extract_semantic_single(
     turn = {"turn_id": turn_id, "speaker": speaker, "text": text}
 
     print(f"  Running semantic extraction for {turn_id}...")
-    catalogs, events_list, _turn_failed = extract_and_merge(
-        turn, catalogs, events_list, llm, min_confidence,
-        catalog_dir=catalog_dir,
-    )
+    try:
+        catalogs, events_list, _turn_failed, _turn_log = extract_and_merge(
+            turn, catalogs, events_list, llm, min_confidence,
+            catalog_dir=catalog_dir,
+        )
+    except Exception as e:
+        _turn_log = {
+            "turn_id": turn_id,
+            "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+            "discovery_ok": False, "discovery_error": str(e),
+            "detail_ok": False, "detail_error": None,
+            "pc_ok": False, "pc_error": None,
+            "relationships_ok": False, "relationships_error": None,
+            "events_ok": False, "events_error": None,
+            "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+        }
+        _write_extraction_log(extraction_log_path, _turn_log)
+        print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
+        save_catalogs(catalog_dir, catalogs)
+        save_events(catalog_dir, events_list)
+        return
+
+    _write_extraction_log(extraction_log_path, _turn_log)
 
     entities_total = sum(len(v) for v in catalogs.values())
     print(f"  Catalog now has {entities_total} entities, {len(events_list)} events")
@@ -3897,3 +4041,20 @@ def _save_progress(
     with open(progress_file, "w", encoding="utf-8") as f:
         json.dump(progress, f, indent=2)
         f.write("\n")
+
+
+def _write_extraction_log(log_path: str, record: dict) -> None:
+    """Append a per-turn extraction log record to a JSONL file (#217).
+
+    Each line is a self-contained JSON object recording the outcome of
+    one turn's extraction phases, errors encountered, counts of new
+    entities/events, and elapsed time.  The file is append-only so it
+    survives interruptions and can be consulted post-mortem.
+    """
+    try:
+        os.makedirs(os.path.dirname(os.path.abspath(log_path)), exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, default=str) + "\n")
+    except (OSError, TypeError, ValueError):
+        # Logging must never interrupt extraction.
+        pass

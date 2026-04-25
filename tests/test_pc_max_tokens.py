@@ -216,7 +216,7 @@ class TestPCSkipIntegration:
                 "speaker": "dm",
                 "text": f"The DM describes turn {start + i}.",
             }
-            catalogs, events, _failed = se.extract_and_merge(
+            catalogs, events, _failed, _log = se.extract_and_merge(
                 turn, catalogs, events, llm, min_confidence=0.6,
             )
         return catalogs, events
@@ -271,7 +271,7 @@ class TestPCSkipIntegration:
         events = []
         for i in range(5):
             turn = {"turn_id": f"turn-{i+1:03d}", "speaker": "dm", "text": "text"}
-            catalogs, events, _failed = se.extract_and_merge(
+            catalogs, events, _failed, _log = se.extract_and_merge(
                 turn, catalogs, events, llm_fail, min_confidence=0.6,
             )
         assert se._pc_consecutive_failures == 5
@@ -379,7 +379,7 @@ class TestPCSkipLogNoise:
                 "speaker": "dm",
                 "text": f"Turn {i+1} text.",
             }
-            catalogs, events, _failed = se.extract_and_merge(
+            catalogs, events, _failed, _log = se.extract_and_merge(
                 turn, catalogs, events, llm, min_confidence=0.6,
             )
         return capsys.readouterr()
