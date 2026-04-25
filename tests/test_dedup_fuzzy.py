@@ -214,7 +214,7 @@ def test_single_turn_extraction_calls_dormancy():
          patch("semantic_extraction.save_catalogs"), \
          patch("semantic_extraction.save_events"), \
          patch("semantic_extraction._ensure_player_character"), \
-         patch("semantic_extraction.extract_and_merge", return_value=({f: [] for f in ["characters.json","locations.json","factions.json","items.json"]}, [])):
+         patch("semantic_extraction.extract_and_merge", return_value=({f: [] for f in ["characters.json","locations.json","factions.json","items.json"]}, [], False)):
         mock_llm_cls.return_value = MagicMock()
         from semantic_extraction import extract_semantic_single
         extract_semantic_single("turn-001", "dm", "Test text", "session-test", "framework-test")

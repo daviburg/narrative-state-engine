@@ -1332,7 +1332,7 @@ def extract_and_merge(
     llm: LLMClient,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     catalog_dir: str | None = None,
-) -> tuple[dict, list]:
+) -> tuple[dict, list, bool]:
     """Process one turn through all extraction agents.
 
     Args:
@@ -1345,7 +1345,9 @@ def extract_and_merge(
             arc sidecar files for relationship compaction (#120).
 
     Returns:
-        Updated (catalogs, events_list) tuple.
+        Tuple of (catalogs, events_list, turn_failed) where
+        turn_failed is True when any extraction agent encountered an
+        LLM error (e.g. 429, quota exhaustion, timeout).
     """
     global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
@@ -1369,6 +1371,7 @@ def extract_and_merge(
                 break
 
     # --- 1. Entity Discovery ---
+    turn_failed = False
     known = format_known_entities(catalogs)
     try:
         discovery_result = llm.extract_json(
@@ -1378,10 +1381,12 @@ def extract_and_merge(
     except LLMExtractionError as e:
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
         discovery_result = {"entities": []}
+        turn_failed = True
 
     if not isinstance(discovery_result, dict):
         print(f"  WARNING: Discovery returned non-dict for {turn_id}, skipping", file=sys.stderr)
         discovery_result = {"entities": []}
+        turn_failed = True
 
     discovered = discovery_result.get("entities", [])
 
@@ -1438,6 +1443,7 @@ def extract_and_merge(
             )
         except LLMExtractionError as e:
             print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
+            turn_failed = True
             continue
 
         entity_data = _unwrap_entity_response(detail_result)
@@ -1610,6 +1616,7 @@ def extract_and_merge(
                 merge_relationships(catalogs, relationships, turn_id)
         except LLMExtractionError as e:
             print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}", file=sys.stderr)
+            turn_failed = True
 
     # --- 4. Event Extraction ---
     next_evt_id = get_next_event_id(events_list)
@@ -1646,9 +1653,10 @@ def extract_and_merge(
         _ensure_birth_entities(events_list, catalogs)
     except LLMExtractionError as e:
         print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
+        turn_failed = True
 
     llm.delay()
-    return catalogs, events_list
+    return catalogs, events_list, turn_failed
 
 
 def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
@@ -3103,6 +3111,8 @@ def _extract_segmented(
         seg_refresh_interval = _seg_refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
         seg_refresh_batch = _seg_refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
 
+        seg_failed_turns: list[str] = []
+
         # Process this segment's turns
         for i, turn in enumerate(segment_turns):
             turn_id = turn["turn_id"]
@@ -3112,12 +3122,16 @@ def _extract_segmented(
                 print(f"  ... {turn_id} ({start + i + 1}/{total}, {entities_now} entities)")
 
             try:
-                seg_catalogs, seg_events = extract_and_merge(
+                seg_catalogs, seg_events, seg_turn_failed = extract_and_merge(
                     turn, seg_catalogs, seg_events, llm, min_confidence,
                     catalog_dir=None,
                 )
             except Exception as e:
                 print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
+                seg_turn_failed = True
+
+            if seg_turn_failed:
+                seg_failed_turns.append(turn_id)
                 continue
 
             # --- Entity refresh pass (#161) ---
@@ -3163,12 +3177,15 @@ def _extract_segmented(
 
         seg_entity_count = sum(len(v) for v in seg_catalogs.values())
         print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events")
+        if seg_failed_turns:
+            print(f"  {segment_id}: {len(seg_failed_turns)} turn(s) had extraction failures", file=sys.stderr)
 
         segments.append({
             "id": segment_id,
             "catalogs": seg_catalogs,
             "events": seg_events,
             "turn_range": (segment_turns[0]["turn_id"], segment_turns[-1]["turn_id"]),
+            "failed_turns": seg_failed_turns,
         })
 
         # Save checkpoint after each segment — use separate progress key
@@ -3204,13 +3221,25 @@ def _extract_segmented(
         print(f"  Post-reconciliation name-mention discovery: {name_stubs} stub(s)")
 
     entities_final = sum(len(v) for v in final_catalogs.values())
+
+    # Collect all failed turns across segments (#211)
+    all_failed_turns = []
+    for seg in segments:
+        all_failed_turns.extend(seg.get("failed_turns", []))
+    if all_failed_turns:
+        print(f"\n  WARNING: {len(all_failed_turns)} turn(s) had extraction failures:", file=sys.stderr)
+        for tid in all_failed_turns:
+            print(f"    - {tid}", file=sys.stderr)
+        print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
+
     print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events")
 
     if not dry_run:
         save_catalogs(catalog_dir, final_catalogs)
         save_events(catalog_dir, final_events)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
-                       total, final_catalogs, dry_run=False, completed=True)
+                       total, final_catalogs, dry_run=False, completed=True,
+                       metadata={"failed_turns": all_failed_turns} if all_failed_turns else None)
 
 
 def extract_semantic_batch(
@@ -3295,6 +3324,24 @@ def extract_semantic_batch(
             pass  # Corrupted progress file; start from beginning
 
     total = len(turn_dicts)
+    failed_turns: list[str] = []
+
+    # Re-attempt turns that failed in a previous run (e.g. due to quota exhaustion)
+    previously_failed = []
+    if os.path.exists(progress_file) and start_from > 0:
+        try:
+            with open(progress_file, "r", encoding="utf-8") as f:
+                prev_progress = json.load(f)
+            previously_failed = prev_progress.get("failed_turns", [])
+            if previously_failed:
+                print(f"  Re-attempting {len(previously_failed)} previously failed turn(s)...")
+        except (json.JSONDecodeError, KeyError, OSError) as e:
+            print(
+                f"  WARNING: Could not load previously failed turns from progress file: {e}. "
+                "Continuing without retry list.",
+                file=sys.stderr,
+            )
+            previously_failed = []
 
     print(f"  Processing {total - start_from} turns for semantic extraction...")
 
@@ -3304,6 +3351,27 @@ def extract_semantic_batch(
     refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
     checkpoint_interval = _read_checkpoint_interval(_refresh_cfg)
 
+    # Re-attempt previously failed turns before continuing
+    if previously_failed:
+        retry_map = {t["turn_id"]: t for t in turn_dicts}
+        for retry_tid in previously_failed:
+            retry_turn = retry_map.get(retry_tid)
+            if not retry_turn:
+                continue
+            try:
+                catalogs, events_list, retry_disc_failed = extract_and_merge(
+                    retry_turn, catalogs, events_list, llm, min_confidence,
+                    catalog_dir=catalog_dir,
+                )
+                if retry_disc_failed:
+                    failed_turns.append(retry_tid)
+                    print(f"  Retry still failed for {retry_tid}", file=sys.stderr)
+                else:
+                    print(f"  Retry succeeded for {retry_tid}")
+            except Exception as e:
+                print(f"  Retry ERROR for {retry_tid}: {e}", file=sys.stderr)
+                failed_turns.append(retry_tid)
+
     for i in range(start_from, total):
         turn = turn_dicts[i]
         turn_id = turn["turn_id"]
@@ -3312,16 +3380,22 @@ def extract_semantic_batch(
             entities_now = sum(len(v) for v in catalogs.values())
             print(f"  ... {turn_id} ({i + 1}/{total}, {entities_now} entities)")
 
+        turn_failed = False
         try:
-            catalogs, events_list = extract_and_merge(
+            catalogs, events_list, turn_failed = extract_and_merge(
                 turn, catalogs, events_list, llm, min_confidence,
                 catalog_dir=catalog_dir,
             )
         except Exception as e:
             print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
+            turn_failed = True
             # Save progress and continue
             _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
-                           total, catalogs, dry_run)
+                           total, catalogs, dry_run,
+                           metadata={"failed_turns": failed_turns} if failed_turns else None)
+
+        if turn_failed:
+            failed_turns.append(turn_id)
             continue
 
         # --- Entity refresh pass (#161) ---
@@ -3346,7 +3420,8 @@ def extract_semantic_batch(
 
         # Checkpoint every N turns (configurable via config/llm.json checkpoint_interval, default 25)
         if (i + 1) % checkpoint_interval == 0:
-            _save_progress(progress_file, turn_id, total, catalogs, dry_run)
+            _save_progress(progress_file, turn_id, total, catalogs, dry_run,
+                           metadata={"failed_turns": failed_turns} if failed_turns else None)
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
@@ -3376,6 +3451,13 @@ def extract_semantic_batch(
     # Final save
     entities_after = sum(len(v) for v in catalogs.values())
     events_after = len(events_list)
+
+    # Report failed turns (#211)
+    if failed_turns:
+        print(f"\n  WARNING: {len(failed_turns)} turn(s) had extraction failures:", file=sys.stderr)
+        for tid in failed_turns:
+            print(f"    - {tid}", file=sys.stderr)
+        print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
     # Post-batch dedup: merge entities that share the same name/aliases but got separate IDs
     dupes_merged, merge_map = _dedup_catalogs(catalogs)
@@ -3428,7 +3510,8 @@ def extract_semantic_batch(
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
-                       total, catalogs, dry_run=False, completed=True)
+                       total, catalogs, dry_run=False, completed=True,
+                       metadata={"failed_turns": failed_turns} if failed_turns else None)
 
 
 def extract_semantic_single(
@@ -3474,7 +3557,7 @@ def extract_semantic_single(
     turn = {"turn_id": turn_id, "speaker": speaker, "text": text}
 
     print(f"  Running semantic extraction for {turn_id}...")
-    catalogs, events_list = extract_and_merge(
+    catalogs, events_list, _turn_failed = extract_and_merge(
         turn, catalogs, events_list, llm, min_confidence,
         catalog_dir=catalog_dir,
     )
