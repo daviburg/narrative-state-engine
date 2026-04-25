@@ -67,7 +67,7 @@ class TestSegmentedCheckpointPersistence:
             catalogs["characters.json"].append(
                 _make_entity(eid, f"Entity {entity_counter[0]}")
             )
-            return catalogs, events, False
+            return catalogs, events, False, {}
 
         turns = _make_turns(1, 6)  # 6 turns, segment_size=3 → 2 segments
 
@@ -103,7 +103,7 @@ class TestSegmentedCheckpointPersistence:
                 _make_entity(f"char-seg-ent-{len(catalogs['characters.json']) + 1}",
                              f"Ent {len(catalogs['characters.json']) + 1}")
             )
-            return catalogs, events, False
+            return catalogs, events, False, {}
 
         def spying_ensure_pc(catalogs, turn_id):
             """Called at the start of each segment — snapshot disk state."""
@@ -158,7 +158,7 @@ class TestIntraSegmentCheckpoint:
                 _make_entity(f"char-intra-{call_count[0]}",
                              f"IntraEnt {call_count[0]}")
             )
-            return catalogs, events, False
+            return catalogs, events, False, {}
 
         turns = _make_turns(1, 5)  # 1 segment of 5 turns
 
@@ -216,7 +216,7 @@ class TestErrorPathPersistence:
                 _make_entity(f"char-err-{call_count[0]}",
                              f"ErrEnt {call_count[0]}")
             )
-            return catalogs, events, False
+            return catalogs, events, False, {}
 
         turns = _make_turns(1, 5)
 
@@ -286,7 +286,7 @@ class TestResumeLoadsPersisted:
             # On the first call (turn 3), record what catalogs were loaded
             if loaded_catalogs[0] is None:
                 loaded_catalogs[0] = {k: list(v) for k, v in catalogs.items()}
-            return catalogs, events, False
+            return catalogs, events, False, {}
 
         turns = _make_turns(1, 5)
 
