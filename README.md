@@ -4,25 +4,42 @@
   <img src="assets/artwork.png" alt="Narrative State Engine" width="800">
 </p>
 
-A player-side assistant framework for AI-driven RPG and interactive fiction sessions.
+A structured knowledge extraction and state-tracking engine for AI-driven narrative systems. It builds and maintains a canonical, evolving world model from sequential text — enabling coherent long-running reasoning over state that grows across hundreds of interactions.
 
-This system captures DM responses and player prompts, preserves full transcripts, extracts structured narrative state, maintains catalogs and storyline continuity, tracks player objectives, analyzes strategy, and generates suggested next player prompts.
-
-**This is NOT a DM engine.** It supports the player interacting with an external AI DM.
+**Flagship use case:** A player-side "second brain" for tabletop RPG campaigns played against AI Dungeon Masters — tracking every character, location, relationship, and event across sessions that span months, surfacing contradictions, and supporting strategic reasoning beyond human memory limits.
 
 ---
 
-## Purpose
+## What This Is
+
+- A **structured state layer** that extracts entities, relationships, and events from narrative text and maintains them as a validated, evolving knowledge graph
+- A **player-side assistant** that independently tracks canonical world state, not relying on the DM's narration alone
+- A **schema-first extraction pipeline** using LLMs (local or cloud) to convert unstructured narrative into structured, provenance-tracked data
+- **Provider-agnostic** — runs on local models (Ollama) or cloud APIs (Gemini, OpenAI) with a config change
+
+## What This Is Not
+
+- Not a workflow engine, UI state machine, or statechart library (not XState, not an onboarding flow tool)
+- Not a DM or story generator — it supports the *player* interacting with an external AI DM
+- Not a RAG system — it builds structured state, not a retrieval index
+- Not a chat memory buffer — it maintains a canonical world model with temporal provenance, not conversation history
+
+## Why This Exists
+
+LLMs lose coherence over long interactions. Chat history is not memory. When a campaign reaches hundreds of turns, the AI forgets who died, what was promised, where the player lives, and which NPCs are allies. This engine solves that by extracting and maintaining structured state that persists independently of any conversation window.
+
+---
+
+## How It Works
 
 Given a sequence of DM outputs and player prompts, the system:
 
-1. Preserves the exact transcript (immutable source)
-2. Maintains a structured understanding of the narrative state
-3. Tracks player objectives (short-term and long-term)
-4. Identifies evidence, inference, and possible DM bait
-5. Infers DM behavior patterns over time
-6. Analyzes the current situation
-7. Suggests multiple candidate player prompts
+1. **Preserves** the exact transcript as an immutable source of truth
+2. **Extracts** entities, relationships, events, and temporal markers via a four-agent LLM pipeline
+3. **Maintains** a validated knowledge graph of characters, locations, factions, items, and plot threads
+4. **Tracks** player objectives, evidence classification, and DM behavior patterns
+5. **Analyzes** the current situation and generates candidate next-player prompts
+6. **Evolves** — every entity carries `first_seen_turn` and `last_updated_turn` provenance, and the world model updates incrementally with each new turn
 
 ---
 
