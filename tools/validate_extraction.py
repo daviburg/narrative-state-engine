@@ -86,6 +86,54 @@ def _all_character_ids(catalog_dir: Path) -> list[str]:
     return sorted(ids)
 
 
+def _find_character_by_name(
+    name: str, catalog_dir: Path,
+) -> tuple[str, str] | None:
+    """Find a character by name or alias (case-insensitive).
+
+    Returns (char_id, match_type) where match_type is 'name' or 'alias',
+    or None if no match is found.
+    """
+    chars_dir = catalog_dir / "characters"
+    if not chars_dir.is_dir():
+        return None
+    target = name.lower()
+    # First pass: match by name
+    for f in sorted(chars_dir.iterdir()):
+        if (
+            f.suffix != ".json"
+            or f.name.endswith(".synthesis.json")
+            or f.name.endswith(".arcs.json")
+            or f.name == "index.json"
+        ):
+            continue
+        try:
+            char = _load_json(f)
+        except Exception:
+            continue
+        if char.get("name", "").lower() == target:
+            return (f.stem, "name")
+    # Second pass: match by alias
+    for f in sorted(chars_dir.iterdir()):
+        if (
+            f.suffix != ".json"
+            or f.name.endswith(".synthesis.json")
+            or f.name.endswith(".arcs.json")
+            or f.name == "index.json"
+        ):
+            continue
+        try:
+            char = _load_json(f)
+        except Exception:
+            continue
+        aliases = _normalize_aliases(
+            char.get("stable_attributes", {}).get("aliases", {}).get("value"),
+        )
+        if target in aliases:
+            return (f.stem, "alias")
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Result tracking
 # ---------------------------------------------------------------------------
@@ -123,6 +171,7 @@ def check_independent_characters(
         patterns = entry.get("id_patterns", [])
         is_optional = entry.get("optional", False)
         found_id = None
+        match_type = None
 
         for pat in patterns:
             # Support glob patterns (e.g. "char-shaman-turn-*")
@@ -137,15 +186,21 @@ def check_independent_characters(
                 break
 
         if not found_id:
-            # Check if merged as PC alias
-            if name.lower() in pc_alias_list:
-                results.append(Result(
-                    Result.FAIL, name, "NOT FOUND — merged as PC alias",
-                ))
+            # Fallback: scan catalog by name/alias
+            match = _find_character_by_name(name, catalog_dir)
+            if match:
+                found_id = match[0]
+                match_type = match[1]
             else:
-                severity = Result.WARN if is_optional else Result.FAIL
-                results.append(Result(severity, name, "NOT FOUND"))
-            continue
+                # Check if merged as PC alias
+                if name.lower() in pc_alias_list:
+                    results.append(Result(
+                        Result.FAIL, name, "NOT FOUND — merged as PC alias",
+                    ))
+                else:
+                    severity = Result.WARN if is_optional else Result.FAIL
+                    results.append(Result(severity, name, "NOT FOUND"))
+                continue
 
         # Check staleness
         char_data = _load_character(catalog_dir, found_id)
@@ -154,13 +209,18 @@ def check_independent_characters(
         )
         turn_display = f"turn-{last_turn}" if last_turn else "unknown"
 
+        # Note if entity was found via name/alias under a non-canonical ID
+        id_note = ""
+        if match_type:
+            id_note = f" (matched by {match_type}, expected ID from id_patterns)"
+
         expected_min = entry.get("expected_last_updated_min")
         if expected_min and last_turn is None:
             results.append(Result(
                 Result.FAIL,
                 name,
                 f"{found_id:30s} ({turn_display}) — last_updated_turn missing "
-                f"(expected >={expected_min})",
+                f"(expected >={expected_min}){id_note}",
             ))
         elif expected_min and last_turn and last_turn < expected_min:
             gap = expected_min - last_turn
@@ -169,11 +229,11 @@ def check_independent_characters(
                 severity,
                 name,
                 f"{found_id:30s} ({turn_display}) — stale by {gap} turns "
-                f"(expected >={expected_min})",
+                f"(expected >={expected_min}){id_note}",
             ))
         else:
             results.append(Result(
-                Result.PASS, name, f"{found_id:30s} ({turn_display})",
+                Result.PASS, name, f"{found_id:30s} ({turn_display}){id_note}",
             ))
 
     return results
@@ -325,12 +385,19 @@ def check_coreference_groups(
         expected_id = group["expected_id"]
         variants = group.get("variants_to_merge", [])
 
-        # Check canonical exists
+        # Check canonical exists (with name/alias fallback)
+        actual_id = expected_id
+        id_note = ""
         if expected_id not in all_ids:
-            results.append(Result(
-                Result.FAIL, canonical, f"{expected_id} NOT FOUND",
-            ))
-            continue
+            match = _find_character_by_name(canonical, catalog_dir)
+            if match:
+                actual_id = match[0]
+                id_note = f" (matched by {match[1]} as {actual_id})"
+            else:
+                results.append(Result(
+                    Result.FAIL, canonical, f"{expected_id} NOT FOUND",
+                ))
+                continue
 
         # Check for fragmented variants
         fragments = []
@@ -341,14 +408,16 @@ def check_coreference_groups(
                 fragments.append(variant_id)
 
         if fragments:
-            frag_list = ", ".join([expected_id] + fragments)
+            frag_list = ", ".join([actual_id] + fragments)
             results.append(Result(
                 Result.WARN,
                 canonical,
-                f"{len(fragments) + 1} FRAGMENTS: {frag_list}",
+                f"{len(fragments) + 1} FRAGMENTS: {frag_list}{id_note}",
             ))
         else:
-            results.append(Result(Result.PASS, canonical, f"{expected_id} — unified"))
+            results.append(Result(
+                Result.PASS, canonical, f"{actual_id} — unified{id_note}",
+            ))
 
     return results
 
@@ -365,11 +434,20 @@ def check_staleness(
         reason = target.get("reason", "")
 
         char_data = _load_character(catalog_dir, entity_id)
+        id_note = ""
         if not char_data:
-            results.append(Result(
-                Result.FAIL, entity_id, f"NOT FOUND — {reason}",
-            ))
-            continue
+            # Fallback: try to find by scanning name/alias
+            # Derive a human name from the ID for lookup
+            human_name = entity_id.replace("char-", "").replace("-", " ").title()
+            match = _find_character_by_name(human_name, catalog_dir)
+            if match:
+                char_data = _load_character(catalog_dir, match[0])
+                id_note = f" (matched by {match[1]} as {match[0]})"
+            if not char_data:
+                results.append(Result(
+                    Result.FAIL, entity_id, f"NOT FOUND — {reason}",
+                ))
+                continue
 
         last_turn = _turn_number(char_data.get("last_updated_turn", ""))
         if last_turn is None:
@@ -382,16 +460,16 @@ def check_staleness(
         if gap > 50:
             results.append(Result(
                 Result.FAIL, entity_id,
-                f"turn-{last_turn} (expected >={expected_min}, gap={gap})",
+                f"turn-{last_turn} (expected >={expected_min}, gap={gap}){id_note}",
             ))
         elif gap > 20:
             results.append(Result(
                 Result.WARN, entity_id,
-                f"turn-{last_turn} (expected >={expected_min}, gap={gap})",
+                f"turn-{last_turn} (expected >={expected_min}, gap={gap}){id_note}",
             ))
         else:
             results.append(Result(
-                Result.PASS, entity_id, f"turn-{last_turn}",
+                Result.PASS, entity_id, f"turn-{last_turn}{id_note}",
             ))
 
     return results

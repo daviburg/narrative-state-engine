@@ -292,3 +292,247 @@ class TestFunctionalValidation:
         assert validate_extraction._normalize_aliases("single") == ["single"]
         assert validate_extraction._normalize_aliases(None) == []
         assert validate_extraction._normalize_aliases(["A", "B"]) == ["a", "b"]
+
+
+# ---------------------------------------------------------------------------
+# Name/alias fallback matching tests (#216)
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def name_fallback_ground_truth(tmp_path):
+    """Ground truth where id_patterns don't match the actual catalog IDs."""
+    gt = {
+        "description": "name fallback fixture",
+        "source_session": "test",
+        "turn_range": [1, 50],
+        "expected_pc_aliases": [],
+        "expected_independent_characters": [
+            {
+                "name": "Kael",
+                "role": "warrior",
+                "id_patterns": ["char-kael"],
+                "must_not_be_pc_alias": True,
+                "expected_first_seen_range": [1, 5],
+                "expected_last_updated_min": 40,
+                "notes": "test — stored under different ID",
+            },
+            {
+                "name": "Lyrawyn",
+                "role": "daughter",
+                "id_patterns": ["char-lyrawyn"],
+                "must_not_be_pc_alias": True,
+                "expected_first_seen_range": [10, 12],
+                "expected_last_updated_min": 30,
+                "notes": "test — found via alias",
+            },
+            {
+                "name": "TrulyMissing",
+                "role": "ghost",
+                "id_patterns": ["char-truly-missing"],
+                "must_not_be_pc_alias": True,
+                "expected_first_seen_range": [1, 5],
+                "expected_last_updated_min": 10,
+                "notes": "should not be found",
+            },
+            {
+                "name": "ExactMatch",
+                "role": "ally",
+                "id_patterns": ["char-exact"],
+                "must_not_be_pc_alias": True,
+                "expected_first_seen_range": [1, 5],
+                "expected_last_updated_min": 40,
+                "notes": "found by exact ID",
+            },
+        ],
+        "must_not_merge": [],
+        "coreference_groups": [
+            {
+                "canonical_name": "Kael",
+                "expected_id": "char-kael",
+                "variants_to_merge": ["young warrior"],
+                "notes": "test coreference with non-canonical ID",
+            },
+        ],
+        "entity_staleness_targets": [
+            {"id": "char-kael", "expected_last_updated_min": 40, "reason": "active"},
+        ],
+        "expected_locations_beyond_turn_100": [],
+        "expected_factions_beyond_early_game": [],
+    }
+    gt_path = tmp_path / "gt.json"
+    _write_json(gt_path, gt)
+    return gt_path
+
+
+@pytest.fixture
+def name_fallback_catalog(tmp_path):
+    """Catalog where entities have non-canonical IDs but correct names/aliases."""
+    cat_dir = tmp_path / "catalogs"
+    chars = cat_dir / "characters"
+    chars.mkdir(parents=True)
+
+    # Kael stored under char-companion instead of char-kael
+    _write_json(chars / "char-companion.json", {
+        "id": "char-companion",
+        "name": "Kael",
+        "type": "character",
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-045",
+        "stable_attributes": {},
+    })
+
+    # Lyrawyn stored under char-new-life, findable via alias
+    _write_json(chars / "char-new-life.json", {
+        "id": "char-new-life",
+        "name": "New Life",
+        "type": "character",
+        "first_seen_turn": "turn-010",
+        "last_updated_turn": "turn-035",
+        "stable_attributes": {
+            "aliases": {"value": ["Lyrawyn", "daughter"], "source_turn": "turn-012"},
+        },
+    })
+
+    # ExactMatch found by exact id_patterns
+    _write_json(chars / "char-exact.json", {
+        "id": "char-exact",
+        "name": "ExactMatch",
+        "type": "character",
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-045",
+        "stable_attributes": {},
+    })
+
+    return cat_dir
+
+
+class TestNameFallbackMatching:
+    """Tests for #216: name/alias fallback when ID patterns don't match."""
+
+    def test_name_match_finds_entity_under_different_id(
+        self, name_fallback_ground_truth, name_fallback_catalog,
+    ):
+        import validate_extraction
+        gt = json.loads(name_fallback_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(name_fallback_catalog)
+        results = validate_extraction.check_independent_characters(
+            gt, name_fallback_catalog, pc_aliases,
+        )
+        kael = [r for r in results if r.label == "Kael"][0]
+        assert kael.status != validate_extraction.Result.FAIL
+        assert "char-companion" in kael.detail
+        assert "matched by name" in kael.detail
+
+    def test_alias_match_finds_entity(
+        self, name_fallback_ground_truth, name_fallback_catalog,
+    ):
+        import validate_extraction
+        gt = json.loads(name_fallback_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(name_fallback_catalog)
+        results = validate_extraction.check_independent_characters(
+            gt, name_fallback_catalog, pc_aliases,
+        )
+        lyra = [r for r in results if r.label == "Lyrawyn"][0]
+        assert lyra.status != validate_extraction.Result.FAIL
+        assert "char-new-life" in lyra.detail
+        assert "matched by alias" in lyra.detail
+
+    def test_truly_missing_still_fails(
+        self, name_fallback_ground_truth, name_fallback_catalog,
+    ):
+        import validate_extraction
+        gt = json.loads(name_fallback_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(name_fallback_catalog)
+        results = validate_extraction.check_independent_characters(
+            gt, name_fallback_catalog, pc_aliases,
+        )
+        missing = [r for r in results if r.label == "TrulyMissing"][0]
+        assert missing.status == validate_extraction.Result.FAIL
+        assert "NOT FOUND" in missing.detail
+
+    def test_exact_id_match_still_works(
+        self, name_fallback_ground_truth, name_fallback_catalog,
+    ):
+        import validate_extraction
+        gt = json.loads(name_fallback_ground_truth.read_text(encoding="utf-8"))
+        pc_aliases = validate_extraction._pc_aliases(name_fallback_catalog)
+        results = validate_extraction.check_independent_characters(
+            gt, name_fallback_catalog, pc_aliases,
+        )
+        exact = [r for r in results if r.label == "ExactMatch"][0]
+        assert exact.status == validate_extraction.Result.PASS
+        assert "matched by" not in exact.detail
+
+    def test_case_insensitive_name_match(self, tmp_path):
+        import validate_extraction
+        cat_dir = tmp_path / "catalogs"
+        chars = cat_dir / "characters"
+        chars.mkdir(parents=True)
+        _write_json(chars / "char-elder-figure.json", {
+            "id": "char-elder-figure",
+            "name": "The elder",
+            "type": "character",
+            "first_seen_turn": "turn-008",
+            "last_updated_turn": "turn-045",
+            "stable_attributes": {},
+        })
+        gt = {
+            "expected_independent_characters": [
+                {
+                    "name": "The Elder",
+                    "id_patterns": ["char-elder"],
+                    "expected_last_updated_min": 40,
+                },
+            ],
+        }
+        results = validate_extraction.check_independent_characters(gt, cat_dir, [])
+        result = results[0]
+        assert result.status != validate_extraction.Result.FAIL
+        assert "char-elder-figure" in result.detail
+
+    def test_coreference_group_name_fallback(
+        self, name_fallback_ground_truth, name_fallback_catalog,
+    ):
+        import validate_extraction
+        gt = json.loads(name_fallback_ground_truth.read_text(encoding="utf-8"))
+        results = validate_extraction.check_coreference_groups(
+            gt, name_fallback_catalog,
+        )
+        kael_group = [r for r in results if r.label == "Kael"][0]
+        # Should not FAIL with NOT FOUND — should find via name
+        assert "NOT FOUND" not in kael_group.detail
+        assert "char-companion" in kael_group.detail
+
+    def test_staleness_name_fallback(
+        self, name_fallback_ground_truth, name_fallback_catalog,
+    ):
+        import validate_extraction
+        gt = json.loads(name_fallback_ground_truth.read_text(encoding="utf-8"))
+        results = validate_extraction.check_staleness(gt, name_fallback_catalog)
+        kael_stale = [r for r in results if r.label == "char-kael"][0]
+        # Should not FAIL with NOT FOUND — should find via name
+        assert "NOT FOUND" not in kael_stale.detail
+
+    def test_find_character_by_name_direct(self, name_fallback_catalog):
+        import validate_extraction
+        result = validate_extraction._find_character_by_name(
+            "Kael", name_fallback_catalog,
+        )
+        assert result is not None
+        assert result == ("char-companion", "name")
+
+    def test_find_character_by_alias_direct(self, name_fallback_catalog):
+        import validate_extraction
+        result = validate_extraction._find_character_by_name(
+            "Lyrawyn", name_fallback_catalog,
+        )
+        assert result is not None
+        assert result == ("char-new-life", "alias")
+
+    def test_find_character_not_found(self, name_fallback_catalog):
+        import validate_extraction
+        result = validate_extraction._find_character_by_name(
+            "Nobody", name_fallback_catalog,
+        )
+        assert result is None
