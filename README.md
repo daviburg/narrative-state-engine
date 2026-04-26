@@ -6,13 +6,13 @@
 
 A structured knowledge extraction and state-tracking engine for AI-driven narrative systems. It builds and maintains a canonical, evolving world model from sequential text — enabling coherent long-running reasoning over state that grows across hundreds of interactions.
 
-**Flagship use case:** A player-side "second brain" for tabletop RPG campaigns played against AI Dungeon Masters — tracking every character, location, relationship, and event across sessions that span months, surfacing contradictions, and supporting strategic reasoning beyond human memory limits.
+**Flagship use case:** A player-side "second brain" for tabletop RPG campaigns played against AI Dungeon Masters — tracking every character, location, relationship, and event across sessions that span months, making contradictions easier to spot through a canonical, provenance-tracked state model, and supporting strategic reasoning beyond human memory limits.
 
 ---
 
 ## What This Is
 
-- A **structured state layer** that extracts entities, relationships, and events from narrative text and maintains them as a validated, evolving knowledge graph
+- A **structured state layer** that extracts entities, relationships, and events from narrative text and maintains them as a schema-defined, evolving knowledge base (validated when `jsonschema` is installed or when running `tools/validate.py`)
 - A **player-side assistant** that independently tracks canonical world state, not relying on the DM's narration alone
 - A **schema-first extraction pipeline** using LLMs (local or cloud) to convert unstructured narrative into structured, provenance-tracked data
 - **Provider-agnostic** — runs on local models (Ollama) or cloud APIs (Gemini, OpenAI) with a config change
@@ -36,7 +36,7 @@ Given a sequence of DM outputs and player prompts, the system:
 
 1. **Preserves** the exact transcript as an immutable source of truth
 2. **Extracts** entities, relationships, events, and temporal markers via a four-agent LLM pipeline
-3. **Maintains** a validated knowledge graph of characters, locations, factions, items, and plot threads
+3. **Maintains** a schema-defined knowledge base of characters, locations, factions, items, relationships, and events — plot threads are tracked separately and currently maintained manually or with Copilot assistance rather than by the automated extraction pipeline
 4. **Tracks** player objectives, evidence classification, and DM behavior patterns
 5. **Analyzes** the current situation and generates candidate next-player prompts
 6. **Evolves** — every entity carries `first_seen_turn` and `last_updated_turn` provenance, and the world model updates incrementally with each new turn
