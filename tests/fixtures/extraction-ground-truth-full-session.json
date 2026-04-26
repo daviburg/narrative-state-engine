@@ -50,7 +50,7 @@
     {
       "name": "The Elder",
       "role": "Tribal elder/authority figure",
-      "id_patterns": ["char-elder-figure-by-fire", "char-elder", "char-older-commanding-figure", "char-southern-elders-spokesperson"],
+      "id_patterns": ["char-elder-figure-by-fire", "char-elder", "char-older-commanding-figure"],
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [8, 15],
       "expected_last_updated_min": 300,
