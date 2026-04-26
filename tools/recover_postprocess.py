@@ -86,7 +86,7 @@ def main():
     # --- Pass 1: Strip false-positive PC aliases FIRST ---
     # Must happen before dedup, otherwise dedup will re-merge NPCs whose
     # names appear in the PC's alias list from the broken original merge.
-    print("\n=== Pass 1: Strip false-positive PC aliases ===")
+    print("\n=== Pass 1: Strip false-positive PC aliases + restore PC name ===")
     pc_entity = None
     for ent in catalogs.get("characters.json", []):
         if ent.get("id") == "char-player":
@@ -94,6 +94,31 @@ def main():
             break
     removed = []
     if pc_entity:
+        # Restore PC name/identity if corrupted by a prior merge (#248)
+        pc_name = pc_entity.get("name", "")
+        valid_pc_names = {"player character", "fenouille moonwind", "fenouille"}
+        if pc_name.lower().strip() not in valid_pc_names:
+            # Name was overwritten — restore from aliases if available
+            sa = pc_entity.get("stable_attributes", {})
+            alias_val = sa.get("aliases", {}).get("value", [])
+            restored_name = None
+            for a in (alias_val if isinstance(alias_val, list) else []):
+                if a.lower().strip() in valid_pc_names and len(a) > 3:
+                    restored_name = a
+                    break
+            if not restored_name:
+                restored_name = "Player Character"
+            print(f"  Restored PC name: '{pc_name}' → '{restored_name}'")
+            pc_entity["name"] = restored_name
+            # Clear corrupted identity if it doesn't describe the PC
+            ident = (pc_entity.get("identity") or "").lower()
+            if not any(w in ident for w in ["player", "fenouille", "warlock", "elf", "moon"]):
+                pc_entity["identity"] = (
+                    "The player character — an elf warlock guided by a celestial "
+                    "pact with a silent star."
+                )
+                print(f"  Restored PC identity (was describing a different character)")
+
         sa = pc_entity.setdefault("stable_attributes", {})
         aliases_attr = sa.get("aliases")
         # Normalize aliases to canonical {"value": [...]} structure

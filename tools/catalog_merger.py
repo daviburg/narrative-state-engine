@@ -631,8 +631,14 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
 
 def _update_existing_entity(current: dict, update: dict) -> None:
     """Update an existing entity with new information."""
+    is_pc = current.get("id") == "char-player"
+
+    # Never overwrite the PC's identity from a per-turn update — the PC's
+    # identity is established early and should not be replaced by an NPC
+    # description that happens to land on the same entity ID.
     if update.get("identity") and update["identity"] != current.get("identity"):
-        current["identity"] = update["identity"]
+        if not is_pc:
+            current["identity"] = update["identity"]
 
     if update.get("current_status"):
         current["current_status"] = update["current_status"]
@@ -654,7 +660,9 @@ def _update_existing_entity(current: dict, update: dict) -> None:
             current["volatile_state"][key] = value
 
     # Handle name changes / aliases via stable_attributes.aliases
-    if update.get("name") and update["name"] != current.get("name"):
+    # Never rename char-player — NPC names that the LLM attributes to the PC
+    # entity should become aliases, not overwrite the canonical PC name (#247).
+    if update.get("name") and update["name"] != current.get("name") and not is_pc:
         old_name = current["name"]
         if "stable_attributes" not in current:
             current["stable_attributes"] = {}
