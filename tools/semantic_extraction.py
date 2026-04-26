@@ -293,6 +293,17 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 entity_data[field] = ""
             print(f"  COERCE: {field} array → string: {val!r}", file=sys.stderr)
 
+    # Repair empty first_seen_turn / last_updated_turn (#241)
+    # An empty string passes `.get()` fallback checks but fails schema
+    # validation (pattern: ^turn-[0-9]{3,}$).  Remove the key so downstream
+    # code falls through to its default turn-ID logic.
+    for turn_field in ("first_seen_turn", "last_updated_turn"):
+        val = entity_data.get(turn_field)
+        if isinstance(val, str) and not _TURN_ID_RE.match(val):
+            entity_data.pop(turn_field)
+            if val:
+                print(f"  COERCE: removed invalid {turn_field}: {val!r}", file=sys.stderr)
+
     # If proposed_id or id contains commas, the LLM crammed multiple IDs into
     # one field.  Pick the one whose prefix matches the declared entity type.
     etype = entity_data.get("type", "")

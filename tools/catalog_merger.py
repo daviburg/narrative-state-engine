@@ -603,6 +603,15 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
             existing = (i, e)
             break
 
+    # Guard: repair empty first_seen_turn before merge (#241)
+    fst = entity.get("first_seen_turn")
+    if not fst or (isinstance(fst, str) and not re.match(r"^turn-[0-9]{3,}$", fst)):
+        fallback = entity.get("last_updated_turn", "")
+        if fallback and re.match(r"^turn-[0-9]{3,}$", fallback):
+            entity["first_seen_turn"] = fallback
+        else:
+            entity.pop("first_seen_turn", None)
+
     if existing is not None:
         idx, current = existing
         _update_existing_entity(current, entity)
@@ -722,11 +731,31 @@ def _dedup_relationships(relationships: list) -> list:
             if l_first is not None and (w_first is None or l_first < w_first):
                 winner["first_seen_turn"] = loser["first_seen_turn"]
 
+            # Push the loser's current_relationship into history so
+            # intermediate state is not silently dropped (#242).
+            loser_desc = loser.get("current_relationship", "")
+            winner_desc = winner.get("current_relationship", "")
+            loser_turn = (loser.get("last_updated_turn")
+                          or loser.get("first_seen_turn", ""))
+            if loser_desc and loser_desc != winner_desc and loser_turn:
+                loser_history_entry = {
+                    "turn": loser_turn,
+                    "description": loser_desc,
+                }
+            else:
+                loser_history_entry = None
+
             # Merge and deduplicate history by (turn, description)
             merged_history = list(winner.get("history", []))
             existing_keys = {
                 (h.get("turn"), h.get("description")) for h in merged_history
             }
+            if loser_history_entry:
+                key = (loser_history_entry["turn"],
+                       loser_history_entry["description"])
+                if key not in existing_keys:
+                    merged_history.append(loser_history_entry)
+                    existing_keys.add(key)
             for h in loser.get("history", []):
                 key = (h.get("turn"), h.get("description"))
                 if key not in existing_keys:
@@ -904,6 +933,9 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
 
     V2: consolidates per (source_id, target_id) pair.
     """
+    # Track entities touched so we can dedup once per entity, not per edge.
+    touched_entities: set[int] = set()
+
     for rel in relationships:
         source_id = rel.get("source_id")
         target_id = rel.get("target_id")
@@ -921,6 +953,12 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
 
         if "relationships" not in entity:
             entity["relationships"] = []
+
+        # Pre-dedup: collapse any pre-existing duplicates for this target
+        # *before* selecting an existing_rel, so consolidation always finds
+        # the single canonical entry and intermediate state is preserved in
+        # history by _dedup_relationships rather than silently dropped (#242).
+        entity["relationships"] = _dedup_relationships(entity["relationships"])
 
         # Check for existing relationship by target_id (V2 per-pair dedup)
         existing_rel = None

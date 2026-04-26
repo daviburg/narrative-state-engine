@@ -592,7 +592,7 @@ class TestDedupRelationships:
         assert result[0]["last_updated_turn"] == "turn-020"
 
     def test_preserves_history(self):
-        """History arrays from both entries should be merged."""
+        """History arrays from both entries should be merged, including loser's current."""
         rels = [
             {"target_id": "char-bob", "current_relationship": "ally",
              "type": "social", "last_updated_turn": "turn-010",
@@ -604,10 +604,11 @@ class TestDedupRelationships:
         result = _dedup_relationships(rels)
         assert len(result) == 1
         history = result[0].get("history", [])
-        assert len(history) == 2  # both histories merged
+        # Loser's current "ally" at turn-010 is also pushed to history
+        assert len(history) == 3
         # Should be chronologically sorted
         turns = [h.get("turn") for h in history]
-        assert turns == ["turn-005", "turn-015"]
+        assert turns == ["turn-005", "turn-010", "turn-015"]
 
     def test_deduplicates_identical_history(self):
         """Identical history entries should not be duplicated."""
@@ -622,7 +623,10 @@ class TestDedupRelationships:
         result = _dedup_relationships(rels)
         assert len(result) == 1
         history = result[0].get("history", [])
-        assert len(history) == 1  # duplicates removed
+        # acquaintance@005 deduped + loser's "ally"@010 pushed = 2
+        assert len(history) == 2
+        descs = {h["description"] for h in history}
+        assert descs == {"acquaintance", "ally"}
 
     def test_preserves_earliest_first_seen_turn(self):
         """The earliest first_seen_turn should be kept."""
@@ -653,6 +657,36 @@ class TestDedupRelationships:
 
     def test_empty_list(self):
         assert _dedup_relationships([]) == []
+
+    def test_loser_current_relationship_pushed_to_history(self):
+        """The losing entry's current_relationship is preserved in history (#242)."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "acquaintance",
+             "type": "social", "first_seen_turn": "turn-005",
+             "last_updated_turn": "turn-005"},
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "first_seen_turn": "turn-010",
+             "last_updated_turn": "turn-010"},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 1
+        # Winner is turn-010 (later); loser's "acquaintance" should be in history
+        assert result[0]["current_relationship"] == "ally"
+        history = result[0].get("history", [])
+        assert any(h["description"] == "acquaintance" for h in history)
+
+    def test_loser_same_description_not_duplicated_in_history(self):
+        """If loser has the same current_relationship as winner, skip history push."""
+        rels = [
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "last_updated_turn": "turn-005"},
+            {"target_id": "char-bob", "current_relationship": "ally",
+             "type": "social", "last_updated_turn": "turn-010"},
+        ]
+        result = _dedup_relationships(rels)
+        assert len(result) == 1
+        # No history entry needed — same description
+        assert result[0].get("history", []) == []
 
 
 # ---------------------------------------------------------------------------
@@ -719,3 +753,113 @@ class TestCleanupDanglingRelationships:
         removed = cleanup_dangling_relationships(catalogs)
         assert removed == {}
         assert len(catalogs["characters.json"][0]["relationships"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# merge_entity: empty first_seen_turn guard (#241)
+# ---------------------------------------------------------------------------
+
+class TestMergeEntityFirstSeenTurnGuard:
+    def test_empty_first_seen_turn_repaired_from_last_updated(self):
+        """Entity with empty first_seen_turn gets it from last_updated_turn."""
+        catalogs = {"characters.json": []}
+        entity = _make_v2_entity("char-ghost", "Ghost", turn="")
+        entity["last_updated_turn"] = "turn-050"
+        merge_entity(catalogs, entity)
+        assert len(catalogs["characters.json"]) == 1
+        assert catalogs["characters.json"][0]["first_seen_turn"] == "turn-050"
+
+    def test_invalid_first_seen_turn_repaired(self):
+        """Entity with non-pattern first_seen_turn gets it from last_updated_turn."""
+        catalogs = {"characters.json": []}
+        entity = _make_v2_entity("char-ghost", "Ghost", turn="unknown")
+        entity["last_updated_turn"] = "turn-010"
+        merge_entity(catalogs, entity)
+        assert len(catalogs["characters.json"]) == 1
+        assert catalogs["characters.json"][0]["first_seen_turn"] == "turn-010"
+
+    def test_entity_rejected_when_no_valid_turn(self):
+        """Entity with no valid turn IDs at all is rejected (missing required field)."""
+        catalogs = {"characters.json": []}
+        entity = _make_v2_entity("char-ghost", "Ghost", turn="")
+        entity["last_updated_turn"] = ""
+        merge_entity(catalogs, entity)
+        assert len(catalogs["characters.json"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# merge_relationships: safety dedup (#242)
+# ---------------------------------------------------------------------------
+
+class TestMergeRelationshipsDedup:
+    def test_deduplicates_pre_existing_duplicates(self):
+        """merge_relationships() should clean up pre-existing duplicate rels (#242)."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player", relationships=[
+                    {
+                        "target_id": "char-npc",
+                        "current_relationship": "ally",
+                        "type": "social",
+                        "status": "active",
+                        "first_seen_turn": "turn-005",
+                        "last_updated_turn": "turn-005",
+                    },
+                    {
+                        "target_id": "char-npc",
+                        "current_relationship": "friend",
+                        "type": "social",
+                        "status": "active",
+                        "first_seen_turn": "turn-010",
+                        "last_updated_turn": "turn-010",
+                    },
+                ]),
+                _make_v2_entity("char-npc", "NPC"),
+            ]
+        }
+        new_rels = [
+            {
+                "source_id": "char-player",
+                "target_id": "char-npc",
+                "relationship": "close friend",
+                "type": "social",
+            }
+        ]
+        merge_relationships(catalogs, new_rels, "turn-020")
+        rels = catalogs["characters.json"][0]["relationships"]
+        assert len(rels) == 1  # duplicates collapsed
+        assert rels[0]["current_relationship"] == "close friend"
+        # The loser's intermediate "ally" state should be preserved in history
+        history = rels[0].get("history", [])
+        history_descs = {h["description"] for h in history}
+        assert "ally" in history_descs
+
+    def test_no_duplicate_after_pc_refresh_style_merge(self):
+        """Simulates PC refresh: merging should not create duplicate target entries (#242)."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player", relationships=[
+                    {
+                        "target_id": "char-npc",
+                        "current_relationship": "ally",
+                        "type": "social",
+                        "status": "active",
+                        "first_seen_turn": "turn-005",
+                        "last_updated_turn": "turn-005",
+                    },
+                ]),
+                _make_v2_entity("char-npc", "NPC"),
+            ]
+        }
+        # Two separate merge calls (simulating relationship mapper + PC refresh)
+        merge_relationships(catalogs, [
+            {"source_id": "char-player", "target_id": "char-npc",
+             "relationship": "friend", "type": "social"},
+        ], "turn-010")
+        merge_relationships(catalogs, [
+            {"source_id": "char-player", "target_id": "char-npc",
+             "relationship": "close friend", "type": "social"},
+        ], "turn-015")
+        rels = catalogs["characters.json"][0]["relationships"]
+        assert len(rels) == 1
+        assert rels[0]["current_relationship"] == "close friend"
