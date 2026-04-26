@@ -177,6 +177,11 @@ class LLMClient:
             body["options"].update(self.ollama_options)
         if self.ollama_format:
             body["format"] = self.ollama_format
+        # Ollama top-level think parameter — False disables thinking so
+        # all num_predict budget goes to visible output.
+        ollama_think = self.config.get("ollama_think")
+        if ollama_think is not None:
+            body["think"] = ollama_think
 
         effective_timeout = timeout or self.default_timeout
         # Allow generous read timeout — streaming sends chunks continuously
