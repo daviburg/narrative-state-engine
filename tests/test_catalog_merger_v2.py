@@ -555,6 +555,72 @@ class TestMergeEntityV2:
 
 
 # ---------------------------------------------------------------------------
+# PC name/identity protection (#247)
+# ---------------------------------------------------------------------------
+
+class TestPCNameProtection:
+    """char-player name and identity must not be overwritten by per-turn updates."""
+
+    def test_pc_name_not_overwritten(self):
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player Character", turn="turn-001")
+            ]
+        }
+        update = _make_v2_entity("char-player", "Elder Lyra", turn="turn-314")
+        update["current_status"] = "Discussing tribal matters."
+        merge_entity(catalogs, update)
+        pc = catalogs["characters.json"][0]
+        # Name must remain unchanged
+        assert pc["name"] == "Player Character"
+        # But current_status should still merge
+        assert pc["current_status"] == "Discussing tribal matters."
+
+    def test_pc_identity_not_overwritten(self):
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player Character", turn="turn-001")
+            ]
+        }
+        catalogs["characters.json"][0]["identity"] = "An elf warlock."
+        update = _make_v2_entity("char-player", "Player Character", turn="turn-314")
+        update["identity"] = "A Riverfolk shaman and elder."
+        merge_entity(catalogs, update)
+        pc = catalogs["characters.json"][0]
+        assert pc["identity"] == "An elf warlock."
+
+    def test_pc_mismatched_name_becomes_alias(self):
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player Character", turn="turn-001")
+            ]
+        }
+        catalogs["characters.json"][0]["stable_attributes"] = {
+            "aliases": {"value": []}
+        }
+        update = _make_v2_entity("char-player", "Fenouille Moonwind", turn="turn-050")
+        merge_entity(catalogs, update)
+        pc = catalogs["characters.json"][0]
+        # Name unchanged
+        assert pc["name"] == "Player Character"
+        # But the proposed name should be recorded as an alias
+        aliases = pc["stable_attributes"]["aliases"]["value"]
+        assert "Fenouille Moonwind" in aliases
+
+    def test_non_pc_name_still_updates(self):
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-elder", "The Elder", turn="turn-015")
+            ]
+        }
+        update = _make_v2_entity("char-elder", "Tribal Authority", turn="turn-100")
+        merge_entity(catalogs, update)
+        npc = catalogs["characters.json"][0]
+        # Non-PC entities should still have their name updated
+        assert npc["name"] == "Tribal Authority"
+
+
+# ---------------------------------------------------------------------------
 # parse_turn_number
 # ---------------------------------------------------------------------------
 

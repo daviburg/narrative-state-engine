@@ -95,29 +95,38 @@ def main():
     removed = []
     if pc_entity:
         # Restore PC name/identity if corrupted by a prior merge (#248)
-        pc_name = pc_entity.get("name", "")
+        pc_name_normalized = str(pc_entity.get("name") or "").lower().strip()
         valid_pc_names = {"player character", "fenouille moonwind", "fenouille"}
-        if pc_name.lower().strip() not in valid_pc_names:
+        if pc_name_normalized not in valid_pc_names:
             # Name was overwritten — restore from aliases if available
             sa = pc_entity.get("stable_attributes", {})
-            alias_val = sa.get("aliases", {}).get("value", [])
+            aliases_attr = sa.get("aliases", {})
+            if isinstance(aliases_attr, dict):
+                alias_val = aliases_attr.get("value", [])
+            elif isinstance(aliases_attr, list):
+                alias_val = aliases_attr
+            elif isinstance(aliases_attr, str):
+                alias_val = [aliases_attr]
+            else:
+                alias_val = []
             restored_name = None
             for a in (alias_val if isinstance(alias_val, list) else []):
-                if a.lower().strip() in valid_pc_names and len(a) > 3:
-                    restored_name = a
+                a_str = a if isinstance(a, str) else str(a)
+                if a_str.lower().strip() in valid_pc_names and len(a_str) > 3:
+                    restored_name = a_str
                     break
             if not restored_name:
                 restored_name = "Player Character"
-            print(f"  Restored PC name: '{pc_name}' → '{restored_name}'")
+            print(f"  Restored PC name: '{pc_entity.get('name')}' -> '{restored_name}'")
             pc_entity["name"] = restored_name
             # Clear corrupted identity if it doesn't describe the PC
-            ident = (pc_entity.get("identity") or "").lower()
+            ident = str(pc_entity.get("identity") or "").lower()
             if not any(w in ident for w in ["player", "fenouille", "warlock", "elf", "moon"]):
                 pc_entity["identity"] = (
-                    "The player character — an elf warlock guided by a celestial "
+                    "The player character \u2014 an elf warlock guided by a celestial "
                     "pact with a silent star."
                 )
-                print(f"  Restored PC identity (was describing a different character)")
+                print("  Restored PC identity (was describing a different character)")
 
         sa = pc_entity.setdefault("stable_attributes", {})
         aliases_attr = sa.get("aliases")
