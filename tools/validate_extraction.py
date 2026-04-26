@@ -109,7 +109,7 @@ def _find_character_by_name(
             continue
         try:
             char = _load_json(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             continue
         if char.get("name", "").lower() == target:
             return (f.stem, "name")
@@ -124,7 +124,7 @@ def _find_character_by_name(
             continue
         try:
             char = _load_json(f)
-        except Exception:
+        except (json.JSONDecodeError, OSError):
             continue
         aliases = _normalize_aliases(
             char.get("stable_attributes", {}).get("aliases", {}).get("value"),
@@ -452,7 +452,8 @@ def check_staleness(
         last_turn = _turn_number(char_data.get("last_updated_turn", ""))
         if last_turn is None:
             results.append(Result(
-                Result.FAIL, entity_id, f"no last_updated_turn — {reason}",
+                Result.FAIL, entity_id,
+                f"no last_updated_turn — {reason}{id_note}",
             ))
             continue
 
