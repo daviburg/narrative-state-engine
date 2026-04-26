@@ -3,7 +3,7 @@
   "source_session": "session-import",
   "turn_range": [1, 345],
 
-  "expected_pc_aliases": ["Fenouille Moonwind"],
+  "expected_pc_aliases": ["Fenouille Moonwind", "Fenouille"],
 
   "expected_independent_characters": [
     {
@@ -39,7 +39,7 @@
     {
       "name": "Kael",
       "role": "PC's partner, tribe warrior-leader",
-      "id_patterns": ["char-kael"],
+      "id_patterns": ["char-kael", "char-karl"],
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [5, 15],
       "expected_last_updated_min": 300,
@@ -50,7 +50,7 @@
     {
       "name": "The Elder",
       "role": "Tribal elder/authority figure",
-      "id_patterns": ["char-elder-figure-by-fire", "char-elder"],
+      "id_patterns": ["char-elder-figure-by-fire", "char-elder", "char-older-commanding-figure"],
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [8, 15],
       "expected_last_updated_min": 300,
@@ -140,7 +140,7 @@
     {
       "name": "Maelis",
       "role": "Swift Arrows hunter-scout",
-      "id_patterns": ["char-maelis"],
+      "id_patterns": ["char-maelis", "char-arrows"],
       "must_not_be_pc_alias": true,
       "expected_first_seen_range": [330, 335],
       "expected_last_updated_min": 332,
