@@ -39,7 +39,6 @@ def test_explicit_segment_size_is_preserved():
 # --max-turns argument parsing (#234)
 # ---------------------------------------------------------------------------
 
-import argparse
 from bootstrap_session import build_parser
 
 
