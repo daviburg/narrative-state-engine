@@ -763,6 +763,34 @@ Ground truth files live in `tests/fixtures/` and define the expected extraction 
 
 ---
 
+## Post-Extraction Recovery
+
+If post-processing bugs are fixed after an extraction run has completed, use `recover_postprocess.py` to re-apply the corrected passes without re-extracting. This avoids repeating expensive LLM calls when only the post-processing logic has changed.
+
+### Running
+
+```bash
+# Preview changes without writing
+python tools/recover_postprocess.py --catalog-dir framework-local/catalogs --dry-run
+
+# Apply recovery passes and save
+python tools/recover_postprocess.py --catalog-dir framework-local/catalogs
+```
+
+### What it does
+
+The script runs 5 passes in order:
+
+1. **Strip false-positive PC aliases** — removes blocklisted words, NPC names, and title-prefixed aliases from `char-player`
+2. **Fix empty `first_seen_turn`** — backfills from event data or `last_updated_turn`
+3. **Catalog dedup** — merges duplicate entities and rewrites stale IDs in relationships/events
+4. **Relationship cleanup + dedup** — removes dangling relationships and consolidates duplicates
+5. **PC alias merge** — re-runs the tightened `_merge_pc_aliases()` heuristics
+
+Both catalogs and events are saved to disk after recovery.
+
+---
+
 ## Example Session
 
 See `examples/demo-session/` for a complete worked example with 6 turns, 3 entities, 2 plot threads, and annotated analysis.
