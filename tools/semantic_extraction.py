@@ -2866,7 +2866,7 @@ def _merge_pc_aliases(
         if name.lower() in _PC_ALIAS_BLOCKLIST:
             continue
 
-        # Skip single-word names matching the common-word blocklist (#239)
+        # Skip names whose full lowercase form matches the common-word blocklist (#239)
         if name.lower() in _PC_ALIAS_WORD_BLOCKLIST:
             continue
 
@@ -2920,12 +2920,19 @@ def _merge_pc_aliases(
             continue
 
         # Guard: skip if candidate is independently referenced in events (#239)
-        # Entities appearing in ≥2 events without char-player are independent
-        independent_refs = sum(
-            1 for e in events_list
-            if eid in e.get("related_entities", [])
-            and "char-player" not in e.get("related_entities", [])
-        )
+        # Entities appearing in ≥2 events without char-player are independent.
+        # Counts are precomputed once (single pass) to avoid O(candidates × events).
+        if "_independent_event_counts" not in locals():
+            _independent_event_counts: dict[str, int] = {}
+            for e in events_list:
+                rel = e.get("related_entities") or []
+                if "char-player" in rel:
+                    continue
+                for ref_eid in rel:
+                    _independent_event_counts[ref_eid] = (
+                        _independent_event_counts.get(ref_eid, 0) + 1
+                    )
+        independent_refs = _independent_event_counts.get(eid, 0)
         if independent_refs >= 2:
             continue
 
