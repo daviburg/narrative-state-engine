@@ -8,7 +8,6 @@ Usage:
     python tools/recover_postprocess.py --catalog-dir framework-local/catalogs
 """
 import argparse
-import json
 import os
 import sys
 
@@ -20,10 +19,12 @@ from catalog_merger import (
     load_catalogs,
     load_events,
     save_catalogs,
+    save_events,
 )
 from semantic_extraction import (
     _dedup_catalogs,
     _merge_pc_aliases,
+    _rewrite_stale_ids,
 )
 
 
@@ -45,7 +46,7 @@ def _fix_empty_first_seen(catalogs: dict, events_list: list) -> int:
                     if new < cur:
                         earliest[eid] = turn_id
                 except (ValueError, IndexError):
-                    pass
+                    continue  # skip malformed turn IDs
 
     fixed = 0
     for _cat_key, entities in catalogs.items():
@@ -53,10 +54,14 @@ def _fix_empty_first_seen(catalogs: dict, events_list: list) -> int:
             fst = ent.get("first_seen_turn", "")
             if not fst or not str(fst).strip():
                 eid = ent.get("id", "")
-                fallback = earliest.get(eid, ent.get("last_updated_turn", "turn-001"))
-                ent["first_seen_turn"] = fallback
-                fixed += 1
-                print(f"  Fixed empty first_seen_turn: {eid} → {fallback}")
+                fallback = earliest.get(eid) or ent.get("last_updated_turn") or ""
+                # Only apply if we found a reliable turn-NNN value
+                if fallback and fallback.startswith("turn-"):
+                    ent["first_seen_turn"] = fallback
+                    fixed += 1
+                    print(f"  Fixed empty first_seen_turn: {eid} → {fallback}")
+                else:
+                    print(f"  WARNING: no reliable turn for {eid}, skipping")
     return fixed
 
 
@@ -89,7 +94,24 @@ def main():
             break
     removed = []
     if pc_entity:
-        aliases_obj = pc_entity.get("stable_attributes", {}).get("aliases", {})
+        sa = pc_entity.setdefault("stable_attributes", {})
+        aliases_attr = sa.get("aliases")
+        # Normalize aliases to canonical {"value": [...]} structure
+        if isinstance(aliases_attr, list):
+            aliases_obj = {"value": [str(a).strip() for a in aliases_attr if a]}
+            sa["aliases"] = aliases_obj
+        elif isinstance(aliases_attr, str):
+            aliases_obj = {"value": [p.strip() for p in aliases_attr.split(",") if p.strip()]}
+            sa["aliases"] = aliases_obj
+        elif isinstance(aliases_attr, dict):
+            aliases_obj = aliases_attr
+            # Normalize value to list
+            val = aliases_obj.get("value", [])
+            if isinstance(val, str):
+                aliases_obj["value"] = [p.strip() for p in val.split(",") if p.strip()]
+        else:
+            aliases_obj = {"value": []}
+            sa["aliases"] = aliases_obj
         old_aliases = aliases_obj.get("value", [])
         from semantic_extraction import _PC_ALIAS_BLOCKLIST, _PC_ALIAS_WORD_BLOCKLIST
 
@@ -144,6 +166,10 @@ def main():
     if merge_map:
         for old_id, survivor in merge_map.items():
             print(f"    {old_id} → {survivor}")
+        # Rewrite stale IDs in relationships and events so dangling cleanup
+        # redirects references to survivors instead of deleting them.
+        _rewrite_stale_ids(catalogs, events_list, merge_map)
+        print(f"  Rewrote stale IDs in relationships and events")
 
     # --- Pass 4: Cleanup dangling relationships + dedup relationships (#242) ---
     print("\n=== Pass 4: Cleanup dangling relationships + dedup ===")
@@ -175,8 +201,9 @@ def main():
 
     # --- Save ---
     if not args.dry_run:
-        print("\n=== Saving catalogs ===")
+        print("\n=== Saving catalogs and events ===")
         save_catalogs(catalog_dir, catalogs)
+        save_events(catalog_dir, events_list)
         print("  Done.")
     else:
         print("\n=== DRY RUN — no changes written ===")
