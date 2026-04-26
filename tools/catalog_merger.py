@@ -603,6 +603,15 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
             existing = (i, e)
             break
 
+    # Guard: repair empty first_seen_turn before merge (#241)
+    fst = entity.get("first_seen_turn")
+    if not fst or (isinstance(fst, str) and not re.match(r"^turn-[0-9]{3,}$", fst)):
+        fallback = entity.get("last_updated_turn", "")
+        if fallback and re.match(r"^turn-[0-9]{3,}$", fallback):
+            entity["first_seen_turn"] = fallback
+        else:
+            entity.pop("first_seen_turn", None)
+
     if existing is not None:
         idx, current = existing
         _update_existing_entity(current, entity)
@@ -958,6 +967,10 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
             # Coerce relationship type to schema enum (#126)
             new_rel["type"] = _coerce_relationship_type(new_rel["type"])
             entity["relationships"].append(new_rel)
+
+        # Safety dedup — collapse any lingering duplicates (#242)
+        if entity.get("relationships"):
+            entity["relationships"] = _dedup_relationships(entity["relationships"])
 
 
 # ---------------------------------------------------------------------------

@@ -1266,6 +1266,34 @@ def test_stable_attributes_existing_object_unchanged():
     assert attr["confidence"] == 1.0
 
 
+def test_empty_first_seen_turn_removed():
+    """Empty first_seen_turn is removed so downstream fallback logic applies (#241)."""
+    entity = {"name": "Ghost", "type": "character", "first_seen_turn": ""}
+    result = _coerce_entity_fields(entity)
+    assert "first_seen_turn" not in result
+
+
+def test_invalid_first_seen_turn_removed():
+    """Non-matching first_seen_turn like 'unknown' is removed (#241)."""
+    entity = {"name": "Ghost", "type": "character", "first_seen_turn": "unknown"}
+    result = _coerce_entity_fields(entity)
+    assert "first_seen_turn" not in result
+
+
+def test_valid_first_seen_turn_preserved():
+    """A valid turn ID is not removed."""
+    entity = {"name": "Ghost", "type": "character", "first_seen_turn": "turn-042"}
+    result = _coerce_entity_fields(entity)
+    assert result["first_seen_turn"] == "turn-042"
+
+
+def test_empty_last_updated_turn_removed():
+    """Empty last_updated_turn is also repaired (#241)."""
+    entity = {"name": "Ghost", "type": "character", "last_updated_turn": ""}
+    result = _coerce_entity_fields(entity)
+    assert "last_updated_turn" not in result
+
+
 def test_coerce_event_returns_none_for_non_dict():
     """Non-dict event items return None."""
     assert _coerce_event_fields(["not", "a", "dict"]) is None

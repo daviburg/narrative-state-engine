@@ -719,3 +719,109 @@ class TestCleanupDanglingRelationships:
         removed = cleanup_dangling_relationships(catalogs)
         assert removed == {}
         assert len(catalogs["characters.json"][0]["relationships"]) == 1
+
+
+# ---------------------------------------------------------------------------
+# merge_entity: empty first_seen_turn guard (#241)
+# ---------------------------------------------------------------------------
+
+class TestMergeEntityFirstSeenTurnGuard:
+    def test_empty_first_seen_turn_repaired_from_last_updated(self):
+        """Entity with empty first_seen_turn gets it from last_updated_turn."""
+        catalogs = {"characters.json": []}
+        entity = _make_v2_entity("char-ghost", "Ghost", turn="")
+        entity["last_updated_turn"] = "turn-050"
+        merge_entity(catalogs, entity)
+        assert len(catalogs["characters.json"]) == 1
+        assert catalogs["characters.json"][0]["first_seen_turn"] == "turn-050"
+
+    def test_invalid_first_seen_turn_repaired(self):
+        """Entity with non-pattern first_seen_turn gets it from last_updated_turn."""
+        catalogs = {"characters.json": []}
+        entity = _make_v2_entity("char-ghost", "Ghost", turn="unknown")
+        entity["last_updated_turn"] = "turn-010"
+        merge_entity(catalogs, entity)
+        assert len(catalogs["characters.json"]) == 1
+        assert catalogs["characters.json"][0]["first_seen_turn"] == "turn-010"
+
+    def test_entity_rejected_when_no_valid_turn(self):
+        """Entity with no valid turn IDs at all is rejected (missing required field)."""
+        catalogs = {"characters.json": []}
+        entity = _make_v2_entity("char-ghost", "Ghost", turn="")
+        entity["last_updated_turn"] = ""
+        merge_entity(catalogs, entity)
+        assert len(catalogs["characters.json"]) == 0
+
+
+# ---------------------------------------------------------------------------
+# merge_relationships: safety dedup (#242)
+# ---------------------------------------------------------------------------
+
+class TestMergeRelationshipsDedup:
+    def test_deduplicates_pre_existing_duplicates(self):
+        """merge_relationships() should clean up pre-existing duplicate rels (#242)."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player", relationships=[
+                    {
+                        "target_id": "char-npc",
+                        "current_relationship": "ally",
+                        "type": "social",
+                        "status": "active",
+                        "first_seen_turn": "turn-005",
+                        "last_updated_turn": "turn-005",
+                    },
+                    {
+                        "target_id": "char-npc",
+                        "current_relationship": "friend",
+                        "type": "social",
+                        "status": "active",
+                        "first_seen_turn": "turn-010",
+                        "last_updated_turn": "turn-010",
+                    },
+                ]),
+                _make_v2_entity("char-npc", "NPC"),
+            ]
+        }
+        new_rels = [
+            {
+                "source_id": "char-player",
+                "target_id": "char-npc",
+                "relationship": "close friend",
+                "type": "social",
+            }
+        ]
+        merge_relationships(catalogs, new_rels, "turn-020")
+        rels = catalogs["characters.json"][0]["relationships"]
+        assert len(rels) == 1  # duplicates collapsed
+        assert rels[0]["current_relationship"] == "close friend"
+
+    def test_no_duplicate_after_pc_refresh_style_merge(self):
+        """Simulates PC refresh: merging should not create duplicate target entries (#242)."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-player", "Player", relationships=[
+                    {
+                        "target_id": "char-npc",
+                        "current_relationship": "ally",
+                        "type": "social",
+                        "status": "active",
+                        "first_seen_turn": "turn-005",
+                        "last_updated_turn": "turn-005",
+                    },
+                ]),
+                _make_v2_entity("char-npc", "NPC"),
+            ]
+        }
+        # Two separate merge calls (simulating relationship mapper + PC refresh)
+        merge_relationships(catalogs, [
+            {"source_id": "char-player", "target_id": "char-npc",
+             "relationship": "friend", "type": "social"},
+        ], "turn-010")
+        merge_relationships(catalogs, [
+            {"source_id": "char-player", "target_id": "char-npc",
+             "relationship": "close friend", "type": "social"},
+        ], "turn-015")
+        rels = catalogs["characters.json"][0]["relationships"]
+        assert len(rels) == 1
+        assert rels[0]["current_relationship"] == "close friend"
