@@ -1328,14 +1328,20 @@ _PC_ALIAS_MIN_LENGTH = 3
 # Maximum number of aliases retained for the PC entity (#214)
 _PC_ALIAS_MAX_COUNT = 10
 
-# Common English words that appear in RPG narratives but are not character names (#214)
+# Common English words that appear in RPG narratives but are not character names (#214, #239)
 _PC_ALIAS_WORD_BLOCKLIST = {
-    "broken", "disruption", "hunters", "method", "one", "pattern",
+    "broken", "covering", "disruption", "hunters", "method", "one", "pattern",
     "plague", "precision", "protocol", "treatment",
     "the", "a", "an", "this", "that", "it", "you", "me",
     "attack", "defense", "move", "action", "skill", "ability",
     "fire", "water", "earth", "wind", "light", "dark", "shadow",
     "death", "life", "blood", "spirit", "soul", "magic",
+    # Additional false-positive words from full extraction runs (#239)
+    "echo", "field", "geometric", "head", "new", "quiet",
+    "reinforced", "song", "southern", "triangular", "tribes", "two", "weave",
+    # NPC role descriptors that are not PC names (#239)
+    "chief", "elder", "healer", "raider", "warrior",
+    "guard", "scout", "shaman", "merchant", "captain",
 }
 
 # Maximum volatile_state keys retained for PC after merge (#214)
@@ -2860,6 +2866,14 @@ def _merge_pc_aliases(
         if name.lower() in _PC_ALIAS_BLOCKLIST:
             continue
 
+        # Skip single-word names matching the common-word blocklist (#239)
+        if name.lower() in _PC_ALIAS_WORD_BLOCKLIST:
+            continue
+
+        # Skip names starting with "The " — typically NPC titles (#239)
+        if name.lower().startswith("the "):
+            continue
+
         # Count whole-name occurrences in PC event text, case-insensitively,
         # to avoid matching substrings inside larger words or names.
         name_pattern = r"(?<!\w)" + re.escape(name) + r"(?!\w)"
@@ -2892,6 +2906,27 @@ def _merge_pc_aliases(
         # Guard: skip if char-player has a relationship targeting this candidate
         pc_rels = pc_entry.get("relationships", [])
         if any(r.get("target_id") == eid for r in pc_rels):
+            continue
+
+        # Guard: skip if candidate has relationships to non-PC entities (#239)
+        # Entities with their own relationship graph are independent characters.
+        # Allow 1 non-PC relationship (alias may have an accidentally-attributed
+        # relationship), but 2+ indicates genuine independence.
+        non_pc_rels = [
+            r for r in candidate_rels
+            if r.get("target_id") and r.get("target_id") != "char-player"
+        ]
+        if len(non_pc_rels) >= 2:
+            continue
+
+        # Guard: skip if candidate is independently referenced in events (#239)
+        # Entities appearing in ≥2 events without char-player are independent
+        independent_refs = sum(
+            1 for e in events_list
+            if eid in e.get("related_entities", [])
+            and "char-player" not in e.get("related_entities", [])
+        )
+        if independent_refs >= 2:
             continue
 
         # Merge into char-player: add name as alias

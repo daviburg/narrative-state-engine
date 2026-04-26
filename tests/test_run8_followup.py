@@ -673,3 +673,313 @@ class TestPCAliasBlocklist:
         assert "Fenouille Moonwind" in alias_list
         assert "player character" not in alias_list
         assert "protagonist" not in alias_list
+
+
+# ---------------------------------------------------------------------------
+# #239 — PC alias merge false positive prevention
+# ---------------------------------------------------------------------------
+
+class TestPCAliasFalsePositives:
+    """Verify _merge_pc_aliases() rejects false positives from issue #239."""
+
+    # -- Word blocklist applied during merge -----------------------------------
+
+    def test_no_merge_abstract_noun_pattern(self):
+        """Abstract noun 'Pattern' should NOT be merged (word blocklist)."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-pattern", "Pattern", "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Pattern glows faintly", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Pattern emerges again", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+        assert len(catalogs["characters.json"]) == 2
+
+    def test_no_merge_abstract_noun_weave(self):
+        """Abstract noun 'Weave' should NOT be merged (word blocklist)."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-weave", "Weave", "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Weave shimmers", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Weave pulses with energy", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    def test_no_merge_abstract_noun_echo(self):
+        """Abstract noun 'Echo' should NOT be merged (word blocklist)."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-echo", "Echo", "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Echo reverberates through the chamber", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Echo fades slowly", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    # -- NPC role descriptors --------------------------------------------------
+
+    def test_no_merge_npc_role_healer(self):
+        """NPC role descriptor 'Healer' should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-healer", "Healer", "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Healer tends wounds", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Healer prepares a poultice", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    def test_no_merge_npc_role_warrior(self):
+        """NPC role descriptor 'Warrior' should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-warrior", "Warrior", "turn-050", "turn-050"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Warrior charges forward", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Warrior blocks the sword", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    def test_no_merge_npc_role_elder(self):
+        """NPC role descriptor 'Elder' should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-elder", "Elder", "turn-016", "turn-016"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Elder speaks wisdom", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Elder nods solemnly", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    # -- "The X" title pattern -------------------------------------------------
+
+    def test_no_merge_the_elder_title(self):
+        """'The Elder' (definite article prefix) should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-the-elder", "The Elder", "turn-016", "turn-016"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The Elder raises a hand", ["char-player"], "turn-100"),
+            _make_event("evt-2", "The Elder addresses the gathering", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    def test_no_merge_the_tribe_elder_title(self):
+        """'The tribe elder' (definite article prefix) should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-tribe-elder", "The tribe elder", "turn-016", "turn-016"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The tribe elder watches", ["char-player"], "turn-100"),
+            _make_event("evt-2", "The tribe elder shares a story", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    # -- Non-PC relationships guard --------------------------------------------
+
+    def test_no_merge_entity_with_non_pc_relationships(self):
+        """Entity with >=2 relationships to non-PC entities should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                {
+                    **_make_entity("char-anya", "Anya", "turn-050", "turn-050"),
+                    "relationships": [
+                        {"target_id": "char-village-elder", "type": "ally"},
+                        {"target_id": "faction-riverfolk", "type": "member_of"},
+                    ],
+                },
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Anya walks through the forest", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Anya gathers herbs", ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+        assert len(catalogs["characters.json"]) == 2
+
+    def test_no_merge_chief_thorne_with_faction_relationship(self):
+        """Chief Thorne with >=2 non-PC relationships should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                {
+                    **_make_entity("char-chief-thorne", "Chief Thorne",
+                                   "turn-200", "turn-201"),
+                    "relationships": [
+                        {"target_id": "faction-ironwood-clan", "type": "leader_of"},
+                        {"target_id": "loc-ironwood-village", "type": "resides_in"},
+                    ],
+                },
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Chief Thorne greets them", ["char-player"], "turn-200"),
+            _make_event("evt-2", "Chief Thorne offers a deal", ["char-player"], "turn-201"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+
+    # -- Independent event references guard ------------------------------------
+
+    def test_no_merge_entity_independently_referenced_in_events(self):
+        """Entity appearing in >=2 events without char-player should NOT be merged."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-lyra", "Lyra", "turn-050", "turn-051"),
+            ]
+        }
+        events = [
+            # Lyra mentioned in PC events (would normally trigger merge)
+            _make_event("evt-1", "Lyra speaks to the group", ["char-player"], "turn-100"),
+            _make_event("evt-2", "Lyra shares a secret", ["char-player"], "turn-101"),
+            # Lyra also appears independently in her own events
+            _make_event("evt-3", "Lyra gathers herbs", ["char-lyra"], "turn-102"),
+            _make_event("evt-4", "Lyra meditates by the river", ["char-lyra"], "turn-103"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert merged == []
+        assert len(catalogs["characters.json"]) == 2
+
+    def test_single_independent_ref_still_allows_merge(self):
+        """Entity with only 1 independent event ref can still be a legitimate alias."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-fenouille", "Fenouille", "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "You are Fenouille, druid of the forest",
+                        ["char-player"], "turn-253"),
+            _make_event("evt-2", "Fenouille casts a healing spell",
+                        ["char-player"], "turn-313"),
+            # One independent event is OK — alias may have been tracked separately once
+            _make_event("evt-3", "Fenouille walks through the grove",
+                        ["char-fenouille"], "turn-314"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille" in merged
+
+    # -- Legitimate aliases still merge ----------------------------------------
+
+    def test_legitimate_alias_fenouille_moonwind_still_merges(self):
+        """Fenouille Moonwind (real PC name) should still be merged correctly."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
+                             "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "You are Fenouille Moonwind",
+                        ["char-player"], "turn-253"),
+            _make_event("evt-2", "Fenouille Moonwind draws her sword",
+                        ["char-player"], "turn-313"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille-moonwind" in merged
+        assert len(catalogs["characters.json"]) == 1
+
+    def test_legitimate_alias_fenouille_still_merges(self):
+        """Short form 'Fenouille' should still be merged correctly."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                _make_entity("char-fenouille", "Fenouille", "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "Fenouille enters the cave",
+                        ["char-player"], "turn-253"),
+            _make_event("evt-2", "Fenouille casts a spell",
+                        ["char-player"], "turn-313"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille" in merged
+
+    # -- Combined scenario: multiple false positives at once -------------------
+
+    def test_batch_false_positives_all_rejected(self):
+        """Multiple false positive types in one catalog — all should be rejected."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-player", "Player Character", "turn-001"),
+                # Legitimate alias — should merge
+                _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
+                             "turn-059", "turn-059"),
+                # Word blocklist — should NOT merge
+                _make_entity("char-pattern", "Pattern", "turn-050", "turn-050"),
+                _make_entity("char-echo", "Echo", "turn-050", "turn-050"),
+                # NPC role — should NOT merge
+                _make_entity("char-healer", "Healer", "turn-050", "turn-050"),
+                # "The X" title — should NOT merge
+                _make_entity("char-the-elder", "The Elder", "turn-016", "turn-016"),
+                # Non-PC relationships (>=2) — should NOT merge
+                {
+                    **_make_entity("char-anya", "Anya", "turn-050", "turn-050"),
+                    "relationships": [
+                        {"target_id": "faction-riverfolk", "type": "member_of"},
+                        {"target_id": "loc-river-camp", "type": "resides_in"},
+                    ],
+                },
+            ]
+        }
+        # All names appear >=2 times in PC event text
+        events = [
+            _make_event("evt-1",
+                        "Fenouille Moonwind sees Pattern and Echo near The Elder. "
+                        "Healer tends to Anya.",
+                        ["char-player"], "turn-100"),
+            _make_event("evt-2",
+                        "Fenouille Moonwind studies Pattern while Echo fades. "
+                        "The Elder speaks as Healer watches. Anya listens.",
+                        ["char-player"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        # Only Fenouille Moonwind should be merged
+        assert "char-fenouille-moonwind" in merged
+        assert "char-pattern" not in merged
+        assert "char-echo" not in merged
+        assert "char-healer" not in merged
+        assert "char-the-elder" not in merged
+        assert "char-anya" not in merged
+        # 1 original PC + 5 non-merged entities = 6 remain
+        assert len(catalogs["characters.json"]) == 6
