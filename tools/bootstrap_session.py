@@ -488,6 +488,15 @@ def build_parser() -> argparse.ArgumentParser:
              "If omitted, sessions with >150 turns auto-default to 100. "
              "Pass 0 to disable segmentation.",
     )
+    parser.add_argument(
+        "--max-turns",
+        type=int,
+        default=None,
+        help="Total cap: stop after processing the first N turns. "
+             "Distinct from --segment-size which controls batch granularity. "
+             "Post-extraction passes (backfill, PC alias merge) still run "
+             "on the partial output.",
+    )
     return parser
 
 
@@ -632,6 +641,15 @@ def main() -> None:
         {"turn_id": _format_turn_id(t.sequence), "speaker": t.speaker, "text": t.text}
         for t in turns
     ]
+
+    # Limit to --max-turns if specified (#234)
+    if args.max_turns is not None:
+        if args.max_turns < 1:
+            print("ERROR: --max-turns must be >= 1.", file=sys.stderr)
+            sys.exit(1)
+        if args.max_turns < len(turn_dicts):
+            print(f"  Limiting to first {args.max_turns} of {len(turn_dicts)} turns (--max-turns).")
+            turn_dicts = turn_dicts[:args.max_turns]
 
     effective_segment_size, auto_segment_enabled = _resolve_segment_size(
         args.segment_size,

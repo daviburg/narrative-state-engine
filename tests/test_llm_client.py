@@ -122,3 +122,162 @@ class TestExtraBodyGating:
         client = LLMClient(config_path=cfg)
         assert client._is_ollama is False
         assert client.ollama_options == {"num_gpu": 1}
+
+
+# ---------------------------------------------------------------------------
+# _skip_response_format gating
+# ---------------------------------------------------------------------------
+
+
+class TestSkipResponseFormat:
+    """Verify _skip_response_format is set correctly for various configs."""
+
+    def test_openai_default_sends_response_format(self, tmp_path):
+        cfg = _write_config(tmp_path)
+        client = LLMClient(config_path=cfg)
+        assert client._skip_response_format is False
+
+    def test_ollama_qwen35_auto_skips(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+            "model": "qwen3.5-9b-32k",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._skip_response_format is True
+
+    def test_ollama_non_qwen35_does_not_skip(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+            "model": "qwen2.5:14b",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._skip_response_format is False
+
+    def test_explicit_skip_override(self, tmp_path):
+        cfg = _write_config(tmp_path, {"skip_response_format": True})
+        client = LLMClient(config_path=cfg)
+        assert client._skip_response_format is True
+
+    def test_explicit_skip_false_overrides_auto(self, tmp_path):
+        """Explicit False in config should not override the auto-detection."""
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+            "model": "qwen3.5-9b-32k",
+            "skip_response_format": False,
+        })
+        client = LLMClient(config_path=cfg)
+        # Auto-detection for qwen3.5 still returns True even with explicit False
+        # because the explicit check only triggers on truthy values
+        assert client._skip_response_format is True
+
+
+# ---------------------------------------------------------------------------
+# _parse_json_response — think-tag stripping
+# ---------------------------------------------------------------------------
+
+
+class TestParseJsonThinkStripping:
+    """Verify _parse_json_response handles <think> blocks correctly."""
+
+    def _make_client(self, tmp_path):
+        cfg = _write_config(tmp_path)
+        return LLMClient(config_path=cfg)
+
+    def test_plain_json(self, tmp_path):
+        client = self._make_client(tmp_path)
+        result = client._parse_json_response('{"entities": []}')
+        assert result == {"entities": []}
+
+    def test_think_block_before_json(self, tmp_path):
+        client = self._make_client(tmp_path)
+        raw = '<think>Let me analyze this turn...</think>{"entities": [{"name": "Kael"}]}'
+        result = client._parse_json_response(raw)
+        assert result == {"entities": [{"name": "Kael"}]}
+
+    def test_multiple_think_blocks(self, tmp_path):
+        client = self._make_client(tmp_path)
+        raw = '<think>First thought</think><think>Second thought</think>{"entities": []}'
+        result = client._parse_json_response(raw)
+        assert result == {"entities": []}
+
+    def test_think_block_with_fenced_json(self, tmp_path):
+        client = self._make_client(tmp_path)
+        raw = '<think>Reasoning here</think>\n```json\n{"entities": []}\n```'
+        result = client._parse_json_response(raw)
+        assert result == {"entities": []}
+
+    def test_multiline_think_block(self, tmp_path):
+        client = self._make_client(tmp_path)
+        raw = (
+            '<think>\nThe user wants me to identify entities.\n'
+            '- "tripwire" is an item\n- "net" is an item\n</think>\n'
+            '{"entities": [{"name": "tripwire"}]}'
+        )
+        result = client._parse_json_response(raw)
+        assert result == {"entities": [{"name": "tripwire"}]}
+
+    def test_no_think_tags_unchanged(self, tmp_path):
+        client = self._make_client(tmp_path)
+        raw = '{"key": "value"}'
+        result = client._parse_json_response(raw)
+        assert result == {"key": "value"}
+
+    def test_think_only_no_json_raises(self, tmp_path):
+        from llm_client import LLMExtractionError
+        client = self._make_client(tmp_path)
+        raw = '<think>Just thinking, no JSON output</think>'
+        try:
+            client._parse_json_response(raw)
+            assert False, "Should have raised LLMExtractionError"
+        except LLMExtractionError as e:
+            assert "Failed to parse JSON" in str(e)
+
+
+# ---------------------------------------------------------------------------
+# Ollama config knobs
+# ---------------------------------------------------------------------------
+
+
+class TestOllamaConfigKnobs:
+    """Verify ollama_format, ollama_think, and _use_ollama_streaming."""
+
+    def test_ollama_format_stored(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+            "ollama_format": "json",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client.ollama_format == "json"
+
+    def test_ollama_format_default_none(self, tmp_path):
+        cfg = _write_config(tmp_path)
+        client = LLMClient(config_path=cfg)
+        assert client.ollama_format is None
+
+    def test_use_ollama_streaming_when_format_set(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+            "ollama_format": "json",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._use_ollama_streaming is True
+
+    def test_no_streaming_without_format(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._use_ollama_streaming is False
+
+    def test_no_streaming_for_openai(self, tmp_path):
+        cfg = _write_config(tmp_path, {"ollama_format": "json"})
+        client = LLMClient(config_path=cfg)
+        assert client._use_ollama_streaming is False
+
+    def test_ollama_think_stored(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:11434/v1",
+            "ollama_think": False,
+        })
+        client = LLMClient(config_path=cfg)
+        assert client.config.get("ollama_think") is False
