@@ -413,7 +413,9 @@ class LLMClient:
 
                 parsed = self._parse_json_response(raw_text)
 
-                # Enforce dict when response_format is json_object
+                # Enforce top-level dict for all extraction calls — both
+                # response_format=json_object and Ollama format=json
+                # produce objects; arrays would break downstream code.
                 if not isinstance(parsed, dict):
                     raise LLMExtractionError(
                         f"Expected JSON object but got {type(parsed).__name__}: "

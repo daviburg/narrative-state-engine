@@ -492,9 +492,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--max-turns",
         type=int,
         default=None,
-        help="Stop after processing the first N turns. "
-             "Useful for test/evaluation runs. Post-extraction passes "
-             "(backfill, PC alias merge) still run on the partial output.",
+        help="Total cap: stop after processing the first N turns. "
+             "Distinct from --segment-size which controls batch granularity. "
+             "Post-extraction passes (backfill, PC alias merge) still run "
+             "on the partial output.",
     )
     return parser
 

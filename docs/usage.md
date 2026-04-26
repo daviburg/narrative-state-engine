@@ -187,6 +187,9 @@ models.
 | `batch_delay_ms` | Delay between consecutive LLM calls in milliseconds. Prevents GPU thrashing. For cloud providers, a minimum of 2000ms is enforced automatically to avoid hitting per-minute rate limits. |
 | `consecutive_rate_limit_threshold` | Number of consecutive HTTP 429 errors before the pipeline stops to preserve quota. Default: `10`. Set higher for APIs with aggressive but transient rate limiting. |
 | `ollama_options` | Optional dict of Ollama-specific parameters (e.g., `{"num_gpu": 99}`). Merged into `extra_body.options` alongside `num_ctx`. `context_length` takes precedence over `num_ctx` in this dict. |
+| `ollama_format` | Ollama-only. Constrains output format via Ollama's native `format` parameter. Set to `"json"` to enforce JSON output. Distinct from the OpenAI `response_format` which hangs on qwen3.5 models. When set in combination with `ollama_think`, enables the Ollama native streaming path (`/api/chat`) instead of the OpenAI SDK. |
+| `ollama_think` | Ollama-only. Boolean. Set to `false` to disable thinking mode for qwen3.5 family models, directing all `num_predict` budget to visible output. Passed as a top-level `think` parameter in the Ollama API request. |
+| `skip_response_format` | Optional boolean. When `true`, omits `response_format={"type": "json_object"}` from OpenAI SDK calls. Auto-enabled for Ollama + qwen3.5 models to avoid hangs. Set explicitly when using other models or providers that don't support `response_format`. |
 
 **PC extraction cooldown:** If PC extraction fails for 20 consecutive turns (`_PC_SKIP_THRESHOLD`), it enters a cooldown cycle: skipping 50 turns, then retrying for 5 turns, repeating until a success resets the counter (#133, #168). An end-of-run summary reports how many turns were skipped.
 
