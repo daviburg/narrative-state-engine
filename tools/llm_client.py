@@ -189,6 +189,10 @@ class LLMClient:
         )
 
         content_parts: list[str] = []
+        thinking_parts: list[str] = []
+        eval_count = 0
+        prompt_eval_count = 0
+        done_reason = "?"
         start = time.time()
         hard_limit = effective_timeout * 3  # total wall-clock limit
 
@@ -205,14 +209,36 @@ class LLMClient:
                 except json.JSONDecodeError:
                     continue
                 if chunk.get("done"):
+                    eval_count = chunk.get("eval_count", 0)
+                    prompt_eval_count = chunk.get("prompt_eval_count", 0)
+                    done_reason = chunk.get("done_reason", "?")
                     break
                 msg = chunk.get("message", {})
+                # Ollama streams qwen3.5 thinking-mode output in a
+                # separate "thinking" field while "content" stays empty.
+                # Collect both so we can diagnose failures.
                 part = msg.get("content", "")
                 if part:
                     content_parts.append(part)
+                thinking = msg.get("thinking", "")
+                if thinking:
+                    thinking_parts.append(thinking)
 
+        elapsed = time.time() - start
         raw = "".join(content_parts)
         if not raw:
+            thinking_text = "".join(thinking_parts)
+            # Truncate thinking for log — can be very long
+            thinking_preview = thinking_text[:500] if thinking_text else "(none)"
+            print(
+                f"  STREAM-DEBUG: empty response in {elapsed:.1f}s — "
+                f"eval={eval_count} prompt_eval={prompt_eval_count} "
+                f"done_reason={done_reason} "
+                f"thinking_tokens={len(thinking_parts)} "
+                f"content_tokens={len(content_parts)}\n"
+                f"  THINKING: {thinking_preview}",
+                file=sys.stderr,
+            )
             raise LLMExtractionError("Empty response from LLM.")
         return raw
 
