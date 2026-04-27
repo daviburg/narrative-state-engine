@@ -1622,8 +1622,30 @@ def extract_and_merge(
             if not validate_id_prefix(pid, etype):
                 entity["proposed_id"] = fix_id_prefix(pid, etype)
 
-    # Filter by confidence
-    qualified = filter_by_confidence(discovered, min_confidence)
+    # Build discovery log entries for all proposed entities (#250)
+    _discovery_proposals = []
+    for entity in discovered:
+        _discovery_proposals.append({
+            "name": entity.get("name", ""),
+            "is_new": entity.get("is_new", True),
+            "proposed_id": entity.get("proposed_id", ""),
+            "existing_id": entity.get("existing_id", ""),
+            "confidence": entity.get("confidence", 0),
+        })
+
+    # Filter by confidence, tracking rejections (#250)
+    _discovery_filtered = []
+    qualified = []
+    for entity in discovered:
+        if entity.get("confidence", 0) >= min_confidence:
+            qualified.append(entity)
+        else:
+            eid = get_entity_id(entity)
+            _discovery_filtered.append({
+                "name": entity.get("name", ""),
+                "id": eid,
+                "reason": "below_confidence_threshold",
+            })
 
     # Reject concept-prefix entities at discovery acceptance time (#124)
     filtered_qualified = []
@@ -1631,6 +1653,11 @@ def extract_and_merge(
         eid = get_entity_id(entity_ref)
         if eid and eid.lower().startswith("concept-"):
             print(f"  Skipping concept-prefix entity from discovery: {eid}", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "concept_prefix",
+            })
             continue
         filtered_qualified.append(entity_ref)
     qualified = filtered_qualified
@@ -1916,6 +1943,8 @@ def extract_and_merge(
         "events_error": _phase_log["events_error"],
         "new_entities": max(0, _entities_after - _entities_before),
         "new_events": max(0, _events_after - _events_before),
+        "discovery_proposals": _discovery_proposals,
+        "discovery_filtered": _discovery_filtered,
         "elapsed_ms": _elapsed_ms,
     }
     return catalogs, events_list, turn_failed, _log_record
