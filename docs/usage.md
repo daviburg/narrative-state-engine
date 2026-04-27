@@ -634,6 +634,8 @@ During extraction (batch, segmented, or single-turn), the pipeline writes a per-
 - `discovery_ok`, `detail_ok`, `pc_ok`, `relationships_ok`, `events_ok` — per-phase success flags
 - `*_error` — error message when a phase failed (null on success)
 - `new_entities`, `new_events` — counts of entities/events added by this turn
+- `discovery_proposals` — array of all entities proposed by the model for this turn, each with `name`, `is_new`, `proposed_id`, `existing_id`, and `confidence`
+- `discovery_filtered` — array of entities rejected during filtering, each with `name`, `id`, and `reason` (`below_confidence_threshold` or `concept_prefix`)
 - `elapsed_ms` — wall-clock time for the turn
 
 The file is append-only and survives interruptions. To diagnose a failed run:
