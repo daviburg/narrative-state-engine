@@ -495,7 +495,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Total cap: stop after processing the first N turns. "
              "Distinct from --segment-size which controls batch granularity. "
              "Post-extraction passes (backfill, PC alias merge) still run "
-             "on the partial output.",
+             "on the partial output. When used with --start-turn, this is "
+             "treated as an absolute turn number (upper bound), not a count.",
+    )
+    parser.add_argument(
+        "--start-turn",
+        type=int,
+        default=None,
+        help="Start extraction from turn N (1-based), using existing catalogs as "
+             "prior context. Turns before N are skipped. "
+             "Example: --start-turn 26 --max-turns 50 extracts turns 26-50.",
     )
     return parser
 
@@ -641,9 +650,38 @@ def main() -> None:
         {"turn_id": _format_turn_id(t.sequence), "speaker": t.speaker, "text": t.text}
         for t in turns
     ]
+    total_turns = len(turn_dicts)
 
-    # Limit to --max-turns if specified (#234)
-    if args.max_turns is not None:
+    # Slice to --start-turn if specified (#251)
+    if args.start_turn is not None:
+        if args.start_turn < 1:
+            print("ERROR: --start-turn must be >= 1.", file=sys.stderr)
+            sys.exit(1)
+        start_idx = args.start_turn - 1
+        if start_idx >= len(turn_dicts):
+            print(f"ERROR: --start-turn {args.start_turn} exceeds total turns ({len(turn_dicts)}).",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(f"  Starting from turn {args.start_turn} of {total_turns} (--start-turn).")
+
+        # When both --start-turn and --max-turns are set, --max-turns is an
+        # absolute turn number (upper bound), not a count.  E.g.
+        # --start-turn 26 --max-turns 50 extracts turns 26-50.
+        if args.max_turns is not None:
+            if args.max_turns < 1:
+                print("ERROR: --max-turns must be >= 1.", file=sys.stderr)
+                sys.exit(1)
+            if args.max_turns < args.start_turn:
+                print(f"ERROR: --max-turns ({args.max_turns}) < --start-turn ({args.start_turn}).",
+                      file=sys.stderr)
+                sys.exit(1)
+            end_idx = min(args.max_turns, len(turn_dicts))
+            print(f"  Extracting turns {args.start_turn}-{end_idx} (--start-turn + --max-turns).")
+            turn_dicts = turn_dicts[start_idx:end_idx]
+        else:
+            turn_dicts = turn_dicts[start_idx:]
+    elif args.max_turns is not None:
+        # Limit to --max-turns if specified (#234) — standalone (no --start-turn)
         if args.max_turns < 1:
             print("ERROR: --max-turns must be >= 1.", file=sys.stderr)
             sys.exit(1)
@@ -751,6 +789,19 @@ def main() -> None:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
                 print(f"  PC alias merge: merged {len(merged_aliases)} alias(es): {merged_aliases}")
+
+        # Generate wiki pages for human review (#251)
+        if args.dry_run:
+            print("  Wiki generation: skipped during dry run")
+        else:
+            try:
+                from generate_wiki_pages import generate_wiki_pages
+                catalog_dir = os.path.join(args.framework, "catalogs")
+                print("\nGenerating wiki pages for review:")
+                generate_wiki_pages(catalog_dir, entity_types=None, index_only=False)
+                print("  Wiki pages generated. Review framework/catalogs/*/README.md and individual pages.")
+            except Exception as e:
+                print(f"  WARNING: Wiki generation failed: {e}", file=sys.stderr)
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(
@@ -767,7 +818,19 @@ def main() -> None:
     if args.dry_run:
         print("Dry run complete. Re-run without --dry-run to write files.")
     else:
-        print("Bootstrap complete.")
+        # Print summary with next-step suggestion (#251)
+        first_turn = turn_dicts[0]["turn_id"] if turn_dicts else "?"
+        last_turn = turn_dicts[-1]["turn_id"] if turn_dicts else "?"
+        print(f"Extraction complete for turns {first_turn} through {last_turn}.")
+        print(f"Wiki pages generated — review {args.framework}/catalogs/ for entity pages.")
+        if args.start_turn is not None:
+            # Suggest the next incremental batch
+            next_start = (args.max_turns or total_turns) + 1
+            if next_start <= total_turns:
+                suggested_end = min(next_start + len(turn_dicts) - 1, total_turns)
+                print(f"To continue: --start-turn {next_start} --max-turns {suggested_end}")
+            else:
+                print("All turns have been extracted.")
         print()
         print("Next steps:")
         print(f"  python tools/update_state.py --session {session_dir}")

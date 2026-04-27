@@ -27,7 +27,7 @@ def _make_stub_llm(fail_on_turns=None):
         prompt = system_prompt.lower()
         return "entity-discovery" in prompt or "discovery" in prompt
 
-    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None):
+    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None, temperature=None):
         # Detect which turn we're processing from the user prompt
         for tid in fail_on_turns:
             if tid in user_prompt and _is_discovery_prompt(system_prompt):

@@ -1586,10 +1586,14 @@ def extract_and_merge(
         context_length=_ctx_len,
         entity_context_budget=_entity_budget,
     )
+    # discovery_temperature override (#251) — allows a higher temperature
+    # for entity discovery without affecting detail/relationship/event phases.
+    _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     try:
         discovery_result = llm.extract_json(
             system_prompt=load_template("entity-discovery"),
             user_prompt=format_discovery_prompt(turn, known),
+            temperature=_discovery_temp,
         )
     except QuotaExhaustedError:
         raise

@@ -512,6 +512,69 @@ Recommended segment sizes:
 
 Segment size 0 runs a single-pass extraction without segmentation.
 
+### Incremental Extraction Workflow
+
+For large sessions, extract in small batches with human review between each
+increment. This gives you control over quality before committing to the next
+batch.
+
+#### Flags
+
+- `--start-turn N` — Start extraction from turn N (1-based). Turns before N
+  are skipped; existing catalogs are used as prior context.
+- When both `--start-turn` and `--max-turns` are set, `--max-turns` is treated
+  as an **absolute turn number** (upper bound), not a count.
+  `--start-turn 26 --max-turns 50` extracts turns 26–50.
+
+#### Typical 3-batch workflow
+
+```bash
+# Batch 1: turns 1-25
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt \
+  --max-turns 25
+
+# Review wiki pages in framework/catalogs/*/README.md
+# If satisfied, continue:
+
+# Batch 2: turns 26-50
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt \
+  --start-turn 26 --max-turns 50
+
+# Review again, then:
+
+# Batch 3: turns 51-75
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+  --file sessions/_import/session-001-full-transcript.txt \
+  --start-turn 51 --max-turns 75
+```
+
+After each batch the tool prints a suggested `--start-turn` / `--max-turns`
+command for the next increment.
+
+Wiki pages are auto-generated after each extraction so you can review entity
+pages before continuing.
+
+#### `discovery_temperature` config key
+
+Entity discovery can benefit from a slightly higher temperature to catch
+entities the model might otherwise miss. Add `discovery_temperature` to
+`config/llm.json` to override the global temperature for the discovery phase
+only:
+
+```json
+{
+  "temperature": 0.0,
+  "discovery_temperature": 0.3
+}
+```
+
+When omitted, discovery uses the global `temperature` value.
+
 ### Coreference Hints
 
 When the automatic dedup pass doesn't catch all duplicates (e.g., a character

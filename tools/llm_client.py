@@ -154,6 +154,7 @@ class LLMClient:
         messages: list[dict],
         max_tokens: int | None = None,
         timeout: int | None = None,
+        temperature: float | None = None,
     ) -> str:
         """Call Ollama's native /api/chat with streaming.
 
@@ -167,7 +168,7 @@ class LLMClient:
             "messages": messages,
             "stream": True,
             "options": {
-                "temperature": self.temperature,
+                "temperature": temperature if temperature is not None else self.temperature,
                 "num_predict": max_tokens or self.max_tokens,
             },
         }
@@ -344,6 +345,7 @@ class LLMClient:
         schema: dict | None = None,
         timeout: int | None = None,
         max_tokens: int | None = None,
+        temperature: float | None = None,
     ) -> dict | list:
         """Send a chat completion request and parse the JSON response.
 
@@ -355,6 +357,8 @@ class LLMClient:
                 default timeout from config for this call only.
             max_tokens: Optional per-call max_tokens override. When provided,
                 overrides ``self.max_tokens`` for this call only.
+            temperature: Optional per-call temperature override. When provided,
+                overrides ``self.temperature`` for this call only (#251).
 
         Returns:
             Parsed JSON object/array.
@@ -372,6 +376,7 @@ class LLMClient:
         for attempt in range(self.retry_attempts):
             try:
                 effective_max = max_tokens if max_tokens is not None else self.max_tokens
+                effective_temp = temperature if temperature is not None else self.temperature
 
                 # Ollama streaming path — uses native /api/chat with
                 # format=json to avoid the non-streaming empty-response
@@ -379,12 +384,13 @@ class LLMClient:
                 if self._use_ollama_streaming:
                     raw_text = self._ollama_streaming_chat(
                         messages, max_tokens=effective_max, timeout=timeout,
+                        temperature=effective_temp,
                     )
                 else:
                     kwargs = {
                         "model": self.model,
                         "messages": messages,
-                        "temperature": self.temperature,
+                        "temperature": effective_temp,
                         "max_tokens": effective_max,
                     }
                     # Ollama hangs when response_format=json_object is used with
