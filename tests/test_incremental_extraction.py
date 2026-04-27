@@ -9,11 +9,12 @@ Covers:
 import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from bootstrap_session import build_parser
+from bootstrap_session import build_parser, slice_turns
 
 # Ensure `import openai` succeeds even when the package is not installed.
 if "openai" not in sys.modules:
@@ -62,91 +63,93 @@ class TestStartTurnArg:
 
 
 # ---------------------------------------------------------------------------
-# Turn slicing logic
+# Turn slicing logic (exercises the actual slice_turns helper)
 # ---------------------------------------------------------------------------
 
 
-class TestTurnSlicing:
-    """Verify turn slicing with --start-turn and --max-turns."""
+def _make_turns(n):
+    return [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": f"T{i}"} for i in range(1, n + 1)]
 
-    def _make_turns(self, n):
-        return [{"turn_id": f"turn-{i:03d}", "speaker": "DM", "text": f"T{i}"} for i in range(1, n + 1)]
+
+class TestSliceTurns:
+    """Verify slice_turns() with --start-turn and --max-turns."""
 
     def test_start_turn_slices_from_correct_index(self):
         """--start-turn 5 should skip turns 1-4."""
-        turns = self._make_turns(10)
-        start_turn = 5
-        sliced = turns[start_turn - 1:]
+        turns = _make_turns(10)
+        sliced = slice_turns(turns, start_turn=5, max_turns=None)
         assert len(sliced) == 6
         assert sliced[0]["turn_id"] == "turn-005"
         assert sliced[-1]["turn_id"] == "turn-010"
 
     def test_start_turn_and_max_turns_absolute_upper_bound(self):
         """--start-turn 26 --max-turns 50 should extract turns 26-50."""
-        turns = self._make_turns(100)
-        start_turn = 26
-        max_turns = 50  # Absolute turn number, not count
-        sliced = turns[start_turn - 1:max_turns]
+        turns = _make_turns(100)
+        sliced = slice_turns(turns, start_turn=26, max_turns=50)
         assert len(sliced) == 25
         assert sliced[0]["turn_id"] == "turn-026"
         assert sliced[-1]["turn_id"] == "turn-050"
 
     def test_start_turn_only_extracts_to_end(self):
         """--start-turn 90 without --max-turns extracts turns 90-100."""
-        turns = self._make_turns(100)
-        start_turn = 90
-        sliced = turns[start_turn - 1:]
+        turns = _make_turns(100)
+        sliced = slice_turns(turns, start_turn=90, max_turns=None)
         assert len(sliced) == 11
         assert sliced[0]["turn_id"] == "turn-090"
         assert sliced[-1]["turn_id"] == "turn-100"
 
     def test_max_turns_caps_at_total_when_exceeding(self):
         """--start-turn 26 --max-turns 200 (beyond total) should cap at total."""
-        turns = self._make_turns(100)
-        start_turn = 26
-        max_turns = 200
-        end_idx = min(max_turns, len(turns))
-        sliced = turns[start_turn - 1:end_idx]
+        turns = _make_turns(100)
+        sliced = slice_turns(turns, start_turn=26, max_turns=200)
         assert len(sliced) == 75
         assert sliced[0]["turn_id"] == "turn-026"
         assert sliced[-1]["turn_id"] == "turn-100"
 
     def test_start_turn_1_is_identity(self):
         """--start-turn 1 should not skip any turns."""
-        turns = self._make_turns(10)
-        sliced = turns[0:]
+        turns = _make_turns(10)
+        sliced = slice_turns(turns, start_turn=1, max_turns=None)
         assert len(sliced) == 10
         assert sliced[0]["turn_id"] == "turn-001"
 
+    def test_max_turns_standalone_caps_count(self):
+        """--max-turns 25 alone limits to first 25 turns."""
+        turns = _make_turns(100)
+        sliced = slice_turns(turns, start_turn=None, max_turns=25)
+        assert len(sliced) == 25
+        assert sliced[-1]["turn_id"] == "turn-025"
+
+    def test_no_flags_returns_all(self):
+        """No flags returns the full list."""
+        turns = _make_turns(10)
+        sliced = slice_turns(turns, start_turn=None, max_turns=None)
+        assert len(sliced) == 10
+
 
 # ---------------------------------------------------------------------------
-# Validation errors
+# Validation errors (exercises actual sys.exit paths)
 # ---------------------------------------------------------------------------
 
 
-class TestStartTurnValidation:
-    """Verify validation errors for out-of-range --start-turn values."""
+class TestSliceTurnsValidation:
+    """Verify slice_turns() raises SystemExit on invalid arguments."""
 
-    def test_start_turn_zero_is_invalid(self):
-        """--start-turn 0 should be rejected (1-based)."""
-        # Validation is in main(), test the condition directly
-        start_turn = 0
-        assert start_turn < 1
+    def test_start_turn_zero_exits(self):
+        with pytest.raises(SystemExit):
+            slice_turns(_make_turns(10), start_turn=0, max_turns=None)
 
-    def test_start_turn_exceeding_total_is_invalid(self):
-        """--start-turn beyond total turns should be rejected."""
-        turns = self._make_turns(10)
-        start_turn = 15
-        start_idx = start_turn - 1
-        assert start_idx >= len(turns)
+    def test_start_turn_exceeding_total_exits(self):
+        with pytest.raises(SystemExit):
+            slice_turns(_make_turns(10), start_turn=15, max_turns=None)
 
-    def test_max_turns_less_than_start_turn_is_invalid(self):
-        """--max-turns 10 --start-turn 20 should be rejected."""
-        assert 10 < 20  # max_turns < start_turn
+    def test_max_turns_less_than_start_turn_exits(self):
+        with pytest.raises(SystemExit):
+            slice_turns(_make_turns(100), start_turn=20, max_turns=10)
 
-    def _make_turns(self, n):
-        return [{"turn_id": f"turn-{i:03d}"} for i in range(1, n + 1)]
-
+    def test_max_turns_zero_standalone_exits(self):
+        with pytest.raises(SystemExit):
+            slice_turns(_make_turns(10), start_turn=None, max_turns=0)
 
 # ---------------------------------------------------------------------------
 # discovery_temperature in LLMClient.extract_json
