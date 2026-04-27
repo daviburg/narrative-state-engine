@@ -26,7 +26,7 @@ def _make_stub_llm(discovery_entities=None):
     if discovery_entities is None:
         discovery_entities = []
 
-    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None):
+    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None, temperature=None):
         prompt_lower = system_prompt.lower()
         if "discover" in prompt_lower or "discovery" in prompt_lower:
             return {"entities": discovery_entities}

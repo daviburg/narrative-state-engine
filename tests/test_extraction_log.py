@@ -25,7 +25,7 @@ def _make_stub_llm(fail_discovery=False, fail_events=False, fail_relationships=F
     llm.delay = MagicMock()
     llm.config = {"checkpoint_interval": 100}
 
-    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None):
+    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None, temperature=None):
         prompt_lower = system_prompt.lower()
         if "discover" in prompt_lower or "discovery" in prompt_lower:
             if fail_discovery:

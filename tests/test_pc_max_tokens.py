@@ -51,7 +51,7 @@ def _make_stub_llm(pc_fail=True, pc_max_tokens=4096):
     _call_count = {"n": 0}
 
     def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None,
-                      schema=None):
+                      schema=None, temperature=None):
         _call_count["n"] += 1
         # Entity discovery always returns empty
         if "discover" in system_prompt.lower() or "discovery" in system_prompt.lower():
@@ -283,7 +283,7 @@ class TestPCSkipIntegration:
         llm_ok.delay = MagicMock()
 
         def _extract_ok(system_prompt, user_prompt, timeout=None, max_tokens=None,
-                        schema=None):
+                        schema=None, temperature=None):
             if "discover" in system_prompt.lower():
                 return {"entities": []}
             if "detail" in system_prompt.lower():
@@ -321,7 +321,7 @@ class TestPCSkipIntegration:
         llm.delay = MagicMock()
 
         def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None,
-                          schema=None):
+                          schema=None, temperature=None):
             if "discover" in system_prompt.lower() or "discovery" in system_prompt.lower():
                 return {"entities": []}
             if "detail" in system_prompt.lower():

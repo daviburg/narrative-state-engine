@@ -495,7 +495,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="Total cap: stop after processing the first N turns. "
              "Distinct from --segment-size which controls batch granularity. "
              "Post-extraction passes (backfill, PC alias merge) still run "
-             "on the partial output.",
+             "on the partial output. When used with --start-turn, this is "
+             "treated as an absolute turn number (upper bound), not a count.",
+    )
+    parser.add_argument(
+        "--start-turn",
+        type=int,
+        default=None,
+        help="Start extraction from turn N (1-based), using existing catalogs as "
+             "prior context. Turns before N are skipped. "
+             "Example: --start-turn 26 --max-turns 50 extracts turns 26-50.",
     )
     return parser
 
@@ -511,6 +520,64 @@ def _resolve_segment_size(requested_segment_size: int | None, turn_count: int) -
     if turn_count > _AUTO_SEGMENT_THRESHOLD:
         return _AUTO_SEGMENT_SIZE, True
     return 0, False
+
+
+def slice_turns(
+    turn_dicts: list[dict],
+    start_turn: int | None,
+    max_turns: int | None,
+) -> list[dict]:
+    """Slice turn_dicts according to --start-turn and --max-turns flags.
+
+    Args:
+        turn_dicts: Full list of turn dicts (1-based turn numbering in IDs).
+        start_turn: 1-based start turn (None = from the beginning).
+        max_turns: When used alone, a count cap.  When combined with
+            start_turn, an absolute turn-number upper bound.
+
+    Returns:
+        The sliced list.
+
+    Raises:
+        SystemExit: On invalid arguments.
+    """
+    if start_turn is not None:
+        if start_turn < 1:
+            print("ERROR: --start-turn must be >= 1.", file=sys.stderr)
+            sys.exit(1)
+        start_idx = start_turn - 1
+        if start_idx >= len(turn_dicts):
+            print(f"ERROR: --start-turn {start_turn} exceeds total turns ({len(turn_dicts)}).",
+                  file=sys.stderr)
+            sys.exit(1)
+        print(f"  Starting from turn {start_turn} of {len(turn_dicts)} (--start-turn).")
+
+        # When both flags are set, --max-turns is an absolute turn number
+        # (upper bound), not a count.  E.g. --start-turn 26 --max-turns 50
+        # extracts turns 26-50.
+        if max_turns is not None:
+            if max_turns < 1:
+                print("ERROR: --max-turns must be >= 1.", file=sys.stderr)
+                sys.exit(1)
+            if max_turns < start_turn:
+                print(f"ERROR: --max-turns ({max_turns}) < --start-turn ({start_turn}).",
+                      file=sys.stderr)
+                sys.exit(1)
+            end_idx = min(max_turns, len(turn_dicts))
+            print(f"  Extracting turns {start_turn}-{end_idx} (--start-turn + --max-turns).")
+            return turn_dicts[start_idx:end_idx]
+        return turn_dicts[start_idx:]
+
+    if max_turns is not None:
+        # Standalone --max-turns (no --start-turn) — count cap
+        if max_turns < 1:
+            print("ERROR: --max-turns must be >= 1.", file=sys.stderr)
+            sys.exit(1)
+        if max_turns < len(turn_dicts):
+            print(f"  Limiting to first {max_turns} of {len(turn_dicts)} turns (--max-turns).")
+            return turn_dicts[:max_turns]
+
+    return turn_dicts
 
 
 def main() -> None:
@@ -641,15 +708,10 @@ def main() -> None:
         {"turn_id": _format_turn_id(t.sequence), "speaker": t.speaker, "text": t.text}
         for t in turns
     ]
+    total_turns = len(turn_dicts)
 
-    # Limit to --max-turns if specified (#234)
-    if args.max_turns is not None:
-        if args.max_turns < 1:
-            print("ERROR: --max-turns must be >= 1.", file=sys.stderr)
-            sys.exit(1)
-        if args.max_turns < len(turn_dicts):
-            print(f"  Limiting to first {args.max_turns} of {len(turn_dicts)} turns (--max-turns).")
-            turn_dicts = turn_dicts[:args.max_turns]
+    # Slice to --start-turn / --max-turns (#251)
+    turn_dicts = slice_turns(turn_dicts, args.start_turn, args.max_turns)
 
     effective_segment_size, auto_segment_enabled = _resolve_segment_size(
         args.segment_size,
@@ -700,6 +762,7 @@ def main() -> None:
             raise
 
     # Semantic extraction — LLM-based entity/relationship/event extraction (#43)
+    wiki_generated = False
     try:
         from semantic_extraction import extract_semantic_batch
 
@@ -751,6 +814,21 @@ def main() -> None:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
                 print(f"  PC alias merge: merged {len(merged_aliases)} alias(es): {merged_aliases}")
+
+        # Generate wiki pages for human review (#251)
+        wiki_generated = False
+        if args.dry_run:
+            print("  Wiki generation: skipped during dry run")
+        else:
+            try:
+                from generate_wiki_pages import generate_wiki_pages
+                catalog_dir = os.path.join(args.framework, "catalogs")
+                print("\nGenerating wiki pages for review:")
+                generate_wiki_pages(catalog_dir, entity_types=None, index_only=False)
+                print(f"  Wiki pages generated. Review {args.framework}/catalogs/*/README.md and individual pages.")
+                wiki_generated = True
+            except Exception as e:
+                print(f"  WARNING: Wiki generation failed: {e}", file=sys.stderr)
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(
@@ -767,7 +845,21 @@ def main() -> None:
     if args.dry_run:
         print("Dry run complete. Re-run without --dry-run to write files.")
     else:
-        print("Bootstrap complete.")
+        # Print summary with next-step suggestion (#251)
+        first_turn = turn_dicts[0]["turn_id"] if turn_dicts else "?"
+        last_turn = turn_dicts[-1]["turn_id"] if turn_dicts else "?"
+        print(f"Extraction complete for turns {first_turn} through {last_turn}.")
+        if wiki_generated:
+            print(f"Wiki pages generated — review {args.framework}/catalogs/ for entity pages.")
+        if args.start_turn is not None:
+            # Compute next start from actual last extracted absolute turn number
+            last_extracted_abs = args.start_turn + len(turn_dicts) - 1
+            next_start = last_extracted_abs + 1
+            if next_start <= total_turns:
+                suggested_end = min(next_start + len(turn_dicts) - 1, total_turns)
+                print(f"To continue: --start-turn {next_start} --max-turns {suggested_end}")
+            else:
+                print("All turns have been extracted.")
         print()
         print("Next steps:")
         print(f"  python tools/update_state.py --session {session_dir}")
