@@ -1609,6 +1609,16 @@ def extract_and_merge(
 
     discovered = discovery_result.get("entities", [])
 
+    # Defensive shape check: ensure entities is a list of dicts (#250 review)
+    if not isinstance(discovered, list):
+        print(f"  WARNING: Discovery entities is not a list for {turn_id}, skipping", file=sys.stderr)
+        discovered = []
+        turn_failed = True
+        _phase_log["discovery_ok"] = False
+        _phase_log["discovery_error"] = _phase_log["discovery_error"] or "entities field is not a list"
+    else:
+        discovered = [e for e in discovered if isinstance(e, dict)]
+
     # Post-process discovery results: ensure provenance and fix ID prefixes
     for entity in discovered:
         # Ensure source_turn is always set (smaller models may omit it)
@@ -1623,14 +1633,15 @@ def extract_and_merge(
                 entity["proposed_id"] = fix_id_prefix(pid, etype)
 
     # Build discovery log entries for all proposed entities (#250)
+    # Use None for missing fields to distinguish absent from default values.
     _discovery_proposals = []
     for entity in discovered:
         _discovery_proposals.append({
-            "name": entity.get("name", ""),
-            "is_new": entity.get("is_new", True),
-            "proposed_id": entity.get("proposed_id", ""),
-            "existing_id": entity.get("existing_id", ""),
-            "confidence": entity.get("confidence", 0),
+            "name": entity.get("name"),
+            "is_new": entity.get("is_new"),
+            "proposed_id": entity.get("proposed_id"),
+            "existing_id": entity.get("existing_id"),
+            "confidence": entity.get("confidence"),
         })
 
     # Filter by confidence, tracking rejections (#250)

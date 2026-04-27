@@ -75,7 +75,7 @@ class TestDiscoveryProposalsLogged:
         assert proposals[0]["name"] == "Elder"
         assert proposals[0]["is_new"] is True
         assert proposals[0]["proposed_id"] == "char-elder"
-        assert proposals[0]["existing_id"] == ""
+        assert proposals[0]["existing_id"] is None  # not provided by model
         assert proposals[0]["confidence"] == 0.9
         assert proposals[1]["name"] == "Village"
         assert proposals[1]["confidence"] == 0.8
@@ -113,7 +113,7 @@ class TestDiscoveryProposalsLogged:
         assert len(proposals) == 1
         assert proposals[0]["is_new"] is False
         assert proposals[0]["existing_id"] == "char-elder"
-        assert proposals[0]["proposed_id"] == ""
+        assert proposals[0]["proposed_id"] is None  # not provided for existing entities
 
 
 class TestDiscoveryFilteredLogged:
@@ -190,3 +190,46 @@ class TestDiscoveryFilteredLogged:
         assert reasons["Fog"] == "below_confidence_threshold"
         assert reasons["Bravery"] == "concept_prefix"
         assert "Knight" not in reasons
+
+    def test_non_list_entities_handled(self, monkeypatch):
+        """Non-list entities value triggers defensive fallback."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+        llm = _make_stub_llm()
+        # Override to return entities as a dict instead of list
+        llm.extract_json = lambda **kw: (
+            {"entities": {"bad": "shape"}} if "discover" in kw.get("system_prompt", "").lower()
+            else {"events": []}
+        )
+        turn = {"turn_id": "turn-001", "speaker": "dm", "text": "Malformed."}
+
+        _, _, failed, log = se.extract_and_merge(
+            turn, _fresh_catalogs(), [], llm, min_confidence=0.6,
+        )
+
+        assert failed is True
+        assert log["discovery_ok"] is False
+        assert "not a list" in log["discovery_error"]
+        assert log["discovery_proposals"] == []
+        assert log["discovery_filtered"] == []
+
+    def test_non_dict_entries_stripped(self, monkeypatch):
+        """Non-dict entries in the entities list are silently stripped."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+        entities = [
+            {"name": "Elder", "is_new": True, "proposed_id": "char-elder",
+             "type": "character", "confidence": 0.9, "source_turn": "turn-001"},
+            "not-a-dict",
+            42,
+        ]
+        llm = _make_stub_llm(discovery_entities=entities)
+        turn = {"turn_id": "turn-001", "speaker": "dm", "text": "Mixed entries."}
+
+        _, _, _, log = se.extract_and_merge(
+            turn, _fresh_catalogs(), [], llm, min_confidence=0.6,
+        )
+
+        # Only the valid dict entity should appear
+        assert len(log["discovery_proposals"]) == 1
+        assert log["discovery_proposals"][0]["name"] == "Elder"
