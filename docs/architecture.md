@@ -39,6 +39,18 @@ tools/update_state.py                  tools/semantic_extraction.py  (optional, 
       +------------------------------------------+
       |
       v
+tools/derive_planning_layer.py       (catalog → derived planning files)
+      |
+      +---> sessions/*/derived/state.json        (populated from catalogs)
+      +---> sessions/*/derived/evidence.json     (populated from events + entity attributes)
+      +---> sessions/*/derived/timeline.json     (merged session + catalog timeline)
+      |
+      v
+tools/build_context.py               (entity context for a specific turn)
+      |
+      +---> sessions/*/derived/turn-context.json
+      |
+      v
 tools/analyze_next_move.py
       |
       +---> sessions/*/derived/next-move-analysis.md
@@ -48,6 +60,11 @@ tools/analyze_next_move.py
 Semantic extraction is triggered automatically during `bootstrap_session.py` (batch)
 or via the `--extract` flag on `ingest_turn.py` (incremental). It requires an LLM
 endpoint configured in `config/llm.json` and gracefully degrades if unavailable.
+
+Planning layer derivation (`derive_planning_layer.py`) bridges the gap between
+extracted catalog data and the derived planning files consumed by
+`analyze_next_move.py`. It runs automatically when `update_state.py` is invoked
+with `--framework`, or can be run standalone.
 
 ---
 
@@ -70,11 +87,12 @@ Running catalogs of entities, locations, factions, items, and plot threads extra
 
 ### State Layer (Derived, Per Session)
 
-Per-session structured state extracted from the transcript.
+Per-session structured state derived from catalog data and transcript extraction.
 
-- `state.json` — current world state, player state, constraints, opportunities, risks
+- `state.json` — current world state, player state, constraints, opportunities, risks. Auto-populated from catalog entities (player location, condition, equipment, relationships), plot threads (active threads, opportunities), and entity attributes (known/inferred constraints, adversarial risks). Placeholder fields are replaced; manually authored content is preserved.
 - `objectives.json` — current player objectives with status
-- `evidence.json` — tagged evidence (explicit, inference, bait, hypothesis)
+- `evidence.json` — tagged evidence (explicit, inference, bait, hypothesis). Auto-populated from catalog events (→ explicit_evidence), entity attributes with inference flags (→ inference with confidence), and low-confidence relationships (→ inference). Existing entries are preserved; new entries are deduplicated before appending.
+- `timeline.json` — merged session-level (pattern-extracted) and catalog-level temporal markers
 
 ### Analysis Layer (Derived, Per Turn)
 
@@ -167,7 +185,8 @@ All data structures are defined in `schemas/`. See each schema file for field de
 |---|---|
 | `tools/bootstrap_session.py` | Import an existing transcript into a session |
 | `tools/ingest_turn.py` | Add a new turn to a session |
-| `tools/update_state.py` | Regenerate session-local derived scaffolds, turn summaries, and structured extraction outputs |
+| `tools/update_state.py` | Regenerate session-local derived scaffolds, turn summaries, structured extraction outputs, and (with `--framework`) planning layer derivation |
+| `tools/derive_planning_layer.py` | Synthesize catalog data into derived planning files (state.json, evidence.json, timeline.json) |
 | `tools/analyze_next_move.py` | Generate next-move analysis and prompt candidates |
 | `tools/validate.py` | Validate all JSON files against schemas |
 | `tools/validate_extraction.py` | Post-extraction validation against curated ground truth (alias merges, missing entities, staleness) |
