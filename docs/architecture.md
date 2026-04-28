@@ -67,6 +67,7 @@ Running catalogs of entities, locations, factions, items, and plot threads extra
 - Updated after each turn
 - Each entry includes `first_seen_turn` and `last_updated_turn` for traceability
 - Catalogs grow over time; entries are never deleted
+- A **relationship index** (`framework/catalogs/relationship-index.json`) is auto-generated on every `save_catalogs()` call, providing bidirectional lookup: given any entity ID, find all relationships where it is source (forward) or target (reverse). This enables efficient reverse queries like "what NPCs are at this location?" without scanning every entity file (#258)
 
 ### State Layer (Derived, Per Session)
 
@@ -158,6 +159,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `dm-profile.schema.json` | Inferred DM behavior profile |
 | `timeline.schema.json` | A temporal marker (season transition, time skip, biological marker, etc.) |
 | `coreference-hints.schema.json` | Manual coreference hints for entity fragmentation resolution |
+| `relationship-index.schema.json` | Bidirectional relationship index for reverse entity lookups (#258) |
 
 ---
 
