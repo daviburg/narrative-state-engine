@@ -181,6 +181,34 @@ def main() -> None:
         except Exception as exc:
             print(f"WARNING: Semantic extraction failed: {exc}", file=sys.stderr)
 
+        # DM profile analysis — update behavioral profile from DM turns (#260)
+        if args.speaker == "dm":
+            try:
+                from dm_profile_analyzer import analyze_single_turn
+
+                llm_overrides = {}
+                if args.model:
+                    llm_overrides["model"] = args.model
+                if args.base_url:
+                    llm_overrides["base_url"] = args.base_url
+
+                analyze_single_turn(
+                    turn_id, args.speaker, text,
+                    framework_dir=args.framework,
+                    overrides=llm_overrides or None,
+                )
+            except ModuleNotFoundError as exc:
+                if exc.name == "dm_profile_analyzer":
+                    print(
+                        "WARNING: DM profile analysis skipped because "
+                        "'dm_profile_analyzer' is not available.",
+                        file=sys.stderr,
+                    )
+                else:
+                    raise
+            except Exception as exc:
+                print(f"WARNING: DM profile analysis failed: {exc}", file=sys.stderr)
+
     print()
     print("Next steps:")
     print(f"  python tools/update_state.py --session {session_dir}")

@@ -72,6 +72,12 @@ ANALYSIS_TEMPLATE = """# Next-Move Analysis — {session_id} (as of {as_of_turn}
 
 ---
 
+## DM Profile
+
+{dm_profile_summary}
+
+---
+
 ## 7. Objectives Affected
 
 {objectives}
@@ -197,6 +203,56 @@ def format_nearby_summary(nearby: list[dict]) -> str:
     return "\n".join(lines)
 
 
+def _load_dm_profile(framework_dir: str | None) -> dict | None:
+    """Load the DM behavioral profile from the framework directory (#260)."""
+    if not framework_dir:
+        return None
+    path = os.path.join(framework_dir, "dm-profile", "dm-profile.json")
+    return load_json(path)
+
+
+def _format_dm_profile_summary(profile: dict | None) -> str:
+    """Format the DM profile for the analysis template (#260)."""
+    if not profile or profile.get("confidence", 0) == 0.0:
+        return "_DM profile not yet established. Run dm_profile_analyzer.py to populate._"
+
+    lines = []
+    conf = profile.get("confidence", 0.0)
+    lines.append(f"**Confidence:** {conf:.0%}")
+
+    tone = profile.get("tone")
+    if tone:
+        lines.append(f"**Tone:** {tone}")
+
+    adv = profile.get("adversarial_level", "unknown")
+    if adv != "unknown":
+        lines.append(f"**Adversarial Level:** {adv}")
+
+    hints = profile.get("hint_patterns", [])
+    if hints:
+        lines.append("**Hint Patterns:**")
+        for h in hints:
+            lines.append(f"  - {h}")
+
+    structs = profile.get("structure_patterns", [])
+    if structs:
+        lines.append("**Structure Patterns:**")
+        for s in structs:
+            lines.append(f"  - {s}")
+
+    fmt = profile.get("formatting_preferences", [])
+    if fmt:
+        lines.append("**Formatting Preferences:**")
+        for f in fmt:
+            lines.append(f"  - {f}")
+
+    notes = profile.get("notes", "")
+    if notes and notes != "Profile not yet established.":
+        lines.append(f"**Notes:** {notes}")
+
+    return "\n".join(lines)
+
+
 def _get_latest_turn_id(session_dir: str) -> str | None:
     """Determine the latest turn ID from transcript files."""
     transcript_dir = os.path.join(session_dir, "transcript")
@@ -273,6 +329,9 @@ def generate_analysis(
     evidence = load_json(os.path.join(derived_dir, "evidence.json"), default=[])
     objectives = load_json(os.path.join(derived_dir, "objectives.json"), default=[])
 
+    # Load DM profile (#260)
+    dm_profile = _load_dm_profile(framework_dir)
+
     # Load turn-context.json (#87)
     turn_context, is_stale = load_turn_context(
         session_dir, rebuild=rebuild_context, framework_dir=framework_dir,
@@ -326,6 +385,7 @@ def generate_analysis(
         nearby_entities_summary=nearby_text,
         opportunities=opportunities,
         risks=risks,
+        dm_profile_summary=_format_dm_profile_summary(dm_profile),
         objectives=objectives_text,
     )
 
