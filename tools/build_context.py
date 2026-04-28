@@ -20,6 +20,8 @@ import re
 import sys
 import warnings
 
+from build_scene_graph import load_scene_graph, query_nearby_from_index
+
 # V2 per-entity directory names
 _V2_DIRNAMES = ["characters", "locations", "factions", "items"]
 
@@ -280,6 +282,7 @@ def build_context(
     framework_dir: str,
     nearby_turns: int = 10,
     output_path: str | None = None,
+    use_scene_graph: bool = True,
 ) -> dict:
     """Main context-building pipeline. Returns the turn-context dict."""
     # Validate turn_id format early to avoid producing schema-invalid output
@@ -344,7 +347,23 @@ def build_context(
             all_scene_ids.add(loc_id)
 
     # Step D (nearby): entities not in scene but recently updated
-    nearby = build_nearby_summary(id_lookup, all_scene_ids, turn_id, nearby_turns)
+    # Use scene graph index when available for O(T) instead of O(N) lookup
+    scene_graph = load_scene_graph(framework_dir) if use_scene_graph else None
+    if scene_graph and scene_graph.get("turn_activity"):
+        nearby_eids = query_nearby_from_index(
+            scene_graph, all_scene_ids, turn_id, nearby_turns,
+        )
+        nearby = []
+        for eid in nearby_eids:
+            entry = id_lookup.get(eid)
+            if not entry:
+                continue
+            record: dict = {"id": entry["id"], "name": entry["name"]}
+            if entry.get("status_summary"):
+                record["status_summary"] = entry["status_summary"]
+            nearby.append(record)
+    else:
+        nearby = build_nearby_summary(id_lookup, all_scene_ids, turn_id, nearby_turns)
 
     # Step E: Assemble output
     context = {
@@ -406,6 +425,10 @@ def main() -> None:
         "--output",
         help="Override output path (default: {session}/derived/turn-context.json)",
     )
+    parser.add_argument(
+        "--no-scene-graph", action="store_true",
+        help="Disable scene graph index for nearby entity lookup.",
+    )
     args = parser.parse_args()
 
     try:
@@ -415,6 +438,7 @@ def main() -> None:
             framework_dir=args.framework,
             nearby_turns=args.nearby_turns,
             output_path=args.output,
+            use_scene_graph=not args.no_scene_graph,
         )
     except (FileNotFoundError, ValueError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
