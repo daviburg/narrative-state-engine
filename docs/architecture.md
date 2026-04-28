@@ -34,7 +34,8 @@ tools/update_state.py                  tools/semantic_extraction.py  (optional, 
       |                                          |     +---> reconcile_segments()
       |                                          |     +---> framework/catalogs/*.json
       |                                          |
-      v                                          +---> framework/catalogs/events.json
+      |                                          +---> framework/catalogs/events.json
+      |                                          +---> framework/catalogs/timeline.json (temporal #263)
       v                                          |
       +------------------------------------------+
       |
@@ -132,7 +133,7 @@ A running profile of inferred DM behavior patterns, populated from two data sour
 
 An automated pipeline that uses an LLM to extract structured data from transcript turns.
 
-- **Four-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor
+- **Five-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor
 - Prompt templates in `templates/extraction/` define each agent's behavior
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`; includes per-pair relationship consolidation, `_dedup_relationships()` safety net (#183), and `cleanup_dangling_relationships()` to remove refs to non-existent entities (#184)
@@ -164,6 +165,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - Biography sections use LLM-generated descriptive titles (not generic "Phase" labels), cached in `.synthesis.json` sidecars
 - Wiki pages include cross-page entity links: the first mention of each known entity in biography prose, relationship tables, event timelines, and member/connection lists is a clickable markdown link to that entity's wiki page. Link resolution uses relative paths across entity types.
 - **Coreference hints** (`apply_coreference_hints`): Optional manual merge rules in `sessions/*/coreference-hints.json`. Each entry maps a canonical entity ID to variant names and ID patterns. After the automatic dedup pass, the pipeline loads any hints file from the session directory and deterministically merges variant entities into their canonical counterpart — absorbing relationships, events, and stable attributes, deleting variant files, and rewriting all dangling references. Validated against `schemas/coreference-hints.schema.json`.
+- **Temporal extraction integration** (#263): The semantic extraction pipeline calls `temporal_extraction.extract_temporal_signals()` per-turn after event extraction (Phase 5). Pattern-based detection identifies season transitions, time-skip language, biological markers, and construction milestones directly from turn text and finalized events. Signals are merged into the timeline via `merge_temporal_signals()` with deduplication by `(source_turn, type, season, raw_text)`. The timeline is loaded alongside catalogs and events, saved at every checkpoint and at the end of extraction, and reconciled across segments in segmented mode. The extraction log records `temporal_ok`, `temporal_error`, and `new_temporal_signals` per turn. When `timeline` is not passed to `extract_and_merge()` (legacy callers), temporal extraction is skipped gracefully.
 
 ### Timeline Layer (Framework)
 
