@@ -129,6 +129,17 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - Wiki pages include cross-page entity links: the first mention of each known entity in biography prose, relationship tables, event timelines, and member/connection lists is a clickable markdown link to that entity's wiki page. Link resolution uses relative paths across entity types.
 - **Coreference hints** (`apply_coreference_hints`): Optional manual merge rules in `sessions/*/coreference-hints.json`. Each entry maps a canonical entity ID to variant names and ID patterns. After the automatic dedup pass, the pipeline loads any hints file from the session directory and deterministically merges variant entities into their canonical counterpart — absorbing relationships, events, and stable attributes, deleting variant files, and rewriting all dangling references. Validated against `schemas/coreference-hints.schema.json`.
 
+### Story Summary Layer (Framework)
+
+High-level narrative arc summary generated from extracted data.
+
+- `framework/story/summary.md` — concise campaign overview with arc descriptions, player character status, and open questions
+- `tools/generate_story_summary.py` — reads events, plot threads, entity catalogs, and timeline data to produce the summary
+- **LLM mode** (default): assembles structured prompt from catalog data and calls the configured LLM for narrative synthesis
+- **Data-only mode** (`--no-llm`): produces a structured markdown summary from catalog data without LLM calls
+- Automatically falls back to data-only mode if the LLM call fails
+- Full regeneration each run (not incremental) — the summary is a derived artifact
+
 ### Timeline Layer (Framework)
 
 Estimated timeline of in-game events, anchored to a configurable reference point.
@@ -174,6 +185,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |
 | `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
+| `tools/generate_story_summary.py` | Generate high-level story arc summary from extracted data (LLM or data-only mode) |
 | `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, Google Gemini, etc.) |
 | `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files; supports `-Framework`/`-PlayerLabel` passthrough and safe argument quoting for values with spaces |
 | `tools/watch_extraction_detached.ps1` | Show status and tail logs for detached extraction runs |
