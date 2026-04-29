@@ -853,12 +853,18 @@ def main() -> None:
             if args.base_url:
                 llm_overrides["base_url"] = args.base_url
 
+            # bootstrap_session's --max-turns is an absolute turn number
+            # when combined with --start-turn, but dm_profile_analyzer's
+            # max_turns is a count of DM turns.  Scope to the actual
+            # DM turns in the extracted batch so analysis stays aligned.
+            dm_analysis_max_turns = len(dm_turns)
+
             print("\nRunning DM profile analysis:")
             analyze_dm_batch(
                 session_dir=session_dir,
                 framework_dir=args.framework,
                 start_turn=args.start_turn or 0,
-                max_turns=args.max_turns or 0,
+                max_turns=dm_analysis_max_turns,
                 dry_run=args.dry_run,
                 overrides=llm_overrides or None,
             )

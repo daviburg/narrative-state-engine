@@ -12,7 +12,6 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from dm_profile_analyzer import (
     _aggregate_adversarial_level,
-    _compute_confidence,
     _empty_profile,
     _format_analysis_prompt,
     _parse_turn_number,
@@ -32,7 +31,7 @@ from dm_profile_analyzer import (
 # ---------------------------------------------------------------------------
 
 
-class TestParseurnNumber:
+class TestParseTurnNumber:
     def test_basic(self):
         assert _parse_turn_number("turn-001") == 1
         assert _parse_turn_number("turn-050") == 50
@@ -148,6 +147,26 @@ class TestMergeObservations:
         ]
         result = merge_observations(profile, obs)
         assert result["confidence"] <= 0.9
+
+    def test_invalid_source_turn_not_used_as_last_updated(self):
+        """LLM-returned source_turn that doesn't match schema pattern is ignored."""
+        profile = _empty_profile()
+        profile["last_updated_turn"] = "turn-005"
+        obs = [
+            {"field": "tone", "observation": "Dark", "evidence": "", "confidence": 0.6, "source_turn": "turn-1"},
+        ]
+        result = merge_observations(profile, obs)
+        # Invalid "turn-1" should be rejected; last_updated_turn stays at turn-005
+        assert result["last_updated_turn"] == "turn-005"
+
+    def test_empty_source_turn_ignored(self):
+        profile = _empty_profile()
+        profile["last_updated_turn"] = "turn-010"
+        obs = [
+            {"field": "tone", "observation": "Dark", "evidence": "", "confidence": 0.6, "source_turn": ""},
+        ]
+        result = merge_observations(profile, obs)
+        assert result["last_updated_turn"] == "turn-010"
 
 
 # ---------------------------------------------------------------------------
@@ -291,6 +310,14 @@ class TestMergeUserInput:
         profile = _empty_profile()
         result = merge_user_input(profile, {})
         assert result["confidence"] == 0.0
+
+    def test_confidence_preserved_above_09(self):
+        """User input must not regress confidence above 0.9 (user-confirmed)."""
+        profile = _empty_profile()
+        profile["confidence"] = 0.95
+        sections = {"Known DM Tendencies": "Some info"}
+        result = merge_user_input(profile, sections)
+        assert result["confidence"] == 0.95
 
 
 # ---------------------------------------------------------------------------

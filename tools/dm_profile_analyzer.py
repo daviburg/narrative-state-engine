@@ -31,7 +31,6 @@ import os
 import re
 import sys
 import time
-from datetime import datetime, timezone
 
 # Allow imports from the tools/ directory
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -48,13 +47,11 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _TEMPLATES_DIR = os.path.join(_REPO_ROOT, "templates", "extraction")
 _FRAMEWORK_DIR = os.path.join(_REPO_ROOT, "framework")
 _DM_PROFILE_PATH = os.path.join(_FRAMEWORK_DIR, "dm-profile", "dm-profile.json")
-_DM_PROFILE_SCHEMA = os.path.join(_REPO_ROOT, "schemas", "dm-profile.schema.json")
 
 _TURN_ID_RE = re.compile(r"^turn-(\d{3,})$")
 
 # Adversarial level ordering for aggregation
 _ADVERSARIAL_LEVELS = {"low": 0, "moderate": 1, "high": 2, "unknown": -1}
-_ADVERSARIAL_BY_RANK = {v: k for k, v in _ADVERSARIAL_LEVELS.items() if v >= 0}
 
 
 def load_dm_profile(path: str | None = None) -> dict:
@@ -243,9 +240,9 @@ def merge_observations(profile: dict, observations: list[dict]) -> dict:
         field = obs["field"]
         by_field.setdefault(field, []).append(obs)
 
-        # Track latest turn
+        # Track latest turn — only accept schema-valid turn IDs
         source = obs.get("source_turn", "")
-        if _parse_turn_number(source) > _parse_turn_number(latest_turn):
+        if _TURN_ID_RE.match(source) and _parse_turn_number(source) > _parse_turn_number(latest_turn):
             latest_turn = source
 
     # Merge tone — pick highest-confidence observation
@@ -378,19 +375,12 @@ def parse_user_input(filepath: str) -> dict:
 def merge_user_input(profile: dict, user_sections: dict) -> dict:
     """Merge user-provided information into the DM profile.
 
-    User-provided information is treated as high-confidence (0.8) since it
-    comes from direct human knowledge rather than inference.
+    User-provided information bumps the minimum profile confidence to 0.3
+    since it comes from direct human knowledge.  Existing confidence values
+    above 0.9 (user-confirmed patterns) are preserved.
     """
     if not user_sections:
         return profile
-
-    # Map section names to profile fields
-    section_map = {
-        "Tone and Content Preferences": "tone",
-        "Known DM Tendencies": "notes",
-        "Hint and Clue Style": "hint_patterns",
-        "Additional Notes": "notes",
-    }
 
     for section, content in user_sections.items():
         if section == "Adversarial Level (Your Assessment)":
@@ -437,9 +427,12 @@ def merge_user_input(profile: dict, user_sections: dict) -> dict:
             patterns.append(f"[user-provided] {content}")
             profile["structure_patterns"] = patterns
 
-    # User input bumps confidence
+    # User input bumps confidence without regressing already-confirmed values.
     current_conf = profile.get("confidence", 0.0)
-    profile["confidence"] = round(min(max(current_conf, 0.3), 0.9), 2)
+    if current_conf > 0.9:
+        profile["confidence"] = round(current_conf, 2)
+    else:
+        profile["confidence"] = round(min(max(current_conf, 0.3), 0.9), 2)
 
     return profile
 
