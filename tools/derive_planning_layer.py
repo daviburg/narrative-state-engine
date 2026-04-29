@@ -24,7 +24,6 @@ import re
 import sys
 
 from build_context import (
-    _V2_DIRNAMES,
     load_entity_file,
     load_indexes,
     parse_turn_number,
@@ -66,6 +65,25 @@ def _next_seq(items: list[dict], prefix: str) -> int:
         if m:
             max_seq = max(max_seq, int(m.group(1)))
     return max_seq + 1
+
+
+def _load_turns(session_dir: str) -> list[dict] | None:
+    """Load transcript turns without importing update_state (avoids cyclic import)."""
+    transcript_dir = os.path.join(session_dir, "transcript")
+    if not os.path.isdir(transcript_dir):
+        return None
+    pattern = re.compile(r"^turn-(\d+)-(player|dm)\.md$")
+    turns: list[dict] = []
+    for fname in sorted(os.listdir(transcript_dir)):
+        m = pattern.match(fname)
+        if m:
+            seq = int(m.group(1))
+            turns.append({
+                "turn_id": f"turn-{seq:03d}",
+                "sequence_number": seq,
+                "speaker": m.group(2),
+            })
+    return turns or None
 
 
 # ---------------------------------------------------------------------------
@@ -145,6 +163,12 @@ def derive_state(
     state_path = os.path.join(derived_dir, "state.json")
     state = _load_json(state_path, default={})
 
+    # Ensure schema-required keys exist with safe defaults
+    state.setdefault("as_of_turn", "turn-001")
+    state.setdefault("current_world_state", "")
+    state.setdefault("player_state", {})
+    state.setdefault("active_threads", [])
+
     # as_of_turn
     if turns:
         state["as_of_turn"] = turns[-1]["turn_id"]
@@ -218,8 +242,7 @@ def derive_state(
             for t in plot_threads
             if isinstance(t, dict) and t.get("status") == "active"
         ]
-        if active:
-            state["active_threads"] = active
+        state["active_threads"] = active if active else []
 
     # -- known_constraints (from explicit entity attributes) --------------------
     if not state.get("known_constraints"):
@@ -251,12 +274,18 @@ def derive_state(
                 val = attr_val.get("value")
                 conf = attr_val.get("confidence", 0.5)
                 source = attr_val.get("source_turn", "")
-                if val:
-                    inferred.append({
-                        "statement": f"{entity['name']}'s {attr_key} may be {val}",
-                        "confidence": conf,
-                        "source_turns": [source] if source else [],
-                    })
+                fallback_source = (
+                    entity.get("first_seen_turn")
+                    or entity.get("last_updated_turn", "")
+                )
+                chosen_source = source or fallback_source
+                if not val or not chosen_source:
+                    continue
+                inferred.append({
+                    "statement": f"{entity['name']}'s {attr_key} may be {val}",
+                    "confidence": conf,
+                    "source_turns": [chosen_source],
+                })
         if inferred:
             state["inferred_constraints"] = inferred
 
@@ -331,11 +360,12 @@ def derive_evidence(
     # From catalog events → explicit_evidence
     for evt in events:
         source_turns = evt.get("source_turns", [])
-        if not source_turns:
+        description = (evt.get("description") or "").strip()
+        if not source_turns or not description:
             continue
         entry = {
             "id": f"ev-{seq:03d}",
-            "statement": evt.get("description", ""),
+            "statement": description,
             "classification": "explicit_evidence",
             "confidence": 1.0,
             "source_turns": source_turns,
@@ -363,7 +393,15 @@ def derive_evidence(
                 continue
 
             is_inference = attr_val.get("inference", False)
-            conf = attr_val.get("confidence", 1.0) if is_inference else 1.0
+            if is_inference:
+                raw_conf = attr_val.get("confidence", 0.5)
+                try:
+                    conf = float(raw_conf)
+                except (TypeError, ValueError):
+                    conf = 0.5
+                conf = max(0.0, min(1.0, conf))
+            else:
+                conf = 1.0
             classification = "inference" if is_inference else "explicit_evidence"
 
             # Build value string
@@ -570,14 +608,7 @@ def main() -> None:
         sys.exit(1)
 
     # Optionally load turns for as_of_turn detection
-    turns = None
-    try:
-        from update_state import list_turns
-
-        transcript_dir = os.path.join(args.session, "transcript")
-        turns = list_turns(transcript_dir) or None
-    except ImportError:
-        pass
+    turns = _load_turns(args.session)
 
     result = derive_all(
         args.session, args.framework, turns, dry_run=args.dry_run,

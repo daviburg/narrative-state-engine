@@ -284,21 +284,29 @@ def main() -> None:
             raise
 
     # Derive planning layer from catalog data (#259)
-    if args.framework and os.path.isdir(args.framework):
-        try:
-            from derive_planning_layer import derive_all
+    if args.framework:
+        if not os.path.isdir(args.framework):
+            print(
+                f"WARNING: --framework path does not exist or is not a "
+                f"directory: {args.framework}. Skipping planning layer "
+                f"derivation.",
+                file=sys.stderr,
+            )
+        else:
+            try:
+                from derive_planning_layer import derive_all
 
-            print("\nDeriving planning layer from catalog data...")
-            derive_all(session_dir, args.framework, turns)
-        except ModuleNotFoundError as exc:
-            if exc.name == "derive_planning_layer":
-                print(
-                    "WARNING: Planning layer derivation skipped because "
-                    "'derive_planning_layer' is not available.",
-                    file=sys.stderr,
-                )
-            else:
-                raise
+                print("\nDeriving planning layer from catalog data...")
+                derive_all(session_dir, args.framework, turns)
+            except ModuleNotFoundError as exc:
+                if exc.name == "derive_planning_layer":
+                    print(
+                        "WARNING: Planning layer derivation skipped because "
+                        "'derive_planning_layer' is not available.",
+                        file=sys.stderr,
+                    )
+                else:
+                    raise
 
     print_instructions(session_dir, turns)
 
