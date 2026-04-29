@@ -76,7 +76,7 @@ Cross-type spatial and temporal index built from entity catalogs (#257).
 - **Location index**: inverted mapping from location ID → entities present (via `volatile_state.location`)
 - **Turn activity index**: mapping from turn ID → entity IDs introduced or updated on that turn
 - **Location connections**: spatial edges between locations derived from location entity relationships
-- Used by `build_context.py` for O(T) nearby-entity lookups instead of O(N) full-catalog scans
+- Used by `build_context.py` for O(T) nearby-entity lookups via direct dict lookups into the turn activity index, instead of O(N) full-catalog scans
 - Rebuilt from catalog files; no extraction rerun needed
 - Falls back gracefully to full-scan when the index is absent
 

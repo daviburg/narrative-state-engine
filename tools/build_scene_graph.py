@@ -21,7 +21,6 @@ import argparse
 import json
 import os
 import re
-import sys
 from datetime import datetime, timezone
 
 
@@ -149,15 +148,15 @@ def build_location_connections(entities: list[dict]) -> list[dict]:
             target_id = rel.get("target_id", "")
             if not target_id.startswith("loc-"):
                 continue
-            # Deduplicate bidirectional edges
+            # Deduplicate bidirectional edges and emit in canonical order
             edge = tuple(sorted([source_id, target_id]))
             if edge in seen:
                 continue
             seen.add(edge)
 
             conn: dict = {
-                "source": source_id,
-                "target": target_id,
+                "source": edge[0],
+                "target": edge[1],
             }
             if rel.get("current_relationship"):
                 conn["relationship"] = rel["current_relationship"]
@@ -269,16 +268,26 @@ def query_entities_at_location(scene_graph: dict, location_id: str) -> list[dict
     return loc_entry.get("entities", [])
 
 
+def _format_turn_id(turn_num: int) -> str:
+    """Format a turn number as a zero-padded turn ID (e.g. 5 -> 'turn-005')."""
+    return f"turn-{turn_num:03d}"
+
+
 def query_active_in_turn_range(
     scene_graph: dict,
     start_turn: int,
     end_turn: int,
 ) -> set[str]:
-    """Return entity IDs that were active (introduced or updated) in a turn range."""
+    """Return entity IDs that were active (introduced or updated) in a turn range.
+
+    O(T) where T = end_turn - start_turn, using direct dict lookups.
+    """
     result: set[str] = set()
-    for turn_id, eids in scene_graph.get("turn_activity", {}).items():
-        num = parse_turn_number(turn_id)
-        if start_turn <= num <= end_turn:
+    turn_activity = scene_graph.get("turn_activity", {})
+    for turn_num in range(start_turn, end_turn + 1):
+        turn_id = _format_turn_id(turn_num)
+        eids = turn_activity.get(turn_id)
+        if eids:
             result.update(eids)
     return result
 
@@ -291,8 +300,8 @@ def query_nearby_from_index(
 ) -> list[str]:
     """Return entity IDs not in scene_ids but active within nearby_turns of current_turn.
 
-    This is an O(T) scan over turn_activity rather than O(N) scan over all entities,
-    where T is the number of turns in the nearby window (typically 10-20).
+    O(T) where T = nearby_turns, using direct dict lookups into turn_activity
+    rather than O(N) scan over all entities.
     """
     current_num = parse_turn_number(current_turn)
     if current_num == 0:
@@ -300,9 +309,11 @@ def query_nearby_from_index(
 
     start = max(1, current_num - nearby_turns)
     nearby_ids: set[str] = set()
-    for turn_id, eids in scene_graph.get("turn_activity", {}).items():
-        num = parse_turn_number(turn_id)
-        if start <= num <= current_num:
+    turn_activity = scene_graph.get("turn_activity", {})
+    for turn_num in range(start, current_num + 1):
+        turn_id = _format_turn_id(turn_num)
+        eids = turn_activity.get(turn_id)
+        if eids:
             nearby_ids.update(eids)
 
     # Exclude entities already in the scene

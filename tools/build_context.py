@@ -347,7 +347,8 @@ def build_context(
             all_scene_ids.add(loc_id)
 
     # Step D (nearby): entities not in scene but recently updated
-    # Use scene graph index when available for O(T) instead of O(N) lookup
+    # Use scene graph turn_activity index when available for O(T) dict lookups
+    # instead of O(N) full-catalog scan
     scene_graph = load_scene_graph(framework_dir) if use_scene_graph else None
     if scene_graph and scene_graph.get("turn_activity"):
         nearby_eids = query_nearby_from_index(

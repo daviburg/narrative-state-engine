@@ -426,7 +426,7 @@ class TestBuildSceneGraph:
 
     def test_custom_output_path(self, catalog_fixture, tmp_path):
         output = str(tmp_path / "custom" / "graph.json")
-        sg = build_scene_graph(catalog_fixture["framework"], output_path=output)
+        build_scene_graph(catalog_fixture["framework"], output_path=output)
         assert os.path.isfile(output)
 
     def test_empty_catalogs(self, tmp_path):
@@ -520,10 +520,7 @@ class TestLoadSceneGraph:
 class TestSchemaValidation:
     def test_scene_graph_validates(self, catalog_fixture):
         """Scene graph output should validate against scene-graph.schema.json."""
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
+        jsonschema = pytest.importorskip("jsonschema")
 
         sg = build_scene_graph(catalog_fixture["framework"])
 

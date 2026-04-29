@@ -70,7 +70,7 @@
     },
     "location_connections": {
       "type": "array",
-      "description": "Spatial connections between locations derived from entity relationships and movement patterns.",
+      "description": "Spatial connections between locations derived from entity relationships.",
       "items": {
         "type": "object",
         "required": ["source", "target"],
