@@ -256,6 +256,61 @@ class TestGenerateRelationshipIndex:
         assert len(entries["char-c"]["reverse"]) == 1
         assert len(entries["loc-tavern"]["reverse"]) == 1
 
+    def test_spatial_relationships_indexed(self):
+        """Spatial relationship type is indexed correctly for reverse lookups."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-elder", "The Elder", relationships=[
+                    _make_rel("loc-village-square", "resides_at", rel_type="spatial",
+                              direction="outgoing"),
+                ]),
+                _make_entity("char-guard", "Guard", relationships=[
+                    _make_rel("loc-village-square", "stationed_at", rel_type="spatial",
+                              direction="outgoing"),
+                ]),
+            ],
+            "locations.json": [
+                _make_entity("loc-village-square", "Village Square", etype="location"),
+            ],
+            "factions.json": [],
+            "items.json": [],
+        }
+        entries = generate_relationship_index(catalogs)
+
+        # Village Square should have 2 reverse spatial relationships
+        loc_entry = entries["loc-village-square"]
+        assert len(loc_entry["reverse"]) == 2
+        assert all(r["type"] == "spatial" for r in loc_entry["reverse"])
+        source_ids = {r["source_id"] for r in loc_entry["reverse"]}
+        assert source_ids == {"char-elder", "char-guard"}
+
+        # Elder and Guard each have 1 forward spatial relationship
+        assert len(entries["char-elder"]["forward"]) == 1
+        assert entries["char-elder"]["forward"][0]["type"] == "spatial"
+        assert len(entries["char-guard"]["forward"]) == 1
+
+    def test_spatial_location_to_location_indexed(self):
+        """Spatial connections between locations appear in both entries."""
+        catalogs = {
+            "characters.json": [],
+            "locations.json": [
+                _make_entity("loc-tavern", "Tavern", etype="location", relationships=[
+                    _make_rel("loc-market", "connected_to", rel_type="spatial",
+                              direction="bidirectional"),
+                ]),
+                _make_entity("loc-market", "Market Square", etype="location"),
+            ],
+            "factions.json": [],
+            "items.json": [],
+        }
+        entries = generate_relationship_index(catalogs)
+
+        # Tavern has 1 forward, Market has 1 reverse
+        assert len(entries["loc-tavern"]["forward"]) == 1
+        assert entries["loc-tavern"]["forward"][0]["type"] == "spatial"
+        assert len(entries["loc-market"]["reverse"]) == 1
+        assert entries["loc-market"]["reverse"][0]["source_id"] == "loc-tavern"
+
 
 # ---------------------------------------------------------------------------
 # save_relationship_index

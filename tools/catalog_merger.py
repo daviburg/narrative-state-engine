@@ -956,7 +956,8 @@ _RELATIONSHIP_TYPE_MAP = {
     # Schema enum identity mappings (pass-through)
     "kinship": "kinship", "partnership": "partnership", "mentorship": "mentorship",
     "political": "political", "factional": "factional", "social": "social",
-    "adversarial": "adversarial", "romantic": "romantic", "other": "other",
+    "adversarial": "adversarial", "romantic": "romantic", "spatial": "spatial",
+    "other": "other",
     # social
     "ally": "social", "ally_of": "social", "ally of": "social",
     "friend": "social", "companion": "social", "supporter": "social",
@@ -986,6 +987,18 @@ _RELATIONSHIP_TYPE_MAP = {
     "diplomatic": "political",
     # factional
     "faction": "factional", "guild": "factional", "tribal": "factional",
+    # spatial — entity-to-location relationships
+    "resides at": "spatial", "resides_at": "spatial",
+    "located at": "spatial", "located_at": "spatial",
+    "traveling to": "spatial", "traveling_to": "spatial",
+    "departed from": "spatial", "departed_from": "spatial",
+    "visited": "spatial", "stationed at": "spatial", "stationed_at": "spatial",
+    "moved to": "spatial", "moved_to": "spatial",
+    "lives in": "spatial", "lives_in": "spatial",
+    "headquartered at": "spatial", "headquartered_at": "spatial",
+    "based in": "spatial", "based_in": "spatial",
+    "connected to": "spatial", "adjacent to": "spatial",
+    "near": "spatial", "inside": "spatial", "contains": "spatial",
     # other — explicit task/using relationships stay as other
     "task related to": "other", "using": "other",
 }
