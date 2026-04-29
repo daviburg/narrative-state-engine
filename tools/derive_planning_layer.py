@@ -39,9 +39,13 @@ def _load_json(path: str, default=None):
     if not os.path.exists(path):
         return default
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, "r", encoding="utf-8-sig") as f:
             return json.load(f)
-    except (json.JSONDecodeError, ValueError):
+    except (json.JSONDecodeError, ValueError) as exc:
+        print(
+            f"Warning: failed to parse JSON from {path}: {exc}",
+            file=sys.stderr,
+        )
         return default
 
 
@@ -274,17 +278,12 @@ def derive_state(
                 val = attr_val.get("value")
                 conf = attr_val.get("confidence", 0.5)
                 source = attr_val.get("source_turn", "")
-                fallback_source = (
-                    entity.get("first_seen_turn")
-                    or entity.get("last_updated_turn", "")
-                )
-                chosen_source = source or fallback_source
-                if not val or not chosen_source:
+                if not val or not source:
                     continue
                 inferred.append({
                     "statement": f"{entity['name']}'s {attr_key} may be {val}",
                     "confidence": conf,
-                    "source_turns": [chosen_source],
+                    "source_turns": [source],
                 })
         if inferred:
             state["inferred_constraints"] = inferred
