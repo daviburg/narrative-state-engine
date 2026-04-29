@@ -304,9 +304,38 @@ This regenerates:
 - `sessions/session-001/derived/objectives.json`
 - `sessions/session-001/derived/evidence.json`
 
-Current `update_state.py` behavior is intentionally limited to session-local derived files.
+### Planning Layer Derivation
 
-It does **not** currently update:
+When catalog data is available (from semantic extraction), pass `--framework` to
+populate derived planning files from catalog entities, events, and timelines:
+
+```bash
+python tools/update_state.py --session sessions/session-001 --framework framework/
+```
+
+This additionally populates:
+- `state.json` — world state from location summaries, player state from the player
+  entity's volatile state (location, condition, equipment, relationships), known/inferred
+  constraints from entity attributes, risks from adversarial relationships, opportunities
+  from active plot thread open questions, active threads from plot-threads.json
+- `evidence.json` — explicit evidence from catalog events, inferences from entity
+  attributes with `inference: true`, inferred relationship evidence from low-confidence
+  relationships
+- `timeline.json` — merged session-level (pattern-extracted) and catalog-level temporal
+  markers, deduplicated and sorted by turn number
+
+Placeholder values (e.g. `TODO:`, `Unknown`) are replaced; manually authored content
+is preserved. Evidence entries are deduplicated — running the tool multiple times is safe.
+
+The derivation tool can also be run standalone:
+
+```bash
+python tools/derive_planning_layer.py --session sessions/session-001 --framework framework/
+```
+
+### Limitations
+
+`update_state.py` does **not** currently update:
 - `framework/story/*`
 - `framework/dm-profile/dm-profile.json`
 
@@ -791,6 +820,28 @@ python tools/validate.py --framework framework
 # Validate everything
 python tools/validate.py --all
 ```
+
+---
+
+## Building the Scene Graph
+
+The scene graph is a cross-type spatial and temporal index built from existing entity catalogs. It enables fast scene-resolution queries without scanning every entity file.
+
+```bash
+# Build from framework catalogs
+python tools/build_scene_graph.py --framework framework/
+
+# Custom output path
+python tools/build_scene_graph.py --framework framework/ --output path/to/scene-graph.json
+```
+
+The scene graph is used automatically by `build_context.py` for nearby-entity lookups. If the scene graph file is absent, `build_context.py` falls back to the original full-catalog scan. To disable scene graph usage explicitly:
+
+```bash
+python tools/build_context.py --session sessions/session-001 --turn turn-078 --framework framework/ --no-scene-graph
+```
+
+Rebuild the scene graph after extraction runs or catalog updates to keep the index current.
 
 ---
 
