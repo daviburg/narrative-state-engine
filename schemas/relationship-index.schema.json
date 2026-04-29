@@ -26,8 +26,8 @@
           },
           "entity_type": {
             "type": "string",
-            "description": "Entity category.",
-            "enum": ["character", "location", "faction", "item", "creature", "concept"]
+            "description": "Entity category. Inferred from ID prefix for dangling targets not present in catalogs. Empty string when prefix is unrecognized.",
+            "enum": ["", "character", "location", "faction", "item", "creature", "concept"]
           },
           "forward": {
             "type": "array",

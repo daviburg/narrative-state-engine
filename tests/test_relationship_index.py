@@ -157,10 +157,48 @@ class TestGenerateRelationshipIndex:
 
         assert "char-a" in entries
         assert "char-unknown" in entries
-        # Unknown entity gets empty name/type since not in catalogs
+        # Unknown entity gets empty name but type inferred from ID prefix
         assert entries["char-unknown"]["entity_name"] == ""
-        assert entries["char-unknown"]["entity_type"] == ""
+        assert entries["char-unknown"]["entity_type"] == "character"
         assert len(entries["char-unknown"]["reverse"]) == 1
+
+    def test_dangling_target_type_inferred_from_prefix(self):
+        """Entity type is inferred from ID prefix for all known prefixes."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-a", "Alice", relationships=[
+                    _make_rel("loc-somewhere", "traveled to"),
+                    _make_rel("faction-secret", "investigated"),
+                    _make_rel("item-amulet", "carries"),
+                    _make_rel("creature-wolf", "fought"),
+                    _make_rel("concept-honor", "values"),
+                ]),
+            ],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+        entries = generate_relationship_index(catalogs)
+        assert entries["loc-somewhere"]["entity_type"] == "location"
+        assert entries["faction-secret"]["entity_type"] == "faction"
+        assert entries["item-amulet"]["entity_type"] == "item"
+        assert entries["creature-wolf"]["entity_type"] == "creature"
+        assert entries["concept-honor"]["entity_type"] == "concept"
+
+    def test_dangling_target_unknown_prefix_empty_type(self):
+        """Unrecognized ID prefix results in empty entity_type."""
+        catalogs = {
+            "characters.json": [
+                _make_entity("char-a", "Alice", relationships=[
+                    _make_rel("mystery-thing", "encountered"),
+                ]),
+            ],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+        entries = generate_relationship_index(catalogs)
+        assert entries["mystery-thing"]["entity_type"] == ""
 
     def test_optional_fields_preserved(self):
         catalogs = {

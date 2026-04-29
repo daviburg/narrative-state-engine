@@ -736,6 +736,28 @@ python tools/validate.py --all
 
 ---
 
+## Building the Scene Graph
+
+The scene graph is a cross-type spatial and temporal index built from existing entity catalogs. It enables fast scene-resolution queries without scanning every entity file.
+
+```bash
+# Build from framework catalogs
+python tools/build_scene_graph.py --framework framework/
+
+# Custom output path
+python tools/build_scene_graph.py --framework framework/ --output path/to/scene-graph.json
+```
+
+The scene graph is used automatically by `build_context.py` for nearby-entity lookups. If the scene graph file is absent, `build_context.py` falls back to the original full-catalog scan. To disable scene graph usage explicitly:
+
+```bash
+python tools/build_context.py --session sessions/session-001 --turn turn-078 --framework framework/ --no-scene-graph
+```
+
+Rebuild the scene graph after extraction runs or catalog updates to keep the index current.
+
+---
+
 ## Using with VS Code Copilot
 
 Open the repo in VS Code with GitHub Copilot enabled.

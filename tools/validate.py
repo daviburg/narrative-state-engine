@@ -51,6 +51,7 @@ SCHEMA_MAP = {
     "turn-context.json": "schemas/turn-context.schema.json",
     "coreference-hints.json": "schemas/coreference-hints.schema.json",
     "relationship-index.json": "schemas/relationship-index.schema.json",
+    "scene-graph.json": "schemas/scene-graph.schema.json",
 }
 
 # Entity catalog directory names that contain per-entity JSON files

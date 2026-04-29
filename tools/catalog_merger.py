@@ -52,6 +52,9 @@ TYPE_TO_PREFIX = {
     "concept": "concept-",
 }
 
+# Reverse of TYPE_TO_PREFIX — infer entity type from ID prefix.
+_PREFIX_TO_TYPE = {v: k for k, v in TYPE_TO_PREFIX.items()}
+
 DEFAULT_DORMANCY_THRESHOLD = 10
 
 
@@ -130,6 +133,13 @@ def generate_relationship_index(catalogs: dict) -> dict:
                     "type": entity.get("type", ""),
                 }
 
+    def _infer_type(entity_id: str) -> str:
+        """Infer entity type from ID prefix for dangling targets."""
+        for prefix, etype in _PREFIX_TO_TYPE.items():
+            if entity_id.startswith(prefix):
+                return etype
+        return ""
+
     # Collect forward and reverse edges
     forward: dict[str, list[dict]] = {}
     reverse: dict[str, list[dict]] = {}
@@ -172,7 +182,7 @@ def generate_relationship_index(catalogs: dict) -> dict:
         meta = entity_meta.get(eid, {})
         entries[eid] = {
             "entity_name": meta.get("name", ""),
-            "entity_type": meta.get("type", ""),
+            "entity_type": meta.get("type") or _infer_type(eid),
             "forward": forward.get(eid, []),
             "reverse": reverse.get(eid, []),
         }

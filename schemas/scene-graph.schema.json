@@ -1,0 +1,105 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "scene-graph.schema.json",
+  "title": "Scene Graph",
+  "description": "Cross-type spatial and temporal index built from entity catalogs. Supports scene-resolution queries: entities at a location, entities active in a turn range, and location adjacency.",
+  "type": "object",
+  "required": ["as_of_turn", "generated_at", "location_index", "turn_activity", "location_connections"],
+  "additionalProperties": false,
+  "properties": {
+    "as_of_turn": {
+      "type": "string",
+      "description": "The latest turn reflected in this index.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "generated_at": {
+      "type": "string",
+      "description": "ISO 8601 timestamp when this index was built.",
+      "format": "date-time"
+    },
+    "location_index": {
+      "type": "object",
+      "description": "Inverted index mapping location IDs to entities present at that location (based on volatile_state.location).",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["location_name", "entities"],
+        "additionalProperties": false,
+        "properties": {
+          "location_name": {
+            "type": "string",
+            "description": "Display name of the location."
+          },
+          "entities": {
+            "type": "array",
+            "description": "Entities whose volatile_state.location points to this location.",
+            "items": {
+              "type": "object",
+              "required": ["id", "name", "type"],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "type": {
+                  "type": "string",
+                  "enum": ["character", "location", "faction", "item", "creature", "concept"]
+                },
+                "last_updated_turn": {
+                  "type": "string",
+                  "pattern": "^turn-[0-9]{3,}$"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "turn_activity": {
+      "type": "object",
+      "description": "Mapping from turn IDs to entity IDs that were introduced or last updated on that turn.",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "description": "Entity ID."
+        }
+      }
+    },
+    "location_connections": {
+      "type": "array",
+      "description": "Spatial connections between locations derived from entity relationships.",
+      "items": {
+        "type": "object",
+        "required": ["source", "target"],
+        "additionalProperties": false,
+        "properties": {
+          "source": {
+            "type": "string",
+            "description": "Source location ID."
+          },
+          "target": {
+            "type": "string",
+            "description": "Target location ID."
+          },
+          "relationship": {
+            "type": "string",
+            "description": "Description of the spatial connection (e.g. 'contains', 'adjacent to', 'path to')."
+          },
+          "status": {
+            "type": "string",
+            "description": "Temporal status of the connection.",
+            "enum": ["active", "dormant", "resolved"]
+          }
+        }
+      }
+    },
+    "entity_count": {
+      "type": "integer",
+      "description": "Total number of entities reflected in this index.",
+      "minimum": 0
+    }
+  }
+}
