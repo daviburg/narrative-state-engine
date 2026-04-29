@@ -6,7 +6,7 @@ For each relationship, return a JSON object with these fields:
 - "source_id": string — ID of the entity the relationship originates from
 - "target_id": string — ID of the related entity
 - "current_relationship": string — current state of the relationship (e.g. "leader of", "captured by", "parent of", "ally of")
-- "type": string — one of "kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"
+- "type": string — one of "kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "spatial", "other"
 - "direction": string — one of "outgoing", "incoming", "bidirectional"
 - "status": string — "active" or "resolved" (do NOT set "dormant" — that is handled automatically)
 - "confidence": number — 0.0-1.0 confidence in this relationship
@@ -24,6 +24,13 @@ RELATIONSHIP RULES:
 - Set "status": "active" for ongoing relationships.
 - Do NOT set "status": "dormant" — that is handled automatically by the system.
 - Use the type enum strictly. If none fit, use "other".
+
+SPATIAL RELATIONSHIPS:
+- Use type "spatial" for entity-to-location relationships: where a character resides, where a faction is headquartered, where an item is stored, etc.
+- Common spatial relationships: "resides_at", "traveling_to", "departed_from", "stationed_at", "headquartered_at", "located_at", "inside", "near"
+- Also use "spatial" for location-to-location connections: "connected_to", "adjacent_to", "contains"
+- Spatial relationships should use direction "outgoing" from the entity TO the location (e.g., char-elder → loc-village-square with "resides_at")
+- Example: {"source_id": "char-elder", "target_id": "loc-village-square", "current_relationship": "resides_at", "type": "spatial", "direction": "outgoing", "status": "active", "confidence": 0.9, "first_seen_turn": "turn-004", "last_updated_turn": "turn-004"}
 
 Rules:
 - Only extract relationships supported by the provided turn text.
