@@ -33,11 +33,12 @@ Divide session processing across multiple specialized agents, each with a focuse
 |---|---|---|
 | Ingestion agent | Parse raw turns, write transcript files, update full-transcript.md | — |
 | Catalog agent | Extract and maintain entities, locations, factions, items | **Implemented** (#43) |
-| Evidence agent | Tag and classify claims; maintain evidence.json | — |
+| Evidence agent | Tag and classify claims; maintain evidence.json | **Implemented** (#259) |
 | Strategy agent | Generate next-move analysis; apply heuristics and risk model | — |
 | Prompt agent | Generate candidate player prompts optimized per mode | — |
 | DM profile agent | Infer and refine DM behavior from accumulated evidence | — |
 | Timeline agent | Extract temporal signals and estimate in-game time progression | **Implemented** (#137) |
+| Planning layer | Synthesize catalog data into actionable derived planning files | **Implemented** (#259) |
 
 The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a four-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.
 
