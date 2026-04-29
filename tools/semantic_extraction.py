@@ -657,7 +657,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "protector": "social",
         "caretaker": "social",
     }
-    _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"}
+    _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "spatial", "other"}
     for rel in entity_data.get("relationships", []):
         rt = rel.get("type", "")
         if isinstance(rt, str):

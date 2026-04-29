@@ -85,6 +85,7 @@ When a code change alters tool behavior, data flow, schemas, or output format:
 | `sessions/*/transcript/turn-*.md` | Individual turn files | No |
 | `sessions/*/derived/` | All derived outputs | Yes (regenerate each turn) |
 | `framework/catalogs/` | Running entity/location catalogs | Yes (append only) |
+| `framework/catalogs/relationship-index.json` | Bidirectional relationship index (auto-generated) | Yes (regenerated) |
 | `framework/objectives/objectives.json` | Current player objectives | Yes |
 | `framework/dm-profile/dm-profile.json` | Inferred DM behavior profile | Yes |
 | `framework/story/summary.md` | High-level story arc | Yes |

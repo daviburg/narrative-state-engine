@@ -1,0 +1,100 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "relationship-index.schema.json",
+  "title": "Relationship Index",
+  "description": "Bidirectional relationship index for efficient reverse lookups. Maps each entity to all relationships where it appears as source (forward) or target (reverse).",
+  "type": "object",
+  "required": ["generated_turn", "entries"],
+  "additionalProperties": false,
+  "properties": {
+    "generated_turn": {
+      "type": "string",
+      "description": "Turn ID when this index was last regenerated.",
+      "pattern": "^turn-[0-9]{3,}$"
+    },
+    "entries": {
+      "type": "object",
+      "description": "Map of entity ID to its forward and reverse relationships.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["entity_name", "entity_type", "forward", "reverse"],
+        "additionalProperties": false,
+        "properties": {
+          "entity_name": {
+            "type": "string",
+            "description": "Display name of the entity."
+          },
+          "entity_type": {
+            "type": "string",
+            "description": "Entity category. Inferred from ID prefix for dangling targets not present in catalogs. Empty string when prefix is unrecognized.",
+            "enum": ["", "character", "location", "faction", "item", "creature", "concept"]
+          },
+          "forward": {
+            "type": "array",
+            "description": "Relationships where this entity is the source.",
+            "items": { "$ref": "#/definitions/indexed_relationship" }
+          },
+          "reverse": {
+            "type": "array",
+            "description": "Relationships where this entity is the target (inferred from other entities' forward relationships).",
+            "items": { "$ref": "#/definitions/indexed_relationship" }
+          }
+        }
+      }
+    }
+  },
+  "definitions": {
+    "indexed_relationship": {
+      "type": "object",
+      "required": ["source_id", "target_id", "current_relationship", "type", "status"],
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "type": "string",
+          "description": "ID of the entity that owns the relationship."
+        },
+        "source_name": {
+          "type": "string",
+          "description": "Display name of the source entity."
+        },
+        "target_id": {
+          "type": "string",
+          "description": "ID of the related entity."
+        },
+        "target_name": {
+          "type": "string",
+          "description": "Display name of the target entity."
+        },
+        "current_relationship": {
+          "type": "string",
+          "description": "Current state of the relationship."
+        },
+        "type": {
+          "type": "string",
+          "description": "Category of relationship.",
+          "enum": ["kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "spatial", "other"]
+        },
+        "direction": {
+          "type": "string",
+          "description": "Directionality from the source entity's perspective.",
+          "enum": ["outgoing", "incoming", "bidirectional"]
+        },
+        "status": {
+          "type": "string",
+          "description": "Temporal status of the relationship.",
+          "enum": ["active", "dormant", "resolved"]
+        },
+        "first_seen_turn": {
+          "type": "string",
+          "description": "Turn when this relationship was first established.",
+          "pattern": "^turn-[0-9]{3,}$"
+        },
+        "last_updated_turn": {
+          "type": "string",
+          "description": "Turn of the most recent change.",
+          "pattern": "^turn-[0-9]{3,}$"
+        }
+      }
+    }
+  }
+}

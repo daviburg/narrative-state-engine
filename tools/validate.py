@@ -50,6 +50,7 @@ SCHEMA_MAP = {
     "metadata.json": "schemas/metadata.schema.json",
     "turn-context.json": "schemas/turn-context.schema.json",
     "coreference-hints.json": "schemas/coreference-hints.schema.json",
+    "relationship-index.json": "schemas/relationship-index.schema.json",
     "scene-graph.json": "schemas/scene-graph.schema.json",
 }
 
