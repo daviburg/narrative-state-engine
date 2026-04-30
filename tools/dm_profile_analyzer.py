@@ -59,7 +59,7 @@ def load_dm_profile(path: str | None = None) -> dict:
     path = path or _DM_PROFILE_PATH
     if not os.path.exists(path):
         return _empty_profile()
-    with open(path, "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8-sig") as f:
         return json.load(f)
 
 
@@ -276,21 +276,24 @@ def merge_observations(profile: dict, observations: list[dict]) -> dict:
 def _aggregate_adversarial_level(observations: list[dict], current: str) -> str:
     """Determine adversarial level from observations.
 
-    Extracts level keywords from observation text and returns the
-    confidence-weighted consensus.
+    Extracts level keywords from observation text using word-boundary
+    matching and returns the confidence-weighted consensus.
     """
-    level_keywords = {
-        "low": ["low", "permissive", "generous", "forgiving", "easy"],
-        "moderate": ["moderate", "balanced", "fair", "medium"],
-        "high": ["high", "adversarial", "punishing", "harsh", "strict", "challenging"],
+    level_patterns = {
+        "low": [re.compile(r"\b" + kw + r"\b") for kw in
+                ["low", "permissive", "generous", "forgiving", "easy"]],
+        "moderate": [re.compile(r"\b" + kw + r"\b") for kw in
+                     ["moderate", "balanced", "fair", "medium"]],
+        "high": [re.compile(r"\b" + kw + r"\b") for kw in
+                 ["high", "adversarial", "punishing", "harsh", "strict", "challenging"]],
     }
 
     weighted_scores: dict[str, float] = {}
     for obs in observations:
         text = obs.get("observation", "").lower()
         conf = obs.get("confidence", 0.3)
-        for level, keywords in level_keywords.items():
-            if any(kw in text for kw in keywords):
+        for level, patterns in level_patterns.items():
+            if any(pat.search(text) for pat in patterns):
                 weighted_scores[level] = weighted_scores.get(level, 0) + conf
 
     if not weighted_scores:
@@ -312,7 +315,11 @@ def _compute_confidence(profile: dict, observations: list[dict]) -> float:
 
     fields_covered = len({obs["field"] for obs in observations})
     avg_confidence = sum(obs.get("confidence", 0) for obs in observations) / len(observations)
-    source_turns = len({obs.get("source_turn", "") for obs in observations})
+    # Only count schema-valid turn IDs toward coverage
+    source_turns = len({
+        t for t in (obs.get("source_turn", "") for obs in observations)
+        if _TURN_ID_RE.match(t)
+    })
 
     # Fields coverage: 5 possible fields
     field_factor = min(fields_covered / 5, 1.0)
@@ -397,34 +404,43 @@ def merge_user_input(profile: dict, user_sections: dict) -> dict:
         elif section == "Tone and Content Preferences":
             if content:
                 existing_tone = profile.get("tone", "")
-                if existing_tone:
-                    profile["tone"] = f"{existing_tone}; User notes: {content}"
-                else:
-                    profile["tone"] = content
+                if content not in (existing_tone or ""):
+                    if existing_tone:
+                        profile["tone"] = f"{existing_tone}; User notes: {content}"
+                    else:
+                        profile["tone"] = content
 
         elif section == "Known DM Tendencies":
+            marker = f"User-provided: {content}"
             existing_notes = profile.get("notes", "")
-            if existing_notes and existing_notes != "Profile not yet established.":
-                profile["notes"] = f"{existing_notes}\n\nUser-provided: {content}"
-            else:
-                profile["notes"] = f"User-provided: {content}"
+            if marker not in (existing_notes or ""):
+                if existing_notes and existing_notes != "Profile not yet established.":
+                    profile["notes"] = f"{existing_notes}\n\n{marker}"
+                else:
+                    profile["notes"] = marker
 
         elif section == "Hint and Clue Style":
+            entry = f"[user-provided] {content}"
             hints = profile.get("hint_patterns", [])
-            hints.append(f"[user-provided] {content}")
+            if entry not in hints:
+                hints.append(entry)
             profile["hint_patterns"] = hints
 
         elif section in ("House Rules", "Session Zero Agreements", "Campaign Setting"):
             existing_notes = profile.get("notes", "")
-            entry = f"\n\n{section}: {content}"
-            if existing_notes and existing_notes != "Profile not yet established.":
-                profile["notes"] = existing_notes + entry
-            else:
-                profile["notes"] = entry.strip()
+            marker = f"{section}: {content}"
+            if marker not in existing_notes:
+                entry = f"\n\n{marker}"
+                if existing_notes and existing_notes != "Profile not yet established.":
+                    profile["notes"] = existing_notes + entry
+                else:
+                    profile["notes"] = marker
 
         elif section == "DM Experience and Style":
+            entry = f"[user-provided] {content}"
             patterns = profile.get("structure_patterns", [])
-            patterns.append(f"[user-provided] {content}")
+            if entry not in patterns:
+                patterns.append(entry)
             profile["structure_patterns"] = patterns
 
     # User input bumps confidence without regressing already-confirmed values.

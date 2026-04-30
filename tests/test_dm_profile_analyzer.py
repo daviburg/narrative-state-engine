@@ -204,6 +204,14 @@ class TestAggregateAdversarialLevel:
         # High has more weight so should win
         assert _aggregate_adversarial_level(obs, "unknown") == "high"
 
+    def test_word_boundary_no_false_positive(self):
+        """Words like 'highlights' should not trigger 'high' classification."""
+        obs = [
+            {"observation": "DM highlights interesting details and is highly descriptive", "confidence": 0.7},
+        ]
+        # "highlights"/"highly" should NOT match "high" as adversarial keyword
+        assert _aggregate_adversarial_level(obs, "unknown") == "unknown"
+
 
 # ---------------------------------------------------------------------------
 # Unit tests — user input parsing
@@ -318,6 +326,26 @@ class TestMergeUserInput:
         sections = {"Known DM Tendencies": "Some info"}
         result = merge_user_input(profile, sections)
         assert result["confidence"] == 0.95
+
+    def test_idempotent_repeated_merge(self):
+        """Repeated merge_user_input with identical input must not duplicate entries."""
+        profile = _empty_profile()
+        sections = {
+            "Known DM Tendencies": "Rewards creativity",
+            "Hint and Clue Style": "Subtle environmental clues",
+            "DM Experience and Style": "10 years of running games",
+            "House Rules": "Critical hits are doubled damage",
+            "Tone and Content Preferences": "Dark comedy",
+        }
+        # Apply twice
+        merge_user_input(profile, sections)
+        merge_user_input(profile, sections)
+
+        assert profile["hint_patterns"].count("[user-provided] Subtle environmental clues") == 1
+        assert profile["structure_patterns"].count("[user-provided] 10 years of running games") == 1
+        assert profile["notes"].count("Rewards creativity") == 1
+        assert profile["notes"].count("Critical hits are doubled damage") == 1
+        assert profile["tone"].count("Dark comedy") == 1
 
 
 # ---------------------------------------------------------------------------
