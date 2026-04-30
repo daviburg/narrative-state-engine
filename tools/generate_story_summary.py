@@ -24,8 +24,6 @@ import argparse
 import json
 import logging
 import os
-import sys
-from collections import Counter
 from datetime import datetime, timezone
 
 from synthesis import (
@@ -93,14 +91,6 @@ def load_timeline(framework_dir: str) -> list[dict]:
     return _load_json(os.path.join(framework_dir, "catalogs", "timeline.json"))
 
 
-def load_season_summaries(framework_dir: str) -> list[dict]:
-    """Load season-summaries.json if it exists."""
-    path = os.path.join(framework_dir, "catalogs", "season-summaries.json")
-    if os.path.isfile(path):
-        return _load_json(path)
-    return []
-
-
 def load_entity_catalog(framework_dir: str, entity_type: str) -> list[dict]:
     """Load a per-type entity catalog (characters.json, etc.)."""
     return _load_json(
@@ -152,14 +142,28 @@ def _critical_events(events: list[dict], limit: int = 15) -> list[dict]:
 
 
 def _format_turn_range(events: list[dict]) -> tuple[str, str]:
-    """Get the first and last turn from a sorted event list."""
+    """Get the earliest and latest turn referenced by the event list."""
     if not events:
         return ("?", "?")
-    first_turns = events[0].get("source_turns", [])
-    last_turns = events[-1].get("source_turns", [])
-    first = first_turns[0] if first_turns else "?"
-    last = last_turns[-1] if last_turns else "?"
-    return (first, last)
+
+    first_turn = "?"
+    last_turn = "?"
+    first_turn_number = None
+    last_turn_number = None
+
+    for event in events:
+        for turn in event.get("source_turns", []):
+            turn_number = _parse_turn_number(turn)
+            if turn_number <= 0:
+                continue
+            if first_turn_number is None or turn_number < first_turn_number:
+                first_turn_number = turn_number
+                first_turn = turn
+            if last_turn_number is None or turn_number > last_turn_number:
+                last_turn_number = turn_number
+                last_turn = turn
+
+    return (first_turn, last_turn)
 
 
 # ---------------------------------------------------------------------------
@@ -208,10 +212,16 @@ def assemble_story_summary_input(
             parts.append("Key relationships:")
             for rel in rels[:8]:
                 target = rel.get("target_id", "")
-                name = _infer_name_from_id(target) if target else "Unknown"
+                canonical_target = resolve_entity_id(target) if target else ""
+                name = (
+                    _infer_name_from_id(canonical_target)
+                    if canonical_target else "Unknown"
+                )
                 current = rel.get("current_relationship", "")
                 rtype = rel.get("type", "")
-                parts.append(f"  - {name} ({target}): {current} [{rtype}]")
+                parts.append(
+                    f"  - {name} ({canonical_target}): {current} [{rtype}]"
+                )
         parts.append("")
 
     # -- Plot threads --
@@ -241,7 +251,10 @@ def assemble_story_summary_input(
             etype = evt.get("type", "other")
             desc = evt.get("description", "")
             related = evt.get("related_entities", [])
-            related_str = ", ".join(related[:4]) if related else ""
+            resolved_related = list(dict.fromkeys(
+                resolve_entity_id(r) for r in related
+            ))
+            related_str = ", ".join(resolved_related[:4]) if resolved_related else ""
             parts.append(f"- [{turn_str}] ({etype}) {desc}")
             if related_str:
                 parts.append(f"  Involving: {related_str}")
@@ -499,26 +512,37 @@ def generate_story_summary(
             f.write(content)
         return content
 
-    if no_llm or llm_client is None and no_llm:
+    if no_llm:
         summary_prose = generate_story_summary_data_only(
             events, plot_threads, characters, timeline)
         method = "data-only"
     else:
         if llm_client is None:
-            from llm_client import LLMClient
-            llm_client = LLMClient()
+            try:
+                from llm_client import LLMClient
+                llm_client = LLMClient()
+            except Exception as exc:
+                logger.warning(
+                    "LLM client initialization failed (%s) — "
+                    "falling back to data-only summary", exc,
+                )
+                summary_prose = generate_story_summary_data_only(
+                    events, plot_threads, characters, timeline)
+                method = "data-only (LLM unavailable)"
+                llm_client = None
 
-        summary_input = assemble_story_summary_input(
-            events, plot_threads, characters, timeline)
-        summary_prose = generate_story_summary_llm(llm_client, summary_input)
-
-        if not summary_prose:
-            logger.warning("LLM generation returned empty — falling back to data-only")
-            summary_prose = generate_story_summary_data_only(
+        if llm_client is not None:
+            summary_input = assemble_story_summary_input(
                 events, plot_threads, characters, timeline)
-            method = "data-only (LLM fallback)"
-        else:
-            method = f"llm ({getattr(llm_client, 'model', 'unknown')})"
+            summary_prose = generate_story_summary_llm(llm_client, summary_input)
+
+            if not summary_prose:
+                logger.warning("LLM generation returned empty — falling back to data-only")
+                summary_prose = generate_story_summary_data_only(
+                    events, plot_threads, characters, timeline)
+                method = "data-only (LLM fallback)"
+            else:
+                method = f"llm ({getattr(llm_client, 'model', 'unknown')})"
 
     page = assemble_summary_page(
         summary_prose, events, plot_threads,

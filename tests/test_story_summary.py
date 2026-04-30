@@ -198,6 +198,18 @@ class TestHelpers:
         assert first == "?"
         assert last == "?"
 
+    def test_format_turn_range_unsorted(self):
+        """Events out of order should still yield correct min/max."""
+        unsorted = [
+            _make_event("e1", ["turn-050"], ["char-player"], "decision", "Mid"),
+            _make_event("e2", ["turn-001"], ["char-player"], "encounter", "First"),
+            _make_event("e3", ["turn-141"], ["char-player"], "birth", "Last"),
+            _make_event("e4", ["turn-015"], ["char-player"], "ritual", "Early"),
+        ]
+        first, last = _format_turn_range(unsorted)
+        assert first == "turn-001"
+        assert last == "turn-141"
+
     def test_critical_events_filters_types(self):
         critical = _critical_events(SAMPLE_EVENTS)
         types = {e["type"] for e in critical}
@@ -548,6 +560,78 @@ class TestIntegration:
 
             generate_story_summary(fw, no_llm=True)
             assert os.path.isfile(os.path.join(fw, "story", "summary.md"))
+
+    def test_llm_init_failure_falls_back(self):
+        """If LLMClient constructor raises, should fallback to data-only."""
+        import unittest.mock as mock
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            fw = self._build_framework(tmpdir)
+            # Patch the import of LLMClient to raise ImportError
+            with mock.patch.dict("sys.modules", {"llm_client": mock.MagicMock()}):
+                import generate_story_summary as gss
+                with mock.patch.object(
+                    gss, "generate_story_summary", wraps=gss.generate_story_summary
+                ):
+                    # Simulate by passing no_llm=False and no client,
+                    # but monkeypatch the import to fail
+                    original_import = __builtins__.__import__ if hasattr(__builtins__, '__import__') else __import__
+
+                    def mock_import(name, *args, **kwargs):
+                        if name == "llm_client":
+                            raise ImportError("openai not installed")
+                        return original_import(name, *args, **kwargs)
+
+                    with mock.patch("builtins.__import__", side_effect=mock_import):
+                        page = generate_story_summary(fw, no_llm=False)
+                        assert "# Story Summary" in page
+                        assert "data-only" in page
+
+
+# ---------------------------------------------------------------------------
+# Alias resolution tests
+# ---------------------------------------------------------------------------
+
+
+class TestAliasResolution:
+    """Tests for entity ID alias resolution in prompt assembly."""
+
+    def test_relationships_use_canonical_ids(self):
+        """Relationship target_ids are resolved through alias table."""
+        characters = [
+            {
+                "id": "char-player",
+                "name": "Fenouille",
+                "type": "character",
+                "identity": "Elf warlock",
+                "first_seen_turn": "turn-001",
+                "last_updated_turn": "turn-050",
+                "relationships": [
+                    {
+                        "target_id": "char-Kael",  # non-canonical
+                        "type": "romantic",
+                        "current_relationship": "Partner",
+                    },
+                ],
+            },
+        ]
+        result = assemble_story_summary_input(
+            SAMPLE_EVENTS, [], characters, [])
+        prompt = result["user_prompt"]
+        # Should use canonical 'char-kael', not 'char-Kael'
+        assert "char-kael" in prompt
+        assert "char-Kael" not in prompt
+
+    def test_key_events_resolve_related_entities(self):
+        """Related entities in key events should be canonicalized."""
+        events = [
+            _make_event("e1", ["turn-001"], ["char-player", "char-Kael"],
+                        "ritual", "Acceptance"),
+        ]
+        result = assemble_story_summary_input(events, [], SAMPLE_CHARACTERS, [])
+        prompt = result["user_prompt"]
+        assert "char-kael" in prompt
+        assert "char-Kael" not in prompt
 
 
 # ---------------------------------------------------------------------------
