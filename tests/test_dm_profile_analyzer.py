@@ -562,10 +562,7 @@ class TestRoundTrip:
 class TestSchemaCompliance:
     def test_profile_validates_against_schema(self, tmp_path):
         """Merged profile must pass the DM profile JSON schema."""
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
+        jsonschema = pytest.importorskip("jsonschema")
 
         schema_path = os.path.join(
             os.path.dirname(__file__), "..", "schemas", "dm-profile.schema.json"
@@ -587,10 +584,7 @@ class TestSchemaCompliance:
 
     def test_empty_profile_validates(self):
         """The empty profile must also validate."""
-        try:
-            import jsonschema
-        except ImportError:
-            pytest.skip("jsonschema not installed")
+        jsonschema = pytest.importorskip("jsonschema")
 
         schema_path = os.path.join(
             os.path.dirname(__file__), "..", "schemas", "dm-profile.schema.json"
