@@ -6,7 +6,7 @@ Produces scene-graph.json: an inverted index that supports scene-resolution
 queries without scanning every entity file.
 
 Three index structures:
-  - location_index: location ID → entities present (via volatile_state.location)
+  - location_index: location ID → entities present (via spatial relationships and volatile_state.location)
   - turn_activity: turn ID → entity IDs introduced or updated on that turn
   - location_connections: spatial edges between locations from relationships
 
@@ -68,6 +68,10 @@ def build_location_index(
 ) -> dict[str, dict]:
     """Build inverted index: location ID → entities present there.
 
+    Uses two sources:
+      1. volatile_state.location — if it starts with a location entity ID
+      2. Spatial relationships — type "spatial" with target starting with "loc-"
+
     Args:
         entities: All loaded entity dicts.
         location_names: Mapping of location ID to display name.
@@ -78,20 +82,49 @@ def build_location_index(
     index: dict[str, list[dict]] = {}
 
     for entity in entities:
+        # Source 1: volatile_state.location containing a loc- entity ID
         vol_loc = entity.get("volatile_state", {}).get("location", "")
-        if not vol_loc or not vol_loc.startswith("loc-"):
-            continue
+        if vol_loc and vol_loc.startswith("loc-"):
+            entry = {
+                "id": entity["id"],
+                "name": entity["name"],
+                "type": entity.get("type", ""),
+            }
+            last_updated = entity.get("last_updated_turn", "")
+            if last_updated:
+                entry["last_updated_turn"] = last_updated
+            index.setdefault(vol_loc, []).append(entry)
 
-        entry = {
-            "id": entity["id"],
-            "name": entity["name"],
-            "type": entity.get("type", ""),
-        }
-        last_updated = entity.get("last_updated_turn", "")
-        if last_updated:
-            entry["last_updated_turn"] = last_updated
+        # Source 2: spatial relationships targeting a location
+        for rel in entity.get("relationships", []):
+            if rel.get("type") != "spatial":
+                continue
+            target_id = rel.get("target_id", "")
+            if not target_id.startswith("loc-"):
+                continue
+            # Skip resolved relationships — entity is no longer there
+            if rel.get("status") == "resolved":
+                continue
+            entry = {
+                "id": entity["id"],
+                "name": entity["name"],
+                "type": entity.get("type", ""),
+                "relationship": rel.get("current_relationship", ""),
+            }
+            last_updated = rel.get("last_updated_turn", entity.get("last_updated_turn", ""))
+            if last_updated:
+                entry["last_updated_turn"] = last_updated
+            index.setdefault(target_id, []).append(entry)
 
-        index.setdefault(vol_loc, []).append(entry)
+    # Deduplicate: same entity may appear via both sources at same location
+    for loc_id in index:
+        seen_ids: set[str] = set()
+        deduped: list[dict] = []
+        for entry in index[loc_id]:
+            if entry["id"] not in seen_ids:
+                seen_ids.add(entry["id"])
+                deduped.append(entry)
+        index[loc_id] = deduped
 
     # Wrap with location names
     result: dict[str, dict] = {}
