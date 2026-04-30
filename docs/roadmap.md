@@ -36,7 +36,7 @@ Divide session processing across multiple specialized agents, each with a focuse
 | Evidence agent | Tag and classify claims; maintain evidence.json | **Implemented** (#259) |
 | Strategy agent | Generate next-move analysis; apply heuristics and risk model | — |
 | Prompt agent | Generate candidate player prompts optimized per mode | — |
-| DM profile agent | Infer and refine DM behavior from accumulated evidence | — |
+| DM profile agent | Infer and refine DM behavior from accumulated evidence | **Implemented** (#260) |
 | Timeline agent | Extract temporal signals and estimate in-game time progression | **Implemented** (#137) |
 | Story summary agent | Generate narrative arc summary from extracted entities, events, and plot threads | **Implemented** (#262) |
 | Planning layer | Synthesize catalog data into actionable derived planning files | **Implemented** (#259) |

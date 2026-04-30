@@ -117,11 +117,16 @@ Generated after each new DM turn.
 
 ### DM Profile (Framework)
 
-A running profile of inferred DM behavior patterns.
+A running profile of inferred DM behavior patterns, populated from two data sources:
+
+1. **Transcript analysis** — `tools/dm_profile_analyzer.py` uses the LLM to extract behavioral patterns from DM turns (tone, structure, hints, adversariality, formatting). Runs in batch mode (via `bootstrap_session.py`) or per-turn (via `ingest_turn.py --extract`).
+2. **User-provided documents** — Off-game notes, session-zero agreements, house rules passed via `--user-input`. Template at `templates/content/dm-profile-user-input.md`.
 
 - Updated incrementally as patterns emerge
 - Includes tone, structure, hint patterns, adversarial level, and formatting preferences
-- All entries include confidence scores
+- All entries include confidence scores (capped at 0.9; 1.0 reserved for user-confirmed)
+- Consumed by `tools/analyze_next_move.py` to inform risk assessment and prompt generation
+- LLM prompt template at `templates/extraction/dm-profile-analyzer.md`
 
 ### Semantic Extraction Layer (Optional, LLM-based)
 
@@ -217,6 +222,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/validate.py` | Validate all JSON files against schemas |
 | `tools/validate_extraction.py` | Post-extraction validation against curated ground truth (alias merges, missing entities, staleness) |
 | `tools/semantic_extraction.py` | LLM-based entity/relationship/event extraction pipeline |
+| `tools/dm_profile_analyzer.py` | DM behavioral profile analysis from transcript and user input (#260) |
 | `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
 | `tools/generate_story_summary.py` | Generate high-level story arc summary from extracted data (LLM or data-only mode) |
