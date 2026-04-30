@@ -2,12 +2,14 @@
 """
 semantic_extraction.py — Core orchestrator for LLM-based semantic extraction.
 
-Processes RPG session transcript turns through five agent roles:
+Processes RPG session transcript turns through four core agent roles, with an
+optional fifth temporal-extraction phase when timeline state is provided:
 1. Entity Discovery — identify entities mentioned in a turn
 2. Entity Detail Extractor — extract/update attributes per entity
 3. Relationship Mapper — identify cross-entity relationships
 4. Event Extractor — identify narrative events
-5. Temporal Signal Extractor — extract season, time-skip, and biological markers (#263)
+5. Temporal Signal Extractor (optional) — extract season, time-skip, and
+   biological markers when timeline tracking is enabled (#263)
 
 Works in both batch (bootstrap) and incremental (ingest) modes.
 """
@@ -47,7 +49,6 @@ from temporal_extraction import (
     merge_temporal_signals,
     load_timeline,
     save_timeline,
-    get_next_timeline_id,
 )
 
 try:
@@ -3637,6 +3638,7 @@ def _extract_segmented(
                     "id": f"{segment_id}-partial",
                     "catalogs": seg_catalogs,
                     "events": seg_events,
+                    "timeline": seg_timeline,
                     "turn_range": (segment_turns[0]["turn_id"], turn_id),
                 }]
                 interim_catalogs, interim_events = _reconcile_segments(interim)
@@ -3647,6 +3649,8 @@ def _extract_segmented(
                 )
                 save_catalogs(catalog_dir, interim_catalogs)
                 save_events(catalog_dir, interim_events)
+                interim_timeline = _reconcile_timelines(interim)
+                save_timeline(catalog_dir, interim_timeline)
 
         # --- Final entity refresh for segment — catch entities stale since last modulo checkpoint (#212) ---
         # Skip refresh if quota was exhausted — no further LLM calls (#215)

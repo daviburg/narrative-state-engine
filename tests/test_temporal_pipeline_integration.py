@@ -4,17 +4,15 @@ import json
 import os
 import sys
 
-import pytest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from catalog_merger import CATALOG_KEYS, load_catalogs, save_catalogs
+from catalog_merger import CATALOG_KEYS
 import semantic_extraction as se
 from temporal_extraction import (
     extract_temporal_signals,
     merge_temporal_signals,
-    load_timeline,
     save_timeline,
 )
 
@@ -280,7 +278,8 @@ class TestBatchExtractionTimeline:
 
         timeline_path = os.path.join(catalog_dir, "timeline.json")
         assert os.path.isfile(timeline_path), "timeline.json not created"
-        timeline = json.loads(open(timeline_path, encoding="utf-8").read())
+        with open(timeline_path, encoding="utf-8") as f:
+            timeline = json.load(f)
         assert len(timeline) >= 1
         assert timeline[0]["type"] == "season_transition"
 
@@ -364,7 +363,8 @@ class TestSingleTurnTimeline:
 
         timeline_path = os.path.join(catalog_dir, "timeline.json")
         assert os.path.isfile(timeline_path), "timeline.json not created"
-        timeline = json.loads(open(timeline_path, encoding="utf-8").read())
+        with open(timeline_path, encoding="utf-8") as f:
+            timeline = json.load(f)
         assert len(timeline) == 1
         assert timeline[0]["season"] == "early_spring"
 
@@ -379,8 +379,6 @@ class TestSegmentedTimeline:
     def test_segmented_reconciles_timelines(self, tmp_path):
         """Segments should each build timeline independently, then reconcile."""
         session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
-
-        seg_counter = [0]
 
         def mock_extract(turn, catalogs, events, llm, min_conf,
                          catalog_dir=None, timeline=None):
@@ -423,7 +421,8 @@ class TestSegmentedTimeline:
 
         timeline_path = os.path.join(catalog_dir, "timeline.json")
         assert os.path.isfile(timeline_path), "timeline.json not created"
-        timeline = json.loads(open(timeline_path, encoding="utf-8").read())
+        with open(timeline_path, encoding="utf-8") as f:
+            timeline = json.load(f)
         assert len(timeline) == 6, f"Expected 6 signals, got {len(timeline)}"
         # Check both seasons present (from both segments)
         seasons = {e["season"] for e in timeline}
