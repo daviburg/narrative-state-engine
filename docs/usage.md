@@ -304,9 +304,38 @@ This regenerates:
 - `sessions/session-001/derived/objectives.json`
 - `sessions/session-001/derived/evidence.json`
 
-Current `update_state.py` behavior is intentionally limited to session-local derived files.
+### Planning Layer Derivation
 
-It does **not** currently update:
+When catalog data is available (from semantic extraction), pass `--framework` to
+populate derived planning files from catalog entities, events, and timelines:
+
+```bash
+python tools/update_state.py --session sessions/session-001 --framework framework/
+```
+
+This additionally populates:
+- `state.json` — world state from location summaries, player state from the player
+  entity's volatile state (location, condition, equipment, relationships), known/inferred
+  constraints from entity attributes, risks from adversarial relationships, opportunities
+  from active plot thread open questions, active threads from plot-threads.json
+- `evidence.json` — explicit evidence from catalog events, inferences from entity
+  attributes with `inference: true`, inferred relationship evidence from low-confidence
+  relationships
+- `timeline.json` — merged session-level (pattern-extracted) and catalog-level temporal
+  markers, deduplicated and sorted by turn number
+
+Placeholder values (e.g. `TODO:`, `Unknown`) are replaced; manually authored content
+is preserved. Evidence entries are deduplicated — running the tool multiple times is safe.
+
+The derivation tool can also be run standalone:
+
+```bash
+python tools/derive_planning_layer.py --session sessions/session-001 --framework framework/
+```
+
+### Limitations
+
+`update_state.py` does **not** currently update:
 - `framework/story/*`
 - `framework/dm-profile/dm-profile.json`
 
@@ -683,6 +712,64 @@ python tools/analyze_next_move.py --session sessions/session-001 --mode all_opti
 
 ---
 
+## DM Profile Analysis
+
+The DM profile tool populates `framework/dm-profile/dm-profile.json` with behavioral patterns inferred from the transcript and/or user-provided off-game documents.
+
+### Transcript Analysis (LLM-based)
+
+Analyze all DM turns from a session:
+
+```bash
+python tools/dm_profile_analyzer.py --session sessions/session-001
+```
+
+Analyze a specific range of turns:
+
+```bash
+python tools/dm_profile_analyzer.py --session sessions/session-001 --start-turn 20 --max-turns 30
+```
+
+The tool sends batches of DM turns (default 5 per LLM call) to the model with the `templates/extraction/dm-profile-analyzer.md` prompt. Extracted observations cover:
+
+- **Tone** — narrative voice and mood (e.g. "dark and atmospheric", "lighthearted")
+- **Structure patterns** — how the DM organizes responses (paragraph count, dialogue separation)
+- **Hint patterns** — how clues are delivered (embedded in descriptions, direct, misleading)
+- **Adversarial level** — how challenging or punishing the DM is (low/moderate/high)
+- **Formatting preferences** — second-person narration, dialogue markers, emphasis
+
+### User-Provided Input
+
+For off-game knowledge the transcript can't reveal, fill in the template and pass it:
+
+```bash
+cp templates/content/dm-profile-user-input.md my-dm-notes.md
+# Edit my-dm-notes.md with your DM knowledge
+python tools/dm_profile_analyzer.py --user-input my-dm-notes.md
+```
+
+Both sources can be combined in one invocation:
+
+```bash
+python tools/dm_profile_analyzer.py --session sessions/session-001 --user-input my-dm-notes.md
+```
+
+### Automatic Integration
+
+- **Bootstrap**: `bootstrap_session.py` automatically runs DM profile analysis after semantic extraction.
+- **Incremental**: `ingest_turn.py --extract` updates the DM profile for each new DM turn.
+- **Analysis**: `analyze_next_move.py` includes the DM profile summary in the analysis output when `--framework` is specified.
+
+### Confidence Scores
+
+- Observations from single turns get lower confidence (0.3–0.5)
+- Corroborated patterns across multiple turns get higher confidence (0.6–0.9)
+- Confidence is capped at 0.9; 1.0 is reserved for user-confirmed patterns
+- User-provided input sets a minimum confidence of 0.3
+- Profile confidence never regresses — new data can only raise or maintain it
+
+---
+
 ## Timeline Configuration
 
 The pipeline tracks in-game time progression by extracting temporal signals (season keywords, biological markers, construction milestones, time-skip language) from transcript turns. By default, turn-001 is Day 0.
@@ -733,6 +820,28 @@ python tools/validate.py --framework framework
 # Validate everything
 python tools/validate.py --all
 ```
+
+---
+
+## Building the Scene Graph
+
+The scene graph is a cross-type spatial and temporal index built from existing entity catalogs. It enables fast scene-resolution queries without scanning every entity file.
+
+```bash
+# Build from framework catalogs
+python tools/build_scene_graph.py --framework framework/
+
+# Custom output path
+python tools/build_scene_graph.py --framework framework/ --output path/to/scene-graph.json
+```
+
+The scene graph is used automatically by `build_context.py` for nearby-entity lookups. If the scene graph file is absent, `build_context.py` falls back to the original full-catalog scan. To disable scene graph usage explicitly:
+
+```bash
+python tools/build_context.py --session sessions/session-001 --turn turn-078 --framework framework/ --no-scene-graph
+```
+
+Rebuild the scene graph after extraction runs or catalog updates to keep the index current.
 
 ---
 
