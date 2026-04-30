@@ -167,11 +167,23 @@ class TestRelationshipTypeCoercion:
     def test_schema_enum_values_pass_through(self):
         schema_enums = [
             "kinship", "partnership", "mentorship", "political",
-            "factional", "social", "adversarial", "romantic", "other",
+            "factional", "social", "adversarial", "romantic", "spatial", "other",
         ]
         for val in schema_enums:
             result = _coerce_relationship_type(val)
             assert result == val
+
+    def test_spatial_labels_map_to_spatial(self):
+        spatial_labels = [
+            "resides at", "resides_at", "located at", "located_at",
+            "traveling to", "traveling_to", "departed from", "departed_from",
+            "visited", "stationed at", "stationed_at", "moved to", "moved_to",
+            "lives in", "lives_in", "headquartered at", "headquartered_at",
+            "based in", "based_in", "connected to", "adjacent to",
+            "near", "inside", "contains",
+        ]
+        for label in spatial_labels:
+            assert _coerce_relationship_type(label) == "spatial", f"{label!r} should map to 'spatial'"
 
     def test_coercion_applied_in_consolidate(self):
         existing = {

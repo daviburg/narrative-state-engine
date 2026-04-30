@@ -52,6 +52,9 @@ TYPE_TO_PREFIX = {
     "concept": "concept-",
 }
 
+# Reverse of TYPE_TO_PREFIX — infer entity type from ID prefix.
+_PREFIX_TO_TYPE = {v: k for k, v in TYPE_TO_PREFIX.items()}
+
 DEFAULT_DORMANCY_THRESHOLD = 10
 
 
@@ -106,6 +109,123 @@ def _generate_index(entity_dir: str, entities: list[dict]) -> None:
     fpath = os.path.join(entity_dir, "index.json")
     with open(fpath, "w", encoding="utf-8") as f:
         json.dump(index, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+# ---------------------------------------------------------------------------
+# Relationship index (bidirectional lookups)
+# ---------------------------------------------------------------------------
+
+def generate_relationship_index(catalogs: dict) -> dict:
+    """Build a bidirectional relationship index from all entity catalogs.
+
+    Returns a dict mapping entity IDs to their forward and reverse
+    relationships, suitable for writing to ``relationship-index.json``.
+    """
+    # Build name/type lookup for all entities
+    entity_meta: dict[str, dict] = {}
+    for _key, entities in catalogs.items():
+        for entity in entities:
+            eid = entity.get("id")
+            if eid:
+                entity_meta[eid] = {
+                    "name": entity.get("name", ""),
+                    "type": entity.get("type", ""),
+                }
+
+    def _infer_type(entity_id: str) -> str:
+        """Infer entity type from ID prefix for dangling targets."""
+        for prefix, etype in _PREFIX_TO_TYPE.items():
+            if entity_id.startswith(prefix):
+                return etype
+        return ""
+
+    # Collect forward and reverse edges
+    forward: dict[str, list[dict]] = {}
+    reverse: dict[str, list[dict]] = {}
+
+    for _key, entities in catalogs.items():
+        for entity in entities:
+            source_id = entity.get("id")
+            if not source_id:
+                continue
+            source_name = entity.get("name", "")
+            for rel in entity.get("relationships", []):
+                target_id = rel.get("target_id")
+                if not target_id:
+                    continue
+                target_meta = entity_meta.get(target_id, {})
+                edge = {
+                    "source_id": source_id,
+                    "source_name": source_name,
+                    "target_id": target_id,
+                    "target_name": target_meta.get("name", ""),
+                    "current_relationship": rel.get("current_relationship", ""),
+                    "type": rel.get("type", "other"),
+                    "status": rel.get("status", "active"),
+                }
+                if rel.get("direction"):
+                    edge["direction"] = rel["direction"]
+                if rel.get("first_seen_turn"):
+                    edge["first_seen_turn"] = rel["first_seen_turn"]
+                if rel.get("last_updated_turn"):
+                    edge["last_updated_turn"] = rel["last_updated_turn"]
+
+                forward.setdefault(source_id, []).append(edge)
+                reverse.setdefault(target_id, []).append(edge)
+
+    # Build entries for every entity that participates in at least one
+    # relationship (as source or target).
+    all_ids = set(forward) | set(reverse)
+    entries: dict[str, dict] = {}
+    for eid in sorted(all_ids):
+        meta = entity_meta.get(eid, {})
+        entries[eid] = {
+            "entity_name": meta.get("name", ""),
+            "entity_type": meta.get("type") or _infer_type(eid),
+            "forward": forward.get(eid, []),
+            "reverse": reverse.get(eid, []),
+        }
+
+    return entries
+
+
+def save_relationship_index(
+    catalog_dir: str,
+    catalogs: dict,
+    turn_id: str | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Generate and write ``relationship-index.json`` to *catalog_dir*."""
+    entries = generate_relationship_index(catalogs)
+    if dry_run:
+        total_edges = sum(len(e["forward"]) for e in entries.values())
+        print(
+            f"  [DRY RUN] Would write relationship index "
+            f"({len(entries)} entities, {total_edges} edges) "
+            f"to {catalog_dir}/relationship-index.json"
+        )
+        return
+
+    # Determine generated_turn: use explicit arg, else scan for the max
+    # last_updated_turn across all entities.
+    if not turn_id:
+        max_num = 0
+        for _key, entities in catalogs.items():
+            for entity in entities:
+                num = _parse_turn_number(entity.get("last_updated_turn"))
+                if num is not None and num > max_num:
+                    max_num = num
+        turn_id = f"turn-{max_num:03d}" if max_num else "turn-000"
+
+    index_doc = {
+        "generated_turn": turn_id,
+        "entries": entries,
+    }
+    fpath = os.path.join(catalog_dir, "relationship-index.json")
+    os.makedirs(catalog_dir, exist_ok=True)
+    with open(fpath, "w", encoding="utf-8") as f:
+        json.dump(index_doc, f, indent=2, ensure_ascii=False)
         f.write("\n")
 
 
@@ -174,6 +294,9 @@ def save_catalogs(catalog_dir: str, catalogs: dict, dry_run: bool = False) -> No
         for entity in entities:
             _write_v2_entity(entity_dir, entity)
         _generate_index(entity_dir, entities)
+
+    # Regenerate the cross-catalog relationship index
+    save_relationship_index(catalog_dir, catalogs, dry_run=dry_run)
 
 
 def load_events(catalog_dir: str) -> list:
@@ -833,7 +956,8 @@ _RELATIONSHIP_TYPE_MAP = {
     # Schema enum identity mappings (pass-through)
     "kinship": "kinship", "partnership": "partnership", "mentorship": "mentorship",
     "political": "political", "factional": "factional", "social": "social",
-    "adversarial": "adversarial", "romantic": "romantic", "other": "other",
+    "adversarial": "adversarial", "romantic": "romantic", "spatial": "spatial",
+    "other": "other",
     # social
     "ally": "social", "ally_of": "social", "ally of": "social",
     "friend": "social", "companion": "social", "supporter": "social",
@@ -863,6 +987,18 @@ _RELATIONSHIP_TYPE_MAP = {
     "diplomatic": "political",
     # factional
     "faction": "factional", "guild": "factional", "tribal": "factional",
+    # spatial — entity-to-location relationships
+    "resides at": "spatial", "resides_at": "spatial",
+    "located at": "spatial", "located_at": "spatial",
+    "traveling to": "spatial", "traveling_to": "spatial",
+    "departed from": "spatial", "departed_from": "spatial",
+    "visited": "spatial", "stationed at": "spatial", "stationed_at": "spatial",
+    "moved to": "spatial", "moved_to": "spatial",
+    "lives in": "spatial", "lives_in": "spatial",
+    "headquartered at": "spatial", "headquartered_at": "spatial",
+    "based in": "spatial", "based_in": "spatial",
+    "connected to": "spatial", "adjacent to": "spatial",
+    "near": "spatial", "inside": "spatial", "contains": "spatial",
     # other — explicit task/using relationships stay as other
     "task related to": "other", "using": "other",
 }
