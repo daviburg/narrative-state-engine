@@ -517,6 +517,9 @@ def generate_story_summary(
             events, plot_threads, characters, timeline)
         method = "data-only"
     else:
+        summary_prose = ""
+        method = "data-only"
+
         if llm_client is None:
             try:
                 from llm_client import LLMClient
