@@ -833,6 +833,47 @@ Low-confidence season signals (regex false positives such as "harvest" in a wint
 - Its confidence ≥ 0.6 (high-quality signal), OR
 - The same base season (winter/spring/summer/autumn) appears ≥ 2 times in the timeline (corroborated by other evidence)
 
+### Timeline Wiki Page
+
+A dedicated timeline overview page is generated at `framework/catalogs/timeline.md` alongside the entity wiki pages. It provides a summarized, human-readable view of all temporal data:
+
+- **Season Progression**: Groups consecutive same-season entries into ranges (e.g., "Turns 3–25: Mid Winter") rather than listing each individually
+- **Time Skips**: Notable time jumps with descriptions and confidence scores
+- **Biological Markers**: Sleep/wake cycles, meals, and rest periods
+- **Day Progression**: Estimated day offsets for entries with day data
+- **Other Temporal Markers**: Anchor events, construction milestones, explicit dates
+
+Generate it with:
+```bash
+# Generate all wiki pages including timeline
+python tools/generate_wiki_pages.py --framework framework/
+
+# Generate only the timeline page
+python tools/generate_wiki_pages.py --framework framework/ --type timeline
+```
+
+---
+
+## Story Summary
+
+After extraction, generate a high-level narrative arc summary:
+
+```bash
+# Generate story summary using configured LLM
+python tools/generate_story_summary.py --framework framework/
+
+# Generate data-only summary (no LLM required)
+python tools/generate_story_summary.py --framework framework/ --no-llm
+```
+
+The summary is written to `framework/story/summary.md` and includes:
+- **Arc Overview** — narrative summary of the campaign's major arcs, character journey, and current state
+- **Open Questions** — unresolved questions from active and dormant plot threads
+
+In LLM mode, the tool assembles a structured prompt from events, plot threads, entity catalogs, and timeline data, then calls the configured model. If the LLM call fails, it automatically falls back to data-only mode.
+
+The data-only mode produces a structured markdown overview without LLM calls, covering campaign scope, player character status, plot thread status (active/dormant/resolved), and key events.
+
 ---
 
 ## Validating JSON

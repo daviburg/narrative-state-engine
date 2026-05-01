@@ -535,6 +535,178 @@ PAGE_GENERATORS = {
 
 
 # ---------------------------------------------------------------------------
+# Timeline page
+# ---------------------------------------------------------------------------
+
+def _group_season_ranges(entries: list[dict]) -> list[dict]:
+    """Group consecutive season_transition entries with the same season into ranges.
+
+    Returns a list of dicts with keys: season, start_turn, end_turn, count.
+    """
+    season_entries = sorted(
+        [e for e in entries if e.get("type") == "season_transition" and e.get("season")],
+        key=lambda e: _parse_turn_number(e.get("source_turn", "")),
+    )
+    if not season_entries:
+        return []
+
+    ranges: list[dict] = []
+    current = {
+        "season": season_entries[0]["season"],
+        "start_turn": season_entries[0]["source_turn"],
+        "end_turn": season_entries[0]["source_turn"],
+        "count": 1,
+    }
+
+    for entry in season_entries[1:]:
+        if entry["season"] == current["season"]:
+            current["end_turn"] = entry["source_turn"]
+            current["count"] += 1
+        else:
+            ranges.append(current)
+            current = {
+                "season": entry["season"],
+                "start_turn": entry["source_turn"],
+                "end_turn": entry["source_turn"],
+                "count": 1,
+            }
+    ranges.append(current)
+    return ranges
+
+
+def _format_turn_range(start: str, end: str) -> str:
+    """Format a turn range as 'Turn N' or 'Turns N–M'."""
+    s = _parse_turn_number(start)
+    e = _parse_turn_number(end)
+    if s == e:
+        return f"Turn {s}"
+    return f"Turns {s}\u2013{e}"
+
+
+def generate_timeline_page(timeline: list[dict]) -> str:
+    """Generate a summarized timeline wiki page from timeline entries.
+
+    Groups season transitions into ranges and lists time skips and
+    biological markers chronologically.
+    """
+    lines = []
+    lines.append("# Timeline Overview\n")
+
+    if not timeline:
+        lines.append("*No temporal data extracted yet.*\n")
+        lines.append("---")
+        lines.append("*Generated from [timeline.json](timeline.json) — do not edit manually.*")
+        return "\n".join(lines) + "\n"
+
+    # Summary stats
+    type_counts: dict[str, int] = {}
+    for entry in timeline:
+        t = entry.get("type", "unknown")
+        type_counts[t] = type_counts.get(t, 0) + 1
+
+    sorted_timeline = sorted(
+        timeline, key=lambda e: _parse_turn_number(e.get("source_turn", ""))
+    )
+    first_turn = sorted_timeline[0].get("source_turn", "")
+    last_turn = sorted_timeline[-1].get("source_turn", "")
+
+    breakdown = ", ".join(
+        f"{count} {typ.replace('_', ' ')}" for typ, count in sorted(type_counts.items())
+    )
+    lines.append(f"> {len(timeline)} temporal markers across "
+                 f"{_format_turn_range(first_turn, last_turn)}")
+    lines.append(f"> ({breakdown})\n")
+
+    # --- Season Progression ---
+    season_ranges = _group_season_ranges(timeline)
+    if season_ranges:
+        lines.append("## Season Progression\n")
+        lines.append("| Period | Season | Signals |")
+        lines.append("|---|---|---|")
+        for r in season_ranges:
+            period = _format_turn_range(r["start_turn"], r["end_turn"])
+            season_label = r["season"].replace("_", " ").title()
+            lines.append(f"| {period} | {season_label} | {r['count']} |")
+        lines.append("")
+
+    # --- Time Skips ---
+    time_skips = sorted(
+        [e for e in timeline if e.get("type") == "time_skip"],
+        key=lambda e: _parse_turn_number(e.get("source_turn", "")),
+    )
+    if time_skips:
+        lines.append("## Time Skips\n")
+        lines.append("| Turn | Description | Confidence |")
+        lines.append("|---|---|---|")
+        for entry in time_skips:
+            turn = entry.get("source_turn", "")
+            desc = _escape_table_cell(entry.get("description", entry.get("raw_text", "")))
+            conf = entry.get("confidence", "")
+            conf_str = f"{conf:.2f}" if isinstance(conf, (int, float)) else str(conf)
+            lines.append(f"| {turn} | {desc} | {conf_str} |")
+        lines.append("")
+
+    # --- Biological Markers ---
+    bio_markers = sorted(
+        [e for e in timeline if e.get("type") == "biological_marker"],
+        key=lambda e: _parse_turn_number(e.get("source_turn", "")),
+    )
+    if bio_markers:
+        lines.append("## Biological Markers\n")
+        lines.append("| Turn | Description | Confidence |")
+        lines.append("|---|---|---|")
+        for entry in bio_markers:
+            turn = entry.get("source_turn", "")
+            desc = _escape_table_cell(entry.get("description", entry.get("raw_text", "")))
+            conf = entry.get("confidence", "")
+            conf_str = f"{conf:.2f}" if isinstance(conf, (int, float)) else str(conf)
+            lines.append(f"| {turn} | {desc} | {conf_str} |")
+        lines.append("")
+
+    # --- Day Estimates ---
+    day_entries = sorted(
+        [e for e in timeline if e.get("estimated_day") is not None],
+        key=lambda e: _parse_turn_number(e.get("source_turn", "")),
+    )
+    if day_entries:
+        lines.append("## Day Progression\n")
+        lines.append("| Turn | Estimated Day | Season | Source |")
+        lines.append("|---|---|---|---|")
+        for entry in day_entries:
+            turn = entry.get("source_turn", "")
+            day = entry.get("estimated_day", "")
+            season = entry.get("season", "")
+            season_label = season.replace("_", " ").title() if season else ""
+            etype = entry.get("type", "").replace("_", " ")
+            lines.append(f"| {turn} | Day {day} | {season_label} | {etype} |")
+        lines.append("")
+
+    # --- Other marker types ---
+    other_types = {"explicit_date", "relative_reference", "construction_milestone", "anchor_event"}
+    other_entries = sorted(
+        [e for e in timeline if e.get("type") in other_types],
+        key=lambda e: _parse_turn_number(e.get("source_turn", "")),
+    )
+    if other_entries:
+        lines.append("## Other Temporal Markers\n")
+        lines.append("| Turn | Type | Description | Confidence |")
+        lines.append("|---|---|---|---|")
+        for entry in other_entries:
+            turn = entry.get("source_turn", "")
+            etype = entry.get("type", "").replace("_", " ").title()
+            desc = _escape_table_cell(entry.get("description", entry.get("raw_text", "")))
+            conf = entry.get("confidence", "")
+            conf_str = f"{conf:.2f}" if isinstance(conf, (int, float)) else str(conf)
+            lines.append(f"| {turn} | {etype} | {desc} | {conf_str} |")
+        lines.append("")
+
+    # Footer
+    lines.append("---")
+    lines.append("*Generated from [timeline.json](timeline.json) — do not edit manually.*")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
 # Index page
 # ---------------------------------------------------------------------------
 
@@ -595,6 +767,8 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
     stats: dict[str, int] = {}
 
     for entity_type in types_to_process:
+        if entity_type == "timeline":
+            continue  # handled separately below
         if entity_type not in ENTITY_TYPES:
             print(f"  WARNING: Unknown entity type '{entity_type}', skipping", file=sys.stderr)
             continue
@@ -645,6 +819,24 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
 
         stats[entity_type] = page_count
         print(f"  {entity_type}: {page_count} pages generated")
+
+    # Generate timeline page (always included unless filtering to a specific entity type)
+    if entity_types is None or "timeline" in entity_types:
+        timeline_path = os.path.join(catalog_dir, "timeline.json")
+        if os.path.isfile(timeline_path):
+            try:
+                with open(timeline_path, "r", encoding="utf-8-sig") as f:
+                    timeline_data = json.load(f)
+                if isinstance(timeline_data, list):
+                    md_content = generate_timeline_page(timeline_data)
+                    md_path = os.path.join(catalog_dir, "timeline.md")
+                    with open(md_path, "w", encoding="utf-8") as f:
+                        f.write(md_content)
+                    stats["timeline"] = 1
+                    print("  timeline: 1 page generated")
+            except (json.JSONDecodeError, OSError) as e:
+                print(f"  WARNING: Could not load timeline.json: {e}",
+                      file=sys.stderr)
 
     return stats
 
@@ -710,8 +902,8 @@ def main():
     )
     parser.add_argument(
         "--type", dest="entity_type",
-        choices=ENTITY_TYPES,
-        help="Limit generation to one entity type"
+        choices=ENTITY_TYPES + ["timeline"],
+        help="Limit generation to one entity type (or 'timeline')"
     )
     parser.add_argument(
         "--index-only", action="store_true",
@@ -735,6 +927,8 @@ def main():
         parser.error("--force requires --synthesize")
     if args.index_only and args.synthesize:
         parser.error("--index-only cannot be used with --synthesize")
+    if args.synthesize and args.entity_type == "timeline":
+        parser.error("--synthesize cannot be used with --type timeline")
 
     catalog_dir = os.path.join(args.framework, "catalogs")
     if not os.path.isdir(catalog_dir):
