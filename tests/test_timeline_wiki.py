@@ -231,6 +231,9 @@ def test_timeline_page_has_summary_stats():
     """Summary line with total markers and turn range."""
     md = generate_timeline_page(SAMPLE_TIMELINE)
     assert "11 temporal markers" in md
+    # Per-type breakdown is included
+    assert "biological marker" in md
+    assert "time skip" in md
 
 
 def test_timeline_page_confidence_format():

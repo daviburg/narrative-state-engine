@@ -610,8 +610,12 @@ def generate_timeline_page(timeline: list[dict]) -> str:
     first_turn = sorted_timeline[0].get("source_turn", "")
     last_turn = sorted_timeline[-1].get("source_turn", "")
 
+    breakdown = ", ".join(
+        f"{count} {typ.replace('_', ' ')}" for typ, count in sorted(type_counts.items())
+    )
     lines.append(f"> {len(timeline)} temporal markers across "
-                 f"{_format_turn_range(first_turn, last_turn)}\n")
+                 f"{_format_turn_range(first_turn, last_turn)}")
+    lines.append(f"> ({breakdown})\n")
 
     # --- Season Progression ---
     season_ranges = _group_season_ranges(timeline)
@@ -763,6 +767,8 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
     stats: dict[str, int] = {}
 
     for entity_type in types_to_process:
+        if entity_type == "timeline":
+            continue  # handled separately below
         if entity_type not in ENTITY_TYPES:
             print(f"  WARNING: Unknown entity type '{entity_type}', skipping", file=sys.stderr)
             continue
@@ -870,6 +876,8 @@ def main():
         parser.error("--force requires --synthesize")
     if args.index_only and args.synthesize:
         parser.error("--index-only cannot be used with --synthesize")
+    if args.synthesize and args.entity_type == "timeline":
+        parser.error("--synthesize cannot be used with --type timeline")
 
     catalog_dir = os.path.join(args.framework, "catalogs")
     if not os.path.isdir(catalog_dir):
