@@ -650,6 +650,53 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
 
 
 # ---------------------------------------------------------------------------
+# Timeline page generation
+# ---------------------------------------------------------------------------
+
+def generate_timeline_page(catalog_dir: str) -> int:
+    """Generate a timeline wiki page from catalog timeline data.
+
+    Reads timeline.json from the catalog directory and produces
+    a timeline.md page with narrative summary and reference tables.
+
+    Returns:
+        Number of pages generated (0 or 1).
+    """
+    from temporal_extraction import (
+        load_timeline,
+        generate_timeline_wiki_page,
+        detect_anchor_event,
+    )
+
+    timeline = load_timeline(catalog_dir)
+    if not timeline:
+        print("  timeline: no timeline data found, skipping")
+        return 0
+
+    anchor = detect_anchor_event(timeline)
+
+    # Determine latest turn from timeline entries
+    latest_turn = None
+    max_turn_num = 0
+    for entry in timeline:
+        source = entry.get("source_turn", "")
+        m = re.match(r"^turn-0*(\d+)$", source)
+        if m:
+            num = int(m.group(1))
+            if num > max_turn_num:
+                max_turn_num = num
+                latest_turn = source
+
+    page_content = generate_timeline_wiki_page(timeline, anchor, latest_turn)
+    out_path = os.path.join(catalog_dir, "timeline.md")
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(page_content)
+
+    print(f"  timeline: 1 page generated")
+    return 1
+
+
+# ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
 
@@ -678,6 +725,10 @@ def main():
         "--force", action="store_true",
         help="Force regeneration even if sidecar shows no new events (requires --synthesize)"
     )
+    parser.add_argument(
+        "--timeline", action="store_true",
+        help="Generate timeline wiki page with narrative summary"
+    )
     args = parser.parse_args()
 
     if args.force and not args.synthesize:
@@ -699,6 +750,11 @@ def main():
     else:
         stats = generate_wiki_pages(
             catalog_dir, entity_types=types, index_only=args.index_only)
+
+    # Generate timeline page if requested or if generating all pages
+    if args.timeline or (not args.entity_type and not args.index_only):
+        timeline_count = generate_timeline_page(catalog_dir)
+        stats["timeline"] = timeline_count
 
     total = sum(stats.values())
     print(f"\nTotal: {total} wiki pages generated.")

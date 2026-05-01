@@ -64,6 +64,12 @@ configurable reference anchor. Implemented in `tools/temporal_extraction.py` wit
 pattern-based detection plus an optional LLM template. Integrated into wiki page display
 (estimated day column in event timelines, season-enriched infoboxes).
 
+**Narrative timeline summary** (#275): The timeline wiki page (`framework/catalogs/timeline.md`)
+presents temporal data as a narrative. Includes: anchor date / current position infobox,
+5-15 sentence natural-language temporal arc summary, and filtered reference tables.
+Season flicker filtering removes low-confidence noise (isolated regex false positives).
+Anchor event auto-detection selects the most significant early event as reference point.
+
 Benefits:
 - Narrower per-agent context window → lower token cost
 - Agents can run in parallel on unrelated subtasks

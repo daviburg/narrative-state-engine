@@ -805,6 +805,33 @@ Day offsets are estimated using a configurable days-per-turn ratio (default: 3.5
 When timeline data is available, wiki pages include:
 - **Infobox**: "First Seen Day" with estimated day and season label
 - **Event Timeline**: An "Est. Day" column showing approximate in-game day for each event
+- **Timeline page** (`framework/catalogs/timeline.md`): A narrative timeline wiki page with current position, prose temporal summary, and reference tables
+
+### Timeline Wiki Page
+
+The timeline wiki page is generated automatically alongside entity pages:
+
+```bash
+# Generate all wiki pages including timeline
+python tools/generate_wiki_pages.py --framework framework-local/
+
+# Generate only the timeline page
+python tools/generate_wiki_pages.py --framework framework-local/ --timeline
+```
+
+The page contains:
+1. **Current Position** — infobox with estimated day, season, anchor event, and confidence
+2. **Narrative Summary** — 5-15 sentence natural-language description of the temporal arc
+3. **Season Progression** — table of confirmed season transitions (flicker-filtered)
+4. **Time Passages** — table of detected time skips
+5. **Biological & Lifecycle Markers** — pregnancies, births, and other lifecycle events
+6. **Other Milestones** — construction and anchor events
+
+### Season Flicker Filtering
+
+Low-confidence season signals (regex false positives such as "harvest" in a winter story) are automatically filtered. A season transition is kept only if:
+- Its confidence ≥ 0.6 (high-quality signal), OR
+- The same base season (winter/spring/summer/autumn) appears ≥ 2 times in the timeline (corroborated by other evidence)
 
 ---
 
