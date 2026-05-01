@@ -806,6 +806,25 @@ When timeline data is available, wiki pages include:
 - **Infobox**: "First Seen Day" with estimated day and season label
 - **Event Timeline**: An "Est. Day" column showing approximate in-game day for each event
 
+### Timeline Wiki Page
+
+A dedicated timeline overview page is generated at `framework/catalogs/timeline.md` alongside the entity wiki pages. It provides a summarized, human-readable view of all temporal data:
+
+- **Season Progression**: Groups consecutive same-season entries into ranges (e.g., "Turns 3–25: Mid Winter") rather than listing each individually
+- **Time Skips**: Notable time jumps with descriptions and confidence scores
+- **Biological Markers**: Sleep/wake cycles, meals, and rest periods
+- **Day Progression**: Estimated day offsets for entries with day data
+- **Other Temporal Markers**: Anchor events, construction milestones, explicit dates
+
+Generate it with:
+```bash
+# Generate all wiki pages including timeline
+python tools/generate_wiki_pages.py --framework framework/
+
+# Generate only the timeline page
+python tools/generate_wiki_pages.py --framework framework/ --type timeline
+```
+
 ---
 
 ## Story Summary
