@@ -473,21 +473,21 @@ def _base_season(fine_season: str) -> str:
 
 def filter_season_flicker(timeline: list[dict],
                           min_confidence: float = 0.6,
-                          min_consecutive: int = 2) -> list[dict]:
+                          min_support: int = 2) -> list[dict]:
     """Filter out season transition noise (flicker) from a timeline.
 
     A season transition is kept only if:
     - Its confidence >= min_confidence, OR
-    - The same base season appears in at least min_consecutive entries
-      within a sliding window of adjacent season_transition entries.
+    - The same base season appears in at least min_support entries
+      across the entire timeline (i.e., other entries corroborate it).
 
     Non-season entries are always preserved.
 
     Args:
         timeline: Full timeline entry list.
         min_confidence: Minimum confidence to auto-accept a season signal.
-        min_consecutive: Number of consecutive same-base-season signals
-            required to accept low-confidence transitions.
+        min_support: Minimum total occurrences of the same base season
+            in the timeline required to accept low-confidence transitions.
 
     Returns:
         Filtered timeline list (new list; original is not modified).
@@ -504,7 +504,6 @@ def filter_season_flicker(timeline: list[dict],
 
     # Mark which entries to keep
     kept: list[dict] = []
-    n = len(season_entries)
 
     # Pre-compute base season counts for support checking
     base_counts: dict[str, int] = {}
@@ -512,7 +511,7 @@ def filter_season_flicker(timeline: list[dict],
         base = _base_season(entry.get("season", ""))
         base_counts[base] = base_counts.get(base, 0) + 1
 
-    for i, entry in enumerate(season_entries):
+    for entry in season_entries:
         conf = entry.get("confidence", 0.0)
         if conf >= min_confidence:
             kept.append(entry)
@@ -520,7 +519,7 @@ def filter_season_flicker(timeline: list[dict],
 
         # Check if this base season has enough total support in the timeline
         base = _base_season(entry.get("season", ""))
-        if base_counts.get(base, 0) >= min_consecutive:
+        if base_counts.get(base, 0) >= min_support:
             kept.append(entry)
 
     # Combine and sort by turn number
@@ -537,7 +536,8 @@ def detect_anchor_event(timeline: list[dict]) -> dict:
     """Detect the most significant anchor event from timeline data.
 
     Chooses the first anchor_event entry if present, otherwise falls back
-    to the first biological_marker or the first entry overall.
+    to the first time_skip or biological_marker. Returns DEFAULT_ANCHOR
+    if no significant events are found.
 
     Returns an anchor dict with 'turn', 'label', 'day' keys.
     """
@@ -584,8 +584,7 @@ def generate_narrative_timeline(timeline: list[dict],
     - Season changes (filtered for flicker)
     - Biological/lifecycle events as temporal anchors
 
-    This is a template-based generator (no LLM required). For LLM-enhanced
-    narrative, use the --synthesize flag with generate_wiki_pages.py.
+    This is a template-based generator (no LLM required).
 
     Args:
         timeline: Full timeline entry list.
@@ -761,8 +760,8 @@ def generate_timeline_wiki_page(timeline: list[dict],
 
     # --- Anchor / current position ---
     est_day = summary.get("estimated_day", 0)
-    season_label = summary.get("season_label", "Unknown")
-    anchor_label = anchor.get("label", "Day 0")
+    season_label = summary.get("season_label") or "Unknown"
+    anchor_label = anchor.get("label") or "Day 0"
     anchor_turn = anchor.get("turn", "turn-001")
 
     lines.append("## Current Position\n")

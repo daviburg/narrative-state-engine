@@ -210,7 +210,7 @@ class TestFilterSeasonFlicker:
         assert result == []
 
     def test_custom_thresholds(self):
-        """Custom min_confidence and min_consecutive work."""
+        """Custom min_confidence and min_support work."""
         # With min_confidence=0.3, everything except below 0.3 passes
         result = filter_season_flicker(FLICKERING_TIMELINE, min_confidence=0.3)
         seasons = [e for e in result if e.get("type") == "season_transition"]
@@ -218,11 +218,12 @@ class TestFilterSeasonFlicker:
 
     def test_result_sorted_by_turn(self):
         """Result entries are sorted by turn number."""
+        import re
         result = filter_season_flicker(FLICKERING_TIMELINE)
         turns = []
         for e in result:
             src = e.get("source_turn", "")
-            m = __import__("re").match(r"turn-0*(\d+)", src)
+            m = re.match(r"turn-0*(\d+)", src)
             if m:
                 turns.append(int(m.group(1)))
         assert turns == sorted(turns)
