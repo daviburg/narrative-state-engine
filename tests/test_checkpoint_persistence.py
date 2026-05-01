@@ -59,7 +59,7 @@ class TestSegmentedCheckpointPersistence:
         turn_count = 0
         entity_counter = [0]
 
-        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             nonlocal turn_count
             turn_count += 1
             entity_counter[0] += 1
@@ -98,7 +98,7 @@ class TestSegmentedCheckpointPersistence:
         segment_calls = [0]
         catalog_snapshots = []
 
-        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             catalogs["characters.json"].append(
                 _make_entity(f"char-seg-ent-{len(catalogs['characters.json']) + 1}",
                              f"Ent {len(catalogs['characters.json']) + 1}")
@@ -152,7 +152,7 @@ class TestIntraSegmentCheckpoint:
         checkpoint_disk_snapshots = []
         call_count = [0]
 
-        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             catalogs["characters.json"].append(
                 _make_entity(f"char-intra-{call_count[0]}",
@@ -208,7 +208,7 @@ class TestErrorPathPersistence:
 
         call_count = [0]
 
-        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             if call_count[0] == 3:
                 raise RuntimeError("Simulated extraction failure")
@@ -282,7 +282,7 @@ class TestResumeLoadsPersisted:
 
         loaded_catalogs = [None]
 
-        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             # On the first call (turn 3), record what catalogs were loaded
             if loaded_catalogs[0] is None:
                 loaded_catalogs[0] = {k: list(v) for k, v in catalogs.items()}

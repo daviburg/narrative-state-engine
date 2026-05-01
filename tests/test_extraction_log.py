@@ -137,7 +137,7 @@ class TestExtractionLogFile:
 
         call_count = [0]
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             log = {
                 "turn_id": turn["turn_id"],
@@ -191,7 +191,7 @@ class TestExtractionLogFile:
         os.makedirs(os.path.join(session_dir, "derived"), exist_ok=True)
         os.makedirs(catalog_dir, exist_ok=True)
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             return catalogs, events, False, {"turn_id": turn["turn_id"]}
 
         turns = [{"turn_id": "turn-001", "speaker": "dm", "text": "T1."}]
@@ -227,7 +227,7 @@ class TestExtractionLogFile:
 
         call_count = [0]
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             if call_count[0] == 2:
                 # Simulate a turn with discovery failure
@@ -295,7 +295,7 @@ class TestExtractionLogFile:
 
         call_count = [0]
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             if call_count[0] == 2:
                 raise RuntimeError("Simulated crash")
