@@ -188,6 +188,7 @@ Estimated timeline of in-game events, anchored to a configurable reference point
 - Calibrated from biological markers (pregnancies), construction timelines, and seasonal descriptions
 - Reference anchor defaults to turn-001 (Day 0); a named anchor (e.g., settlement founding) can be set in config
 - Feeds into wiki page generation for character ages and event dating (estimated day column in event timelines, season labels in infoboxes)
+- `framework/catalogs/timeline.md` — auto-generated summarized wiki page grouping season ranges, time skips, and biological markers for human review
 
 ---
 
