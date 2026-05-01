@@ -625,13 +625,16 @@ def detect_anchor_event(timeline: list[dict]) -> dict:
 
 def generate_narrative_timeline(timeline: list[dict],
                                 anchor: dict | None = None,
-                                latest_turn: str | None = None) -> str:
+                                latest_turn: str | None = None,
+                                *,
+                                entities: list[dict] | None = None,
+                                events: list[dict] | None = None,
+                                relationships: dict | None = None) -> str:
     """Generate a natural-language narrative summary of the temporal arc.
 
-    Produces a 5-15 sentence prose description highlighting:
-    - Major time skips and what happened between them
-    - Season changes (filtered for flicker)
-    - Biological/lifecycle events as temporal anchors
+    When catalog data (entities/events) is provided, produces a structured
+    markdown summary with story progression beats grouped by period.
+    Without catalog data, produces a concise 3-sentence fallback.
 
     This is a template-based generator (no LLM required).
 
@@ -639,6 +642,9 @@ def generate_narrative_timeline(timeline: list[dict],
         timeline: Full timeline entry list.
         anchor: Anchor event dict. Auto-detected if None.
         latest_turn: Current latest turn ID.
+        entities: Entity dicts from catalogs (optional).
+        events: Event dicts from events.json (optional).
+        relationships: Relationship index dict (optional).
 
     Returns:
         Narrative summary as a markdown string.
@@ -655,11 +661,10 @@ def generate_narrative_timeline(timeline: list[dict],
     # Get current state
     summary = get_current_timeline_summary(filtered, anchor, latest_turn)
 
-    # Group events by type for narrative construction
+    # Group timeline events by type
     season_transitions = []
     time_skips = []
     bio_markers = []
-    other_events = []
 
     for entry in filtered:
         etype = entry.get("type", "")
@@ -669,100 +674,51 @@ def generate_narrative_timeline(timeline: list[dict],
             time_skips.append(entry)
         elif etype == "biological_marker":
             bio_markers.append(entry)
-        elif etype in ("construction_milestone", "anchor_event"):
-            other_events.append(entry)
 
-    # Build narrative sentences
+    # If catalog data available, produce rich structured output
+    if events or entities:
+        return _build_rich_narrative(
+            summary, anchor, season_transitions, time_skips, bio_markers,
+            entities=entities, events=events, relationships=relationships,
+        )
+
+    # Fallback: concise summary without catalog data
+    return _build_fallback_narrative(summary, anchor, season_transitions, time_skips, bio_markers)
+
+
+def _build_fallback_narrative(summary: dict, anchor: dict,
+                              season_transitions: list[dict],
+                              time_skips: list[dict],
+                              bio_markers: list[dict]) -> str:
+    """Produce a concise 3-5 sentence narrative without catalog data."""
     sentences = []
 
-    # Opening — anchor context
+    # Elapsed time
     anchor_label = anchor.get("label", "the beginning")
     est_day = summary.get("estimated_day", 0)
     if est_day > 0:
-        if est_day < 14:
-            time_phrase = f"approximately {est_day} days"
-        elif est_day < 60:
-            weeks = round(est_day / 7)
-            time_phrase = f"approximately {weeks} week{'s' if weeks != 1 else ''}"
-        elif est_day < 365:
-            months = round(est_day / 30)
-            time_phrase = f"approximately {months} month{'s' if months != 1 else ''}"
-        else:
-            years = round(est_day / 365, 1)
-            time_phrase = f"approximately {years} year{'s' if years != 1 else ''}"
         sentences.append(
-            f"As of the current turn, {time_phrase} have elapsed since {anchor_label}."
+            f"As of the current turn, {_format_elapsed(est_day)} have elapsed "
+            f"since {anchor_label}."
         )
 
-    # Season arc
+    # Season arc (first → current only)
     if season_transitions:
-        first_season = season_transitions[0]
-        last_season = season_transitions[-1]
-        first_label = format_season_label(first_season.get("season", ""))
-        last_label = format_season_label(last_season.get("season", ""))
-        if first_season != last_season:
+        first_label = format_season_label(season_transitions[0].get("season", ""))
+        last_label = format_season_label(season_transitions[-1].get("season", ""))
+        if season_transitions[0] != season_transitions[-1]:
             sentences.append(
                 f"The story began in {first_label} and has progressed to {last_label}."
             )
         else:
             sentences.append(f"The story has remained in {first_label} throughout.")
 
-        # Report distinct season transitions (deduplicated by base season)
-        seen_bases = []
-        transitions_narrative = []
-        for entry in season_transitions:
-            base = _base_season(entry.get("season", ""))
-            if base not in seen_bases:
-                seen_bases.append(base)
-                turn = entry.get("source_turn", "")
-                label = format_season_label(entry.get("season", ""))
-                transitions_narrative.append(f"{label} (at {turn})")
-        if len(transitions_narrative) > 1:
-            sentences.append(
-                "Season progression: " + " → ".join(transitions_narrative) + "."
-            )
-
-    # Time skips
+    # Major time passages count
     if time_skips:
-        skip_descriptions = []
-        for skip in time_skips:
-            signals = skip.get("signals", [])
-            turn = skip.get("source_turn", "")
-            if signals:
-                desc = signals[0].split(": ", 1)[-1] if ": " in signals[0] else signals[0]
-                skip_descriptions.append(f"{desc} ({turn})")
-        if skip_descriptions:
-            if len(skip_descriptions) <= 3:
-                sentences.append(
-                    "Notable time passages: " + "; ".join(skip_descriptions) + "."
-                )
-            else:
-                sentences.append(
-                    f"There have been {len(skip_descriptions)} notable time passages, "
-                    f"including: " + "; ".join(skip_descriptions[:3]) + "."
-                )
-
-    # Biological markers
-    if bio_markers:
-        bio_descriptions = []
-        for marker in bio_markers:
-            signals = marker.get("signals", [])
-            turn = marker.get("source_turn", "")
-            if signals:
-                desc = signals[0].split(": ", 1)[-1] if ": " in signals[0] else signals[0]
-                bio_descriptions.append(f"{desc} ({turn})")
-        if bio_descriptions:
-            sentences.append(
-                "Biological/lifecycle markers: " + "; ".join(bio_descriptions) + "."
-            )
-
-    # Other milestones
-    if other_events:
-        for evt in other_events[:3]:
-            desc = evt.get("description", "")
-            turn = evt.get("source_turn", "")
-            if desc:
-                sentences.append(f"{desc} ({turn}).")
+        sentences.append(
+            f"There have been {len(time_skips)} notable time passage"
+            f"{'s' if len(time_skips) != 1 else ''}."
+        )
 
     # Confidence note
     conf = summary.get("confidence", 0.0)
@@ -774,18 +730,275 @@ def generate_narrative_timeline(timeline: list[dict],
     return " ".join(sentences) if sentences else "*No temporal narrative available.*"
 
 
+def _build_rich_narrative(summary: dict, anchor: dict,
+                          season_transitions: list[dict],
+                          time_skips: list[dict],
+                          bio_markers: list[dict],
+                          *,
+                          entities: list[dict] | None = None,
+                          events: list[dict] | None = None,
+                          relationships: dict | None = None) -> str:
+    """Produce a structured narrative using catalog data."""
+    lines = []
+
+    # --- Temporal Arc ---
+    anchor_label = anchor.get("label", "the beginning")
+    est_day = summary.get("estimated_day", 0)
+    season_label = summary.get("season_label") or "unknown"
+
+    arc_parts = []
+    if est_day > 0:
+        arc_parts.append(f"{_format_elapsed(est_day)} have elapsed since {anchor_label}")
+    if season_label and season_label != "unknown":
+        arc_parts.append(f"currently in {season_label}")
+    if arc_parts:
+        lines.append(f"**Temporal Arc**: {'; '.join(arc_parts)}.")
+    else:
+        lines.append("**Temporal Arc**: Timeline position uncertain.")
+    lines.append("")
+
+    # --- Story Progression (from events) ---
+    if events:
+        story_section = _build_story_progression(events, season_transitions)
+        if story_section:
+            lines.append("**Story Progression**:")
+            lines.extend(story_section)
+            lines.append("")
+
+    # --- Lifecycle Events (grouped bio markers) ---
+    if bio_markers:
+        lifecycle = _build_lifecycle_summary(bio_markers, entities)
+        if lifecycle:
+            lines.append(f"**Lifecycle Events**: {lifecycle}")
+            lines.append("")
+
+    # --- Time Passages (brief summary of major skips only) ---
+    if time_skips:
+        passages = _build_time_passages_summary(time_skips)
+        if passages:
+            lines.append(f"**Time Passages**: {passages}")
+            lines.append("")
+
+    # Confidence note
+    conf = summary.get("confidence", 0.0)
+    if conf < 0.4:
+        lines.append(
+            "*Note: Temporal estimates have low confidence due to limited anchor data.*"
+        )
+
+    return "\n".join(lines).strip() if lines else "*No temporal narrative available.*"
+
+
+def _format_elapsed(est_day: int) -> str:
+    """Format estimated days as a human-readable phrase."""
+    if est_day < 14:
+        return f"approximately {est_day} days"
+    elif est_day < 60:
+        weeks = round(est_day / 7)
+        return f"approximately {weeks} week{'s' if weeks != 1 else ''}"
+    elif est_day < 365:
+        months = round(est_day / 30)
+        return f"approximately {months} month{'s' if months != 1 else ''}"
+    else:
+        years = round(est_day / 365, 1)
+        return f"approximately {years} year{'s' if years != 1 else ''}"
+
+
+# Priority event types for story progression
+_PRIORITY_EVENT_TYPES = {"discovery", "conflict", "decision", "milestone"}
+
+
+def _build_story_progression(events: list[dict],
+                             season_transitions: list[dict]) -> list[str]:
+    """Group events into temporal periods and summarize."""
+    if not events:
+        return []
+
+    # Build period labels from season transitions
+    period_labels = _build_period_labels(season_transitions)
+
+    # Assign events to periods (25-turn buckets)
+    periods: dict[int, list[dict]] = {}
+    for evt in events:
+        turns = evt.get("source_turns", [])
+        if not turns:
+            continue
+        turn_num = _parse_turn_number(turns[0]) if turns else None
+        if turn_num is None:
+            continue
+        bucket = (turn_num - 1) // 25  # 0-indexed bucket
+        periods.setdefault(bucket, []).append(evt)
+
+    if not periods:
+        return []
+
+    lines = []
+    for bucket in sorted(periods.keys()):
+        bucket_events = periods[bucket]
+        start_turn = bucket * 25 + 1
+        end_turn = start_turn + 24
+
+        # Pick representative events (prioritize key types)
+        priority = [e for e in bucket_events if e.get("type") in _PRIORITY_EVENT_TYPES]
+        if priority:
+            selected = priority[:3]
+        else:
+            selected = bucket_events[:2]
+
+        # Build period label
+        label = period_labels.get(bucket, f"Turns {start_turn}\u2013{end_turn}")
+
+        # Build summary from selected events
+        descs = []
+        for evt in selected:
+            desc = evt.get("description", "").strip()
+            if desc:
+                # Truncate long descriptions
+                if len(desc) > 120:
+                    desc = desc[:117] + "..."
+                descs.append(desc)
+
+        if descs:
+            summary_text = " ".join(descs)
+            lines.append(f"- **{label}**: {summary_text}")
+
+    return lines
+
+
+def _build_period_labels(season_transitions: list[dict]) -> dict[int, str]:
+    """Map 25-turn buckets to season-based labels."""
+    labels: dict[int, str] = {}
+    for entry in season_transitions:
+        turn_num = _parse_turn_number(entry.get("source_turn"))
+        if turn_num is None:
+            continue
+        bucket = (turn_num - 1) // 25
+        season = format_season_label(entry.get("season", ""))
+        turn_range = f"turns {bucket * 25 + 1}\u2013{bucket * 25 + 25}"
+        if bucket not in labels:
+            labels[bucket] = f"{season} ({turn_range})"
+    return labels
+
+
+def _build_lifecycle_summary(bio_markers: list[dict],
+                             entities: list[dict] | None = None) -> str:
+    """Group bio markers into pregnancy-birth cycles and summarize."""
+    if not bio_markers:
+        return ""
+
+    # Sort by turn
+    sorted_markers = sorted(
+        bio_markers,
+        key=lambda e: _parse_turn_number(e.get("source_turn")) or 0
+    )
+
+    # Detect cycles: a cycle starts with pregnancy/pregnancy_progression
+    # and ends with birth/born. Cluster entries within ~20 turns.
+    cycles: list[dict] = []
+    current_cycle: dict | None = None
+
+    for marker in sorted_markers:
+        signals = marker.get("signals", [])
+        turn_num = _parse_turn_number(marker.get("source_turn")) or 0
+        signal_text = signals[0] if signals else ""
+        marker_type = signal_text.split(":")[0].strip() if ":" in signal_text else ""
+
+        if marker_type in ("pregnancy", "pregnancy_progression"):
+            if current_cycle is None or (turn_num - current_cycle["end_turn"] > 20):
+                # Start new cycle
+                if current_cycle:
+                    cycles.append(current_cycle)
+                current_cycle = {
+                    "start_turn": turn_num,
+                    "end_turn": turn_num,
+                    "has_birth": False,
+                    "count": 1,
+                }
+            else:
+                current_cycle["end_turn"] = turn_num
+                current_cycle["count"] += 1
+        elif marker_type in ("birth", "born"):
+            if current_cycle and (turn_num - current_cycle["end_turn"] <= 20):
+                current_cycle["end_turn"] = turn_num
+                current_cycle["has_birth"] = True
+                current_cycle["count"] += 1
+            else:
+                # Orphaned birth — standalone cycle
+                cycles.append({
+                    "start_turn": turn_num,
+                    "end_turn": turn_num,
+                    "has_birth": True,
+                    "count": 1,
+                })
+        else:
+            # Other bio marker — attach to current cycle or ignore
+            if current_cycle and (turn_num - current_cycle["end_turn"] <= 20):
+                current_cycle["end_turn"] = turn_num
+                current_cycle["count"] += 1
+
+    if current_cycle:
+        cycles.append(current_cycle)
+
+    if not cycles:
+        return f"{len(sorted_markers)} biological markers recorded."
+
+    births = sum(1 for c in cycles if c["has_birth"])
+    if births and len(cycles) == 1:
+        c = cycles[0]
+        return (
+            f"A pregnancy cycle spanned turns {c['start_turn']}\u2013{c['end_turn']}, "
+            f"culminating in birth."
+        )
+    elif births:
+        turn_range_start = min(c["start_turn"] for c in cycles)
+        turn_range_end = max(c["end_turn"] for c in cycles)
+        return (
+            f"{births} birth{'s' if births != 1 else ''} occurred across "
+            f"turns {turn_range_start}\u2013{turn_range_end}."
+        )
+    else:
+        total = sum(c["count"] for c in cycles)
+        return f"{total} lifecycle markers recorded across {len(cycles)} period{'s' if len(cycles) != 1 else ''}."
+
+
+def _build_time_passages_summary(time_skips: list[dict]) -> str:
+    """Summarize time passages briefly — only major skips get detail."""
+    if not time_skips:
+        return ""
+
+    if len(time_skips) <= 3:
+        descs = []
+        for skip in time_skips:
+            signals = skip.get("signals", [])
+            if signals:
+                desc = signals[0].split(": ", 1)[-1] if ": " in signals[0] else signals[0]
+                turn = skip.get("source_turn", "")
+                descs.append(f"{desc} ({turn})")
+        return "; ".join(descs) + "." if descs else ""
+    else:
+        return (
+            f"{len(time_skips)} time passages noted, including early transitions at "
+            f"{time_skips[0].get('source_turn', '?')} through "
+            f"{time_skips[-1].get('source_turn', '?')}."
+        )
+
+
 # ---------------------------------------------------------------------------
 # Timeline wiki page generation
 # ---------------------------------------------------------------------------
 
 def generate_timeline_wiki_page(timeline: list[dict],
                                 anchor: dict | None = None,
-                                latest_turn: str | None = None) -> str:
+                                latest_turn: str | None = None,
+                                *,
+                                entities: list[dict] | None = None,
+                                events: list[dict] | None = None,
+                                relationships: dict | None = None) -> str:
     """Generate a full timeline wiki page with narrative summary and data tables.
 
     The page structure:
     1. Anchor date / current position header
-    2. Narrative temporal summary (5-15 sentences)
+    2. Narrative temporal summary (structured with catalog data)
     3. Season progression table (filtered for quality)
     4. Time skip table
     5. Biological markers table
@@ -794,6 +1007,9 @@ def generate_timeline_wiki_page(timeline: list[dict],
         timeline: Full timeline entry list.
         anchor: Anchor event dict. Auto-detected if None.
         latest_turn: Current latest turn ID.
+        entities: Entity dicts from catalogs (optional).
+        events: Event dicts from events.json (optional).
+        relationships: Relationship index dict (optional).
 
     Returns:
         Complete markdown page content.
@@ -826,7 +1042,9 @@ def generate_timeline_wiki_page(timeline: list[dict],
 
     # --- Narrative summary ---
     lines.append("## Narrative Summary\n")
-    narrative = generate_narrative_timeline(timeline, anchor, latest_turn)
+    narrative = generate_narrative_timeline(timeline, anchor, latest_turn,
+                                           entities=entities, events=events,
+                                           relationships=relationships)
     lines.append(narrative)
     lines.append("")
 

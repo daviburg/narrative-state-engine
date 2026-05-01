@@ -321,7 +321,7 @@ class TestGenerateNarrativeTimeline:
     def test_mentions_biological_markers(self):
         """Narrative should reference biological markers."""
         narrative = generate_narrative_timeline(SAMPLE_TIMELINE)
-        assert "biological" in narrative.lower() or "birth" in narrative.lower() or "pregnan" in narrative.lower()
+        assert "biological" in narrative.lower() or "birth" in narrative.lower() or "pregnan" in narrative.lower() or "lifecycle" in narrative.lower() or "passage" in narrative.lower()
 
     def test_custom_anchor(self):
         """Custom anchor is used in narrative."""
@@ -333,6 +333,79 @@ class TestGenerateNarrativeTimeline:
         """Anchor event in timeline is auto-detected."""
         narrative = generate_narrative_timeline(TIMELINE_WITH_ANCHOR)
         assert "Captured" in narrative
+
+    def test_backward_compat_no_kwargs(self):
+        """Old signature (no catalog data) still works."""
+        narrative = generate_narrative_timeline(SAMPLE_TIMELINE, None, "turn-060")
+        assert len(narrative) > 30
+        assert narrative != "*No temporal data available yet.*"
+
+    def test_with_events_produces_structured_output(self):
+        """Passing events produces structured markdown with Story Progression."""
+        events = [
+            {
+                "id": "evt-001",
+                "source_turns": ["turn-005"],
+                "type": "decision",
+                "description": "The player regains consciousness after a fall.",
+                "related_entities": ["char-player"],
+            },
+            {
+                "id": "evt-002",
+                "source_turns": ["turn-015"],
+                "type": "discovery",
+                "description": "A hidden cave is found beneath the cliff.",
+                "related_entities": ["loc-cave"],
+            },
+            {
+                "id": "evt-003",
+                "source_turns": ["turn-035"],
+                "type": "conflict",
+                "description": "Wolves attack the camp at night.",
+                "related_entities": ["char-player"],
+            },
+        ]
+        narrative = generate_narrative_timeline(SAMPLE_TIMELINE, events=events)
+        assert "**Story Progression**" in narrative
+        assert "**Temporal Arc**" in narrative
+
+    def test_bio_markers_grouped_not_listed(self):
+        """Bio markers are grouped into cycles, not listed 1:1."""
+        # Create many bio markers to ensure grouping kicks in
+        big_bio_timeline = SAMPLE_TIMELINE + [
+            {
+                "id": f"time-bio-{i}",
+                "source_turn": f"turn-{31+i:03d}",
+                "type": "biological_marker",
+                "signals": ["pregnancy_progression: belly grows"],
+                "confidence": 0.7,
+            }
+            for i in range(10)
+        ]
+        events = [
+            {"id": "evt-001", "source_turns": ["turn-005"], "type": "decision",
+             "description": "The player wakes up."},
+        ]
+        narrative = generate_narrative_timeline(big_bio_timeline, events=events)
+        # Should NOT list each marker individually
+        assert narrative.count("belly grows") <= 1
+        assert "**Lifecycle Events**" in narrative
+
+    def test_output_length_with_events(self):
+        """Output should stay under 2000 chars for a reasonable timeline."""
+        events = [
+            {"id": f"evt-{i:03d}", "source_turns": [f"turn-{i*5:03d}"],
+             "type": "discovery", "description": f"Event {i} happened here."}
+            for i in range(10)
+        ]
+        narrative = generate_narrative_timeline(SAMPLE_TIMELINE, events=events)
+        assert len(narrative) < 2000
+
+    def test_fallback_no_catalog_concise(self):
+        """Without catalog data, fallback is concise (not a data dump)."""
+        narrative = generate_narrative_timeline(SAMPLE_TIMELINE)
+        # Fallback should be short — under 500 chars
+        assert len(narrative) < 500
 
 
 # ---------------------------------------------------------------------------

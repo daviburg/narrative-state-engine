@@ -821,11 +821,15 @@ python tools/generate_wiki_pages.py --framework framework-local/ --type timeline
 
 The page contains:
 1. **Current Position** — infobox with estimated day, season, anchor event, and confidence
-2. **Narrative Summary** — 5-15 sentence natural-language description of the temporal arc
+2. **Narrative Summary** — structured story progression using catalog events (or concise fallback when no catalog data available)
 3. **Season Progression** — table of confirmed season transitions (flicker-filtered)
 4. **Time Passages** — table of detected time skips
 5. **Biological & Lifecycle Markers** — pregnancies, births, and other lifecycle events
 6. **Other Milestones** — construction and anchor events
+
+When `events.json` is available in the catalog directory, the narrative summary uses event
+descriptions to produce a richer story progression grouped by temporal period. Without events,
+a concise 3-sentence fallback is produced (elapsed time, season arc, time passage count).
 
 ### Season Flicker Filtering
 

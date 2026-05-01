@@ -583,11 +583,13 @@ def _format_turn_range(start: str, end: str) -> str:
     return f"Turns {s}\u2013{e}"
 
 
-def generate_timeline_page(timeline: list[dict]) -> str:
+def generate_timeline_page(timeline: list[dict],
+                           catalog_dir: str | None = None) -> str:
     """Generate a summarized timeline wiki page from timeline entries.
 
     Groups season transitions into ranges and lists time skips and
-    biological markers chronologically.
+    biological markers chronologically.  When catalog_dir is provided,
+    loads events.json for richer narrative summaries.
     """
     lines = []
     lines.append("# Timeline Overview\n")
@@ -624,8 +626,22 @@ def generate_timeline_page(timeline: list[dict]) -> str:
             filter_season_flicker,
             detect_anchor_event,
         )
+        # Load events from catalog if available
+        events_data = None
+        if catalog_dir:
+            events_path = os.path.join(catalog_dir, "events.json")
+            if os.path.isfile(events_path):
+                try:
+                    with open(events_path, "r", encoding="utf-8-sig") as ef:
+                        events_data = json.load(ef)
+                    if not isinstance(events_data, list):
+                        events_data = None
+                except (json.JSONDecodeError, OSError):
+                    events_data = None
+
         anchor = detect_anchor_event(timeline)
-        narrative = generate_narrative_timeline(timeline, anchor, last_turn)
+        narrative = generate_narrative_timeline(timeline, anchor, last_turn,
+                                               events=events_data)
         if narrative and not narrative.startswith("*No temporal"):
             lines.append("## Narrative Summary\n")
             lines.append(narrative)
@@ -844,7 +860,7 @@ def generate_wiki_pages(catalog_dir: str, entity_types: list[str] | None = None,
                 with open(timeline_path, "r", encoding="utf-8-sig") as f:
                     timeline_data = json.load(f)
                 if isinstance(timeline_data, list):
-                    md_content = generate_timeline_page(timeline_data)
+                    md_content = generate_timeline_page(timeline_data, catalog_dir)
                     md_path = os.path.join(catalog_dir, "timeline.md")
                     with open(md_path, "w", encoding="utf-8") as f:
                         f.write(md_content)
