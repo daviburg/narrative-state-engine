@@ -38,6 +38,7 @@ Divide session processing across multiple specialized agents, each with a focuse
 | Prompt agent | Generate candidate player prompts optimized per mode | — |
 | DM profile agent | Infer and refine DM behavior from accumulated evidence | **Implemented** (#260) |
 | Timeline agent | Extract temporal signals and estimate in-game time progression | **Implemented** (#137) |
+| Story summary agent | Generate narrative arc summary from extracted entities, events, and plot threads | **Implemented** (#262) |
 | Planning layer | Synthesize catalog data into actionable derived planning files | **Implemented** (#259) |
 
 The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a five-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.

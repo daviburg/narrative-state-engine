@@ -808,6 +808,28 @@ When timeline data is available, wiki pages include:
 
 ---
 
+## Story Summary
+
+After extraction, generate a high-level narrative arc summary:
+
+```bash
+# Generate story summary using configured LLM
+python tools/generate_story_summary.py --framework framework/
+
+# Generate data-only summary (no LLM required)
+python tools/generate_story_summary.py --framework framework/ --no-llm
+```
+
+The summary is written to `framework/story/summary.md` and includes:
+- **Arc Overview** — narrative summary of the campaign's major arcs, character journey, and current state
+- **Open Questions** — unresolved questions from active and dormant plot threads
+
+In LLM mode, the tool assembles a structured prompt from events, plot threads, entity catalogs, and timeline data, then calls the configured model. If the LLM call fails, it automatically falls back to data-only mode.
+
+The data-only mode produces a structured markdown overview without LLM calls, covering campaign scope, player character status, plot thread status (active/dormant/resolved), and key events.
+
+---
+
 ## Validating JSON
 
 ```bash
