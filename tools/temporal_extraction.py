@@ -706,7 +706,7 @@ def _build_fallback_narrative(summary: dict, anchor: dict,
     if season_transitions:
         first_label = format_season_label(season_transitions[0].get("season", ""))
         last_label = format_season_label(season_transitions[-1].get("season", ""))
-        if season_transitions[0] != season_transitions[-1]:
+        if first_label != last_label:
             sentences.append(
                 f"The story began in {first_label} and has progressed to {last_label}."
             )
@@ -804,8 +804,19 @@ def _format_elapsed(est_day: int) -> str:
         return f"approximately {years} year{'s' if years != 1 else ''}"
 
 
-# Priority event types for story progression
-_PRIORITY_EVENT_TYPES = {"discovery", "conflict", "decision", "milestone"}
+# Priority event types for story progression.
+# These values match the valid `type` enums in schemas/event.schema.json.
+_PRIORITY_EVENT_TYPES = {
+    "decision",
+    "discovery",
+    "encounter",
+    "capture",
+    "birth",
+    "death",
+    "arrival",
+    "departure",
+    "construction",
+}
 
 
 def _build_story_progression(events: list[dict],
@@ -823,8 +834,15 @@ def _build_story_progression(events: list[dict],
         turns = evt.get("source_turns", [])
         if not turns:
             continue
-        turn_num = _parse_turn_number(turns[0]) if turns else None
-        if turn_num is None:
+        parsed_turns = []
+        for turn in turns:
+            parsed = _parse_turn_number(turn)
+            if parsed is not None:
+                parsed_turns.append(parsed)
+        if not parsed_turns:
+            continue
+        turn_num = min(parsed_turns)
+        if turn_num < 1:
             continue
         bucket = (turn_num - 1) // 25  # 0-indexed bucket
         periods.setdefault(bucket, []).append(evt)

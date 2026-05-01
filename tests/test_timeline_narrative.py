@@ -319,9 +319,20 @@ class TestGenerateNarrativeTimeline:
         assert "winter" in narrative.lower() or "spring" in narrative.lower()
 
     def test_mentions_biological_markers(self):
-        """Narrative should reference biological markers."""
+        """Fallback narrative should mention time passages (bio markers are in a cycle)."""
         narrative = generate_narrative_timeline(SAMPLE_TIMELINE)
-        assert "biological" in narrative.lower() or "birth" in narrative.lower() or "pregnan" in narrative.lower() or "lifecycle" in narrative.lower() or "passage" in narrative.lower()
+        # Fallback path mentions passages or lifecycle-related terms
+        assert "passage" in narrative.lower() or "lifecycle" in narrative.lower() or "birth" in narrative.lower() or "pregnan" in narrative.lower()
+
+    def test_rich_narrative_mentions_lifecycle(self):
+        """Rich narrative with events should reference lifecycle events."""
+        events = [
+            {"id": "evt-001", "source_turns": ["turn-005"], "type": "decision",
+             "description": "The player wakes up."},
+        ]
+        narrative = generate_narrative_timeline(SAMPLE_TIMELINE, events=events)
+        assert "**Lifecycle Events**" in narrative
+        assert "pregnan" in narrative.lower() or "birth" in narrative.lower()
 
     def test_custom_anchor(self):
         """Custom anchor is used in narrative."""
@@ -360,7 +371,7 @@ class TestGenerateNarrativeTimeline:
             {
                 "id": "evt-003",
                 "source_turns": ["turn-035"],
-                "type": "conflict",
+                "type": "encounter",
                 "description": "Wolves attack the camp at night.",
                 "related_entities": ["char-player"],
             },
@@ -394,7 +405,7 @@ class TestGenerateNarrativeTimeline:
     def test_output_length_with_events(self):
         """Output should stay under 2000 chars for a reasonable timeline."""
         events = [
-            {"id": f"evt-{i:03d}", "source_turns": [f"turn-{i*5:03d}"],
+            {"id": f"evt-{i:03d}", "source_turns": [f"turn-{(i + 1) * 5:03d}"],
              "type": "discovery", "description": f"Event {i} happened here."}
             for i in range(10)
         ]

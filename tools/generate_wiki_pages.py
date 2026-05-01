@@ -623,7 +623,6 @@ def generate_timeline_page(timeline: list[dict],
     try:
         from temporal_extraction import (
             generate_narrative_timeline,
-            filter_season_flicker,
             detect_anchor_event,
         )
         # Load events from catalog if available
