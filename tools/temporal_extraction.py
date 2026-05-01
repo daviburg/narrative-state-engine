@@ -457,3 +457,392 @@ def get_current_timeline_summary(timeline: list[dict],
         "turn_span": max_turn_num - anchor_num,
         "confidence": day_info["confidence"],
     }
+
+
+# ---------------------------------------------------------------------------
+# Season flicker filtering
+# ---------------------------------------------------------------------------
+
+def _base_season(fine_season: str) -> str:
+    """Extract the base season name from a fine-grained label."""
+    for base in ("winter", "spring", "summer", "autumn"):
+        if base in fine_season:
+            return base
+    return fine_season
+
+
+def filter_season_flicker(timeline: list[dict],
+                          min_confidence: float = 0.6,
+                          min_support: int = 2) -> list[dict]:
+    """Filter out season transition noise (flicker) from a timeline.
+
+    A season transition is kept only if:
+    - Its confidence >= min_confidence, OR
+    - The same base season appears in at least min_support entries
+      across the entire timeline (i.e., other entries corroborate it).
+
+    Non-season entries are always preserved.
+
+    Args:
+        timeline: Full timeline entry list.
+        min_confidence: Minimum confidence to auto-accept a season signal.
+        min_support: Minimum total occurrences of the same base season
+            in the timeline required to accept low-confidence transitions.
+
+    Returns:
+        Filtered timeline list (new list; original is not modified).
+    """
+    # Separate season transitions from other entries
+    non_season = [e for e in timeline if e.get("type") != "season_transition"]
+    season_entries = [e for e in timeline if e.get("type") == "season_transition"]
+
+    if not season_entries:
+        return list(timeline)
+
+    # Sort season entries by turn number
+    season_entries.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+
+    # Mark which entries to keep
+    kept: list[dict] = []
+
+    # Pre-compute base season counts for support checking
+    base_counts: dict[str, int] = {}
+    for entry in season_entries:
+        base = _base_season(entry.get("season", ""))
+        base_counts[base] = base_counts.get(base, 0) + 1
+
+    for entry in season_entries:
+        conf = entry.get("confidence", 0.0)
+        if conf >= min_confidence:
+            kept.append(entry)
+            continue
+
+        # Check if this base season has enough total support in the timeline
+        base = _base_season(entry.get("season", ""))
+        if base_counts.get(base, 0) >= min_support:
+            kept.append(entry)
+
+    # Combine and sort by turn number
+    result = non_season + kept
+    result.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Anchor event detection
+# ---------------------------------------------------------------------------
+
+def detect_anchor_event(timeline: list[dict]) -> dict:
+    """Detect the most significant anchor event from timeline data.
+
+    Chooses the first anchor_event entry if present, otherwise falls back
+    to the first time_skip or biological_marker. Returns DEFAULT_ANCHOR
+    if no significant events are found.
+
+    Returns an anchor dict with 'turn', 'label', 'day' keys.
+    """
+    if not timeline:
+        return DEFAULT_ANCHOR
+
+    # Prefer explicit anchor_event entries
+    anchors = [e for e in timeline if e.get("type") == "anchor_event"]
+    if anchors:
+        anchors.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+        first = anchors[0]
+        return {
+            "turn": first["source_turn"],
+            "label": first.get("description", "Anchor event"),
+            "day": first.get("estimated_day", 0),
+        }
+
+    # Fall back to first significant event (time_skip or biological_marker)
+    significant = [e for e in timeline
+                   if e.get("type") in ("time_skip", "biological_marker")]
+    if significant:
+        significant.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+        first = significant[0]
+        return {
+            "turn": first["source_turn"],
+            "label": first.get("description") or first.get("signals", ["Event"])[0],
+            "day": first.get("estimated_day", 0),
+        }
+
+    return DEFAULT_ANCHOR
+
+
+# ---------------------------------------------------------------------------
+# Narrative timeline summary
+# ---------------------------------------------------------------------------
+
+def generate_narrative_timeline(timeline: list[dict],
+                                anchor: dict | None = None,
+                                latest_turn: str | None = None) -> str:
+    """Generate a natural-language narrative summary of the temporal arc.
+
+    Produces a 5-15 sentence prose description highlighting:
+    - Major time skips and what happened between them
+    - Season changes (filtered for flicker)
+    - Biological/lifecycle events as temporal anchors
+
+    This is a template-based generator (no LLM required).
+
+    Args:
+        timeline: Full timeline entry list.
+        anchor: Anchor event dict. Auto-detected if None.
+        latest_turn: Current latest turn ID.
+
+    Returns:
+        Narrative summary as a markdown string.
+    """
+    if not timeline:
+        return "*No temporal data available yet.*"
+
+    # Filter flicker
+    filtered = filter_season_flicker(timeline)
+
+    if anchor is None:
+        anchor = detect_anchor_event(filtered)
+
+    # Get current state
+    summary = get_current_timeline_summary(filtered, anchor, latest_turn)
+
+    # Group events by type for narrative construction
+    season_transitions = []
+    time_skips = []
+    bio_markers = []
+    other_events = []
+
+    for entry in filtered:
+        etype = entry.get("type", "")
+        if etype == "season_transition":
+            season_transitions.append(entry)
+        elif etype == "time_skip":
+            time_skips.append(entry)
+        elif etype == "biological_marker":
+            bio_markers.append(entry)
+        elif etype in ("construction_milestone", "anchor_event"):
+            other_events.append(entry)
+
+    # Build narrative sentences
+    sentences = []
+
+    # Opening — anchor context
+    anchor_label = anchor.get("label", "the beginning")
+    est_day = summary.get("estimated_day", 0)
+    if est_day > 0:
+        if est_day < 14:
+            time_phrase = f"approximately {est_day} days"
+        elif est_day < 60:
+            weeks = round(est_day / 7)
+            time_phrase = f"approximately {weeks} week{'s' if weeks != 1 else ''}"
+        elif est_day < 365:
+            months = round(est_day / 30)
+            time_phrase = f"approximately {months} month{'s' if months != 1 else ''}"
+        else:
+            years = round(est_day / 365, 1)
+            time_phrase = f"approximately {years} year{'s' if years != 1 else ''}"
+        sentences.append(
+            f"As of the current turn, {time_phrase} have elapsed since {anchor_label}."
+        )
+
+    # Season arc
+    if season_transitions:
+        first_season = season_transitions[0]
+        last_season = season_transitions[-1]
+        first_label = format_season_label(first_season.get("season", ""))
+        last_label = format_season_label(last_season.get("season", ""))
+        if first_season != last_season:
+            sentences.append(
+                f"The story began in {first_label} and has progressed to {last_label}."
+            )
+        else:
+            sentences.append(f"The story has remained in {first_label} throughout.")
+
+        # Report distinct season transitions (deduplicated by base season)
+        seen_bases = []
+        transitions_narrative = []
+        for entry in season_transitions:
+            base = _base_season(entry.get("season", ""))
+            if base not in seen_bases:
+                seen_bases.append(base)
+                turn = entry.get("source_turn", "")
+                label = format_season_label(entry.get("season", ""))
+                transitions_narrative.append(f"{label} (at {turn})")
+        if len(transitions_narrative) > 1:
+            sentences.append(
+                "Season progression: " + " → ".join(transitions_narrative) + "."
+            )
+
+    # Time skips
+    if time_skips:
+        skip_descriptions = []
+        for skip in time_skips:
+            signals = skip.get("signals", [])
+            turn = skip.get("source_turn", "")
+            if signals:
+                desc = signals[0].split(": ", 1)[-1] if ": " in signals[0] else signals[0]
+                skip_descriptions.append(f"{desc} ({turn})")
+        if skip_descriptions:
+            if len(skip_descriptions) <= 3:
+                sentences.append(
+                    "Notable time passages: " + "; ".join(skip_descriptions) + "."
+                )
+            else:
+                sentences.append(
+                    f"There have been {len(skip_descriptions)} notable time passages, "
+                    f"including: " + "; ".join(skip_descriptions[:3]) + "."
+                )
+
+    # Biological markers
+    if bio_markers:
+        bio_descriptions = []
+        for marker in bio_markers:
+            signals = marker.get("signals", [])
+            turn = marker.get("source_turn", "")
+            if signals:
+                desc = signals[0].split(": ", 1)[-1] if ": " in signals[0] else signals[0]
+                bio_descriptions.append(f"{desc} ({turn})")
+        if bio_descriptions:
+            sentences.append(
+                "Biological/lifecycle markers: " + "; ".join(bio_descriptions) + "."
+            )
+
+    # Other milestones
+    if other_events:
+        for evt in other_events[:3]:
+            desc = evt.get("description", "")
+            turn = evt.get("source_turn", "")
+            if desc:
+                sentences.append(f"{desc} ({turn}).")
+
+    # Confidence note
+    conf = summary.get("confidence", 0.0)
+    if conf < 0.4:
+        sentences.append(
+            "*Note: Temporal estimates have low confidence due to limited anchor data.*"
+        )
+
+    return " ".join(sentences) if sentences else "*No temporal narrative available.*"
+
+
+# ---------------------------------------------------------------------------
+# Timeline wiki page generation
+# ---------------------------------------------------------------------------
+
+def generate_timeline_wiki_page(timeline: list[dict],
+                                anchor: dict | None = None,
+                                latest_turn: str | None = None) -> str:
+    """Generate a full timeline wiki page with narrative summary and data tables.
+
+    The page structure:
+    1. Anchor date / current position header
+    2. Narrative temporal summary (5-15 sentences)
+    3. Season progression table (filtered for quality)
+    4. Time skip table
+    5. Biological markers table
+
+    Args:
+        timeline: Full timeline entry list.
+        anchor: Anchor event dict. Auto-detected if None.
+        latest_turn: Current latest turn ID.
+
+    Returns:
+        Complete markdown page content.
+    """
+    if anchor is None:
+        anchor = detect_anchor_event(timeline)
+
+    filtered = filter_season_flicker(timeline)
+    summary = get_current_timeline_summary(filtered, anchor, latest_turn)
+
+    lines = []
+    lines.append("# Timeline\n")
+
+    # --- Anchor / current position ---
+    est_day = summary.get("estimated_day", 0)
+    season_label = summary.get("season_label") or "Unknown"
+    anchor_label = anchor.get("label") or "Day 0"
+    anchor_turn = anchor.get("turn", "turn-001")
+
+    lines.append("## Current Position\n")
+    lines.append(f"| | |")
+    lines.append(f"|---|---|")
+    lines.append(f"| **Current Season** | {season_label} |")
+    lines.append(f"| **Estimated Day** | Day {est_day} |")
+    lines.append(f"| **Anchor Event** | {anchor_label} ({anchor_turn}) |")
+    lines.append(f"| **Turn Span** | {summary.get('turn_span', 0)} turns |")
+    conf = summary.get("confidence", 0.0)
+    lines.append(f"| **Confidence** | {conf:.0%} |")
+    lines.append("")
+
+    # --- Narrative summary ---
+    lines.append("## Narrative Summary\n")
+    narrative = generate_narrative_timeline(timeline, anchor, latest_turn)
+    lines.append(narrative)
+    lines.append("")
+
+    # --- Season progression table ---
+    season_entries = [e for e in filtered if e.get("type") == "season_transition"]
+    if season_entries:
+        season_entries.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+        lines.append("## Season Progression\n")
+        lines.append("| Turn | Season | Confidence | Signals |")
+        lines.append("|---|---|---|---|")
+        for entry in season_entries:
+            turn = entry.get("source_turn", "")
+            season = format_season_label(entry.get("season", ""))
+            conf = entry.get("confidence", 0.0)
+            signals = ", ".join(entry.get("signals", []))
+            lines.append(f"| {turn} | {season} | {conf:.0%} | {signals} |")
+        lines.append("")
+
+    # --- Time skips table ---
+    skip_entries = [e for e in filtered if e.get("type") == "time_skip"]
+    if skip_entries:
+        skip_entries.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+        lines.append("## Time Passages\n")
+        lines.append("| Turn | Description | Confidence |")
+        lines.append("|---|---|---|")
+        for entry in skip_entries:
+            turn = entry.get("source_turn", "")
+            signals = entry.get("signals", [])
+            desc = signals[0] if signals else entry.get("raw_text", "")
+            conf = entry.get("confidence", 0.0)
+            lines.append(f"| {turn} | {desc} | {conf:.0%} |")
+        lines.append("")
+
+    # --- Biological markers table ---
+    bio_entries = [e for e in filtered if e.get("type") == "biological_marker"]
+    if bio_entries:
+        bio_entries.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+        lines.append("## Biological & Lifecycle Markers\n")
+        lines.append("| Turn | Marker | Confidence |")
+        lines.append("|---|---|---|")
+        for entry in bio_entries:
+            turn = entry.get("source_turn", "")
+            signals = entry.get("signals", [])
+            desc = signals[0] if signals else entry.get("raw_text", "")
+            conf = entry.get("confidence", 0.0)
+            lines.append(f"| {turn} | {desc} | {conf:.0%} |")
+        lines.append("")
+
+    # --- Other events table ---
+    other_entries = [e for e in filtered
+                     if e.get("type") in ("construction_milestone", "anchor_event")]
+    if other_entries:
+        other_entries.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
+        lines.append("## Other Milestones\n")
+        lines.append("| Turn | Type | Description | Confidence |")
+        lines.append("|---|---|---|---|")
+        for entry in other_entries:
+            turn = entry.get("source_turn", "")
+            etype = entry.get("type", "").replace("_", " ").title()
+            desc = entry.get("description", "")
+            conf = entry.get("confidence", 0.0)
+            lines.append(f"| {turn} | {etype} | {desc} | {conf:.0%} |")
+        lines.append("")
+
+    # Footer
+    lines.append("---")
+    lines.append("*Generated from timeline catalog data — do not edit manually.*")
+    return "\n".join(lines) + "\n"

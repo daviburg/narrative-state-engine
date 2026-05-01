@@ -617,6 +617,22 @@ def generate_timeline_page(timeline: list[dict]) -> str:
                  f"{_format_turn_range(first_turn, last_turn)}")
     lines.append(f"> ({breakdown})\n")
 
+    # --- Narrative Summary ---
+    try:
+        from temporal_extraction import (
+            generate_narrative_timeline,
+            filter_season_flicker,
+            detect_anchor_event,
+        )
+        anchor = detect_anchor_event(timeline)
+        narrative = generate_narrative_timeline(timeline, anchor, last_turn)
+        if narrative and not narrative.startswith("*No temporal"):
+            lines.append("## Narrative Summary\n")
+            lines.append(narrative)
+            lines.append("")
+    except ImportError:
+        pass  # temporal_extraction unavailable; skip narrative
+
     # --- Season Progression ---
     season_ranges = _group_season_ranges(timeline)
     if season_ranges:
