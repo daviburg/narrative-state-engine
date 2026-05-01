@@ -281,7 +281,8 @@ def test_generate_wiki_pages_creates_timeline_md():
 
         md_path = os.path.join(tmpdir, "timeline.md")
         assert os.path.isfile(md_path)
-        content = open(md_path).read()
+        with open(md_path) as f:
+            content = f.read()
         assert "Mid Winter" in content
 
 
