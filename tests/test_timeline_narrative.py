@@ -16,7 +16,7 @@ from temporal_extraction import (
     _base_season,
     DEFAULT_ANCHOR,
 )
-from generate_wiki_pages import generate_timeline_page
+from generate_wiki_pages import generate_timeline_page, generate_wiki_pages
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +406,8 @@ class TestGenerateTimelinePageIntegration:
 
     def setup_method(self):
         self.tmpdir = tempfile.mkdtemp()
+        # Create minimal catalog structure expected by generate_wiki_pages
+        os.makedirs(os.path.join(self.tmpdir, "characters"))
 
     def teardown_method(self):
         shutil.rmtree(self.tmpdir)
@@ -416,8 +418,9 @@ class TestGenerateTimelinePageIntegration:
         with open(timeline_path, "w", encoding="utf-8") as f:
             json.dump(SAMPLE_TIMELINE, f)
 
-        count = generate_timeline_page(self.tmpdir)
-        assert count == 1
+        stats = generate_wiki_pages(self.tmpdir)
+        assert "timeline" in stats
+        assert stats["timeline"] == 1
 
         md_path = os.path.join(self.tmpdir, "timeline.md")
         assert os.path.isfile(md_path)
@@ -428,15 +431,16 @@ class TestGenerateTimelinePageIntegration:
         assert "## Narrative Summary" in content
 
     def test_no_timeline_data(self):
-        """Should return 0 when no timeline.json exists."""
-        count = generate_timeline_page(self.tmpdir)
-        assert count == 0
+        """Timeline not generated when no timeline.json exists."""
+        stats = generate_wiki_pages(self.tmpdir)
+        assert "timeline" not in stats
 
     def test_empty_timeline_json(self):
-        """Should return 0 when timeline.json contains empty array."""
+        """Empty timeline array produces placeholder page."""
         timeline_path = os.path.join(self.tmpdir, "timeline.json")
         with open(timeline_path, "w", encoding="utf-8") as f:
             json.dump([], f)
 
-        count = generate_timeline_page(self.tmpdir)
-        assert count == 0
+        # generate_timeline_page with empty list still produces a page
+        md = generate_timeline_page([])
+        assert "No temporal data extracted yet" in md

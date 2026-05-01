@@ -191,7 +191,7 @@ Estimated timeline of in-game events, anchored to a configurable reference point
 - Feeds into wiki page generation for character ages and event dating (estimated day column in event timelines, season labels in infoboxes)
 - **Season flicker filtering** (#275): Low-confidence season signals are filtered to prevent noise from regex false positives (e.g., "summer" keywords appearing in a winter-dominant story). A signal is kept only if its confidence ≥ threshold (default 0.6) OR the same base season appears ≥ N times (default 2) in the timeline. Non-season entries are never filtered.
 - **Anchor event detection** (#275): The system auto-detects the most significant temporal anchor from timeline data — preferring explicit `anchor_event` type entries, then falling back to the first `time_skip` or `biological_marker`.
-- **Narrative timeline wiki page** (#275): `generate_wiki_pages.py --timeline` (or default full generation) produces `timeline.md` with: (1) a Current Position infobox showing estimated day, season, anchor, and confidence; (2) a 5-15 sentence natural-language narration of the temporal arc; (3) reference tables for season progression, time passages, biological markers, and other milestones.
+- **Narrative timeline wiki page** (#275): `generate_wiki_pages.py --type timeline` (or default full generation) produces `timeline.md` with: (1) a Current Position infobox showing estimated day, season, anchor, and confidence; (2) a 5-15 sentence natural-language narration of the temporal arc; (3) reference tables for season progression, time passages, biological markers, and other milestones.
 
 ---
 

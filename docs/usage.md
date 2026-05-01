@@ -816,7 +816,7 @@ The timeline wiki page is generated automatically alongside entity pages:
 python tools/generate_wiki_pages.py --framework framework-local/
 
 # Generate only the timeline page
-python tools/generate_wiki_pages.py --framework framework-local/ --timeline
+python tools/generate_wiki_pages.py --framework framework-local/ --type timeline
 ```
 
 The page contains:
