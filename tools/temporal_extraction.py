@@ -15,6 +15,9 @@ import json
 import os
 import re
 
+# Maximum length for captured signal text to avoid storing full paragraphs
+MAX_SIGNAL_TEXT_LENGTH = 120
+
 # ---------------------------------------------------------------------------
 # Season keyword patterns
 # ---------------------------------------------------------------------------
@@ -79,9 +82,9 @@ TIME_OF_DAY_PATTERNS: list[tuple[str, str]] = [
 # Biological markers
 BIOLOGICAL_PATTERNS: list[tuple[str, str]] = [
     (r"\bpregnan\w*\b", "pregnancy"),
-    (r"\bbelly.*swell\w*\b", "pregnancy_progression"),
+    (r"\bbelly.*?swell\w*\b", "pregnancy_progression"),
     (r"\bmorning sickness\b", "pregnancy_early"),
-    (r"\blife.*taken root\b", "pregnancy_discovery"),
+    (r"\blife.*?taken root\b", "pregnancy_discovery"),
     (r"\blabor\b", "labor"),
     (r"\bbirth\b", "birth"),
     (r"\bborn\b", "birth"),
@@ -103,19 +106,46 @@ TIME_SKIP_PATTERNS: list[tuple[str, str]] = [
 # Core extraction
 # ---------------------------------------------------------------------------
 
+
+def _cap_signal_text(text: str) -> str:
+    """Truncate signal text to MAX_SIGNAL_TEXT_LENGTH with ellipsis if needed."""
+    if len(text) <= MAX_SIGNAL_TEXT_LENGTH:
+        return text
+    return text[:MAX_SIGNAL_TEXT_LENGTH - 3] + "..."
+
+
 def _detect_base_season(text: str) -> str | None:
-    """Detect the dominant base season from text using keyword counts."""
+    """Detect the dominant base season from text using keyword counts.
+
+    Requires at least 2 distinct keyword matches for the winning season,
+    and a margin of at least 2 over the runner-up to avoid false positives
+    from ambiguous text.
+    """
     text_lower = text.lower()
     scores: dict[str, int] = {}
+    distinct_matches: dict[str, int] = {}
     for season, patterns in SEASON_PATTERNS.items():
         count = 0
+        distinct = 0
         for pattern in patterns:
-            count += len(re.findall(pattern, text_lower))
+            hits = len(re.findall(pattern, text_lower))
+            if hits > 0:
+                distinct += 1
+                count += hits
         if count > 0:
             scores[season] = count
+            distinct_matches[season] = distinct
     if not scores:
         return None
-    return max(scores, key=scores.get)
+    best = max(scores, key=scores.get)
+    # Require at least 2 distinct keyword patterns matched
+    if distinct_matches.get(best, 0) < 2:
+        return None
+    # Require margin of 2 over runner-up
+    runner_up = max((v for k, v in scores.items() if k != best), default=0)
+    if scores[best] - runner_up < 2:
+        return None
+    return best
 
 
 def _detect_fine_season(text: str) -> str | None:
@@ -134,7 +164,7 @@ def _detect_biological_markers(text: str) -> list[tuple[str, str]]:
     for pattern, marker_type in BIOLOGICAL_PATTERNS:
         match = re.search(pattern, text_lower)
         if match:
-            found.append((marker_type, match.group()))
+            found.append((marker_type, _cap_signal_text(match.group())))
     return found
 
 
@@ -145,7 +175,7 @@ def _detect_time_skips(text: str) -> list[tuple[str, str]]:
     for pattern, skip_type in TIME_SKIP_PATTERNS:
         match = re.search(pattern, text_lower)
         if match:
-            found.append((skip_type, match.group()))
+            found.append((skip_type, _cap_signal_text(match.group())))
     return found
 
 
@@ -473,21 +503,30 @@ def _base_season(fine_season: str) -> str:
 
 def filter_season_flicker(timeline: list[dict],
                           min_confidence: float = 0.6,
-                          min_support: int = 2) -> list[dict]:
+                          min_support: int = 1,
+                          window_size: int = 5) -> list[dict]:
     """Filter out season transition noise (flicker) from a timeline.
 
     A season transition is kept only if:
     - Its confidence >= min_confidence, OR
-    - The same base season appears in at least min_support entries
-      across the entire timeline (i.e., other entries corroborate it).
+    - Within a sliding window of up to ``window_size`` entries on each side
+      (total window up to ``2 * window_size`` neighbors, excluding the
+      current entry), at least ``min_support`` neighbors share the same
+      base season — confirming it's not an isolated blip.
+
+    A single outlier season sandwiched between many entries of a different
+    season is discarded even if its base season has high total count.
 
     Non-season entries are always preserved.
 
     Args:
         timeline: Full timeline entry list.
         min_confidence: Minimum confidence to auto-accept a season signal.
-        min_support: Minimum total occurrences of the same base season
-            in the timeline required to accept low-confidence transitions.
+        min_support: Minimum number of neighbors (excluding the current
+            entry) within the window that share the same base season.
+        window_size: Per-side radius — how many season entries to inspect
+            on each side of the current entry (total window is up to
+            ``2 * window_size`` neighbors).
 
     Returns:
         Filtered timeline list (new list; original is not modified).
@@ -505,21 +544,21 @@ def filter_season_flicker(timeline: list[dict],
     # Mark which entries to keep
     kept: list[dict] = []
 
-    # Pre-compute base season counts for support checking
-    base_counts: dict[str, int] = {}
-    for entry in season_entries:
-        base = _base_season(entry.get("season", ""))
-        base_counts[base] = base_counts.get(base, 0) + 1
-
-    for entry in season_entries:
+    for i, entry in enumerate(season_entries):
         conf = entry.get("confidence", 0.0)
         if conf >= min_confidence:
             kept.append(entry)
             continue
 
-        # Check if this base season has enough total support in the timeline
+        # Sliding window: check neighbors for same base season
         base = _base_season(entry.get("season", ""))
-        if base_counts.get(base, 0) >= min_support:
+        window_start = max(0, i - window_size)
+        window_end = min(len(season_entries), i + window_size + 1)
+        neighbor_support = sum(
+            1 for j in range(window_start, window_end)
+            if j != i and _base_season(season_entries[j].get("season", "")) == base
+        )
+        if neighbor_support >= min_support:
             kept.append(entry)
 
     # Combine and sort by turn number
@@ -561,9 +600,19 @@ def detect_anchor_event(timeline: list[dict]) -> dict:
     if significant:
         significant.sort(key=lambda e: _parse_turn_number(e.get("source_turn")) or 0)
         first = significant[0]
+        # Build a human-readable label from the entry
+        label = first.get("description")
+        if not label:
+            raw = first.get("raw_text", "")
+            if raw and len(raw) <= 80:
+                label = raw.strip().capitalize()
+            else:
+                # Derive from type without duplicating the signal prefix
+                etype = first.get("type", "event")
+                label = f"First {etype.replace('_', ' ')}"
         return {
             "turn": first["source_turn"],
-            "label": first.get("description") or first.get("signals", ["Event"])[0],
+            "label": label,
             "day": first.get("estimated_day", 0),
         }
 
