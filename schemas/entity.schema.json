@@ -93,7 +93,7 @@
           "type": {
             "type": "string",
             "description": "Category of relationship.",
-            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"]
+            "enum": ["kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "spatial", "other"]
           },
           "direction": {
             "type": "string",

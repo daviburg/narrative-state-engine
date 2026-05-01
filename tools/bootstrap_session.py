@@ -841,6 +841,45 @@ def main() -> None:
     except Exception as exc:
         print(f"WARNING: Semantic extraction failed: {exc}", file=sys.stderr)
 
+    # DM profile analysis — extract behavioral patterns from DM turns (#260)
+    try:
+        from dm_profile_analyzer import analyze_batch as analyze_dm_batch
+
+        dm_turns = [t for t in turn_dicts if t.get("speaker") == "dm"]
+        if dm_turns:
+            llm_overrides = {}
+            if args.model:
+                llm_overrides["model"] = args.model
+            if args.base_url:
+                llm_overrides["base_url"] = args.base_url
+
+            # bootstrap_session's --max-turns is an absolute turn number
+            # when combined with --start-turn, but dm_profile_analyzer's
+            # max_turns is a count of DM turns.  Scope to the actual
+            # DM turns in the extracted batch so analysis stays aligned.
+            dm_analysis_max_turns = len(dm_turns)
+
+            print("\nRunning DM profile analysis:")
+            analyze_dm_batch(
+                session_dir=session_dir,
+                framework_dir=args.framework,
+                start_turn=args.start_turn or 0,
+                max_turns=dm_analysis_max_turns,
+                dry_run=args.dry_run,
+                overrides=llm_overrides or None,
+            )
+    except ModuleNotFoundError as exc:
+        if exc.name == "dm_profile_analyzer":
+            print(
+                "WARNING: DM profile analysis skipped because "
+                "'dm_profile_analyzer' is not available.",
+                file=sys.stderr,
+            )
+        else:
+            raise
+    except Exception as exc:
+        print(f"WARNING: DM profile analysis failed: {exc}", file=sys.stderr)
+
     print()
     if args.dry_run:
         print("Dry run complete. Re-run without --dry-run to write files.")

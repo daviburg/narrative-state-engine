@@ -2,11 +2,14 @@
 """
 semantic_extraction.py — Core orchestrator for LLM-based semantic extraction.
 
-Processes RPG session transcript turns through four agent roles:
+Processes RPG session transcript turns through four core agent roles, with an
+optional fifth temporal-extraction phase when timeline state is provided:
 1. Entity Discovery — identify entities mentioned in a turn
 2. Entity Detail Extractor — extract/update attributes per entity
 3. Relationship Mapper — identify cross-entity relationships
 4. Event Extractor — identify narrative events
+5. Temporal Signal Extractor (optional) — extract season, time-skip, and
+   biological markers when timeline tracking is enabled (#263)
 
 Works in both batch (bootstrap) and incremental (ingest) modes.
 """
@@ -41,6 +44,12 @@ from catalog_merger import (
     CATALOG_KEYS,
 )
 from llm_client import LLMClient, LLMExtractionError, QuotaExhaustedError
+from temporal_extraction import (
+    extract_temporal_signals,
+    merge_temporal_signals,
+    load_timeline,
+    save_timeline,
+)
 
 try:
     import jsonschema
@@ -657,7 +666,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         "protector": "social",
         "caretaker": "social",
     }
-    _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "other"}
+    _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "spatial", "other"}
     for rel in entity_data.get("relationships", []):
         rt = rel.get("type", "")
         if isinstance(rt, str):
@@ -1516,6 +1525,7 @@ def extract_and_merge(
     llm: LLMClient,
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     catalog_dir: str | None = None,
+    timeline: list | None = None,
 ) -> tuple[dict, list, bool, dict]:
     """Process one turn through all extraction agents.
 
@@ -1527,6 +1537,8 @@ def extract_and_merge(
         min_confidence: Minimum confidence to catalog an entity.
         catalog_dir: Optional path to the catalog directory, used to load
             arc sidecar files for relationship compaction (#120).
+        timeline: Optional list of timeline entries.  When provided, temporal
+            signals are extracted from the turn and merged in-place (#263).
 
     Returns:
         Tuple of (catalogs, events_list, turn_failed, log_record) where
@@ -1939,10 +1951,28 @@ def extract_and_merge(
 
     llm.delay()
 
+    # --- Phase 5: Temporal signal extraction (#263) ---
+    _temporal_before = len(timeline) if timeline is not None else 0
+    if timeline is not None:
+        try:
+            temporal_signals = extract_temporal_signals(
+                turn["text"], turn_id, events=events_list,
+            )
+            if temporal_signals:
+                merge_temporal_signals(timeline, temporal_signals)
+                _phase_log["temporal_ok"] = True
+            else:
+                _phase_log["temporal_ok"] = True  # No signals is not an error
+        except Exception as e:
+            print(f"  WARNING: Temporal extraction failed for {turn_id}: {e}", file=sys.stderr)
+            _phase_log["temporal_ok"] = False
+            _phase_log["temporal_error"] = str(e)
+
     # Build extraction log record (#217)
     _elapsed_ms = int((time.monotonic() - _t0) * 1000)
     _entities_after = sum(len(v) for v in catalogs.values())
     _events_after = len(events_list)
+    _temporal_after = len(timeline) if timeline is not None else 0
     _log_record = {
         "turn_id": turn_id,
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -1956,8 +1986,11 @@ def extract_and_merge(
         "relationships_error": _phase_log["relationships_error"],
         "events_ok": _phase_log["events_ok"],
         "events_error": _phase_log["events_error"],
+        "temporal_ok": _phase_log.get("temporal_ok"),
+        "temporal_error": _phase_log.get("temporal_error"),
         "new_entities": max(0, _entities_after - _entities_before),
         "new_events": max(0, _events_after - _events_before),
+        "new_temporal_signals": max(0, _temporal_after - _temporal_before),
         "discovery_proposals": _discovery_proposals,
         "discovery_filtered": _discovery_filtered,
         "elapsed_ms": _elapsed_ms,
@@ -3426,6 +3459,26 @@ def _reconcile_segments(segments):
     return merged_catalogs, merged_events
 
 
+def _reconcile_timelines(segments) -> list[dict]:
+    """Merge timeline entries from multiple extraction segments.
+
+    Concatenates all segment timelines and uses ``merge_temporal_signals``
+    to deduplicate and assign sequential IDs.
+    """
+    merged: list[dict] = []
+    for seg in segments:
+        seg_timeline = seg.get("timeline", [])
+        if seg_timeline:
+            # Strip segment-local IDs so merge_temporal_signals can re-assign
+            stripped = []
+            for entry in seg_timeline:
+                entry_copy = entry.copy()
+                entry_copy.pop("id", None)
+                stripped.append(entry_copy)
+            merge_temporal_signals(merged, stripped)
+    return merged
+
+
 def _print_retry_stats(llm) -> None:
     """Print API retry statistics from the LLM client (#215)."""
     stats = getattr(llm, "stats", None)
@@ -3477,6 +3530,7 @@ def _extract_segmented(
         # Fresh catalog for each segment
         seg_catalogs = {fn: [] for fn in CATALOG_KEYS}
         seg_events = []
+        seg_timeline: list[dict] = []
 
         # Pre-seed player character (always present)
         _ensure_player_character(seg_catalogs, segment_turns[0]["turn_id"])
@@ -3513,6 +3567,7 @@ def _extract_segmented(
                 seg_catalogs, seg_events, seg_turn_failed, seg_turn_log = extract_and_merge(
                     turn, seg_catalogs, seg_events, llm, min_confidence,
                     catalog_dir=None,
+                    timeline=seg_timeline,
                 )
             except QuotaExhaustedError as e:
                 print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
@@ -3583,6 +3638,7 @@ def _extract_segmented(
                     "id": f"{segment_id}-partial",
                     "catalogs": seg_catalogs,
                     "events": seg_events,
+                    "timeline": seg_timeline,
                     "turn_range": (segment_turns[0]["turn_id"], turn_id),
                 }]
                 interim_catalogs, interim_events = _reconcile_segments(interim)
@@ -3593,6 +3649,8 @@ def _extract_segmented(
                 )
                 save_catalogs(catalog_dir, interim_catalogs)
                 save_events(catalog_dir, interim_events)
+                interim_timeline = _reconcile_timelines(interim)
+                save_timeline(catalog_dir, interim_timeline)
 
         # --- Final entity refresh for segment — catch entities stale since last modulo checkpoint (#212) ---
         # Skip refresh if quota was exhausted — no further LLM calls (#215)
@@ -3616,7 +3674,7 @@ def _extract_segmented(
                         print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities at end of {segment_id}")
 
         seg_entity_count = sum(len(v) for v in seg_catalogs.values())
-        print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events")
+        print(f"  {segment_id} complete: {seg_entity_count} entities, {len(seg_events)} events, {len(seg_timeline)} temporal signals")
         if seg_failed_turns:
             print(f"  {segment_id}: {len(seg_failed_turns)} turn(s) had extraction failures", file=sys.stderr)
 
@@ -3624,6 +3682,7 @@ def _extract_segmented(
             "id": segment_id,
             "catalogs": seg_catalogs,
             "events": seg_events,
+            "timeline": seg_timeline,
             "turn_range": (segment_turns[0]["turn_id"], segment_turns[-1]["turn_id"]),
             "failed_turns": seg_failed_turns,
         })
@@ -3641,6 +3700,8 @@ def _extract_segmented(
             interim_catalogs, interim_events = _reconcile_segments(segments)
             save_catalogs(catalog_dir, interim_catalogs)
             save_events(catalog_dir, interim_events)
+            interim_timeline = _reconcile_timelines(segments)
+            save_timeline(catalog_dir, interim_timeline)
 
         # Stop processing further segments if quota was exhausted (#215)
         if quota_exhausted:
@@ -3657,6 +3718,7 @@ def _extract_segmented(
     # Reconcile all segments into a single catalog
     print(f"\n  === Reconciliation: merging {len(segments)} segments ===")
     final_catalogs, final_events = _reconcile_segments(segments)
+    final_timeline = _reconcile_timelines(segments)
 
     # Run standard post-batch passes on the reconciled result
     dupes_merged, merge_map = _dedup_catalogs(final_catalogs)
@@ -3691,7 +3753,7 @@ def _extract_segmented(
             print(f"    - {tid}", file=sys.stderr)
         print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
-    print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events")
+    print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events, {len(final_timeline)} temporal signals")
 
     # Report API retry statistics (#215)
     _print_retry_stats(llm)
@@ -3699,6 +3761,7 @@ def _extract_segmented(
     if not dry_run:
         save_catalogs(catalog_dir, final_catalogs)
         save_events(catalog_dir, final_events)
+        save_timeline(catalog_dir, final_timeline)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
                        total, final_catalogs, dry_run=False, completed=True,
                        metadata={"failed_turns": all_failed_turns} if all_failed_turns else None)
@@ -3907,6 +3970,7 @@ def extract_semantic_batch(
 
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
+    timeline = load_timeline(catalog_dir)
 
     # Pre-seed the player character so it can be tracked every turn
     first_turn = turn_dicts[0]["turn_id"] if turn_dicts else None
@@ -3936,6 +4000,7 @@ def extract_semantic_batch(
                         # Reload catalogs since they may have been partially written
                         catalogs = load_catalogs(catalog_dir)
                         events_list = load_events(catalog_dir)
+                        timeline = load_timeline(catalog_dir)
         except (json.JSONDecodeError, KeyError):
             pass  # Corrupted progress file; start from beginning
 
@@ -3990,6 +4055,7 @@ def extract_semantic_batch(
                 catalogs, events_list, retry_disc_failed, retry_log = extract_and_merge(
                     retry_turn, catalogs, events_list, llm, min_confidence,
                     catalog_dir=catalog_dir,
+                    timeline=timeline,
                 )
                 if not dry_run:
                     _write_extraction_log(extraction_log_path, retry_log)
@@ -4029,6 +4095,7 @@ def extract_semantic_batch(
         if not dry_run:
             save_catalogs(catalog_dir, catalogs)
             save_events(catalog_dir, events_list)
+            save_timeline(catalog_dir, timeline)
         _print_retry_stats(llm)
         return
 
@@ -4046,6 +4113,7 @@ def extract_semantic_batch(
             catalogs, events_list, turn_failed, _turn_log = extract_and_merge(
                 turn, catalogs, events_list, llm, min_confidence,
                 catalog_dir=catalog_dir,
+                timeline=timeline,
             )
         except QuotaExhaustedError as e:
             print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
@@ -4061,6 +4129,7 @@ def extract_semantic_batch(
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
+                save_timeline(catalog_dir, timeline)
                 _write_extraction_log(extraction_log_path, {
                     "turn_id": turn_id,
                     "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -4093,6 +4162,7 @@ def extract_semantic_batch(
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
+                save_timeline(catalog_dir, timeline)
 
         # Write per-turn extraction log (#217)
         if _turn_log and not dry_run:
@@ -4129,6 +4199,7 @@ def extract_semantic_batch(
             if not dry_run:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
+                save_timeline(catalog_dir, timeline)
 
     # --- Final entity refresh — catch entities stale since last modulo checkpoint (#212) ---
     # Skip refresh if quota was exhausted — no further LLM calls (#215)
@@ -4206,7 +4277,7 @@ def extract_semantic_batch(
             f"{_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW} turns)",
         )
 
-    print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events")
+    print(f"  Semantic extraction complete: {entities_after} entities, {events_after} events, {len(timeline)} temporal signals")
 
     # Report API retry statistics (#215)
     _print_retry_stats(llm)
@@ -4217,6 +4288,7 @@ def extract_semantic_batch(
         # is only meaningful during incremental single-turn extraction.
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
+        save_timeline(catalog_dir, timeline)
         _save_progress(progress_file, turn_dicts[-1]["turn_id"] if turn_dicts else "",
                        total, catalogs, dry_run=False, completed=True,
                        metadata={"failed_turns": failed_turns} if failed_turns else None)
@@ -4259,6 +4331,7 @@ def extract_semantic_single(
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
+    timeline = load_timeline(catalog_dir)
 
     # Pre-seed the player character so it can be tracked every turn
     _ensure_player_character(catalogs, turn_id)
@@ -4270,6 +4343,7 @@ def extract_semantic_single(
         catalogs, events_list, _turn_failed, _turn_log = extract_and_merge(
             turn, catalogs, events_list, llm, min_confidence,
             catalog_dir=catalog_dir,
+            timeline=timeline,
         )
     except Exception as e:
         _turn_log = {
@@ -4291,7 +4365,7 @@ def extract_semantic_single(
     _write_extraction_log(extraction_log_path, _turn_log)
 
     entities_total = sum(len(v) for v in catalogs.values())
-    print(f"  Catalog now has {entities_total} entities, {len(events_list)} events")
+    print(f"  Catalog now has {entities_total} entities, {len(events_list)} events, {len(timeline)} temporal signals")
 
     # Post-merge dormancy pass
     dormant_count = mark_dormant_relationships(catalogs, turn_id)
@@ -4300,6 +4374,7 @@ def extract_semantic_single(
 
     save_catalogs(catalog_dir, catalogs)
     save_events(catalog_dir, events_list)
+    save_timeline(catalog_dir, timeline)
 
 
 def _save_progress(
