@@ -831,7 +831,9 @@ The page contains:
 
 Low-confidence season signals (regex false positives such as "harvest" in a winter story) are automatically filtered. A season transition is kept only if:
 - Its confidence ≥ 0.6 (high-quality signal), OR
-- The same base season (winter/spring/summer/autumn) appears ≥ 2 times in the timeline (corroborated by other evidence)
+- At least 1 neighboring season entry within a sliding window of 5 entries on each side shares the same base season (winter/spring/summer/autumn)
+
+Additionally, base season detection requires at least 2 distinct keyword matches and a margin of 2 over the runner-up, preventing single occurrences of common words ("cold", "warm", "fall") from triggering false detections. Signal text is capped at 120 characters to avoid storing full paragraphs from greedy matches.
 
 ### Timeline Wiki Page
 

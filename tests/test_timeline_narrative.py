@@ -459,29 +459,27 @@ class TestGreedyRegexFix:
     """Regression tests for greedy regex patterns in biological markers."""
 
     def test_belly_swell_non_greedy(self):
-        """belly.*?swell should not capture entire paragraphs."""
+        """belly.*?swell should stop at the first valid ending token."""
         long_text = (
-            "Her belly grows rounder each day. The tribe gathers supplies "
-            "and prepares shelters against the coming storms. The elders "
-            "speak of ancient rites. Her belly continues to swell with life."
+            "Her belly begins to swell. Days later, after more travel and worry, "
+            "her belly continues to swell again."
         )
         markers = _detect_biological_markers(long_text)
         pregnancy_prog = [m for m in markers if m[0] == "pregnancy_progression"]
         assert len(pregnancy_prog) == 1
-        # The matched text should NOT be the whole paragraph
-        assert len(pregnancy_prog[0][1]) < MAX_SIGNAL_TEXT_LENGTH + 1
+        assert pregnancy_prog[0][1] == "belly begins to swell"
+        assert len(pregnancy_prog[0][1]) <= MAX_SIGNAL_TEXT_LENGTH
 
     def test_life_taken_root_non_greedy(self):
-        """life.*?taken root should not capture entire paragraphs."""
+        """life.*?taken root should stop at the first valid ending token."""
         long_text = (
-            "A new life stirs within her. The world around them shifts, "
-            "snow piles high, and the hunters return empty-handed. "
-            "It seems life has taken root despite the hardship."
+            "A new life has taken root. Later, after hardship and waiting, "
+            "everyone fears that life has taken root more deeply still."
         )
         markers = _detect_biological_markers(long_text)
         discovery = [m for m in markers if m[0] == "pregnancy_discovery"]
         assert len(discovery) == 1
-        assert len(discovery[0][1]) <= MAX_SIGNAL_TEXT_LENGTH
+        assert discovery[0][1] == "life has taken root"
 
 
 class TestSignalTextCap:

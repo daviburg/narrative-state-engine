@@ -509,9 +509,10 @@ def filter_season_flicker(timeline: list[dict],
 
     A season transition is kept only if:
     - Its confidence >= min_confidence, OR
-    - Within a sliding window of window_size neighboring season entries,
-      at least min_support entries share the same base season (confirming
-      it's not an isolated blip).
+    - Within a sliding window of up to ``window_size`` entries on each side
+      (total window up to ``2 * window_size`` neighbors, excluding the
+      current entry), at least ``min_support`` neighbors share the same
+      base season — confirming it's not an isolated blip.
 
     A single outlier season sandwiched between many entries of a different
     season is discarded even if its base season has high total count.
@@ -521,8 +522,11 @@ def filter_season_flicker(timeline: list[dict],
     Args:
         timeline: Full timeline entry list.
         min_confidence: Minimum confidence to auto-accept a season signal.
-        min_support: Minimum neighbors with same base season in the window.
-        window_size: Number of neighboring entries to check on each side.
+        min_support: Minimum number of neighbors (excluding the current
+            entry) within the window that share the same base season.
+        window_size: Per-side radius — how many season entries to inspect
+            on each side of the current entry (total window is up to
+            ``2 * window_size`` neighbors).
 
     Returns:
         Filtered timeline list (new list; original is not modified).
