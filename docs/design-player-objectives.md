@@ -8,9 +8,9 @@
 
 ## 1. Problem Statement
 
-The player objectives framework exists in schema only. `objectives.json` is always scaffolded as an empty array ([bootstrap_session.py](../tools/bootstrap_session.py) L306, [update_state.py](../tools/update_state.py) L157), and no tool, template, or workflow populates it.
+The player objectives framework exists in schema only. Session bootstrapping scaffolds `sessions/*/derived/objectives.json` as an empty array ([bootstrap_session.py `ensure_derived_scaffolds()`](../tools/bootstrap_session.py), [update_state.py `ensure_objectives_scaffold()`](../tools/update_state.py)), and no tool, template, or workflow populates it.
 
-This matters because objectives are already wired into the analysis pipeline. `analyze_next_move.py` [loads objectives](../tools/analyze_next_move.py#L194), [filters active ones](../tools/analyze_next_move.py#L96-L103), formats them into the analysis template (Section 7: "Objectives Affected"), and passes active objective IDs to [prompt candidate generation](../tools/analyze_next_move.py#L270-L273). The `prompt-candidates.json` schema already has an `objective_refs` field. All of this infrastructure produces empty output because there are no objectives.
+This matters because objectives are already wired into the analysis pipeline. [analyze_next_move.py](../tools/analyze_next_move.py) loads objectives, filters active ones via `format_objectives()`, formats them into the analysis template (Section 7: "Objectives Affected"), and passes active objective IDs to prompt candidate generation. The `prompt-candidates.json` schema already has an `objective_refs` field. All of this infrastructure produces empty output because there are no objectives.
 
 ### What's missing
 
@@ -18,7 +18,7 @@ This matters because objectives are already wired into the analysis pipeline. `a
 |---|---|
 | No mechanism to populate objectives | The entire objectives section of analysis is dead weight |
 | Only two objective types (`strategic_long_term`, `tactical_short_term`) | No mid-term layer for active quests and sub-quests |
-| No source provenance | Cannot distinguish user-declared goals from transcript-inferred ones (violates Rule 2 and Rule 3) |
+| No source provenance | Cannot distinguish user-declared goals from transcript-inferred ones, so the system cannot preserve provenance or cleanly separate fact from inference |
 | No entity/location linkage | Objectives exist in isolation; plot-threads have `related_entities` but objectives don't |
 | No state transition model | No defined path for how objectives change status |
 | No user input workflow | Player cannot tell the system what they want |
@@ -158,7 +158,7 @@ Priority (`priority` field, integer, 1 = highest) operates within and across lay
     },
     "source_turns": {
       "type": "array",
-      "description": "Turn IDs that support or prompted this objective. Required for transcript_inferred and hybrid sources.",
+      "description": "Turn IDs that support or prompted this objective. Tooling enforces this is non-empty when source is 'transcript_inferred' or 'hybrid' (not expressible in JSON Schema without if/then).",
       "items": {
         "type": "string",
         "pattern": "^turn-[0-9]{3,}$"
@@ -202,7 +202,7 @@ Priority (`priority` field, integer, 1 = highest) operates within and across lay
     },
     "scene_scope": {
       "type": "string",
-      "description": "For tactical objectives: the scene or turn range this objective is bound to. When the scene ends, the objective auto-transitions to completed/failed/suspended.",
+      "description": "For tactical objectives: a single turn/scene anchor this objective is bound to. When the anchored scene ends, the objective auto-transitions to completed/failed/suspended.",
       "pattern": "^turn-[0-9]{3,}$"
     },
     "created_turn": {
@@ -524,10 +524,10 @@ This preserves the provenance chain. Example: "Find the missing scholar" gets re
 
 ### Current state
 
-`analyze_next_move.py` already:
-- Loads `objectives.json` and filters active objectives ([L192-195](../tools/analyze_next_move.py#L192))
-- Formats them as `- **[type]** title` bullets via `format_objectives()` ([L96-103](../tools/analyze_next_move.py#L96))
-- Passes active objective IDs to prompt candidate generation ([L270-273](../tools/analyze_next_move.py#L270))
+[analyze_next_move.py](../tools/analyze_next_move.py) already:
+- Loads `objectives.json` and filters active objectives via `load_json()`
+- Formats them as `- **[type]** title` bullets via `format_objectives()`
+- Passes active objective IDs to `generate_prompt_candidates()`
 
 ### Proposed improvements
 
