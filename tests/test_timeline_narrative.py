@@ -14,7 +14,12 @@ from temporal_extraction import (
     generate_narrative_timeline,
     generate_timeline_wiki_page,
     _base_season,
+    _cap_signal_text,
+    _detect_base_season,
+    _detect_biological_markers,
+    extract_temporal_signals,
     DEFAULT_ANCHOR,
+    MAX_SIGNAL_TEXT_LENGTH,
 )
 from generate_wiki_pages import generate_timeline_page, generate_wiki_pages
 
@@ -444,3 +449,206 @@ class TestGenerateTimelinePageIntegration:
         # generate_timeline_page with empty list still produces a page
         md = generate_timeline_page([])
         assert "No temporal data extracted yet" in md
+
+
+# ---------------------------------------------------------------------------
+# Regression tests for issue #277
+# ---------------------------------------------------------------------------
+
+class TestGreedyRegexFix:
+    """Regression tests for greedy regex patterns in biological markers."""
+
+    def test_belly_swell_non_greedy(self):
+        """belly.*?swell should not capture entire paragraphs."""
+        long_text = (
+            "Her belly grows rounder each day. The tribe gathers supplies "
+            "and prepares shelters against the coming storms. The elders "
+            "speak of ancient rites. Her belly continues to swell with life."
+        )
+        markers = _detect_biological_markers(long_text)
+        pregnancy_prog = [m for m in markers if m[0] == "pregnancy_progression"]
+        assert len(pregnancy_prog) == 1
+        # The matched text should NOT be the whole paragraph
+        assert len(pregnancy_prog[0][1]) < MAX_SIGNAL_TEXT_LENGTH + 1
+
+    def test_life_taken_root_non_greedy(self):
+        """life.*?taken root should not capture entire paragraphs."""
+        long_text = (
+            "A new life stirs within her. The world around them shifts, "
+            "snow piles high, and the hunters return empty-handed. "
+            "It seems life has taken root despite the hardship."
+        )
+        markers = _detect_biological_markers(long_text)
+        discovery = [m for m in markers if m[0] == "pregnancy_discovery"]
+        assert len(discovery) == 1
+        assert len(discovery[0][1]) <= MAX_SIGNAL_TEXT_LENGTH
+
+
+class TestSignalTextCap:
+    """Regression tests for signal text length cap."""
+
+    def test_cap_short_text_unchanged(self):
+        """Short text passes through unchanged."""
+        assert _cap_signal_text("hello") == "hello"
+
+    def test_cap_at_boundary(self):
+        """Text exactly at limit is unchanged."""
+        text = "x" * MAX_SIGNAL_TEXT_LENGTH
+        assert _cap_signal_text(text) == text
+
+    def test_cap_over_limit_truncated(self):
+        """Text over limit is truncated with ellipsis."""
+        text = "x" * (MAX_SIGNAL_TEXT_LENGTH + 50)
+        result = _cap_signal_text(text)
+        assert len(result) == MAX_SIGNAL_TEXT_LENGTH
+        assert result.endswith("...")
+
+    def test_no_signal_over_limit_in_extraction(self):
+        """extract_temporal_signals never produces signals with text > limit."""
+        long_text = (
+            "Her belly " + "stretches and " * 50 + "swells with new life. "
+            "The snow falls heavily and frost covers the ground. "
+            "The cold biting cold of deep winter settles. "
+            "Days pass slowly in the frozen wilderness."
+        )
+        signals = extract_temporal_signals(long_text, "turn-099")
+        for sig in signals:
+            raw = sig.get("raw_text", "")
+            assert len(raw) <= MAX_SIGNAL_TEXT_LENGTH, (
+                f"Signal raw_text too long ({len(raw)} chars): {raw[:50]}..."
+            )
+
+
+class TestSeasonDetectionThresholds:
+    """Regression tests for season detection requiring distinct keywords and margin."""
+
+    def test_single_keyword_not_enough(self):
+        """A single 'cold' mention should NOT trigger winter detection."""
+        text = "The cold is harsh but her warmth sustains them."
+        result = _detect_base_season(text)
+        assert result is None
+
+    def test_ambiguous_text_returns_none(self):
+        """Text with equal winter/summer signals returns None."""
+        text = "The frost melts in the warm sun, ice gives way to heat."
+        result = _detect_base_season(text)
+        # Even if both score similarly, margin requirement prevents a pick
+        assert result is None
+
+    def test_strong_winter_signal_detected(self):
+        """Multiple distinct winter keywords are detected correctly."""
+        text = (
+            "The snow falls thick, frost covers the ground, "
+            "and the frozen river cracks under the weight of ice."
+        )
+        result = _detect_base_season(text)
+        assert result == "winter"
+
+    def test_winter_dominant_no_spurious_summer(self):
+        """A winter story with incidental 'warm' should not detect summer."""
+        text = (
+            "Deep winter has settled. Snow blankets everything. "
+            "The frozen lake creaks. Inside, a warm fire burns. "
+            "The cold biting cold seeps through the walls."
+        )
+        result = _detect_base_season(text)
+        # Should be winter or None, never summer
+        assert result != "summer"
+
+
+class TestFlickerSlidingWindow:
+    """Regression tests for sliding-window season flicker filtering."""
+
+    def test_isolated_summer_in_winter_sequence_removed(self):
+        """A single summer entry surrounded by winter entries is filtered out."""
+        timeline = []
+        for i in range(1, 21):
+            season = "mid_winter" if i != 10 else "mid_summer"
+            conf = 0.8 if i != 10 else 0.4
+            timeline.append({
+                "id": f"time-{i:03d}",
+                "source_turn": f"turn-{i:03d}",
+                "type": "season_transition",
+                "season": season,
+                "confidence": conf,
+                "signals": [f"base season: {'winter' if i != 10 else 'summer'}"],
+            })
+        result = filter_season_flicker(timeline)
+        seasons = [e.get("season") for e in result if e.get("type") == "season_transition"]
+        assert "mid_summer" not in seasons
+
+    def test_legitimate_transition_preserved(self):
+        """A real season change (multiple consecutive entries) is kept."""
+        timeline = []
+        # 10 winter entries, then 10 spring entries
+        for i in range(1, 11):
+            timeline.append({
+                "id": f"time-{i:03d}",
+                "source_turn": f"turn-{i:03d}",
+                "type": "season_transition",
+                "season": "mid_winter",
+                "confidence": 0.8,
+                "signals": ["base season: winter"],
+            })
+        for i in range(11, 21):
+            timeline.append({
+                "id": f"time-{i:03d}",
+                "source_turn": f"turn-{i:03d}",
+                "type": "season_transition",
+                "season": "early_spring",
+                "confidence": 0.5,  # Low confidence but supported by neighbors
+                "signals": ["base season: spring"],
+            })
+        result = filter_season_flicker(timeline)
+        spring = [e for e in result if "spring" in e.get("season", "")]
+        assert len(spring) == 10  # All spring entries kept
+
+
+class TestAnchorLabelFormatting:
+    """Regression tests for human-readable anchor labels."""
+
+    def test_no_type_colon_type_pattern(self):
+        """Anchor label should never look like 'type: type'."""
+        timeline = [
+            {
+                "id": "time-001",
+                "source_turn": "turn-005",
+                "type": "biological_marker",
+                "signals": ["labor: labor"],
+                "confidence": 0.7,
+                "raw_text": "labor",
+            }
+        ]
+        anchor = detect_anchor_event(timeline)
+        assert "labor: labor" not in anchor["label"]
+        assert anchor["label"][0].isupper()  # Should be capitalized
+
+    def test_uses_raw_text_when_short(self):
+        """Should use raw_text as label when it's short and readable."""
+        timeline = [
+            {
+                "id": "time-001",
+                "source_turn": "turn-010",
+                "type": "time_skip",
+                "signals": ["days_pass: days pass"],
+                "confidence": 0.6,
+                "raw_text": "days pass",
+            }
+        ]
+        anchor = detect_anchor_event(timeline)
+        assert anchor["label"] == "Days pass"
+
+    def test_fallback_to_type_label(self):
+        """Without raw_text, uses human-readable type description."""
+        timeline = [
+            {
+                "id": "time-001",
+                "source_turn": "turn-010",
+                "type": "biological_marker",
+                "signals": ["pregnancy: pregnant"],
+                "confidence": 0.7,
+            }
+        ]
+        anchor = detect_anchor_event(timeline)
+        assert "biological marker" in anchor["label"].lower()
+
