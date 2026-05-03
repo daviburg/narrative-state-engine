@@ -7,9 +7,11 @@
 
 ## Executive Summary
 
-OpenVINO GenAI **works** on the Arc Pro B70 and delivers **competitive but not superior** performance compared to llama-server's SYCL backend. Warm-state generation averages ~48–54 tok/s vs the 52.7 tok/s llama-server baseline. The improvement is marginal and comes with significant ecosystem friction that makes it impractical as a drop-in replacement today.
+OpenVINO GenAI **works** on the Arc Pro B70 and delivers **competitive** performance compared to llama-server's SYCL backend in initial testing. Warm-state generation averages ~48–54 tok/s vs the 52.7 tok/s llama-server baseline. However, this initial investigation has significant methodological gaps (see [Caveats](#caveats--investigation-gaps) below) that make the comparison unreliable.
 
-**Recommendation**: Stay with llama-server SYCL for now. Revisit when OVMS supports Ubuntu 26 natively or when Qwen3.5 gains first-class OpenVINO support.
+**Status**: Phase 1 complete (proof of viability). Phase 2 required for a fair comparison.
+
+**Recommendation**: Proceed with Phase 2 follow-up investigation to resolve the methodological issues before drawing conclusions. See [Follow-Up Tasks](#follow-up-tasks-phase-2).
 
 ---
 
@@ -93,15 +95,16 @@ The FastAPI wrapper approach is feasible but adds maintenance burden for margina
 
 ### Why Not a Clear Win?
 
-1. **llama-server SYCL is already well-optimized** — The IPEX-LLM SYCL build uses flash attention and optimized kernels for Arc GPUs.
+> **CAVEAT**: The analysis below was written during initial investigation and contains
+> assumptions now known to be questionable. See [Caveats](#caveats--investigation-gaps).
+
+1. ~~**llama-server SYCL is already well-optimized**~~ — Subsequent investigation found the llama-server SYCL build was **not** well-optimized and missed significant performance opportunities discovered by researching other projects. This same bias likely affected the OpenVINO evaluation.
 
 2. **INT4 dynamic quantization overhead** — OpenVINO's INT4 inference uses dynamic dequantization at runtime, which has compute cost. llama-server's Q4_K_M uses a different (ggml-specific) dequant path that may be more efficient for decode.
 
-3. **XMX utilization** — The B70's XMX (matrix extension) units are designed for larger batch sizes. Single-request inference (batch=1, which is our use case) doesn't fully exploit XMX parallelism. OpenVINO's advantage would be more pronounced with batched requests.
+3. **XMX utilization** — The B70's XMX (matrix extension) units are designed for larger batch sizes. Single-request inference (batch=1) doesn't fully exploit XMX parallelism. OpenVINO's advantage would be more pronounced with batched requests. **NOTE**: Batched requests were not tested but should have been — other B70 users report batching works fine on this hardware.
 
-4. **Thinking mode** — The benchmark couldn't disable thinking tokens for Qwen3, which inflates the token count. A fair comparison would require either:
-   - Using a non-thinking model (Qwen2.5)
-   - Configuring the chat template to suppress thinking
+4. **Thinking mode** — The benchmark ran with thinking mode active, inflating token counts and wasting generation budget. This was noted as a blocker but not actually resolved. **NOTE**: Disabling thinking in Qwen3 is achievable via chat template configuration (`/no_think` or system prompt instruction) — this should have been tested.
 
 ### Estimated Full-Run Time (344 turns)
 
@@ -138,27 +141,52 @@ cat ~/bench_results.txt
 
 ---
 
-## Recommended Next Steps
+## Caveats & Investigation Gaps
 
-### If pursuing OpenVINO further:
-1. **Install Docker** on arclight — enables OVMS with native GGUF support and OpenAI API
-2. **Wait for Qwen3.5 support** in stable transformers + optimum-intel
-3. **Test with model cache** (`ov::cache_dir`) to eliminate recompilation overhead
-4. **Benchmark with prefix caching** — OpenVINO 2025.4+ has optimized prefix caching for GPU, which would benefit our extraction pipeline's repeated system prompts
-5. **Try ContinuousBatchingPipeline** instead of LLMPipeline for better throughput
+This initial investigation has significant methodological problems that invalidate a definitive conclusion:
 
-### If staying with llama-server:
-1. The current setup is proven and integrated
-2. Performance difference is within noise margin
-3. No additional maintenance burden
-4. Qwen3.5-9B GGUF works directly without conversion
+1. **Unfair comparison — thinking mode active**: The OpenVINO benchmark ran with Qwen3's thinking mode generating `<think>` tokens, while the llama-server baseline uses `--reasoning off`. This wastes 60-80% of generated tokens on internal monologue and makes the tok/s figures incomparable. Disabling thinking is achievable (chat template manipulation, system prompt instructions) and must be done for Phase 2.
+
+2. **No batching tested**: The benchmark only tested single-request serial inference (`LLMPipeline`). OpenVINO's `ContinuousBatchingPipeline` and OVMS both support concurrent request batching, which is where XMX units excel. Other B70 users report batching works fine. The assumption that "our use case is batch=1" is questionable — the extraction pipeline could be parallelized.
+
+3. **MoE models not tested**: OpenVINO 2025.4+ has explicit Mixture-of-Experts optimization for GPU (validated for Qwen3-30B-A3B). MoE was a major performance win on RTX 4070 via Ollama in past tests. This avenue was not explored at all.
+
+4. **OVMS not tested**: The primary serving solution (OVMS Docker) was dismissed because Docker wasn't installed, rather than installing Docker. OVMS provides OpenAI-compatible API, native GGUF support, prefix caching, and continuous batching — all directly relevant to our workload.
+
+5. **llama-server baseline was flawed**: A separate investigation found the llama-server SYCL setup was NOT well-optimized and missed significant performance improvements. The 52.7 tok/s "baseline" is likely an underperforming reference point. The same investigator bias (accepting first results without deeper research) likely affected this OpenVINO evaluation.
+
+6. **No model cache used**: First-run kernel compilation dominates timing but is a one-time cost with `ov::cache_dir`. Benchmarks should use pre-compiled cache for steady-state measurement.
+
+---
+
+## Follow-Up Tasks (Phase 2)
+
+These must be completed before drawing conclusions:
+
+### P0 — Required for fair comparison
+- [ ] **Install Docker on arclight** — Unblocks OVMS, the primary OpenVINO serving path
+- [ ] **Deploy OVMS via Docker with GPU passthrough** — Test native GGUF loading and OpenAI API
+- [ ] **Disable thinking mode** — Configure chat template or system prompt to suppress `<think>` generation for extraction workload
+- [ ] **Benchmark with batched requests** — Use `ContinuousBatchingPipeline` or OVMS with 2-4 concurrent requests to test XMX utilization
+- [ ] **Enable model compilation cache** — Use `ov::cache_dir` or OVMS `--cache_dir` for steady-state benchmarks
+
+### P1 — High-value exploration
+- [ ] **Test MoE model (Qwen3-30B-A3B)** — OpenVINO has explicit MoE GPU optimization; this model may outperform dense 8-9B models for extraction quality at acceptable speed
+- [ ] **Test prefix caching** — Our extraction pipeline reuses the same system prompt across all turns; OVMS's optimized prefix caching could dramatically reduce TTFT
+- [ ] **Research OpenVINO-specific optimizations** — Look at what other Arc users have achieved; check Intel's benchmark publications for B-series GPUs
+- [ ] **Benchmark prompt evaluation (prefill) speed** — Our extraction prompts are 4K-16K tokens; prefill performance matters as much as decode
+
+### P2 — If performance is competitive
+- [ ] **Run extraction smoke test** (turns 1-10) through OVMS endpoint
+- [ ] **Compare output quality** between OpenVINO INT4 and llama-server Q4_K_M
+- [ ] **Measure end-to-end extraction time** including all pipeline overhead
 
 ---
 
 ## Key Takeaways
 
-- OpenVINO on Arc Pro B70 is **functional and competitive** but not a breakthrough improvement
-- The ecosystem has significant friction: Ubuntu 26 support is incomplete, Qwen3.5 needs bleeding-edge transformers, OVMS requires Docker
-- The theoretical advantage of Intel-optimized kernels for Arc XMX doesn't materialize at batch_size=1
-- For our single-request extraction workload, **llama-server SYCL remains the better choice** due to proven reliability, direct GGUF support, and equivalent performance
-- OpenVINO would be worth revisiting for **batched inference** scenarios or when OVMS supports Ubuntu 26 natively
+- OpenVINO on Arc Pro B70 is **functional** — GPU detection, model loading, and inference all work
+- Initial benchmarks show **competitive raw decode speed** (~48-54 tok/s) even with methodological handicaps (thinking mode active, no batching, no caching)
+- The investigation was **incomplete** — critical features (OVMS, batching, MoE, thinking suppression) were not tested due to accepting blockers at face value rather than resolving them
+- **Phase 2 is required** before any recommendation can be made
+- The 52.7 tok/s llama-server baseline is itself suboptimal (confirmed by separate investigation), making the comparison doubly unreliable
