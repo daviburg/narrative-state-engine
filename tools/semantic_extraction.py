@@ -14,6 +14,7 @@ optional fifth temporal-extraction phase when timeline state is provided:
 Works in both batch (bootstrap) and incremental (ingest) modes.
 """
 
+import concurrent.futures
 import json
 import math
 import os
@@ -1518,6 +1519,95 @@ def _ensure_birth_entities(events_list: list, catalogs: dict) -> list[str]:
     return created
 
 
+# ---------------------------------------------------------------------------
+# Parallel extraction helpers
+# ---------------------------------------------------------------------------
+
+def _extract_single_entity_detail(
+    llm: "LLMClient",
+    turn: dict,
+    entity_ref: dict,
+    current_entry: dict | None,
+    pc_arcs_data: dict | None,
+) -> tuple[dict, dict | None, str | None]:
+    """Run entity-detail extraction for a single entity.
+
+    Returns ``(entity_ref, validated_entity_data, None)`` on success,
+    ``(entity_ref, None, error_string)`` on LLM failure, or
+    ``(entity_ref, None, None)`` when validation/filtering rejects the result.
+    Designed to run inside a ThreadPoolExecutor.
+    """
+    entity_id = get_entity_id(entity_ref)
+    turn_id = turn["turn_id"]
+    try:
+        entity_arcs = pc_arcs_data if entity_id == "char-player" else None
+        detail_result = llm.extract_json(
+            system_prompt=load_template("entity-detail"),
+            user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
+                                             arcs_data=entity_arcs),
+        )
+    except QuotaExhaustedError:
+        raise
+    except LLMExtractionError as e:
+        print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
+        return entity_ref, None, str(e)
+
+    entity_data = _unwrap_entity_response(detail_result)
+    if entity_data:
+        entity_data = _coerce_entity_fields(entity_data)
+    if entity_data and not _filter_concept_prefix_from_items(entity_data):
+        return entity_ref, None, None
+    if entity_data and _validate_entity(entity_data):
+        _filter_pc_attributes(entity_data)
+        return entity_ref, entity_data, None
+    return entity_ref, None, None
+
+
+def _extract_relationships_parallel(
+    llm: "LLMClient",
+    turn: dict,
+    mentioned_entities: list,
+    existing_rels_json: str,
+) -> list | None:
+    """Run relationship-mapper extraction.  Returns list of relationships or
+    None on failure.  Designed to run inside a ThreadPoolExecutor."""
+    turn_id = turn["turn_id"]
+    try:
+        rel_result = llm.extract_json(
+            system_prompt=load_template("relationship-mapper"),
+            user_prompt=format_relationship_prompt(turn, mentioned_entities,
+                                                   existing_rels_json),
+        )
+        return rel_result.get("relationships", [])
+    except QuotaExhaustedError:
+        raise
+    except LLMExtractionError as e:
+        print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}", file=sys.stderr)
+        return None
+
+
+def _extract_events_parallel(
+    llm: "LLMClient",
+    turn: dict,
+    next_evt_id: int,
+    entity_ids: list,
+) -> list | None:
+    """Run event-extractor extraction.  Returns list of events or None on
+    failure.  Designed to run inside a ThreadPoolExecutor."""
+    turn_id = turn["turn_id"]
+    try:
+        event_result = llm.extract_json(
+            system_prompt=load_template("event-extractor"),
+            user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
+        )
+        return event_result.get("events", [])
+    except QuotaExhaustedError:
+        raise
+    except LLMExtractionError as e:
+        print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
+        return None
+
+
 def extract_and_merge(
     turn: dict,
     catalogs: dict,
@@ -1689,183 +1779,25 @@ def extract_and_merge(
         filtered_qualified.append(entity_ref)
     qualified = filtered_qualified
 
-    # --- 2. Entity Detail Extraction (per entity above threshold) ---
+    # --- Pre-compute task inputs for phases 2-4 ---
+
+    # Filter qualified entities and snapshot current entries for detail extraction
+    _entity_tasks: list[tuple[dict, dict | None]] = []
     for entity_ref in qualified:
         entity_id = get_entity_id(entity_ref)
         if not entity_id:
             continue
-
-        # Skip pronoun / generic-stem IDs that slipped through discovery
         stem = _strip_any_prefix(entity_id)
         if stem.lower() in _GENERIC_STEMS:
             continue
-
-        # Look up current entry for existing entities
         current_entry = None
         if not entity_ref.get("is_new", True):
             result = find_entity_by_id(catalogs, entity_id)
             if result:
                 _, current_entry = result
+        _entity_tasks.append((entity_ref, current_entry))
 
-        try:
-            entity_arcs = pc_arcs_data if entity_id == "char-player" else None
-            detail_result = llm.extract_json(
-                system_prompt=load_template("entity-detail"),
-                user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
-                                                 arcs_data=entity_arcs),
-            )
-        except QuotaExhaustedError:
-            raise
-        except LLMExtractionError as e:
-            print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}", file=sys.stderr)
-            turn_failed = True
-            _phase_log["detail_ok"] = False
-            _phase_log["detail_error"] = str(e)
-            continue
-
-        entity_data = _unwrap_entity_response(detail_result)
-        if entity_data:
-            entity_data = _coerce_entity_fields(entity_data)
-        if entity_data and not _filter_concept_prefix_from_items(entity_data):
-            continue
-        if entity_data and _validate_entity(entity_data):
-            _filter_pc_attributes(entity_data)
-            merge_entity(catalogs, entity_data)
-            # Clear residual stub notes only when the effective identity is
-            # non-stub; placeholder stub identities still carry useful notes (#152).
-            _effective_identity = entity_data.get("identity")
-            if not _effective_identity and current_entry:
-                _effective_identity = current_entry.get("identity")
-            if (
-                current_entry
-                and isinstance(_effective_identity, str)
-                and _effective_identity.strip()
-                and "stub" not in _effective_identity.lower()
-            ):
-                _clear_stub_notes(current_entry)
-            # If this was char-player, also purge stale keys from catalog
-            if entity_data.get("id") == "char-player":
-                _sanitize_pc_catalog_entry(catalogs)
-
-        llm.delay()
-
-    # --- 2b. Always run detail extraction for the player character ---
-    # The PC is "you" in DM narration, so they won't be "discovered" but are
-    # affected by almost every turn.
-    pc_already_extracted = any(
-        get_entity_id(e) == "char-player" for e in qualified
-    )
-    if not pc_already_extracted:
-        # Skip PC extraction after too many consecutive failures (#149)
-        _skip_pc = _should_skip_pc(_pc_consecutive_failures, _pc_turns_since_cooldown)
-        if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            _pc_turns_since_cooldown += 1  # lgtm[py/unused-global-variable]
-            if _skip_pc:
-                _pc_skipped_turns += 1
-        if not _skip_pc:
-            pc_result = find_entity_by_id(catalogs, "char-player")
-            pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
-            # Sanitize existing entry before sending to LLM so stale keys
-            # don't appear in the prompt and get echoed back.
-            _sanitize_pc_catalog_entry(catalogs)
-            pc_ref = {"name": pc_entry["name"], "type": "character",
-                      "existing_id": "char-player", "is_new": False}
-            # Use extended timeout for PC extraction — context is larger (#107)
-            pc_timeout = max(llm.default_timeout * 2, 120)
-            pc_updated = False
-            try:
-                detail_result = llm.extract_json(
-                    system_prompt=load_template("entity-detail"),
-                    user_prompt=format_detail_prompt(turn, pc_ref, pc_entry,
-                                                     arcs_data=pc_arcs_data),
-                    timeout=pc_timeout,
-                    max_tokens=llm.pc_max_tokens,
-                )
-                entity_data = _unwrap_entity_response(detail_result)
-                if entity_data:
-                    entity_data = _coerce_entity_fields(entity_data)
-                if entity_data and _validate_entity(entity_data):
-                    _filter_pc_attributes(entity_data)
-                    merge_entity(catalogs, entity_data)
-                    # Purge any stale keys that survived the merge
-                    _sanitize_pc_catalog_entry(catalogs)
-                    pc_updated = True
-                elif entity_data is not None:
-                    # Validation failed — attempt partial merge fallback (#107)
-                    # Log structure and partial values of the raw response to aid diagnosis (#125, #199)
-                    if isinstance(entity_data, dict):
-                        try:
-                            _data_keys = sorted(entity_data.keys())
-                        except Exception:
-                            _data_keys = list(map(str, entity_data.keys()))
-                        try:
-                            _data_preview = json.dumps(entity_data, default=str)[:500]
-                        except Exception:
-                            _data_preview = repr(entity_data)[:500]
-                    else:
-                        _data_keys = "non-dict"
-                        _data_preview = str(entity_data)[:500]
-                    print(
-                        f"  PC detail extraction: validation failed at {turn_id}, "
-                        f"response keys={_data_keys}, falling back to partial merge",
-                        file=sys.stderr,
-                    )
-                    print(
-                        f"  PC detail extraction: raw response preview (500 chars): {_data_preview}",
-                        file=sys.stderr,
-                    )
-                    # Partial merge success counts as an update (#133)
-                    pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
-                    _write_pc_debug_record(
-                        turn_id,
-                        "validation_failed",
-                        _data_keys,
-                        _data_preview,
-                        merge_result=pc_updated,
-                    )
-                else:
-                    # entity_data is None — extraction returned nothing (#133)
-                    print(
-                        f"  WARNING: PC detail extraction returned None at {turn_id}. "
-                        f"Consecutive failures: {_pc_consecutive_failures + 1}",
-                        file=sys.stderr,
-                    )
-                    _write_pc_debug_record(turn_id, "none_returned", [], "", merge_result=False)
-            except QuotaExhaustedError:
-                raise
-            except LLMExtractionError as e:
-                print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}", file=sys.stderr)
-                _phase_log["pc_ok"] = False
-                _phase_log["pc_error"] = str(e)
-
-            # Track consecutive PC extraction failures (#133)
-            if pc_updated:
-                _phase_log["pc_ok"] = True
-                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
-                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
-            else:
-                _phase_log["pc_ok"] = False
-                if not _phase_log["pc_error"]:
-                    _phase_log["pc_error"] = "validation_failed_or_none"
-                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
-                if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
-                    print(
-                        f"  WARNING: PC extraction has failed for {_pc_consecutive_failures} "
-                        f"consecutive turns (last update: "
-                        f"{pc_entry.get('last_updated_turn', 'unknown')}). "
-                        f"Context may be too large for reliable extraction.",
-                        file=sys.stderr,
-                    )
-                elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
-                    print(
-                        f"  WARNING: PC extraction entering cooldown after "
-                        f"{_PC_SKIP_THRESHOLD} consecutive failures "
-                        f"(skip {_PC_SKIP_COOLDOWN}, retry {_PC_RETRY_WINDOW}).",
-                        file=sys.stderr,
-                    )
-            llm.delay()
-
-    # --- 3. Relationship Mapping ---
+    # Build mentioned_entities for relationship / event phases
     mentioned_entities = []
     for entity_ref in qualified:
         eid = get_entity_id(entity_ref)
@@ -1886,70 +1818,467 @@ def extract_and_merge(
             "type": "character",
         })
 
-    if len(mentioned_entities) >= 2:
-        # Collect existing relationships for context injection
+    # Pre-compute relationship context
+    _run_rels = len(mentioned_entities) >= 2
+    existing_rels_json = None
+    if _run_rels:
         entity_id_list = [e["id"] for e in mentioned_entities]
         existing_rels_json = _collect_existing_relationships(catalogs, entity_id_list)
-        try:
-            rel_result = llm.extract_json(
-                system_prompt=load_template("relationship-mapper"),
-                user_prompt=format_relationship_prompt(turn, mentioned_entities,
-                                                       existing_rels_json),
-            )
-            relationships = rel_result.get("relationships", [])
-            if relationships:
-                merge_relationships(catalogs, relationships, turn_id)
-            _phase_log["relationships_ok"] = True
-        except QuotaExhaustedError:
-            raise
-        except LLMExtractionError as e:
-            print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}", file=sys.stderr)
-            turn_failed = True
-            _phase_log["relationships_ok"] = False
-            _phase_log["relationships_error"] = str(e)
 
-    # --- 4. Event Extraction ---
+    # Pre-compute event inputs
     next_evt_id = get_next_event_id(events_list)
     entity_ids = [e["id"] for e in mentioned_entities]
 
-    try:
-        event_result = llm.extract_json(
-            system_prompt=load_template("event-extractor"),
-            user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
-        )
-        new_events = event_result.get("events", [])
+    # Determine PC extraction eligibility
+    pc_already_extracted = any(
+        get_entity_id(e) == "char-player" for e in qualified
+    )
+    _run_pc = False
+    _pc_entry = None
+    _pc_ref = None
+    _pc_timeout = None
+    if not pc_already_extracted:
+        _skip_pc = _should_skip_pc(_pc_consecutive_failures, _pc_turns_since_cooldown)
+        if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
+            _pc_turns_since_cooldown += 1  # lgtm[py/unused-global-variable]
+            if _skip_pc:
+                _pc_skipped_turns += 1
+        if not _skip_pc:
+            _run_pc = True
+            pc_result = find_entity_by_id(catalogs, "char-player")
+            _pc_entry = pc_result[1] if pc_result else dict(PLAYER_CHARACTER_SEED)
+            _sanitize_pc_catalog_entry(catalogs)
+            _pc_ref = {"name": _pc_entry["name"], "type": "character",
+                       "existing_id": "char-player", "is_new": False}
+            _pc_timeout = max(llm.default_timeout * 2, 120)
 
-        # --- Phase 0: Validate event source_turns match processing turn (#127) ---
-        _fix_event_source_turns(new_events, turn_id)
+    # --- Execute phases 2-4 ---
+    _pw = getattr(llm, "parallel_workers", 1)
+    _use_parallel = isinstance(_pw, int) and _pw > 1
 
-        # --- Phase 1: Normalize event related_entities IDs (#108) ---
-        known_ids = _collect_all_entity_ids(catalogs)
-        for event in new_events:
-            related = event.get("related_entities", [])
-            if related:
-                event["related_entities"] = [
-                    normalize_entity_id(eid, known_ids) for eid in related
-                ]
+    if _use_parallel:
+        # ---- PARALLEL PATH (#282) ----
+        _detail_results: list[tuple[dict, dict | None, str | None]] = []
+        _rel_raw: list | None = None
+        _event_raw: list | None = None
+        _pc_raw_result = None
+        _pc_llm_error: str | None = None
 
-        valid_events = [e for e in (_coerce_event_fields(ev) for ev in new_events) if e is not None and _validate_event(e)]
+        futures_map: dict[concurrent.futures.Future, tuple[str, object]] = {}
+        with concurrent.futures.ThreadPoolExecutor(
+            max_workers=llm.parallel_workers,
+        ) as pool:
+            # Submit entity detail tasks
+            for entity_ref, current_entry in _entity_tasks:
+                f = pool.submit(
+                    _extract_single_entity_detail,
+                    llm, turn, entity_ref, current_entry, pc_arcs_data,
+                )
+                futures_map[f] = ("detail", entity_ref)
 
-        # --- Phase 2: Create stub entities for orphan IDs (#106) ---
-        if valid_events:
-            _create_orphan_stubs(catalogs, valid_events, turn_id,
-                                all_events=events_list + valid_events)
-            merge_events(events_list, valid_events)
+            # Submit PC detail extraction
+            if _run_pc:
+                _pc_ref_snap = _pc_ref
+                _pc_entry_snap = _pc_entry
+                _pc_timeout_snap = _pc_timeout
 
-        # --- Phase 3: Create entities for birth events (#136) ---
-        _ensure_birth_entities(events_list, catalogs)
-    except QuotaExhaustedError:
-        raise
-    except LLMExtractionError as e:
-        print(f"  WARNING: Event extraction failed for {turn_id}: {e}", file=sys.stderr)
-        turn_failed = True
-        _phase_log["events_ok"] = False
-        _phase_log["events_error"] = str(e)
+                def _pc_llm_call(
+                    _ref=_pc_ref_snap,
+                    _entry=_pc_entry_snap,
+                    _timeout=_pc_timeout_snap,
+                ):
+                    return llm.extract_json(
+                        system_prompt=load_template("entity-detail"),
+                        user_prompt=format_detail_prompt(
+                            turn, _ref, _entry, arcs_data=pc_arcs_data,
+                        ),
+                        timeout=_timeout,
+                        max_tokens=llm.pc_max_tokens,
+                    )
 
-    llm.delay()
+                f = pool.submit(_pc_llm_call)
+                futures_map[f] = ("pc", None)
+
+            # Submit relationship mapping
+            if _run_rels:
+                f = pool.submit(
+                    _extract_relationships_parallel,
+                    llm, turn, mentioned_entities, existing_rels_json,
+                )
+                futures_map[f] = ("relationship", None)
+
+            # Submit event extraction
+            f = pool.submit(
+                _extract_events_parallel,
+                llm, turn, next_evt_id, entity_ids,
+            )
+            futures_map[f] = ("event", None)
+
+            # Collect results
+            for future in concurrent.futures.as_completed(futures_map):
+                tag, data = futures_map[future]
+                try:
+                    result = future.result()
+                except QuotaExhaustedError:
+                    raise
+                except Exception as exc:
+                    print(f"  WARNING: Parallel {tag} task raised: {exc}",
+                          file=sys.stderr)
+                    if tag == "detail":
+                        _detail_results.append((data, None, str(exc)))
+                    elif tag == "pc":
+                        _pc_llm_error = str(exc)
+                    continue
+
+                if tag == "detail":
+                    _detail_results.append(result)
+                elif tag == "pc":
+                    _pc_raw_result = result
+                elif tag == "relationship":
+                    _rel_raw = result
+                elif tag == "event":
+                    _event_raw = result
+
+        # --- Merge entity details (deterministic order by entity ID) ---
+        _detail_results.sort(key=lambda r: get_entity_id(r[0]) or "")
+        for entity_ref, entity_data, _detail_err in _detail_results:
+            if _detail_err:
+                turn_failed = True
+                _phase_log["detail_ok"] = False
+                _phase_log["detail_error"] = _detail_err
+            elif entity_data:
+                merge_entity(catalogs, entity_data)
+                # Stub clearing — only for existing (non-new) entities
+                if not entity_ref.get("is_new", True):
+                    entity_id = get_entity_id(entity_ref)
+                    _merged_result = find_entity_by_id(catalogs, entity_id)
+                    _merged_entry = _merged_result[1] if _merged_result else None
+                    _effective_identity = entity_data.get("identity")
+                    if not _effective_identity and _merged_entry:
+                        _effective_identity = _merged_entry.get("identity")
+                    if (
+                        _merged_entry
+                        and isinstance(_effective_identity, str)
+                        and _effective_identity.strip()
+                        and "stub" not in _effective_identity.lower()
+                    ):
+                        _clear_stub_notes(_merged_entry)
+                if entity_data.get("id") == "char-player":
+                    _sanitize_pc_catalog_entry(catalogs)
+
+        # --- PC post-processing (stateful, always sequential) ---
+        if _run_pc:
+            pc_updated = False
+            if _pc_llm_error:
+                _phase_log["pc_ok"] = False
+                _phase_log["pc_error"] = _pc_llm_error
+            elif _pc_raw_result is not None:
+                entity_data = _unwrap_entity_response(_pc_raw_result)
+                if entity_data:
+                    entity_data = _coerce_entity_fields(entity_data)
+                if entity_data and _validate_entity(entity_data):
+                    _filter_pc_attributes(entity_data)
+                    merge_entity(catalogs, entity_data)
+                    _sanitize_pc_catalog_entry(catalogs)
+                    pc_updated = True
+                elif entity_data is not None:
+                    if isinstance(entity_data, dict):
+                        try:
+                            _data_keys = sorted(entity_data.keys())
+                        except Exception:
+                            _data_keys = list(map(str, entity_data.keys()))
+                        try:
+                            _data_preview = json.dumps(entity_data, default=str)[:500]
+                        except Exception:
+                            _data_preview = repr(entity_data)[:500]
+                    else:
+                        _data_keys = "non-dict"
+                        _data_preview = str(entity_data)[:500]
+                    print(
+                        f"  PC detail extraction: validation failed at {turn_id}, "
+                        f"response keys={_data_keys}, falling back to partial merge",
+                        file=sys.stderr,
+                    )
+                    print(
+                        f"  PC detail extraction: raw response preview (500 chars): "
+                        f"{_data_preview}",
+                        file=sys.stderr,
+                    )
+                    pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
+                    _write_pc_debug_record(
+                        turn_id, "validation_failed",
+                        _data_keys, _data_preview, merge_result=pc_updated,
+                    )
+                else:
+                    print(
+                        f"  WARNING: PC detail extraction returned None at {turn_id}. "
+                        f"Consecutive failures: {_pc_consecutive_failures + 1}",
+                        file=sys.stderr,
+                    )
+                    _write_pc_debug_record(
+                        turn_id, "none_returned", [], "", merge_result=False,
+                    )
+
+            # Track consecutive PC extraction failures (#133)
+            if pc_updated:
+                _phase_log["pc_ok"] = True
+                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
+                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
+            else:
+                _phase_log["pc_ok"] = False
+                if not _phase_log["pc_error"]:
+                    _phase_log["pc_error"] = "validation_failed_or_none"
+                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
+                if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
+                    print(
+                        f"  WARNING: PC extraction has failed for "
+                        f"{_pc_consecutive_failures} consecutive turns "
+                        f"(last update: "
+                        f"{_pc_entry.get('last_updated_turn', 'unknown')}). "
+                        f"Context may be too large for reliable extraction.",
+                        file=sys.stderr,
+                    )
+                elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
+                    print(
+                        f"  WARNING: PC extraction entering cooldown after "
+                        f"{_PC_SKIP_THRESHOLD} consecutive failures "
+                        f"(skip {_PC_SKIP_COOLDOWN}, retry {_PC_RETRY_WINDOW}).",
+                        file=sys.stderr,
+                    )
+
+        # --- Merge relationships ---
+        if _run_rels:
+            if _rel_raw is not None:
+                if _rel_raw:
+                    merge_relationships(catalogs, _rel_raw, turn_id)
+                _phase_log["relationships_ok"] = True
+            else:
+                turn_failed = True
+                _phase_log["relationships_ok"] = False
+                _phase_log["relationships_error"] = "parallel extraction failed"
+
+        # --- Merge events ---
+        if _event_raw is not None:
+            new_events = _event_raw
+            _fix_event_source_turns(new_events, turn_id)
+            known_ids = _collect_all_entity_ids(catalogs)
+            for event in new_events:
+                related = event.get("related_entities", [])
+                if related:
+                    event["related_entities"] = [
+                        normalize_entity_id(eid, known_ids) for eid in related
+                    ]
+            valid_events = [
+                e for e in (_coerce_event_fields(ev) for ev in new_events)
+                if e is not None and _validate_event(e)
+            ]
+            if valid_events:
+                _create_orphan_stubs(catalogs, valid_events, turn_id,
+                                    all_events=events_list + valid_events)
+                merge_events(events_list, valid_events)
+            _ensure_birth_entities(events_list, catalogs)
+        else:
+            turn_failed = True
+            _phase_log["events_ok"] = False
+            _phase_log["events_error"] = (
+                _phase_log["events_error"] or "parallel extraction failed"
+            )
+
+        llm.delay()
+
+    else:
+        # ---- SEQUENTIAL PATH (existing behaviour, parallel_workers <= 1) ----
+
+        # --- 2. Entity Detail Extraction ---
+        for entity_ref, current_entry in _entity_tasks:
+            entity_id = get_entity_id(entity_ref)
+            try:
+                entity_arcs = pc_arcs_data if entity_id == "char-player" else None
+                detail_result = llm.extract_json(
+                    system_prompt=load_template("entity-detail"),
+                    user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
+                                                     arcs_data=entity_arcs),
+                )
+            except QuotaExhaustedError:
+                raise
+            except LLMExtractionError as e:
+                print(f"  WARNING: Detail extraction failed for {entity_id} at {turn_id}: {e}",
+                      file=sys.stderr)
+                turn_failed = True
+                _phase_log["detail_ok"] = False
+                _phase_log["detail_error"] = str(e)
+                continue
+
+            entity_data = _unwrap_entity_response(detail_result)
+            if entity_data:
+                entity_data = _coerce_entity_fields(entity_data)
+            if entity_data and not _filter_concept_prefix_from_items(entity_data):
+                continue
+            if entity_data and _validate_entity(entity_data):
+                _filter_pc_attributes(entity_data)
+                merge_entity(catalogs, entity_data)
+                _effective_identity = entity_data.get("identity")
+                if not _effective_identity and current_entry:
+                    _effective_identity = current_entry.get("identity")
+                if (
+                    current_entry
+                    and isinstance(_effective_identity, str)
+                    and _effective_identity.strip()
+                    and "stub" not in _effective_identity.lower()
+                ):
+                    _clear_stub_notes(current_entry)
+                if entity_data.get("id") == "char-player":
+                    _sanitize_pc_catalog_entry(catalogs)
+
+            llm.delay()
+
+        # --- 2b. PC extraction ---
+        if _run_pc:
+            pc_updated = False
+            try:
+                detail_result = llm.extract_json(
+                    system_prompt=load_template("entity-detail"),
+                    user_prompt=format_detail_prompt(turn, _pc_ref, _pc_entry,
+                                                     arcs_data=pc_arcs_data),
+                    timeout=_pc_timeout,
+                    max_tokens=llm.pc_max_tokens,
+                )
+                entity_data = _unwrap_entity_response(detail_result)
+                if entity_data:
+                    entity_data = _coerce_entity_fields(entity_data)
+                if entity_data and _validate_entity(entity_data):
+                    _filter_pc_attributes(entity_data)
+                    merge_entity(catalogs, entity_data)
+                    _sanitize_pc_catalog_entry(catalogs)
+                    pc_updated = True
+                elif entity_data is not None:
+                    if isinstance(entity_data, dict):
+                        try:
+                            _data_keys = sorted(entity_data.keys())
+                        except Exception:
+                            _data_keys = list(map(str, entity_data.keys()))
+                        try:
+                            _data_preview = json.dumps(entity_data, default=str)[:500]
+                        except Exception:
+                            _data_preview = repr(entity_data)[:500]
+                    else:
+                        _data_keys = "non-dict"
+                        _data_preview = str(entity_data)[:500]
+                    print(
+                        f"  PC detail extraction: validation failed at {turn_id}, "
+                        f"response keys={_data_keys}, falling back to partial merge",
+                        file=sys.stderr,
+                    )
+                    print(
+                        f"  PC detail extraction: raw response preview (500 chars): "
+                        f"{_data_preview}",
+                        file=sys.stderr,
+                    )
+                    pc_updated = _pc_partial_merge(catalogs, entity_data, turn_id)
+                    _write_pc_debug_record(
+                        turn_id, "validation_failed",
+                        _data_keys, _data_preview, merge_result=pc_updated,
+                    )
+                else:
+                    print(
+                        f"  WARNING: PC detail extraction returned None at {turn_id}. "
+                        f"Consecutive failures: {_pc_consecutive_failures + 1}",
+                        file=sys.stderr,
+                    )
+                    _write_pc_debug_record(
+                        turn_id, "none_returned", [], "", merge_result=False,
+                    )
+            except QuotaExhaustedError:
+                raise
+            except LLMExtractionError as e:
+                print(f"  WARNING: PC detail extraction failed at {turn_id}: {e}",
+                      file=sys.stderr)
+                _phase_log["pc_ok"] = False
+                _phase_log["pc_error"] = str(e)
+
+            # Track consecutive PC extraction failures (#133)
+            if pc_updated:
+                _phase_log["pc_ok"] = True
+                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
+                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
+            else:
+                _phase_log["pc_ok"] = False
+                if not _phase_log["pc_error"]:
+                    _phase_log["pc_error"] = "validation_failed_or_none"
+                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
+                if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
+                    print(
+                        f"  WARNING: PC extraction has failed for "
+                        f"{_pc_consecutive_failures} consecutive turns "
+                        f"(last update: "
+                        f"{_pc_entry.get('last_updated_turn', 'unknown')}). "
+                        f"Context may be too large for reliable extraction.",
+                        file=sys.stderr,
+                    )
+                elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
+                    print(
+                        f"  WARNING: PC extraction entering cooldown after "
+                        f"{_PC_SKIP_THRESHOLD} consecutive failures "
+                        f"(skip {_PC_SKIP_COOLDOWN}, retry {_PC_RETRY_WINDOW}).",
+                        file=sys.stderr,
+                    )
+            llm.delay()
+
+        # --- 3. Relationship Mapping ---
+        if _run_rels:
+            try:
+                rel_result = llm.extract_json(
+                    system_prompt=load_template("relationship-mapper"),
+                    user_prompt=format_relationship_prompt(turn, mentioned_entities,
+                                                           existing_rels_json),
+                )
+                relationships = rel_result.get("relationships", [])
+                if relationships:
+                    merge_relationships(catalogs, relationships, turn_id)
+                _phase_log["relationships_ok"] = True
+            except QuotaExhaustedError:
+                raise
+            except LLMExtractionError as e:
+                print(f"  WARNING: Relationship mapping failed for {turn_id}: {e}",
+                      file=sys.stderr)
+                turn_failed = True
+                _phase_log["relationships_ok"] = False
+                _phase_log["relationships_error"] = str(e)
+
+        # --- 4. Event Extraction ---
+        try:
+            event_result = llm.extract_json(
+                system_prompt=load_template("event-extractor"),
+                user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
+            )
+            new_events = event_result.get("events", [])
+            _fix_event_source_turns(new_events, turn_id)
+            known_ids = _collect_all_entity_ids(catalogs)
+            for event in new_events:
+                related = event.get("related_entities", [])
+                if related:
+                    event["related_entities"] = [
+                        normalize_entity_id(eid, known_ids) for eid in related
+                    ]
+            valid_events = [
+                e for e in (_coerce_event_fields(ev) for ev in new_events)
+                if e is not None and _validate_event(e)
+            ]
+            if valid_events:
+                _create_orphan_stubs(catalogs, valid_events, turn_id,
+                                    all_events=events_list + valid_events)
+                merge_events(events_list, valid_events)
+            _ensure_birth_entities(events_list, catalogs)
+        except QuotaExhaustedError:
+            raise
+        except LLMExtractionError as e:
+            print(f"  WARNING: Event extraction failed for {turn_id}: {e}",
+                  file=sys.stderr)
+            turn_failed = True
+            _phase_log["events_ok"] = False
+            _phase_log["events_error"] = str(e)
+
+        llm.delay()
 
     # --- Phase 5: Temporal signal extraction (#263) ---
     _temporal_before = len(timeline) if timeline is not None else 0

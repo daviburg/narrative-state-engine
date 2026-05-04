@@ -134,6 +134,7 @@ A running profile of inferred DM behavior patterns, populated from two data sour
 An automated pipeline that uses an LLM to extract structured data from transcript turns.
 
 - **Five-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor
+- **Intra-turn parallelism** (#282): When `parallel_workers > 1` in `config/llm.json`, entity detail, PC detail, relationship mapping, and event extraction run concurrently via `ThreadPoolExecutor` after discovery completes. Results are merged sequentially (entities → relationships → events) to maintain catalog consistency. The inter-call delay is applied once per turn instead of between each call. With `parallel_workers: 1` (default), the pipeline uses the original sequential execution path.
 - Prompt templates in `templates/extraction/` define each agent's behavior
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`; includes per-pair relationship consolidation, `_dedup_relationships()` safety net (#183), and `cleanup_dangling_relationships()` to remove refs to non-existent entities (#184)
