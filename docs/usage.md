@@ -47,6 +47,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 |---|---|---|---|---|
 | `qwen2.5:3b` | 3B | Q4_K_M | ~2.5 GB | Poor — 0% item recall, frequent hallucinations, ID format violations |
 | `qwen2.5:14b` | 14B | Q4_K_M | ~9 GB | Good — reliable entity classification, items extracted, acceptable coreference |
+| `qwen3-8b-int4-ov` (OpenVINO) | 8B | INT4 sym | ~4.5 GB | Good — reliable JSON, needs `skip_response_format`, thinking output parsed automatically |
 | `gemini-2.5-flash` (Google) | Unknown | N/A | Cloud | Very good — fast, low cost (~$0.30/run), 1M token context, strong JSON mode |
 | `gpt-4o` (OpenAI) | Unknown | N/A | Cloud | Best — accurate structured JSON, strong coreference, minimal hallucination |
 
@@ -58,6 +59,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 | 12 GB | Up to 14B |
 | 16 GB | Up to 22B |
 | 24 GB | Up to 32B |
+| 31 GB (Arc Pro B70) | Up to 70B (INT4 sym, OpenVINO) |
 
 ### Known Limitations of Small Models (<7B)
 
@@ -173,6 +175,183 @@ restarts.
 
 See `config/ollama/README.md` for details on adding variants for other base
 models.
+
+### Using OpenVINO (Intel Arc / Xeon GPUs)
+
+OpenVINO's `ContinuousBatchingPipeline` provides high-throughput inference on
+Intel Arc discrete GPUs and Xeon CPUs. This section documents tested hardware
+configurations and the concurrency constraints that matter for extraction.
+
+#### Tested Hardware
+
+| GPU | VRAM | Max Model | Batch Perf (INT4) | Notes |
+|---|---|---|---|---|
+| Intel Arc Pro B70 | 31 GB | 70B INT4 | ~61 tok/s (batch=1), ~204 agg (batch=4) | Server-class; 8 GB KV cache fits large batches |
+| NVIDIA RTX 4070 | 12 GB | 14B Q4 | ~40-50 tok/s (llama-server, batch=1) | Consumer-class; use llama-server (`-np 4`) or Ollama |
+
+#### Server Setup (Intel Arc + OpenVINO)
+
+The extraction pipeline connects to any OpenAI-compatible endpoint. For Intel
+Arc GPUs, serve the model with OpenVINO's `ContinuousBatchingPipeline` behind
+a FastAPI wrapper:
+
+```bash
+# On the inference server (e.g. Ubuntu + Intel Arc Pro B70)
+pip install openvino openvino-genai fastapi uvicorn
+
+# Export model to OpenVINO IR format (one-time)
+optimum-cli export openvino --model Qwen/Qwen3-8B --weight-format int4_sym \
+    --trust-remote-code ./models/qwen3-8b-int4-ov
+
+# Start the server
+python serve_openvino.py --model ./models/qwen3-8b-int4-ov --port 8000
+```
+
+Configure `config/llm.json` on the client machine:
+
+```json
+{
+  "provider": "openai",
+  "base_url": "http://<server-ip>:8000/v1",
+  "model": "qwen3-8b-int4-ov",
+  "temperature": 0.3,
+  "max_tokens": 4096,
+  "discovery_max_tokens": 8192,
+  "pc_max_tokens": 8192,
+  "timeout_seconds": 300,
+  "retry_attempts": 3,
+  "parallel_workers": 4,
+  "skip_response_format": true,
+  "context_length": 32768,
+  "checkpoint_interval": 25
+}
+```
+
+Key settings for OpenVINO servers:
+
+- **`skip_response_format: true`** — OpenVINO's pipeline does not support
+  `response_format={"type": "json_object"}`. The extraction pipeline parses
+  JSON from freeform output anyway.
+- **`parallel_workers: 4`** — Matches the server's effective batch throughput.
+  The pipeline fires detail, PC, relationship, and event extraction in parallel
+  after discovery completes.
+- **`temperature: 0.3`** — Avoid 0.0 with qwen3 models (can cause empty
+  responses or infinite thinking loops).
+
+#### Server Batching Behavior
+
+The OpenVINO `ContinuousBatchingPipeline` processes requests in atomic batches:
+
+1. Incoming requests queue until `BATCH_WAIT_MS` elapses or `MAX_BATCH_SIZE`
+   requests accumulate
+2. `pipeline.generate()` runs the entire batch to completion (blocking)
+3. While a batch is generating, new requests queue in memory for the next batch
+
+This means per-request throughput **decreases** as batch size grows (total VRAM
+bandwidth is shared), but aggregate throughput increases:
+
+| Batch Size | Per-request tok/s | Aggregate tok/s | Time for 8192 tokens |
+|---|---|---|---|
+| 1 | ~61 | ~61 | 134s |
+| 2 | ~65 | ~122 | 126s |
+| 4 | ~51 | ~204 | 161s |
+| 8 | ~24 | ~194 | 341s |
+
+#### Concurrency Rules
+
+The extraction pipeline has two levels of parallelism that interact:
+
+- **External workers** (`--workers` in `retry_failed_turns.py`): number of
+  turns processed simultaneously
+- **Internal workers** (`parallel_workers` in `config/llm.json`): concurrent
+  LLM calls within a single turn (detail + PC + relationships + events)
+
+Total concurrent requests = external workers × internal parallel_workers.
+
+**Safe configurations (timeout_seconds=300):**
+
+| External | Internal | Max Concurrent | Discovery Time (8192 tok) | Safe? |
+|---|---|---|---|---|
+| 1 | 4 | 4 | 144s (8192/57) | **Yes** (proven) |
+| 2 | 4 | 8 | 341s (8192/24) | **No** — exceeds timeout |
+| 4 | 4 | 16 | queue death | **No** — cascading failures |
+| 2 | 2 | 4 | 144s | Marginal (untested) |
+| 4 | 1 | 4 | 144s | Loses batching benefit |
+
+**Rule of thumb**: Keep total concurrent requests ≤ 4 for discovery-heavy
+workloads (8192 tokens). For detail-only work (4096 tokens), up to 8
+concurrent is safe.
+
+#### RTX 4070 Configuration (llama-server)
+
+For an RTX 4070 (12 GB VRAM), use llama-server (llama.cpp) with a 14B model
+at Q4 quantization. llama-server supports true parallel slot processing
+(`-np 4`), unlike Ollama which queues concurrent requests on consumer GPUs.
+
+```bash
+# Start llama-server with 4 parallel slots and 8K context per slot
+llama-server -m qwen2.5-14b-q4_k_m.gguf \
+    -ngl 99 -np 4 -c 32768 --port 8080
+```
+
+Configure `config/llm.json`:
+
+```json
+{
+  "provider": "openai",
+  "base_url": "http://localhost:8080/v1",
+  "model": "qwen2.5-14b",
+  "temperature": 0.0,
+  "max_tokens": 4096,
+  "pc_max_tokens": 8192,
+  "context_length": 32768,
+  "timeout_seconds": 120,
+  "parallel_workers": 4,
+  "batch_delay_ms": 0,
+  "skip_response_format": true
+}
+```
+
+Key differences from the B70 config:
+
+- **`parallel_workers: 4`** — llama-server with `-np 4` handles 4 concurrent
+  requests in parallel slots (unlike Ollama which serializes them).
+- **`context_length: 32768`** — Total context shared across 4 slots
+  (8K effective per slot). Fits within 12 GB at Q4.
+- **`batch_delay_ms: 0`** — No delay needed; the server manages slot
+  scheduling internally.
+- **`timeout_seconds: 120`** — Sufficient for single-slot generation speeds.
+
+> **Why llama-server over Ollama?** Ollama wraps llama.cpp but does not expose
+> parallel slot scheduling to the OpenAI-compatible endpoint. With Ollama,
+> `parallel_workers: 4` in config sends 4 requests that queue serially.
+> With llama-server `-np 4`, all 4 requests process simultaneously in
+> dedicated KV-cache slots, achieving ~3-4× throughput for the parallel
+> phases of extraction.
+
+> **qwen3 thinking models**: If using qwen3 on llama-server, thinking mode
+> cannot be fully disabled via the chat template — the server generates
+> `<think>` blocks regardless. The extraction pipeline's JSON parser handles
+> this automatically (strips thinking content, extracts JSON from fenced
+> blocks). Use `skip_response_format: true` and `temperature: 0.3`.
+
+#### Retrying Failed Turns
+
+After a full extraction run, some turns may fail due to transient timeouts or
+server hiccups. Use the retry tool:
+
+```bash
+# Preview what would be retried
+python tools/retry_failed_turns.py --session sessions/my-session --dry-run
+
+# Execute (sequential by default — safe for any server)
+python tools/retry_failed_turns.py --session sessions/my-session
+```
+
+The tool reads `framework/extraction-log.jsonl` to identify turns where
+`discovery_ok=False`, then re-extracts them. Results are merged into the
+existing catalogs. The tool is idempotent — re-running it skips turns that
+have since succeeded.
 
 | Field | Description |
 |---|---|
