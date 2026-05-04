@@ -197,14 +197,15 @@ a FastAPI wrapper:
 
 ```bash
 # On the inference server (e.g. Ubuntu + Intel Arc Pro B70)
-pip install openvino openvino-genai fastapi uvicorn
+pip install openvino openvino-genai optimum[openvino] fastapi uvicorn
 
 # Export model to OpenVINO IR format (one-time)
 optimum-cli export openvino --model Qwen/Qwen3-8B --weight-format int4_sym \
     --trust-remote-code ./models/qwen3-8b-int4-ov
 
-# Start the server
-python serve_openvino.py --model ./models/qwen3-8b-int4-ov --port 8000
+# Start the server (use any OpenAI-compatible wrapper around ContinuousBatchingPipeline)
+# For example, using openvino_genai's built-in server or a custom FastAPI wrapper:
+python -m openvino_genai.server --model ./models/qwen3-8b-int4-ov --port 8000
 ```
 
 Configure `config/llm.json` on the client machine:

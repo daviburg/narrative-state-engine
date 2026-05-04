@@ -52,13 +52,13 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from catalog_merger import load_catalogs, load_events, save_catalogs, save_events, merge_entity
-from llm_client import LLMClient, LLMExtractionError, QuotaExhaustedError
+from llm_client import LLMClient, QuotaExhaustedError
 from semantic_extraction import (
     extract_and_merge,
     _write_extraction_log,
     _reset_pc_failure_tracking,
 )
-from temporal_extraction import load_timeline, save_timeline
+from temporal_extraction import load_timeline, save_timeline, merge_temporal_signals
 
 
 def load_failed_turns(extraction_log_path: str) -> list[str]:
@@ -84,10 +84,12 @@ def load_failed_turns(extraction_log_path: str) -> list[str]:
             except json.JSONDecodeError:
                 continue
             turn_id = entry.get("turn_id", "")
-            if entry.get("discovery_ok"):
+            if not turn_id:
+                continue
+            if entry.get("discovery_ok") is True:
                 succeeded.add(turn_id)
                 failed.discard(turn_id)
-            else:
+            elif entry.get("discovery_ok") is False:
                 if turn_id not in succeeded:
                     failed.add(turn_id)
 
@@ -106,10 +108,13 @@ def load_turn_dicts(session_dir: str) -> list[dict]:
         speaker = parts[2] if len(parts) > 2 else "dm"
         with open(tf, encoding="utf-8") as f:
             text = f.read()
-        # Strip the header line (## turn-NNN [speaker])
+        # Strip a leading markdown header line (#/## turn-NNN — SPEAKER)
+        # and one following blank separator line if present.
         lines = text.strip().split("\n")
-        if lines and lines[0].startswith("##"):
+        if lines and (lines[0].startswith("# ") or lines[0].startswith("## ")):
             lines = lines[1:]
+            if lines and not lines[0].strip():
+                lines = lines[1:]
         text = "\n".join(lines).strip()
         turn_dicts.append({"turn_id": turn_id, "speaker": speaker, "text": text})
     return turn_dicts
@@ -156,13 +161,9 @@ def merge_parallel_results(
 ) -> tuple[dict, list, list]:
     """Merge entity additions from parallel extractions into base catalogs.
 
-    Each result contains a full catalog snapshot. We diff against the base
-    to find new/updated entities and merge them sequentially.
+    Each result contains a full catalog snapshot. We merge new/updated
+    entities sequentially.
     """
-    base_entity_ids: dict[str, set[str]] = {}
-    for key, entities in base_catalogs.items():
-        base_entity_ids[key] = {e.get("id", "") for e in entities}
-
     for turn_id, result_catalogs, result_events, result_timeline, failed, log_record in results:
         if failed:
             # Don't merge data from failed extractions
@@ -184,16 +185,8 @@ def merge_parallel_results(
                 base_events.append(event)
                 existing_event_ids.add(event.get("id", ""))
 
-        # Merge timeline entries (deduplicate by turn + signal)
-        existing_signals = {
-            (t.get("turn_id", ""), t.get("signal", ""))
-            for t in base_timeline
-        }
-        for entry in result_timeline:
-            key = (entry.get("turn_id", ""), entry.get("signal", ""))
-            if key not in existing_signals:
-                base_timeline.append(entry)
-                existing_signals.add(key)
+        # Merge timeline entries using canonical dedup logic
+        merge_temporal_signals(base_timeline, result_timeline)
 
     return base_catalogs, base_events, base_timeline
 
@@ -235,8 +228,12 @@ def main():
                     f"Server batch saturation may cause timeouts.",
                     file=sys.stderr,
                 )
-        except (OSError, json.JSONDecodeError):
-            pass
+        except (OSError, json.JSONDecodeError) as e:
+            print(
+                f"  WARNING: Unable to read/parse config '{args.config}' for "
+                f"concurrency check: {e}",
+                file=sys.stderr,
+            )
 
     # Load failed turns from extraction log
     failed_turn_ids = load_failed_turns(extraction_log_path)
@@ -327,7 +324,9 @@ def main():
 
             except QuotaExhaustedError as e:
                 still_failed += 1
-                print(f"  QUOTA   {turn_id} — {e}")
+                print(f"  QUOTA   {turn_id} — {e}", file=sys.stderr)
+                print("  Stopping early — quota exhausted, cancelling remaining work.",
+                      file=sys.stderr)
                 # Log the failure
                 _write_extraction_log(extraction_log_path, {
                     "turn_id": turn_id,
@@ -340,6 +339,10 @@ def main():
                     "events_ok": False, "events_error": None,
                     "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
                 })
+                # Cancel remaining futures to stop hammering the provider
+                for pending in future_to_turn:
+                    pending.cancel()
+                break
             except Exception as e:
                 still_failed += 1
                 print(f"  ERROR   {turn_id} — {type(e).__name__}: {e}")
