@@ -343,7 +343,6 @@ class TestTruncationDetection:
         mock_response.choices = [mock_choice]
 
         call_count = 0
-        original_create = client.client.chat.completions.create
 
         def counting_create(**kwargs):
             nonlocal call_count

@@ -890,8 +890,9 @@ def _repair_truncated_discovery(partial_text: str) -> dict | None:
     When the model hits max_tokens mid-array, the JSON is cut off like:
         {"entities": [..., {"name": "foo", "type": "cha
     
-    Strategy: find the last complete entity object in the array by locating
-    the last `}, {` or `}]` boundary, then close the array and object.
+    Strategy: walk the partial JSON tracking brace depth — each time depth
+    drops from 2→1, we've just closed a complete entity object.  Truncate
+    after the last such close and append `]}` to finish the structure.
 
     Returns:
         Parsed dict with entities array if repair succeeds, None otherwise.
@@ -1890,7 +1891,8 @@ def extract_and_merge(
         # Discovery hit the token ceiling. Retry with 2× token budget first
         # (prefer complete response over lossy repair).
         _retry_max = (_discovery_max_tokens or llm.max_tokens) * 2
-        print(f"  TRUNCATED: Discovery for {turn_id} hit max_tokens={_discovery_max_tokens}, "
+        _effective_max = _discovery_max_tokens or llm.max_tokens
+        print(f"  TRUNCATED: Discovery for {turn_id} hit max_tokens={_effective_max}, "
               f"retrying with max_tokens={_retry_max}...", file=sys.stderr)
         try:
             discovery_result = llm.extract_json(

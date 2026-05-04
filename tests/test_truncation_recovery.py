@@ -10,7 +10,6 @@ import json
 import os
 import sys
 from unittest.mock import MagicMock, patch
-import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -146,7 +145,6 @@ class TestDiscoveryTruncationRetry:
 
     def test_repair_fallback_on_double_truncation(self):
         """When retry also truncates, repair is attempted on the larger partial."""
-        first_partial = '{"entities": [{"id": "char-a", "name": "A", "type": "character", "is_new": true, "confidence": 0.9, "description": "test"}, {"id": "char-trunc'
         second_partial = '{"entities": [{"id": "char-a", "name": "A", "type": "character", "is_new": true, "confidence": 0.9, "description": "test"}, {"id": "char-b", "name": "B", "type": "character", "is_new": true, "confidence": 0.8, "description": "second"}, {"id": "char-trunc'
 
         # Simulate: first call truncates, retry truncates with more data
