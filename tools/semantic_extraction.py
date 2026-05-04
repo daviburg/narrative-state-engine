@@ -4315,7 +4315,7 @@ def extract_semantic_batch(
                     except (json.JSONDecodeError, KeyError):
                         continue
         except OSError:
-            pass
+            pass  # Non-critical: extraction log is optional; proceed without skip set
     if _already_extracted:
         print(f"  Skipping {len(_already_extracted)} previously-extracted turn(s) from extraction log.")
 
