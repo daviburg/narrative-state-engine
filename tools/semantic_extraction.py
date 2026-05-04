@@ -44,7 +44,7 @@ from catalog_merger import (
     _levenshtein,
     CATALOG_KEYS,
 )
-from llm_client import LLMClient, LLMExtractionError, QuotaExhaustedError
+from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
     extract_temporal_signals,
     merge_temporal_signals,
@@ -884,6 +884,76 @@ def format_discovery_prompt(turn: dict, known_entities: str) -> str:
     )
 
 
+def _repair_truncated_discovery(partial_text: str) -> dict | None:
+    """Attempt to repair a truncated discovery JSON response.
+
+    When the model hits max_tokens mid-array, the JSON is cut off like:
+        {"entities": [..., {"name": "foo", "type": "cha
+    
+    Strategy: find the last complete entity object in the array by locating
+    the last `}, {` or `}]` boundary, then close the array and object.
+
+    Returns:
+        Parsed dict with entities array if repair succeeds, None otherwise.
+    """
+    import json as _json
+
+    text = partial_text.strip()
+
+    # Strip thinking blocks and markdown fences
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    fence_match = re.match(r"^```(?:json)?\s*\n(.*)", text, re.DOTALL)
+    if fence_match:
+        text = fence_match.group(1).strip()
+        # Remove trailing ``` if present
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+    # Find the last complete object boundary in the entities array
+    # Look for the pattern `}` followed by `,` or end — the last complete entry
+    last_complete = -1
+    brace_depth = 0
+    in_string = False
+    escape_next = False
+
+    for i, ch in enumerate(text):
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+        if ch == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            brace_depth += 1
+        elif ch == '}':
+            brace_depth -= 1
+            if brace_depth == 1:
+                # We just closed an entity object (depth goes from 2→1)
+                last_complete = i
+
+    if last_complete <= 0:
+        return None
+
+    # Truncate after the last complete entity object, close the array and outer object
+    repaired = text[:last_complete + 1] + "]}"
+
+    try:
+        parsed = _json.loads(repaired)
+        if isinstance(parsed, dict) and "entities" in parsed:
+            entities = parsed["entities"]
+            if isinstance(entities, list) and len(entities) > 0:
+                return parsed
+    except _json.JSONDecodeError:
+        pass
+
+    return None
+
+
 # Stable attribute keys considered when trimming PC prior context.
 #
 # Why these are included:
@@ -1701,6 +1771,60 @@ def extract_and_merge(
             temperature=_discovery_temp,
             max_tokens=_discovery_max_tokens,
         )
+    except LLMTruncationError as trunc_err:
+        # Discovery hit the token ceiling. Retry with 2× token budget first
+        # (prefer complete response over lossy repair).
+        _retry_max = (_discovery_max_tokens or llm.max_tokens) * 2
+        print(f"  TRUNCATED: Discovery for {turn_id} hit max_tokens={_discovery_max_tokens}, "
+              f"retrying with max_tokens={_retry_max}...", file=sys.stderr)
+        try:
+            discovery_result = llm.extract_json(
+                system_prompt=load_template("entity-discovery"),
+                user_prompt=format_discovery_prompt(turn, known),
+                temperature=_discovery_temp,
+                max_tokens=_retry_max,
+            )
+        except LLMTruncationError as retry_trunc:
+            # Still truncated at 2× — fall back to lossy JSON repair
+            partial = retry_trunc.partial_text
+            print(f"  TRUNCATED (2nd attempt): Still hit limit at {_retry_max}, "
+                  f"attempting repair...", file=sys.stderr)
+            repaired = _repair_truncated_discovery(partial) if partial else None
+            if repaired is not None:
+                print(f"  REPAIRED: Recovered {len(repaired.get('entities', []))} entities "
+                      f"from truncated response", file=sys.stderr)
+                discovery_result = repaired
+            else:
+                # Repair on 2nd attempt failed — try repair on 1st attempt's partial
+                repaired_orig = _repair_truncated_discovery(trunc_err.partial_text)
+                if repaired_orig is not None:
+                    print(f"  REPAIRED (from 1st attempt): Recovered "
+                          f"{len(repaired_orig.get('entities', []))} entities",
+                          file=sys.stderr)
+                    discovery_result = repaired_orig
+                else:
+                    print(f"  WARNING: Entity discovery failed for {turn_id}: "
+                          f"{retry_trunc}", file=sys.stderr)
+                    discovery_result = {"entities": []}
+                    turn_failed = True
+                    _phase_log["discovery_ok"] = False
+                    _phase_log["discovery_error"] = str(retry_trunc)
+        except LLMExtractionError as retry_err:
+            # Non-truncation failure on retry — fall back to repair on original
+            print(f"  WARNING: Retry failed for {turn_id}: {retry_err}, "
+                  f"attempting repair on original...", file=sys.stderr)
+            repaired = _repair_truncated_discovery(trunc_err.partial_text)
+            if repaired is not None:
+                print(f"  REPAIRED: Recovered {len(repaired.get('entities', []))} entities "
+                      f"from original truncated response", file=sys.stderr)
+                discovery_result = repaired
+            else:
+                print(f"  WARNING: Entity discovery failed for {turn_id}: "
+                      f"{retry_err}", file=sys.stderr)
+                discovery_result = {"entities": []}
+                turn_failed = True
+                _phase_log["discovery_ok"] = False
+                _phase_log["discovery_error"] = str(retry_err)
     except QuotaExhaustedError:
         raise
     except LLMExtractionError as e:

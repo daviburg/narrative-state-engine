@@ -18,6 +18,18 @@ class LLMExtractionError(Exception):
     """Raised when the LLM response cannot be parsed or validated."""
 
 
+class LLMTruncationError(LLMExtractionError):
+    """Raised when the LLM response was truncated due to max_tokens limit.
+
+    The partial response text is available via the `partial_text` attribute
+    for callers that want to attempt JSON repair.
+    """
+
+    def __init__(self, message: str, partial_text: str = ""):
+        super().__init__(message)
+        self.partial_text = partial_text
+
+
 class QuotaExhaustedError(LLMExtractionError):
     """Raised when consecutive rate-limit (429) errors suggest daily quota exhaustion."""
 
@@ -431,9 +443,18 @@ class LLMClient:
 
                     response = self.client.chat.completions.create(**kwargs)
                     raw_text = response.choices[0].message.content
+                    finish_reason = getattr(response.choices[0], "finish_reason", None)
 
                     if not raw_text:
                         raise LLMExtractionError("Empty response from LLM.")
+
+                    # Detect token-limit truncation before attempting JSON parse
+                    if finish_reason == "length":
+                        raise LLMTruncationError(
+                            f"Response truncated (finish_reason=length, "
+                            f"max_tokens={effective_max})",
+                            partial_text=raw_text,
+                        )
 
                 parsed = self._parse_json_response(raw_text)
 
@@ -453,6 +474,8 @@ class LLMClient:
                 self.stats.record_success()
                 return parsed
 
+            except (LLMTruncationError, QuotaExhaustedError):
+                raise
             except Exception as e:
                 last_error = e
                 self._handle_retry(attempt, e)
