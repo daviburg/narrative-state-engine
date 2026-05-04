@@ -125,7 +125,8 @@ Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
   "context_length": 8192,
   "timeout_seconds": 120,
   "retry_attempts": 3,
-  "batch_delay_ms": 200
+  "batch_delay_ms": 200,
+  "parallel_workers": 4
 }
 ```
 
@@ -185,6 +186,7 @@ models.
 | `timeout_seconds` | HTTP timeout per LLM call in seconds. PC extraction uses the greater of `2×` this value and `120` seconds. |
 | `retry_attempts` | Number of retries on LLM call failure. |
 | `batch_delay_ms` | Delay between consecutive LLM calls in milliseconds. Prevents GPU thrashing. For cloud providers, a minimum of 2000ms is enforced automatically to avoid hitting per-minute rate limits. |
+| `parallel_workers` | Number of concurrent LLM calls per turn. When set to a value greater than 1, entity detail, PC detail, relationship mapping, and event extraction calls fire concurrently after discovery completes, using a `ThreadPoolExecutor`. The inter-call delay is applied once at the end of the turn instead of between each call. Default: `1` (sequential). Set to `4` for local servers that support batched inference (e.g., OpenVINO, llama-server with `-np 4`). |
 | `consecutive_rate_limit_threshold` | Number of consecutive HTTP 429 errors before the pipeline stops to preserve quota. Default: `10`. Set higher for APIs with aggressive but transient rate limiting. |
 | `ollama_options` | Optional dict of Ollama-specific parameters (e.g., `{"num_gpu": 99}`). Merged into `extra_body.options` alongside `num_ctx`. `context_length` takes precedence over `num_ctx` in this dict. |
 | `ollama_format` | Ollama-only. Constrains output format via Ollama's native `format` parameter. Set to `"json"` to enforce JSON output. Distinct from the OpenAI `response_format` which hangs on qwen3.5 models. When set in combination with `ollama_think`, enables the Ollama native streaming path (`/api/chat`) instead of the OpenAI SDK. |
