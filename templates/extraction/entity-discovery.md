@@ -8,7 +8,7 @@ For each entity, return a JSON object with these fields:
 - "is_new": true if this entity is NOT in the known-entities list
 - "existing_id": if is_new is false, the ID from the known-entities list. Must be null if is_new is true.
 - "proposed_id": if is_new is true, a proposed ID following the prefix convention (char-, loc-, faction-, item-, creature-, concept-). Must be null if is_new is false. Use lowercase, hyphen-separated words.
-- "description": one-sentence factual description based ONLY on what appears in THIS turn's text
+- "description": one-sentence factual description based ONLY on what appears in THIS turn's text. **OMIT this field entirely when is_new is false** (existing entities already have descriptions in the catalog).
 - "confidence": 0.0-1.0 confidence that this is a distinct, nameable entity worth cataloging
 - "source_turn": the turn ID provided in the input
 
@@ -46,6 +46,9 @@ Examples:
 {"entities": [{"name": "Kael", "type": "character", "is_new": true, "existing_id": null, "proposed_id": "char-kael", "description": "A young hunter mentioned by the elder.", "confidence": 0.9, "source_turn": "turn-019"}]}
 
 {"entities": [{"name": "Crude spear", "type": "item", "is_new": true, "existing_id": null, "proposed_id": "item-crude-spear", "description": "A roughly-made spear carried by one of the warriors.", "confidence": 0.85, "source_turn": "turn-007"}]}
+
+Example with existing entities (no description field):
+{"entities": [{"name": "Kael", "type": "character", "is_new": false, "existing_id": "char-kael", "proposed_id": null, "confidence": 0.95, "source_turn": "turn-042"}, {"name": "the longhouse", "type": "location", "is_new": false, "existing_id": "loc-communal-longhouse", "proposed_id": null, "confidence": 0.9, "source_turn": "turn-042"}]}
 
 {"entities": [{"name": "Tripwire", "type": "item", "is_new": true, "existing_id": null, "proposed_id": "item-tripwire", "description": "A hidden trap mechanism stretched across the path.", "confidence": 0.9, "source_turn": "turn-005"}]}
 
