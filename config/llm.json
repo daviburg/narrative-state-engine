@@ -9,6 +9,7 @@
   "timeout_seconds": 120,
   "retry_attempts": 3,
   "batch_delay_ms": 200,
+  "parallel_workers": 1,
   "context_length": 32768,
   "entity_refresh_interval": 50,
   "entity_refresh_batch_size": 10,

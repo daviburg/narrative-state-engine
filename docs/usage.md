@@ -125,7 +125,8 @@ Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
   "context_length": 8192,
   "timeout_seconds": 120,
   "retry_attempts": 3,
-  "batch_delay_ms": 200
+  "batch_delay_ms": 200,
+  "parallel_workers": 4
 }
 ```
 
@@ -185,6 +186,7 @@ models.
 | `timeout_seconds` | HTTP timeout per LLM call in seconds. PC extraction uses the greater of `2×` this value and `120` seconds. |
 | `retry_attempts` | Number of retries on LLM call failure. |
 | `batch_delay_ms` | Delay between consecutive LLM calls in milliseconds. Prevents GPU thrashing. For cloud providers, a minimum of 2000ms is enforced automatically to avoid hitting per-minute rate limits. |
+| `parallel_workers` | Number of concurrent LLM calls per turn. When set to a value greater than 1, entity detail, PC detail, relationship mapping, and event extraction calls fire concurrently after discovery completes, using a `ThreadPoolExecutor`. The inter-call delay is applied once at the end of the turn instead of between each call. Default: `1` (sequential). Set to `4` for local servers that support batched inference (e.g., OpenVINO, llama-server with `-np 4`). **Intended for local providers only** — automatically forced to `1` for cloud providers (non-localhost base URLs) to avoid triggering rate limits. |
 | `consecutive_rate_limit_threshold` | Number of consecutive HTTP 429 errors before the pipeline stops to preserve quota. Default: `10`. Set higher for APIs with aggressive but transient rate limiting. |
 | `ollama_options` | Optional dict of Ollama-specific parameters (e.g., `{"num_gpu": 99}`). Merged into `extra_body.options` alongside `num_ctx`. `context_length` takes precedence over `num_ctx` in this dict. |
 | `ollama_format` | Ollama-only. Constrains output format via Ollama's native `format` parameter. Set to `"json"` to enforce JSON output. Distinct from the OpenAI `response_format` which hangs on qwen3.5 models. When set in combination with `ollama_think`, enables the Ollama native streaming path (`/api/chat`) instead of the OpenAI SDK. |
@@ -805,6 +807,80 @@ Day offsets are estimated using a configurable days-per-turn ratio (default: 3.5
 When timeline data is available, wiki pages include:
 - **Infobox**: "First Seen Day" with estimated day and season label
 - **Event Timeline**: An "Est. Day" column showing approximate in-game day for each event
+- **Timeline page** (`framework/catalogs/timeline.md`): A narrative timeline wiki page with current position, prose temporal summary, and reference tables
+
+### Timeline Wiki Page
+
+The timeline wiki page is generated automatically alongside entity pages:
+
+```bash
+# Generate all wiki pages including timeline
+python tools/generate_wiki_pages.py --framework framework-local/
+
+# Generate only the timeline page
+python tools/generate_wiki_pages.py --framework framework-local/ --type timeline
+```
+
+The page contains:
+1. **Current Position** — infobox with estimated day, season, anchor event, and confidence
+2. **Narrative Summary** — structured story progression using catalog events (or concise fallback when no catalog data available)
+3. **Season Progression** — table of confirmed season transitions (flicker-filtered)
+4. **Time Passages** — table of detected time skips
+5. **Biological & Lifecycle Markers** — pregnancies, births, and other lifecycle events
+6. **Other Milestones** — construction and anchor events
+
+When `events.json` is available in the catalog directory, the narrative summary uses event
+descriptions to produce a richer story progression grouped by temporal period. Without events,
+a concise 3-sentence fallback is produced (elapsed time, season arc, time passage count).
+
+### Season Flicker Filtering
+
+Low-confidence season signals (regex false positives such as "harvest" in a winter story) are automatically filtered. A season transition is kept only if:
+- Its confidence ≥ 0.6 (high-quality signal), OR
+- At least 1 neighboring season entry within a sliding window of 5 entries on each side shares the same base season (winter/spring/summer/autumn)
+
+Additionally, base season detection requires at least 2 distinct keyword matches and a margin of 2 over the runner-up, preventing single occurrences of common words ("cold", "warm", "fall") from triggering false detections. Signal text is capped at 120 characters to avoid storing full paragraphs from greedy matches.
+
+### Timeline Wiki Page
+
+A dedicated timeline overview page is generated at `framework/catalogs/timeline.md` alongside the entity wiki pages. It provides a summarized, human-readable view of all temporal data:
+
+- **Season Progression**: Groups consecutive same-season entries into ranges (e.g., "Turns 3–25: Mid Winter") rather than listing each individually
+- **Time Skips**: Notable time jumps with descriptions and confidence scores
+- **Biological Markers**: Sleep/wake cycles, meals, and rest periods
+- **Day Progression**: Estimated day offsets for entries with day data
+- **Other Temporal Markers**: Anchor events, construction milestones, explicit dates
+
+Generate it with:
+```bash
+# Generate all wiki pages including timeline
+python tools/generate_wiki_pages.py --framework framework/
+
+# Generate only the timeline page
+python tools/generate_wiki_pages.py --framework framework/ --type timeline
+```
+
+---
+
+## Story Summary
+
+After extraction, generate a high-level narrative arc summary:
+
+```bash
+# Generate story summary using configured LLM
+python tools/generate_story_summary.py --framework framework/
+
+# Generate data-only summary (no LLM required)
+python tools/generate_story_summary.py --framework framework/ --no-llm
+```
+
+The summary is written to `framework/story/summary.md` and includes:
+- **Arc Overview** — narrative summary of the campaign's major arcs, character journey, and current state
+- **Open Questions** — unresolved questions from active and dormant plot threads
+
+In LLM mode, the tool assembles a structured prompt from events, plot threads, entity catalogs, and timeline data, then calls the configured model. If the LLM call fails, it automatically falls back to data-only mode.
+
+The data-only mode produces a structured markdown overview without LLM calls, covering campaign scope, player character status, plot thread status (active/dormant/resolved), and key events.
 
 ---
 
