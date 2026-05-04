@@ -1939,7 +1939,8 @@ def extract_and_merge(
                 elif tag == "event":
                     _event_raw = result
 
-        # --- Merge entity details ---
+        # --- Merge entity details (deterministic order by entity ID) ---
+        _detail_results.sort(key=lambda r: get_entity_id(r[0]) or "")
         for entity_ref, entity_data, _detail_err in _detail_results:
             if _detail_err:
                 turn_failed = True
