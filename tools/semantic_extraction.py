@@ -1691,11 +1691,15 @@ def extract_and_merge(
     # discovery_temperature override (#251) — allows a higher temperature
     # for entity discovery without affecting detail/relationship/event phases.
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
+    # discovery_max_tokens override (#191) — discovery responses grow with
+    # catalog size; allow a higher output budget than the default max_tokens.
+    _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
     try:
         discovery_result = llm.extract_json(
             system_prompt=load_template("entity-discovery"),
             user_prompt=format_discovery_prompt(turn, known),
             temperature=_discovery_temp,
+            max_tokens=_discovery_max_tokens,
         )
     except QuotaExhaustedError:
         raise
@@ -3838,6 +3842,7 @@ def _print_retry_stats(llm) -> None:
 def _extract_segmented(
     turn_dicts, session_dir, framework_dir, catalog_dir,
     llm, min_confidence, dry_run, segment_size,
+    *, already_extracted: set | None = None,
 ):
     """Extract in segments with fresh catalogs, then reconcile."""
     segments = []
@@ -3887,6 +3892,10 @@ def _extract_segmented(
         # Process this segment's turns
         for i, turn in enumerate(segment_turns):
             turn_id = turn["turn_id"]
+
+            # Skip turns already successfully extracted (#191)
+            if already_extracted and turn_id in already_extracted:
+                continue
 
             if i % 25 == 0 and i > 0:
                 entities_now = sum(len(v) for v in seg_catalogs.values())
@@ -4289,11 +4298,33 @@ def extract_semantic_batch(
     catalog_dir = os.path.join(framework_dir, "catalogs")
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
 
+    # Build set of turns already successfully extracted (#191) so re-runs
+    # skip them instead of overwriting good data from earlier passes.
+    _already_extracted: set[str] = set()
+    if os.path.exists(extraction_log_path):
+        try:
+            with open(extraction_log_path, "r", encoding="utf-8") as _elf:
+                for _line in _elf:
+                    _line = _line.strip()
+                    if not _line:
+                        continue
+                    try:
+                        _entry = json.loads(_line)
+                        if _entry.get("discovery_ok"):
+                            _already_extracted.add(_entry["turn_id"])
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+        except OSError:
+            pass  # Non-critical: extraction log is optional; proceed without skip set
+    if _already_extracted:
+        print(f"  Skipping {len(_already_extracted)} previously-extracted turn(s) from extraction log.")
+
     # Segmented extraction: process in chunks with fresh catalogs, then reconcile
     if segment_size > 0 and len(turn_dicts) > segment_size:
         _extract_segmented(
             turn_dicts, session_dir, framework_dir, catalog_dir,
             llm, min_confidence, dry_run, segment_size,
+            already_extracted=_already_extracted,
         )
         return
 
@@ -4431,6 +4462,10 @@ def extract_semantic_batch(
     for i in range(start_from, total):
         turn = turn_dicts[i]
         turn_id = turn["turn_id"]
+
+        # Skip turns already successfully extracted (#191)
+        if turn_id in _already_extracted:
+            continue
 
         if (i - start_from) % 25 == 0 and i > start_from:
             entities_now = sum(len(v) for v in catalogs.values())
