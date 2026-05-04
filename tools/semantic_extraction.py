@@ -955,6 +955,71 @@ def _repair_truncated_discovery(partial_text: str) -> dict | None:
     return None
 
 
+def _repair_truncated_relationships(partial_text: str) -> list | None:
+    """Attempt to repair a truncated relationship-mapper JSON response.
+
+    Same strategy as _repair_truncated_discovery but looks for the
+    "relationships" array key.
+
+    Returns:
+        List of relationship dicts if repair succeeds, None otherwise.
+    """
+    import json as _json
+
+    text = partial_text.strip()
+
+    # Strip thinking blocks and markdown fences
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+    fence_match = re.match(r"^```(?:json)?\s*\n(.*)", text, re.DOTALL)
+    if fence_match:
+        text = fence_match.group(1).strip()
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+    # Find the last complete object boundary in the relationships array
+    last_complete = -1
+    brace_depth = 0
+    in_string = False
+    escape_next = False
+
+    for i, ch in enumerate(text):
+        if escape_next:
+            escape_next = False
+            continue
+        if ch == '\\' and in_string:
+            escape_next = True
+            continue
+        if ch == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch == '{':
+            brace_depth += 1
+        elif ch == '}':
+            brace_depth -= 1
+            if brace_depth == 1:
+                # Closed a relationship object (depth 2→1)
+                last_complete = i
+
+    if last_complete <= 0:
+        return None
+
+    repaired = text[:last_complete + 1] + "]}"
+
+    try:
+        parsed = _json.loads(repaired)
+        if isinstance(parsed, dict) and "relationships" in parsed:
+            rels = parsed["relationships"]
+            if isinstance(rels, list) and len(rels) > 0:
+                return rels
+    except _json.JSONDecodeError as exc:
+        print(f"  [repair] Relationship JSON decode failed after truncation repair: {exc}",
+              file=sys.stderr)
+
+    return None
+
+
 # Stable attribute keys considered when trimming PC prior context.
 #
 # Why these are included:
@@ -1639,17 +1704,63 @@ def _extract_relationships_parallel(
     turn: dict,
     mentioned_entities: list,
     existing_rels_json: str,
+    max_tokens: int | None = None,
 ) -> list | None:
     """Run relationship-mapper extraction.  Returns list of relationships or
-    None on failure.  Designed to run inside a ThreadPoolExecutor."""
+    None on failure.  Designed to run inside a ThreadPoolExecutor.
+
+    Handles truncation by retrying with 2× max_tokens, then attempting
+    lossy JSON repair as a last resort.
+    """
     turn_id = turn["turn_id"]
+    _sys_prompt = load_template("relationship-mapper")
+    _user_prompt = format_relationship_prompt(turn, mentioned_entities, existing_rels_json)
     try:
         rel_result = llm.extract_json(
-            system_prompt=load_template("relationship-mapper"),
-            user_prompt=format_relationship_prompt(turn, mentioned_entities,
-                                                   existing_rels_json),
+            system_prompt=_sys_prompt,
+            user_prompt=_user_prompt,
+            max_tokens=max_tokens,
         )
         return rel_result.get("relationships", [])
+    except LLMTruncationError as trunc_err:
+        # Retry with 2× token budget
+        _retry_max = (max_tokens or llm.max_tokens) * 2
+        print(f"  TRUNCATED: Relationships for {turn_id} hit max_tokens={max_tokens or llm.max_tokens}, "
+              f"retrying with max_tokens={_retry_max}...", file=sys.stderr)
+        try:
+            rel_result = llm.extract_json(
+                system_prompt=_sys_prompt,
+                user_prompt=_user_prompt,
+                max_tokens=_retry_max,
+            )
+            return rel_result.get("relationships", [])
+        except LLMTruncationError as retry_trunc:
+            # Still truncated — attempt repair on the larger partial
+            print(f"  TRUNCATED (2nd attempt): Relationships still hit limit at {_retry_max}, "
+                  f"attempting repair...", file=sys.stderr)
+            repaired = _repair_truncated_relationships(retry_trunc.partial_text) if retry_trunc.partial_text else None
+            if repaired is not None:
+                print(f"  REPAIRED: Recovered {len(repaired)} relationships from truncated response",
+                      file=sys.stderr)
+                return repaired
+            # Try repair on original partial
+            repaired_orig = _repair_truncated_relationships(trunc_err.partial_text) if trunc_err.partial_text else None
+            if repaired_orig is not None:
+                print(f"  REPAIRED (from 1st attempt): Recovered {len(repaired_orig)} relationships",
+                      file=sys.stderr)
+                return repaired_orig
+            print(f"  WARNING: Relationship mapping failed for {turn_id}: "
+                  f"truncated and repair failed", file=sys.stderr)
+            return None
+        except LLMExtractionError as retry_err:
+            # Non-truncation error on retry — try repair on original
+            repaired = _repair_truncated_relationships(trunc_err.partial_text) if trunc_err.partial_text else None
+            if repaired is not None:
+                print(f"  REPAIRED: Recovered {len(repaired)} relationships from original truncated response",
+                      file=sys.stderr)
+                return repaired
+            print(f"  WARNING: Relationship mapping failed for {turn_id}: {retry_err}", file=sys.stderr)
+            return None
     except QuotaExhaustedError:
         raise
     except LLMExtractionError as e:
@@ -1765,6 +1876,9 @@ def extract_and_merge(
     # discovery_max_tokens override (#191) — discovery responses grow with
     # catalog size; allow a higher output budget than the default max_tokens.
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
+    # relationship_max_tokens override — relationship responses grow with
+    # entity density; allow a higher output budget for entity-dense turns.
+    _rel_max_tokens = _cfg.get("relationship_max_tokens") if isinstance(_cfg, dict) else None
     try:
         discovery_result = llm.extract_json(
             system_prompt=load_template("entity-discovery"),
@@ -2033,6 +2147,7 @@ def extract_and_merge(
                 f = pool.submit(
                     _extract_relationships_parallel,
                     llm, turn, mentioned_entities, existing_rels_json,
+                    _rel_max_tokens,
                 )
                 futures_map[f] = ("relationship", None)
 
@@ -2360,11 +2475,57 @@ def extract_and_merge(
                     system_prompt=load_template("relationship-mapper"),
                     user_prompt=format_relationship_prompt(turn, mentioned_entities,
                                                            existing_rels_json),
+                    max_tokens=_rel_max_tokens,
                 )
                 relationships = rel_result.get("relationships", [])
                 if relationships:
                     merge_relationships(catalogs, relationships, turn_id)
                 _phase_log["relationships_ok"] = True
+            except LLMTruncationError as trunc_err:
+                # Retry with 2× token budget, then attempt repair
+                _retry_max = (_rel_max_tokens or llm.max_tokens) * 2
+                print(f"  TRUNCATED: Relationships for {turn_id} hit max_tokens="
+                      f"{_rel_max_tokens or llm.max_tokens}, retrying with "
+                      f"max_tokens={_retry_max}...", file=sys.stderr)
+                try:
+                    rel_result = llm.extract_json(
+                        system_prompt=load_template("relationship-mapper"),
+                        user_prompt=format_relationship_prompt(turn, mentioned_entities,
+                                                               existing_rels_json),
+                        max_tokens=_retry_max,
+                    )
+                    relationships = rel_result.get("relationships", [])
+                    if relationships:
+                        merge_relationships(catalogs, relationships, turn_id)
+                    _phase_log["relationships_ok"] = True
+                except LLMTruncationError as retry_trunc:
+                    # Still truncated — attempt repair
+                    partial = retry_trunc.partial_text
+                    repaired = _repair_truncated_relationships(partial) if partial else None
+                    if repaired is None:
+                        repaired = _repair_truncated_relationships(trunc_err.partial_text) if trunc_err.partial_text else None
+                    if repaired is not None:
+                        print(f"  REPAIRED: Recovered {len(repaired)} relationships",
+                              file=sys.stderr)
+                        merge_relationships(catalogs, repaired, turn_id)
+                        _phase_log["relationships_ok"] = True
+                    else:
+                        turn_failed = True
+                        _phase_log["relationships_ok"] = False
+                        _phase_log["relationships_error"] = str(retry_trunc)
+                except (QuotaExhaustedError, LLMExtractionError) as retry_err:
+                    repaired = _repair_truncated_relationships(trunc_err.partial_text) if trunc_err.partial_text else None
+                    if repaired is not None:
+                        print(f"  REPAIRED: Recovered {len(repaired)} relationships from original",
+                              file=sys.stderr)
+                        merge_relationships(catalogs, repaired, turn_id)
+                        _phase_log["relationships_ok"] = True
+                    else:
+                        if isinstance(retry_err, QuotaExhaustedError):
+                            raise
+                        turn_failed = True
+                        _phase_log["relationships_ok"] = False
+                        _phase_log["relationships_error"] = str(retry_err)
             except QuotaExhaustedError:
                 raise
             except LLMExtractionError as e:

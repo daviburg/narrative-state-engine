@@ -14,7 +14,7 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from semantic_extraction import _repair_truncated_discovery
+from semantic_extraction import _repair_truncated_discovery, _repair_truncated_relationships
 
 # Ensure openai mock exists for llm_client import
 if "openai" not in sys.modules:
@@ -168,3 +168,55 @@ class TestDiscoveryTruncationRetry:
         assert repair_first is not None
         assert len(repair_first["entities"]) == 1
         assert repair_first["entities"][0]["id"] == "char-a"
+
+
+# ---------------------------------------------------------------------------
+# _repair_truncated_relationships tests
+# ---------------------------------------------------------------------------
+
+
+class TestRepairTruncatedRelationships:
+    """Verify JSON repair logic for truncated relationship-mapper responses."""
+
+    def test_recovers_complete_relationships(self):
+        """Truncation mid-second-relationship recovers the first complete one."""
+        partial = '{"relationships": [{"source_id": "char-player", "target_id": "char-kael", "current_relationship": "ally", "type": "social", "direction": "bidirectional", "status": "active", "confidence": 0.9, "first_seen_turn": "turn-100", "last_updated_turn": "turn-318"}, {"source_id": "char-player", "target_id": "char-bo'
+        result = _repair_truncated_relationships(partial)
+        assert result is not None
+        assert len(result) == 1
+        assert result[0]["source_id"] == "char-player"
+        assert result[0]["target_id"] == "char-kael"
+
+    def test_returns_none_for_no_complete_relationships(self):
+        """When truncation happens inside the first relationship, returns None."""
+        partial = '{"relationships": [{"source_id": "char-player", "target_id": "char-ka'
+        result = _repair_truncated_relationships(partial)
+        assert result is None
+
+    def test_multiple_complete_relationships_preserved(self):
+        """All complete relationship objects before truncation are kept."""
+        partial = '{"relationships": [{"source_id": "char-a", "target_id": "char-b", "current_relationship": "ally", "type": "social", "direction": "bidirectional", "status": "active", "confidence": 0.9, "first_seen_turn": "turn-1", "last_updated_turn": "turn-1"}, {"source_id": "char-b", "target_id": "char-c", "current_relationship": "rival", "type": "social", "direction": "bidirectional", "status": "active", "confidence": 0.8, "first_seen_turn": "turn-1", "last_updated_turn": "turn-1"}, {"source_id": "char-c", "target_id": "char-trunc'
+        result = _repair_truncated_relationships(partial)
+        assert result is not None
+        assert len(result) == 2
+        assert result[0]["target_id"] == "char-b"
+        assert result[1]["target_id"] == "char-c"
+
+    def test_handles_think_block_prefix(self):
+        """<think> blocks are stripped before repair."""
+        partial = '<think>Analyzing relationships...</think>{"relationships": [{"source_id": "char-player", "target_id": "char-kael", "current_relationship": "ally", "type": "social", "direction": "bidirectional", "status": "active", "confidence": 0.9, "first_seen_turn": "turn-1", "last_updated_turn": "turn-1"}, {"source_id": "trunc'
+        result = _repair_truncated_relationships(partial)
+        assert result is not None
+        assert len(result) == 1
+
+    def test_returns_none_for_garbage(self):
+        """Non-JSON input returns None."""
+        result = _repair_truncated_relationships("not json at all")
+        assert result is None
+
+    def test_complete_json_passes_through(self):
+        """Already-valid JSON returns the relationships list."""
+        complete = '{"relationships": [{"source_id": "char-player", "target_id": "char-kael", "current_relationship": "ally", "type": "social", "direction": "bidirectional", "status": "active", "confidence": 0.9, "first_seen_turn": "turn-1", "last_updated_turn": "turn-1"}]}'
+        result = _repair_truncated_relationships(complete)
+        assert result is not None
+        assert len(result) == 1
