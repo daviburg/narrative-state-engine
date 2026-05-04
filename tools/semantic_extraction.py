@@ -948,8 +948,9 @@ def _repair_truncated_discovery(partial_text: str) -> dict | None:
             entities = parsed["entities"]
             if isinstance(entities, list) and len(entities) > 0:
                 return parsed
-    except _json.JSONDecodeError:
-        pass
+    except _json.JSONDecodeError as exc:
+        print(f"  [repair] JSON decode failed after truncation repair: {exc}",
+              file=sys.stderr)
 
     return None
 

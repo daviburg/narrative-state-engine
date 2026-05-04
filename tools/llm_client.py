@@ -272,6 +272,14 @@ class LLMClient:
                 file=sys.stderr,
             )
             raise LLMExtractionError("Empty response from LLM.")
+
+        # Detect token-limit truncation in streaming path
+        if done_reason == "length":
+            raise LLMTruncationError(
+                f"Response truncated (done_reason=length, "
+                f"num_predict={max_tokens or self.max_tokens})",
+                partial_text=raw,
+            )
         return raw
 
     @property

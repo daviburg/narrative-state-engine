@@ -3,7 +3,8 @@
 import json
 import os
 import sys
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -14,7 +15,7 @@ if "openai" not in sys.modules:
     _mock_openai.OpenAI = MagicMock
     sys.modules["openai"] = _mock_openai
 
-from llm_client import LLMClient
+from llm_client import LLMClient, LLMTruncationError, LLMExtractionError
 
 
 def _write_config(tmp_dir, overrides=None):
@@ -281,3 +282,80 @@ class TestOllamaConfigKnobs:
         })
         client = LLMClient(config_path=cfg)
         assert client.config.get("ollama_think") is False
+
+
+# ---------------------------------------------------------------------------
+# LLMTruncationError detection
+# ---------------------------------------------------------------------------
+
+
+class TestTruncationDetection:
+    """Verify extract_json raises LLMTruncationError on finish_reason=length."""
+
+    def test_finish_reason_length_raises_truncation_error(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+
+        # Mock the OpenAI response with finish_reason="length"
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"entities": [{"id": "char-foo"'
+        mock_choice.finish_reason = "length"
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=mock_response):
+            with pytest.raises(LLMTruncationError) as exc_info:
+                client.extract_json(
+                    system_prompt="test",
+                    user_prompt="test",
+                )
+            assert exc_info.value.partial_text == '{"entities": [{"id": "char-foo"'
+            assert "finish_reason=length" in str(exc_info.value)
+
+    def test_finish_reason_stop_does_not_raise(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"entities": []}'
+        mock_choice.finish_reason = "stop"
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=mock_response):
+            result = client.extract_json(
+                system_prompt="test",
+                user_prompt="test",
+            )
+            assert result == {"entities": []}
+
+    def test_truncation_error_not_retried(self, tmp_path):
+        """LLMTruncationError should propagate immediately, not retry."""
+        cfg = _write_config(tmp_path, {"retry_attempts": 3})
+        client = LLMClient(config_path=cfg)
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"partial": true'
+        mock_choice.finish_reason = "length"
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        call_count = 0
+        original_create = client.client.chat.completions.create
+
+        def counting_create(**kwargs):
+            nonlocal call_count
+            call_count += 1
+            return mock_response
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=counting_create):
+            with pytest.raises(LLMTruncationError):
+                client.extract_json(
+                    system_prompt="test",
+                    user_prompt="test",
+                )
+            # Should only be called once — no retries
+            assert call_count == 1
