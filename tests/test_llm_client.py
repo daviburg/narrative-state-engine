@@ -235,6 +235,61 @@ class TestParseJsonThinkStripping:
 
 
 # ---------------------------------------------------------------------------
+# Malformed confidence repair (#290)
+# ---------------------------------------------------------------------------
+
+class TestMalformedConfidenceRepair:
+    """Verify _parse_json_response fixes malformed confidence values."""
+
+    def _make_client(self, tmp_path):
+        cfg = _write_config(tmp_path)
+        return LLMClient(config_path=cfg)
+
+    def test_confidence_range_0_1_0(self, tmp_path):
+        """'confidence': 0-1.0 → 1.0 (right value ≤1, use it directly)."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": [{"name": "A", "confidence": 0-1.0}]}'
+        result = client._parse_json_response(raw)
+        assert result["entities"][0]["confidence"] == 1.0
+
+    def test_confidence_range_0_0_95(self, tmp_path):
+        """'confidence': 0-0.95 → 0.95."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": [{"name": "A", "confidence": 0-0.95}]}'
+        result = client._parse_json_response(raw)
+        assert result["entities"][0]["confidence"] == 0.95
+
+    def test_confidence_0_9_mistyped_decimal(self, tmp_path):
+        """'confidence': 0-9 → 0.9 (right > 1, interpret as 0.X)."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": [{"name": "A", "confidence": 0-9}]}'
+        result = client._parse_json_response(raw)
+        assert result["entities"][0]["confidence"] == 0.9
+
+    def test_confidence_0_85_mistyped(self, tmp_path):
+        """'confidence': 0-85 → 0.85."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": [{"name": "A", "confidence": 0-85}]}'
+        result = client._parse_json_response(raw)
+        assert result["entities"][0]["confidence"] == 0.85
+
+    def test_valid_confidence_not_modified(self, tmp_path):
+        """Normal confidence values are not touched."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": [{"name": "A", "confidence": 0.95}]}'
+        result = client._parse_json_response(raw)
+        assert result["entities"][0]["confidence"] == 0.95
+
+    def test_multiple_malformed_in_one_response(self, tmp_path):
+        """Multiple malformed confidences in one response all get fixed."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": [{"name": "A", "confidence": 0-1.0}, {"name": "B", "confidence": 0-9}]}'
+        result = client._parse_json_response(raw)
+        assert result["entities"][0]["confidence"] == 1.0
+        assert result["entities"][1]["confidence"] == 0.9
+
+
+# ---------------------------------------------------------------------------
 # Ollama config knobs
 # ---------------------------------------------------------------------------
 

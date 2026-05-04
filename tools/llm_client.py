@@ -504,6 +504,13 @@ class LLMClient:
         if fence_match:
             text = fence_match.group(1).strip()
 
+        # Fix malformed confidence values like "confidence": 0-1.0 or 0-9 (#290)
+        text = re.sub(
+            r'"confidence":\s*(\d+)-(\d+(?:\.\d+)?)',
+            self._fix_malformed_confidence,
+            text,
+        )
+
         try:
             return json.loads(text)
         except json.JSONDecodeError as e:
@@ -511,6 +518,24 @@ class LLMClient:
                 f"Failed to parse JSON from LLM response: {e}\n"
                 f"Raw response (first 500 chars): {raw_text[:500]}"
             )
+
+    @staticmethod
+    def _fix_malformed_confidence(match: re.Match) -> str:
+        """Convert malformed confidence like 0-1.0 or 0-9 to a valid float."""
+        left = match.group(1)   # e.g. "0"
+        right = match.group(2)  # e.g. "1.0" or "9"
+        # Interpret: "0-9" → 0.9, "0-1.0" → 0.5 (midpoint of stated range)
+        try:
+            r = float(right)
+            if r <= 1.0:
+                # "0-0.95" → use right value as the confidence
+                return f'"confidence": {r}'
+            else:
+                # "0-9" → model meant 0.9 (mistyped decimal)
+                val = float(f"0.{right.replace('.', '')}")
+                return f'"confidence": {min(val, 1.0)}'
+        except (ValueError, TypeError):
+            return f'"confidence": 0.5'
 
     def generate_text(
         self,
