@@ -56,7 +56,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 
 | GPU VRAM | Maximum Model Size (Q4 quantization) |
 |---|---|
-| 8 GB | Up to 7B |
+| 8 GB | Up to 7B (up to 9B with reduced context) |
 | 12 GB | Up to 14B |
 | 16 GB | Up to 22B |
 | 24 GB | Up to 32B |
@@ -69,10 +69,10 @@ Qwen3.5-9B (Q4_K_M quantization, served via llama-server) delivers a measurable 
 - **Entity classification accuracy** — fewer type-prefix errors (e.g., items no longer misclassified as locations)
 - **Coreference resolution** — significantly better at recognizing when different descriptions refer to the same entity, reducing duplicate catalog entries
 - **Relationship detection** — captures more nuanced inter-entity relationships with appropriate confidence scores
-- **JSON compliance** — reliable structured output without needing `response_format` enforcement; use `--reasoning-format none` on llama-server to disable thinking blocks
+- **JSON compliance** — reliable structured output without needing `response_format` enforcement. On llama-server, use `--reasoning-format none` to fully disable thinking blocks (unlike qwen3-8b where `<think>` blocks cannot be disabled at the server level). This is a Qwen3.5-specific improvement.
 - **Context efficiency** — the 9B dense architecture uses context more effectively than the 14B qwen2.5 at equivalent quantization
 
-This model is the recommended choice for local extraction when a GPU with 8+ GB VRAM is available. On the RTX 4070 (12 GB), it runs at ~61 tok/s with room for a 32K context window. On the Intel Arc Pro B70 (31 GB), it achieves ~56 tok/s via SYCL.
+This model is the recommended choice for local extraction when a GPU with 12+ GB VRAM is available. On an 8 GB GPU it fits with reduced context (~8K). On the RTX 4070 (12 GB), it runs at ~61 tok/s with room for a 32K context window. On the Intel Arc Pro B70 (31 GB), it achieves ~56 tok/s via SYCL.
 
 ### Known Limitations of Small Models (<7B)
 
@@ -129,13 +129,18 @@ export GEMINI_API_KEY="your-key-here"
 The recommended local backend is **llama-server** (from [llama.cpp](https://github.com/ggml-org/llama.cpp)), which exposes an OpenAI-compatible `/v1` endpoint with true parallel slot processing. Download a pre-built release from the [llama.cpp releases page](https://github.com/ggml-org/llama.cpp/releases) — CUDA, Vulkan, and SYCL builds are available.
 
 ```bash
-# Start llama-server (example: Qwen3.5-9B on an NVIDIA GPU)
+# Single-slot baseline (simplest setup)
 llama-server -m Qwen3.5-9B-Q4_K_M.gguf \
     -ngl 999 -c 32768 --flash-attn on -t 1 -np 1 --port 8080 \
     --reasoning-format none
+
+# Parallel setup (4 concurrent extraction phases)
+llama-server -m Qwen3.5-9B-Q4_K_M.gguf \
+    -ngl 999 -c 32768 --flash-attn on -t 1 -np 4 --port 8080 \
+    --reasoning-format none
 ```
 
-Configure `config/llm.json`:
+Configure `config/llm.json` (parallel example):
 
 ```json
 {
@@ -149,7 +154,8 @@ Configure `config/llm.json`:
   "context_length": 32768,
   "timeout_seconds": 120,
   "retry_attempts": 3,
-  "batch_delay_ms": 0
+  "batch_delay_ms": 0,
+  "parallel_workers": 4
 }
 ```
 
@@ -158,7 +164,7 @@ Key flags:
 - **`-ngl 999`** — offload all layers to GPU
 - **`-c 32768`** — context window size (adjust to fit VRAM)
 - **`--reasoning-format none`** — disable thinking mode for Qwen3.5 (avoids `<think>` blocks consuming output tokens)
-- **`-np N`** — parallel slots for concurrent requests (use with `parallel_workers` in llm.json)
+- **`-np N`** — parallel slots for concurrent requests (use with `parallel_workers` in `config/llm.json`)
 - **`--flash-attn on`** — enable flash attention (slight memory savings)
 
 > **Why llama-server over Ollama?** llama-server gives direct control over
@@ -243,14 +249,14 @@ fallback but runs ~34% slower.
 #### Launch (Intel Arc Pro B70)
 
 ```bash
-export LD_LIBRARY_PATH="$HOME/llama-b9010-sycl/llama-b9010:/opt/intel/oneapi/redist/lib:/opt/intel/oneapi/umf/1.0/lib"
+export LD_LIBRARY_PATH="$HOME/llama-b9010-sycl/llama-b9010:/opt/intel/oneapi/redist/lib:/opt/intel/oneapi/umf/1.0/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export ONEAPI_DEVICE_SELECTOR=level_zero:0
 export ZES_ENABLE_SYSMAN=1
 export UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1
 
 ~/llama-b9010-sycl/llama-b9010/llama-server \
     -m /path/to/Qwen3.5-9B-Q4_K_M.gguf \
-    --host 0.0.0.0 --port 8080 -ngl 999 -c 32768 \
+    --host 127.0.0.1 --port 8080 -ngl 999 -c 32768 \
     --flash-attn on -t 1 -np 1 \
     --reasoning-format none
 ```
@@ -260,6 +266,10 @@ Environment variables provide ~13% speedup over defaults:
 - **`UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1`** — allows larger GPU allocations
 - **`ONEAPI_DEVICE_SELECTOR=level_zero:0`** — pin to the discrete GPU
 - **`ZES_ENABLE_SYSMAN=1`** — enable system management interface
+
+> **Remote access:** To serve requests from other machines, change `--host 127.0.0.1`
+> to `--host 0.0.0.0`. llama-server has no authentication — only bind to all
+> interfaces on trusted networks or behind a firewall.
 
 #### B70 Performance (Qwen3.5-9B Q4_K_M, 5.3 GB)
 
