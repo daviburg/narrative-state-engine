@@ -137,7 +137,7 @@ class TestExtractionLogFile:
 
         call_count = [0]
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             log = {
                 "turn_id": turn["turn_id"],
@@ -191,7 +191,7 @@ class TestExtractionLogFile:
         os.makedirs(os.path.join(session_dir, "derived"), exist_ok=True)
         os.makedirs(catalog_dir, exist_ok=True)
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             return catalogs, events, False, {"turn_id": turn["turn_id"]}
 
         turns = [{"turn_id": "turn-001", "speaker": "dm", "text": "T1."}]
@@ -227,7 +227,7 @@ class TestExtractionLogFile:
 
         call_count = [0]
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             if call_count[0] == 2:
                 # Simulate a turn with discovery failure
@@ -295,7 +295,7 @@ class TestExtractionLogFile:
 
         call_count = [0]
 
-        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None):
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
             call_count[0] += 1
             if call_count[0] == 2:
                 raise RuntimeError("Simulated crash")
@@ -371,3 +371,117 @@ class TestWriteExtractionLogHelper:
         os.makedirs(log_path, exist_ok=True)
         # Should not raise
         se._write_extraction_log(log_path, {"turn_id": "turn-001"})
+
+
+class TestSkipAlreadyExtracted:
+    """Turns with discovery_ok=True in extraction-log.jsonl are skipped (#191)."""
+
+    def test_skips_previously_succeeded_turns(self, monkeypatch, tmp_path):
+        """extract_semantic_batch skips turns already in log with discovery_ok=True."""
+        session_dir = str(tmp_path / "sessions" / "test")
+        framework_dir = str(tmp_path / "framework")
+        catalog_dir = os.path.join(framework_dir, "catalogs")
+        os.makedirs(os.path.join(session_dir, "derived"), exist_ok=True)
+        os.makedirs(catalog_dir, exist_ok=True)
+
+        # Pre-seed extraction log: turn-001 succeeded, turn-002 failed
+        log_path = os.path.join(framework_dir, "extraction-log.jsonl")
+        with open(log_path, "w", encoding="utf-8") as f:
+            f.write(json.dumps({"turn_id": "turn-001", "discovery_ok": True}) + "\n")
+            f.write(json.dumps({"turn_id": "turn-002", "discovery_ok": False}) + "\n")
+
+        extracted_turns = []
+
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
+            extracted_turns.append(turn["turn_id"])
+            log = {
+                "turn_id": turn["turn_id"],
+                "timestamp": "2026-05-04T00:00:00+00:00",
+                "discovery_ok": True, "discovery_error": None,
+                "detail_ok": True, "detail_error": None,
+                "pc_ok": True, "pc_error": None,
+                "relationships_ok": True, "relationships_error": None,
+                "events_ok": True, "events_error": None,
+                "new_entities": 0, "new_events": 0, "elapsed_ms": 50,
+            }
+            return catalogs, events, False, log
+
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "dm", "text": f"Turn {i}."}
+                 for i in range(1, 4)]
+
+        monkeypatch.setattr("semantic_extraction.LLMClient", lambda *a, **kw: MagicMock(
+            config={"checkpoint_interval": 100}))
+        monkeypatch.setattr("semantic_extraction.load_catalogs", lambda d: _fresh_catalogs())
+        monkeypatch.setattr("semantic_extraction.load_events", lambda d: [])
+        monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
+        monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
+        monkeypatch.setattr("semantic_extraction.extract_and_merge", mock_extract)
+        monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
+        monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction.cleanup_dangling_relationships", lambda cats: {})
+        monkeypatch.setattr("semantic_extraction._ensure_player_character", lambda *a: None)
+
+        se.extract_semantic_batch(
+            turns, session_dir, framework_dir=framework_dir,
+            config_path="unused",
+        )
+
+        # turn-001 was skipped (already succeeded), turn-002 and turn-003 were extracted
+        assert "turn-001" not in extracted_turns
+        assert "turn-002" in extracted_turns
+        assert "turn-003" in extracted_turns
+
+    def test_does_not_skip_failed_turns(self, monkeypatch, tmp_path):
+        """Turns with discovery_ok=False are NOT skipped."""
+        session_dir = str(tmp_path / "sessions" / "test")
+        framework_dir = str(tmp_path / "framework")
+        catalog_dir = os.path.join(framework_dir, "catalogs")
+        os.makedirs(os.path.join(session_dir, "derived"), exist_ok=True)
+        os.makedirs(catalog_dir, exist_ok=True)
+
+        # Pre-seed: all turns failed
+        log_path = os.path.join(framework_dir, "extraction-log.jsonl")
+        with open(log_path, "w", encoding="utf-8") as f:
+            for i in range(1, 4):
+                f.write(json.dumps({"turn_id": f"turn-{i:03d}", "discovery_ok": False}) + "\n")
+
+        extracted_turns = []
+
+        def mock_extract(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
+            extracted_turns.append(turn["turn_id"])
+            log = {
+                "turn_id": turn["turn_id"],
+                "timestamp": "2026-05-04T00:00:00+00:00",
+                "discovery_ok": True, "discovery_error": None,
+                "detail_ok": True, "detail_error": None,
+                "pc_ok": True, "pc_error": None,
+                "relationships_ok": True, "relationships_error": None,
+                "events_ok": True, "events_error": None,
+                "new_entities": 0, "new_events": 0, "elapsed_ms": 50,
+            }
+            return catalogs, events, False, log
+
+        turns = [{"turn_id": f"turn-{i:03d}", "speaker": "dm", "text": f"Turn {i}."}
+                 for i in range(1, 4)]
+
+        monkeypatch.setattr("semantic_extraction.LLMClient", lambda *a, **kw: MagicMock(
+            config={"checkpoint_interval": 100}))
+        monkeypatch.setattr("semantic_extraction.load_catalogs", lambda d: _fresh_catalogs())
+        monkeypatch.setattr("semantic_extraction.load_events", lambda d: [])
+        monkeypatch.setattr("semantic_extraction.save_catalogs", lambda *a, **kw: None)
+        monkeypatch.setattr("semantic_extraction.save_events", lambda *a, **kw: None)
+        monkeypatch.setattr("semantic_extraction.extract_and_merge", mock_extract)
+        monkeypatch.setattr("semantic_extraction._dedup_catalogs", lambda cats: (0, {}))
+        monkeypatch.setattr("semantic_extraction._post_batch_orphan_sweep", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction._name_mention_discovery", lambda cats, evts: 0)
+        monkeypatch.setattr("semantic_extraction.cleanup_dangling_relationships", lambda cats: {})
+        monkeypatch.setattr("semantic_extraction._ensure_player_character", lambda *a: None)
+
+        se.extract_semantic_batch(
+            turns, session_dir, framework_dir=framework_dir,
+            config_path="unused",
+        )
+
+        # All turns should be re-extracted since all had discovery_ok=False
+        assert len(extracted_turns) == 3

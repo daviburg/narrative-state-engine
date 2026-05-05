@@ -18,6 +18,18 @@ class LLMExtractionError(Exception):
     """Raised when the LLM response cannot be parsed or validated."""
 
 
+class LLMTruncationError(LLMExtractionError):
+    """Raised when the LLM response was truncated due to max_tokens limit.
+
+    The partial response text is available via the `partial_text` attribute
+    for callers that want to attempt JSON repair.
+    """
+
+    def __init__(self, message: str, partial_text: str = ""):
+        super().__init__(message)
+        self.partial_text = partial_text
+
+
 class QuotaExhaustedError(LLMExtractionError):
     """Raised when consecutive rate-limit (429) errors suggest daily quota exhaustion."""
 
@@ -26,6 +38,8 @@ class RetryStats:
     """Track API call statistics across an LLMClient session."""
 
     def __init__(self):
+        import threading
+        self._lock = threading.Lock()
         self.total_requests = 0
         self.successful_requests = 0
         self.retried_requests = 0
@@ -35,25 +49,28 @@ class RetryStats:
         self._max_consecutive_rate_limits = 0
 
     def record_success(self):
-        self.total_requests += 1
-        self.successful_requests += 1
-        self.consecutive_rate_limits = 0
-
-    def record_error(self, status_code: int | str | None, retry_after_present: bool = False):
-        self.total_requests += 1
-        key = status_code if status_code is not None else "unknown"
-        self.errors_by_status[key] = self.errors_by_status.get(key, 0) + 1
-        if retry_after_present:
-            self.retry_after_seen += 1
-        if key == 429:
-            self.consecutive_rate_limits += 1
-            self._max_consecutive_rate_limits = max(
-                self._max_consecutive_rate_limits, self.consecutive_rate_limits)
-        else:
+        with self._lock:
+            self.total_requests += 1
+            self.successful_requests += 1
             self.consecutive_rate_limits = 0
 
+    def record_error(self, status_code: int | str | None, retry_after_present: bool = False):
+        with self._lock:
+            self.total_requests += 1
+            key = status_code if status_code is not None else "unknown"
+            self.errors_by_status[key] = self.errors_by_status.get(key, 0) + 1
+            if retry_after_present:
+                self.retry_after_seen += 1
+            if key == 429:
+                self.consecutive_rate_limits += 1
+                self._max_consecutive_rate_limits = max(
+                    self._max_consecutive_rate_limits, self.consecutive_rate_limits)
+            else:
+                self.consecutive_rate_limits = 0
+
     def record_retry(self):
-        self.retried_requests += 1
+        with self._lock:
+            self.retried_requests += 1
 
     def summary(self) -> dict:
         return {
@@ -112,6 +129,10 @@ class LLMClient:
         self.pc_max_tokens = self.config.get("pc_max_tokens", self.max_tokens)
         self.retry_attempts = self.config.get("retry_attempts", 3)
         self.batch_delay_ms = self.config.get("batch_delay_ms", 200)
+        try:
+            self.parallel_workers = max(1, int(self.config.get("parallel_workers", 1)))
+        except (ValueError, TypeError):
+            self.parallel_workers = 1
         self.default_timeout = self.config.get("timeout_seconds", 60)
         self.context_length = self.config.get("context_length", None)
         self.ollama_options = self.config.get("ollama_options", None)
@@ -119,6 +140,11 @@ class LLMClient:
         self.consecutive_rate_limit_threshold = self.config.get(
             "consecutive_rate_limit_threshold", 10)
         self.stats = RetryStats()
+
+        # Force sequential execution for cloud providers — parallel bursts
+        # would trip rate limits / quota thresholds (#282 review).
+        if self.parallel_workers > 1 and self._is_cloud_provider:
+            self.parallel_workers = 1
 
     @property
     def _is_ollama(self) -> bool:
@@ -246,6 +272,14 @@ class LLMClient:
                 file=sys.stderr,
             )
             raise LLMExtractionError("Empty response from LLM.")
+
+        # Detect token-limit truncation in streaming path
+        if done_reason == "length":
+            raise LLMTruncationError(
+                f"Response truncated (done_reason=length, "
+                f"num_predict={max_tokens or self.max_tokens})",
+                partial_text=raw,
+            )
         return raw
 
     @property
@@ -266,6 +300,10 @@ class LLMClient:
         base_url = self.config.get("base_url", "")
         return not any(local in base_url for local in [
             "localhost", "127.0.0.1", "0.0.0.0", "[::1]",
+            "192.168.", "10.", "172.16.", "172.17.", "172.18.",
+            "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
+            "172.24.", "172.25.", "172.26.", "172.27.", "172.28.",
+            "172.29.", "172.30.", "172.31.",
         ])
 
     @staticmethod
@@ -413,9 +451,18 @@ class LLMClient:
 
                     response = self.client.chat.completions.create(**kwargs)
                     raw_text = response.choices[0].message.content
+                    finish_reason = getattr(response.choices[0], "finish_reason", None)
 
                     if not raw_text:
                         raise LLMExtractionError("Empty response from LLM.")
+
+                    # Detect token-limit truncation before attempting JSON parse
+                    if finish_reason == "length":
+                        raise LLMTruncationError(
+                            f"Response truncated (finish_reason=length, "
+                            f"max_tokens={effective_max})",
+                            partial_text=raw_text,
+                        )
 
                 parsed = self._parse_json_response(raw_text)
 
@@ -435,6 +482,8 @@ class LLMClient:
                 self.stats.record_success()
                 return parsed
 
+            except (LLMTruncationError, QuotaExhaustedError):
+                raise
             except Exception as e:
                 last_error = e
                 self._handle_retry(attempt, e)

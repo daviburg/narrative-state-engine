@@ -33,13 +33,15 @@ Divide session processing across multiple specialized agents, each with a focuse
 |---|---|---|
 | Ingestion agent | Parse raw turns, write transcript files, update full-transcript.md | — |
 | Catalog agent | Extract and maintain entities, locations, factions, items | **Implemented** (#43) |
-| Evidence agent | Tag and classify claims; maintain evidence.json | — |
+| Evidence agent | Tag and classify claims; maintain evidence.json | **Implemented** (#259) |
 | Strategy agent | Generate next-move analysis; apply heuristics and risk model | — |
 | Prompt agent | Generate candidate player prompts optimized per mode | — |
-| DM profile agent | Infer and refine DM behavior from accumulated evidence | — |
+| DM profile agent | Infer and refine DM behavior from accumulated evidence | **Implemented** (#260) |
 | Timeline agent | Extract temporal signals and estimate in-game time progression | **Implemented** (#137) |
+| Story summary agent | Generate narrative arc summary from extracted entities, events, and plot threads | **Implemented** (#262) |
+| Planning layer | Synthesize catalog data into actionable derived planning files | **Implemented** (#259) |
 
-The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a four-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.
+The **Catalog agent** is implemented as `tools/semantic_extraction.py` — a five-agent LLM pipeline (Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor) that runs during bootstrap and incremental ingestion. It uses prompt templates in `templates/extraction/` and a provider-agnostic LLM client (`tools/llm_client.py`) supporting OpenAI and Ollama.
 
 Post-extraction quality passes include:
 - **Dedup** — name, token-overlap, ID-stem, and Levenshtein matching (with minimum 6-char stem guard, #132)
@@ -57,11 +59,22 @@ Post-extraction quality passes include:
 - **Periodic entity refresh** (#161, #182) — re-extracts stale entities every N turns (`entity_refresh_interval`, default 50) using recent transcript context. Up to `entity_refresh_batch_size` (default 10) entities are refreshed per interval, with dynamic scaling for large catalogs (60+ entities scale to `catalog_size // 5`, capped at 25). Type-aware slot allocation gives characters 50% of refresh slots, locations 20%, items 20%, and factions 10%, with overflow redistribution. Event-frequency tiebreaking prioritizes narratively important entities.
 - **Scene graph / spatial index** (#257) — cross-type queryable index (`framework/catalogs/scene-graph.json`) built from entity catalogs by `tools/build_scene_graph.py`. Location index maps location IDs to present entities, turn activity index maps turns to active entity IDs, and location connections track spatial edges between locations. Integrated into `build_context.py` for O(T) nearby-entity lookups. Additive capability — no re-extraction required.
 
-**Timeline tracking** (#137): The pipeline extracts temporal signals (season transitions,
+**Timeline tracking** (#137, #263): The pipeline extracts temporal signals (season transitions,
 biological markers, construction milestones) and estimates in-game day offsets from a
 configurable reference anchor. Implemented in `tools/temporal_extraction.py` with
-pattern-based detection plus an optional LLM template. Integrated into wiki page display
-(estimated day column in event timelines, season-enriched infoboxes).
+pattern-based detection plus an optional LLM template. Integrated into the semantic
+extraction pipeline (#263) as Phase 5: `extract_temporal_signals()` runs per-turn after
+event extraction, signals are merged with dedup into `framework/catalogs/timeline.json`,
+and the timeline is saved at checkpoints and reconciled across segments. The extraction
+log records `temporal_ok`, `temporal_error`, and `new_temporal_signals` per turn.
+Also integrated into wiki page display (estimated day column in event timelines,
+season-enriched infoboxes).
+
+**Narrative timeline summary** (#275): The timeline wiki page (`framework/catalogs/timeline.md`)
+presents temporal data as a narrative. Includes: anchor date / current position infobox,
+5-15 sentence natural-language temporal arc summary, and filtered reference tables.
+Season flicker filtering removes low-confidence noise (isolated regex false positives).
+Anchor event auto-detection selects the most significant early event as reference point.
 
 Benefits:
 - Narrower per-agent context window → lower token cost
