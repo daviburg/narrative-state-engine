@@ -307,7 +307,7 @@ configurations and the concurrency constraints that matter for extraction.
 
 The extraction pipeline connects to any OpenAI-compatible endpoint. For Intel
 Arc GPUs, serve the model with OpenVINO's `ContinuousBatchingPipeline` behind
-a FastAPI wrapper. A reference implementation is provided in `server/ov_serve.py`.
+a FastAPI wrapper that exposes an OpenAI-compatible `/v1/chat/completions` API.
 
 ```bash
 # On the inference server (e.g. Ubuntu + Intel Arc Pro B70)
@@ -317,19 +317,21 @@ pip install openvino openvino-genai optimum[openvino] fastapi uvicorn
 optimum-cli export openvino --model Qwen/Qwen3-8B --weight-format int4_sym \
     --trust-remote-code ./models/qwen3-8b-int4-ov
 
-# Start the reference server
-python server/ov_serve.py --model ./models/qwen3-8b-int4-ov --port 8000
+# Start the server (any OpenAI-compatible wrapper around ContinuousBatchingPipeline)
+python ov_serve.py --model ./models/qwen3-8b-int4-ov --port 8000
 ```
 
-The reference server (`server/ov_serve.py`) handles:
+The server wrapper should handle:
 
-- **Thinking suppression** — applies `enable_thinking=False` via the chat
-  template's `extra_context`, preventing qwen3 models from wasting ~80% of
-  output tokens on `<think>` blocks. Unlike llama-server's `--reasoning-format
-  none`, OpenVINO's chat template controls this at the tokenizer level.
-- **Continuous batching** — queues concurrent requests and processes them in
+- **Thinking suppression** — pass `enable_thinking=False` (a Python `bool`) in
+  the chat template's `extra_context` dict when calling
+  `tokenizer.apply_chat_template(..., extra_context={'enable_thinking': False})`.
+  This prevents qwen3 models from wasting ~80% of output tokens on `<think>`
+  blocks. Unlike llama-server's `--reasoning-format none`, OpenVINO controls
+  this at the tokenizer level.
+- **Continuous batching** — queue concurrent requests and process them in
   batches for higher aggregate throughput.
-- **Robust output parsing** — strips any residual `<think>` blocks and
+- **Robust output parsing** — strip any residual `<think>` blocks and
   markdown fences before returning content.
 
 Configure `config/llm.json` on the client machine:
@@ -370,10 +372,10 @@ Qwen3 models generate `<think>...</think>` blocks by default, which consume
 This dramatically slows extraction and increases truncation risk.
 
 - **llama-server**: use `--reasoning-format none` to disable thinking entirely.
-- **OpenVINO**: pass `enable_thinking=False` in the chat template's
-  `extra_context` parameter. The reference server (`server/ov_serve.py`) does
-  this automatically. The extraction pipeline's JSON parser also strips any
-  residual `<think>` blocks as a safety net.
+- **OpenVINO**: pass `enable_thinking=False` (a Python `bool`) in the chat
+  template's `extra_context` parameter when calling `apply_chat_template()`.
+  The extraction pipeline's JSON parser also strips any residual `<think>`
+  blocks as a safety net.
 
 #### Server Restart After Interrupted Extraction
 
