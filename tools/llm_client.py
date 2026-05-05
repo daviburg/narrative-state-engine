@@ -521,10 +521,17 @@ class LLMClient:
 
     @staticmethod
     def _fix_malformed_confidence(match: re.Match) -> str:
-        """Convert malformed confidence like 0-1.0 or 0-9 to a valid float."""
+        """Convert malformed confidence like 0-1.0 or 0-9 to a valid float.
+
+        Only repairs patterns where the left side is "0", which covers the
+        observed model output defects. Other patterns (e.g. "1-2") are left
+        unchanged to avoid manufacturing incorrect confidence scores.
+        """
         left = match.group(1)   # e.g. "0"
         right = match.group(2)  # e.g. "1.0" or "9"
-        # Interpret: "0-9" → 0.9, "0-1.0" → 0.5 (midpoint of stated range)
+        if left != "0":
+            # Not a known malformation pattern — return original text unchanged
+            return match.group(0)
         try:
             r = float(right)
             if r <= 1.0:

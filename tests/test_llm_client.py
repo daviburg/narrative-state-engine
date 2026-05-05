@@ -288,6 +288,16 @@ class TestMalformedConfidenceRepair:
         assert result["entities"][0]["confidence"] == 1.0
         assert result["entities"][1]["confidence"] == 0.9
 
+    def test_non_zero_left_side_not_repaired(self, tmp_path):
+        """Patterns like 1-2 are not repaired — only 0-X is a known defect."""
+        client = self._make_client(tmp_path)
+        # 1-2 is not valid JSON either, but the regex should leave it alone
+        # so the original parse error surfaces instead of silent corruption
+        raw = '{"entities": [{"name": "A", "confidence": 1-2}]}'
+        import pytest
+        with pytest.raises(Exception):
+            client._parse_json_response(raw)
+
 
 # ---------------------------------------------------------------------------
 # Ollama config knobs
