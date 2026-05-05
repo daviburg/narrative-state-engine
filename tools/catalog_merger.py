@@ -416,9 +416,11 @@ def _find_mentioned_entities(
 ) -> set[str]:
     """Return IDs of entities whose name or alias appears in *turn_text*.
 
-    Uses case-insensitive substring matching.  Names shorter than
-    ``_MIN_NAME_LENGTH_FOR_MATCH`` characters are skipped to avoid
-    false positives on common short words.
+    Uses word-boundary-aware matching to avoid false positives (e.g.
+    "elder" inside "beelder", or "the camp" inside "campfire").
+    Multi-word names use non-word-character boundaries; single words
+    use ``\\b``.  Names shorter than ``_MIN_NAME_LENGTH_FOR_MATCH``
+    characters are skipped.
     """
     if not turn_text:
         return set()
@@ -429,7 +431,14 @@ def _find_mentioned_entities(
         for name in _entity_names(entity):
             if len(name) < _MIN_NAME_LENGTH_FOR_MATCH:
                 continue
-            if name.lower() in text_lower:
+            escaped = re.escape(name.lower())
+            if " " in name:
+                # Multi-word: non-word boundaries at both ends
+                pattern = r"(?<!\w)" + escaped + r"(?!\w)"
+            else:
+                # Single-word: word boundary
+                pattern = r"\b" + escaped + r"\b"
+            if re.search(pattern, text_lower):
                 mentioned.add(entity["id"])
                 break
     return mentioned
@@ -445,22 +454,104 @@ def _get_entity_location(entity: dict) -> str | None:
     return None
 
 
+def _collect_relevant_locations(mentioned_ids: set[str], by_id: dict[str, dict]) -> set[str]:
+    """Build the set of relevant location identifiers from mentioned entities.
+
+    Includes both entity names/aliases (lowered) **and** entity IDs for
+    location-type entities, plus the ``volatile_state.location`` value of
+    every mentioned entity.  This ensures matching works whether catalogs
+    store locations as human-readable names or as ``loc-*`` IDs.
+    """
+    relevant: set[str] = set()
+    for eid in mentioned_ids:
+        entity = by_id.get(eid)
+        if entity is None:
+            continue
+        # If a mentioned entity IS a location, its ID and names are
+        # location references
+        if entity.get("type") == "location":
+            relevant.add(entity["id"].lower())
+            for n in _entity_names(entity):
+                relevant.add(n.lower())
+        # If a mentioned entity has a location, that location is relevant
+        loc = _get_entity_location(entity)
+        if loc:
+            relevant.add(loc.lower())
+    return relevant
+
+
+def _find_colocated_entities(
+    all_entities: list[dict],
+    mentioned_ids: set[str],
+    relevant_locations: set[str],
+) -> set[str]:
+    """Return IDs of entities co-located with mentioned entities."""
+    colocated: set[str] = set()
+    if not relevant_locations:
+        return colocated
+    for entity in all_entities:
+        if entity["id"] in mentioned_ids:
+            continue
+        # Check if entity's location matches a relevant location
+        loc = _get_entity_location(entity)
+        if loc and loc.lower() in relevant_locations:
+            colocated.add(entity["id"])
+        # Check if entity IS a location that's relevant (by ID or name)
+        if entity.get("type") == "location":
+            if entity["id"].lower() in relevant_locations:
+                colocated.add(entity["id"])
+                continue
+            for n in _entity_names(entity):
+                if n.lower() in relevant_locations:
+                    colocated.add(entity["id"])
+                    break
+    return colocated
+
+
+def _find_one_hop_targets(
+    mentioned_ids: set[str],
+    exclude_ids: set[str],
+    by_id: dict[str, dict],
+) -> set[str]:
+    """Return IDs of active relationship targets of mentioned entities.
+
+    Only ``active`` (or unset) relationship status is followed; ``dormant``
+    and ``resolved`` relationships are skipped to avoid dragging in stale
+    entities.
+    """
+    one_hop: set[str] = set()
+    for eid in mentioned_ids:
+        entity = by_id.get(eid)
+        if entity is None:
+            continue
+        for rel in entity.get("relationships") or []:
+            status = rel.get("status", "active")
+            if status != "active":
+                continue
+            target = rel.get("target_id")
+            if (target and target in by_id
+                    and target not in mentioned_ids
+                    and target not in exclude_ids):
+                one_hop.add(target)
+    return one_hop
+
+
 def _select_context_aware_entities(
     all_entities: list[dict],
     turn_text: str | None,
     current_turn: int | None,
     recency_window: int,
-) -> list[dict]:
-    """Return entities ordered by contextual relevance to the current turn.
+) -> tuple[list[dict], set[str]]:
+    """Return entities ordered by contextual relevance and their priority IDs.
 
     Priority tiers (entities appear at most once, in the highest tier they
     qualify for):
 
     1. **Mentioned** — entity name or alias appears in turn text.
     2. **Co-located** — shares a location with a mentioned entity, or is at
-       a mentioned location.
-    3. **One-hop relationships** — is a relationship target of a mentioned
-       entity.
+       a mentioned location.  Matches both location names and ``loc-*`` IDs.
+    3. **One-hop relationships** — is an *active* relationship target of a
+       mentioned entity (dormant/resolved relationships are skipped).
     4. **Recency backfill** — most recently updated entities not already
        selected.
 
@@ -468,6 +559,10 @@ def _select_context_aware_entities(
 
     When *turn_text* is ``None`` or empty, falls back to pure recency
     ordering (equivalent to the pre-#233 behaviour).
+
+    Returns:
+        A tuple of (ordered_entities, priority_ids) where *priority_ids*
+        is the union of mentioned, co-located, and one-hop entity IDs.
     """
     # Build an id→entity lookup
     by_id: dict[str, dict] = {e["id"]: e for e in all_entities}
@@ -478,54 +573,18 @@ def _select_context_aware_entities(
     # --- Tier 2: Co-located entities ---
     colocated_ids: set[str] = set()
     if mentioned_ids:
-        # Collect locations of mentioned entities and names of mentioned
-        # location entities
-        relevant_locations: set[str] = set()
-        for eid in mentioned_ids:
-            entity = by_id.get(eid)
-            if entity is None:
-                continue
-            # If a mentioned entity IS a location, its name/aliases are
-            # location references
-            if entity.get("type") == "location":
-                for n in _entity_names(entity):
-                    relevant_locations.add(n.lower())
-            # If a mentioned entity has a location, that location is relevant
-            loc = _get_entity_location(entity)
-            if loc:
-                relevant_locations.add(loc.lower())
+        relevant_locations = _collect_relevant_locations(mentioned_ids, by_id)
+        colocated_ids = _find_colocated_entities(
+            all_entities, mentioned_ids, relevant_locations)
 
-        if relevant_locations:
-            for entity in all_entities:
-                if entity["id"] in mentioned_ids:
-                    continue
-                # Check if entity's location matches a relevant location
-                loc = _get_entity_location(entity)
-                if loc and loc.lower() in relevant_locations:
-                    colocated_ids.add(entity["id"])
-                # Check if entity IS a location that's relevant
-                if entity.get("type") == "location":
-                    for n in _entity_names(entity):
-                        if n.lower() in relevant_locations:
-                            colocated_ids.add(entity["id"])
-                            break
-
-    # --- Tier 3: One-hop relationship targets ---
+    # --- Tier 3: One-hop relationship targets (active only) ---
     one_hop_ids: set[str] = set()
     if mentioned_ids:
-        for eid in mentioned_ids:
-            entity = by_id.get(eid)
-            if entity is None:
-                continue
-            for rel in entity.get("relationships") or []:
-                target = rel.get("target_id")
-                if (target and target in by_id
-                        and target not in mentioned_ids
-                        and target not in colocated_ids):
-                    one_hop_ids.add(target)
+        one_hop_ids = _find_one_hop_targets(
+            mentioned_ids, mentioned_ids | colocated_ids, by_id)
 
     # --- Tier 4: Recency backfill ---
-    selected_ids = mentioned_ids | colocated_ids | one_hop_ids
+    priority_ids = mentioned_ids | colocated_ids | one_hop_ids
 
     def _sort_key(e: dict) -> int:
         return _parse_turn_number(e.get("last_updated_turn")) or 0
@@ -539,11 +598,11 @@ def _select_context_aware_entities(
         result.extend(tier)
 
     # Backfill: remaining entities sorted by recency
-    backfill = [e for e in all_entities if e["id"] not in selected_ids]
+    backfill = [e for e in all_entities if e["id"] not in priority_ids]
     backfill.sort(key=_sort_key, reverse=True)
     result.extend(backfill)
 
-    return result
+    return result, priority_ids
 
 
 def format_known_entities_bounded(
@@ -619,56 +678,9 @@ def format_known_entities_bounded(
 
     # Order entities by contextual relevance when turn text is available,
     # otherwise fall back to recency-only partitioning.
-    ordered = _select_context_aware_entities(
+    ordered, priority_ids = _select_context_aware_entities(
         all_entities, turn_text, current_turn, recency_window,
     )
-
-    # Partition into priority (full detail) vs backfill (brief).
-    # Priority = mentioned + co-located + one-hop (context-aware tiers)
-    # OR entities within the recency window.  An entity qualifies for
-    # full detail if it is in a context-aware tier OR is recent.
-    mentioned_ids = (
-        _find_mentioned_entities(all_entities, turn_text or "")
-        if turn_text else set()
-    )
-    # Collect co-located + one-hop IDs by re-checking (cheap — set ops)
-    context_ids: set[str] = set()
-    if mentioned_ids:
-        by_id = {e["id"]: e for e in all_entities}
-        # Co-located
-        relevant_locations: set[str] = set()
-        for eid in mentioned_ids:
-            ent = by_id.get(eid)
-            if not ent:
-                continue
-            if ent.get("type") == "location":
-                for n in _entity_names(ent):
-                    relevant_locations.add(n.lower())
-            loc = _get_entity_location(ent)
-            if loc:
-                relevant_locations.add(loc.lower())
-        for ent in all_entities:
-            if ent["id"] in mentioned_ids:
-                continue
-            loc = _get_entity_location(ent)
-            if loc and loc.lower() in relevant_locations:
-                context_ids.add(ent["id"])
-            if ent.get("type") == "location":
-                for n in _entity_names(ent):
-                    if n.lower() in relevant_locations:
-                        context_ids.add(ent["id"])
-                        break
-        # One-hop
-        for eid in mentioned_ids:
-            ent = by_id.get(eid)
-            if not ent:
-                continue
-            for rel in ent.get("relationships") or []:
-                target = rel.get("target_id")
-                if target and target in by_id and target not in mentioned_ids:
-                    context_ids.add(target)
-
-    priority_ids = mentioned_ids | context_ids
 
     # Build lines in context-aware order
     lines: list[str] = []
@@ -703,7 +715,7 @@ def format_known_entities_bounded(
     omitted = 0
     if used > budget and len(lines) > 1:
         while lines and used > budget:
-            removed = lines.pop()
+            lines.pop()
             omitted += 1
             used = _estimate_tokens("\n".join(lines)) if lines else 0
 

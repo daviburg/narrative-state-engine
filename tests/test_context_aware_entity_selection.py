@@ -11,6 +11,9 @@ from catalog_merger import (
     _entity_names,
     _get_entity_location,
     _select_context_aware_entities,
+    _collect_relevant_locations,
+    _find_colocated_entities,
+    _find_one_hop_targets,
 )
 
 
@@ -90,6 +93,24 @@ class TestFindMentionedEntities:
         result = _find_mentioned_entities(entities, "Al walked in")
         assert len(result) == 0
 
+    def test_word_boundary_prevents_substring_match(self):
+        """Word-boundary matching prevents 'elder' matching inside 'beelder'."""
+        entities = [_make_entity("char-e", "Elder")]
+        result = _find_mentioned_entities(entities, "beelder walked in")
+        assert len(result) == 0
+
+    def test_word_boundary_prevents_compound_match(self):
+        """Word-boundary matching prevents 'the camp' inside 'campfire'."""
+        entities = [_make_entity("loc-c", "The Camp", etype="location")]
+        result = _find_mentioned_entities(entities, "They sat by the campfire")
+        assert len(result) == 0
+
+    def test_word_boundary_allows_exact_match(self):
+        """Word-boundary matching still matches exact word occurrences."""
+        entities = [_make_entity("char-e", "Elder")]
+        result = _find_mentioned_entities(entities, "The Elder spoke")
+        assert "char-e" in result
+
     def test_empty_turn_text(self):
         entities = [_make_entity("char-a", "Alice")]
         result = _find_mentioned_entities(entities, "")
@@ -140,7 +161,7 @@ class TestSelectContextAwareEntities:
             _make_entity("char-a", "Alice", last_updated_turn="turn-010"),
             _make_entity("char-b", "Bob", last_updated_turn="turn-100"),
         ]
-        result = _select_context_aware_entities(
+        result, _ = _select_context_aware_entities(
             entities, "Alice walked in", current_turn=100, recency_window=10)
         assert result[0]["id"] == "char-a"
 
@@ -153,7 +174,7 @@ class TestSelectContextAwareEntities:
                          last_updated_turn="turn-020"),
             _make_entity("char-b", "Bob", last_updated_turn="turn-090"),
         ]
-        result = _select_context_aware_entities(
+        result, _ = _select_context_aware_entities(
             entities, "They arrived at Thornhaven",
             current_turn=100, recency_window=10)
         ids = [e["id"] for e in result]
@@ -173,7 +194,7 @@ class TestSelectContextAwareEntities:
             _make_entity("char-b", "Bob", last_updated_turn="turn-010"),
             _make_entity("char-c", "Charlie", last_updated_turn="turn-090"),
         ]
-        result = _select_context_aware_entities(
+        result, _ = _select_context_aware_entities(
             entities, "Alice spoke up",
             current_turn=100, recency_window=10)
         ids = [e["id"] for e in result]
@@ -187,7 +208,7 @@ class TestSelectContextAwareEntities:
             _make_entity("char-a", "Alice", last_updated_turn="turn-010"),
             _make_entity("char-b", "Bob", last_updated_turn="turn-090"),
         ]
-        result = _select_context_aware_entities(
+        result, _ = _select_context_aware_entities(
             entities, None, current_turn=100, recency_window=10)
         # All are backfill, sorted by recency descending
         assert result[0]["id"] == "char-b"
@@ -207,7 +228,7 @@ class TestSelectContextAwareEntities:
             _make_entity("loc-t", "Thornhaven", etype="location",
                          last_updated_turn="turn-050"),
         ]
-        result = _select_context_aware_entities(
+        result, _ = _select_context_aware_entities(
             entities, "Alice entered Thornhaven",
             current_turn=100, recency_window=10)
         ids = [e["id"] for e in result]
@@ -227,7 +248,7 @@ class TestSelectContextAwareEntities:
                                 location="Distant City",
                                 last_updated_turn="turn-095")
         entities = [innkeeper, blacksmith, loc, far_away]
-        result = _select_context_aware_entities(
+        result, _ = _select_context_aware_entities(
             entities, "They arrived at Thornhaven",
             current_turn=100, recency_window=10)
         ids = [e["id"] for e in result]
@@ -238,6 +259,87 @@ class TestSelectContextAwareEntities:
         assert ids.index("loc-t") < ids.index("char-smith")
         assert ids.index("char-inn") < ids.index("char-far")
         assert ids.index("char-smith") < ids.index("char-far")
+
+    def test_dormant_relationship_excluded_from_one_hop(self):
+        """Dormant relationships should not pull targets into one-hop tier."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100",
+                         relationships=[{"target_id": "char-b",
+                                         "current_relationship": "former ally",
+                                         "type": "social",
+                                         "status": "dormant",
+                                         "first_seen_turn": "turn-010"}]),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-010"),
+            _make_entity("char-c", "Charlie", last_updated_turn="turn-090"),
+        ]
+        result, priority_ids = _select_context_aware_entities(
+            entities, "Alice spoke up",
+            current_turn=100, recency_window=10)
+        # Bob should NOT be in priority (one-hop) because relationship is dormant
+        assert "char-b" not in priority_ids
+        ids = [e["id"] for e in result]
+        # Bob and Charlie are both backfill; Charlie is more recent
+        assert ids.index("char-c") < ids.index("char-b")
+
+    def test_resolved_relationship_excluded_from_one_hop(self):
+        """Resolved relationships should not pull targets into one-hop tier."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100",
+                         relationships=[{"target_id": "char-b",
+                                         "current_relationship": "defeated",
+                                         "type": "adversarial",
+                                         "status": "resolved",
+                                         "first_seen_turn": "turn-010"}]),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-010"),
+        ]
+        _, priority_ids = _select_context_aware_entities(
+            entities, "Alice spoke up",
+            current_turn=100, recency_window=10)
+        assert "char-b" not in priority_ids
+
+    def test_active_relationship_included_in_one_hop(self):
+        """Active relationships should pull targets into one-hop tier."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100",
+                         relationships=[{"target_id": "char-b",
+                                         "current_relationship": "ally",
+                                         "type": "social",
+                                         "status": "active",
+                                         "first_seen_turn": "turn-010"}]),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-010"),
+        ]
+        _, priority_ids = _select_context_aware_entities(
+            entities, "Alice spoke up",
+            current_turn=100, recency_window=10)
+        assert "char-b" in priority_ids
+
+    def test_location_id_matching_for_colocation(self):
+        """Entities with volatile_state.location as a loc-* ID are co-located."""
+        loc = _make_entity("loc-forge", "The Forge", etype="location",
+                           last_updated_turn="turn-050")
+        npc = _make_entity("char-smith", "Blacksmith",
+                           location="loc-forge",
+                           last_updated_turn="turn-020")
+        entities = [loc, npc]
+        result, priority_ids = _select_context_aware_entities(
+            entities, "They entered The Forge",
+            current_turn=100, recency_window=10)
+        # Blacksmith's location is "loc-forge" (an ID), The Forge is mentioned
+        assert "char-smith" in priority_ids
+        ids = [e["id"] for e in result]
+        assert ids.index("loc-forge") < ids.index("char-smith")
+
+    def test_priority_ids_returned(self):
+        """Priority IDs set is returned as second element of tuple."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100"),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-010"),
+        ]
+        _, priority_ids = _select_context_aware_entities(
+            entities, "Alice walked in",
+            current_turn=100, recency_window=10)
+        assert "char-a" in priority_ids
+        assert "char-b" not in priority_ids
 
 
 # ---------------------------------------------------------------------------
@@ -300,7 +402,6 @@ class TestBoundedWithTurnText:
             entity_context_budget=200,
             recency_window=10,
             turn_text=turn_text)
-        tokens = _estimate_tokens(result)
         # Result should be within budget (may exceed slightly due to note)
         main_text = result.split("\n\n(Note:")[0] if "(Note:" in result else result
         assert _estimate_tokens(main_text) <= 200
