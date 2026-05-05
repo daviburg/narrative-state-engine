@@ -11,9 +11,6 @@ from catalog_merger import (
     _entity_names,
     _get_entity_location,
     _select_context_aware_entities,
-    _collect_relevant_locations,
-    _find_colocated_entities,
-    _find_one_hop_targets,
 )
 
 
@@ -278,8 +275,11 @@ class TestSelectContextAwareEntities:
         # Bob should NOT be in priority (one-hop) because relationship is dormant
         assert "char-b" not in priority_ids
         ids = [e["id"] for e in result]
-        # Bob and Charlie are both backfill; Charlie is more recent
-        assert ids.index("char-c") < ids.index("char-b")
+        # Bob is stale (turn-010 vs current 100, >50 turns) and not priority,
+        # so it's excluded from backfill by staleness filtering
+        assert "char-b" not in ids
+        # Charlie (turn-090) is within staleness threshold, kept in backfill
+        assert "char-c" in ids
 
     def test_resolved_relationship_excluded_from_one_hop(self):
         """Resolved relationships should not pull targets into one-hop tier."""
@@ -340,6 +340,58 @@ class TestSelectContextAwareEntities:
             current_turn=100, recency_window=10)
         assert "char-a" in priority_ids
         assert "char-b" not in priority_ids
+
+    def test_staleness_excludes_old_backfill(self):
+        """Backfill entities older than 50 turns are excluded when turn_text present."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100"),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-040"),  # 60 turns stale
+            _make_entity("char-c", "Charlie", last_updated_turn="turn-060"),  # 40 turns stale
+        ]
+        result, priority_ids = _select_context_aware_entities(
+            entities, "Alice appeared",
+            current_turn=100, recency_window=10)
+        ids = [e["id"] for e in result]
+        # Alice is mentioned (priority)
+        assert "char-a" in priority_ids
+        assert "char-a" in ids
+        # Charlie at turn-060 is 40 turns stale (< 50 threshold), kept
+        assert "char-c" in ids
+        # Bob at turn-040 is 60 turns stale (> 50 threshold), excluded
+        assert "char-b" not in ids
+
+    def test_staleness_does_not_exclude_priority(self):
+        """Priority entities are kept regardless of staleness."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100",
+                         relationships=[{"target_id": "char-b",
+                                         "current_relationship": "ally",
+                                         "type": "social",
+                                         "status": "active",
+                                         "first_seen_turn": "turn-001"}]),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-010"),  # 90 turns stale
+        ]
+        result, priority_ids = _select_context_aware_entities(
+            entities, "Alice appeared",
+            current_turn=100, recency_window=10)
+        ids = [e["id"] for e in result]
+        # Bob is one-hop (priority) despite being 90 turns stale
+        assert "char-b" in priority_ids
+        assert "char-b" in ids
+
+    def test_staleness_not_applied_without_turn_text(self):
+        """Without turn_text, all backfill entities are kept regardless of age."""
+        entities = [
+            _make_entity("char-a", "Alice", last_updated_turn="turn-100"),
+            _make_entity("char-b", "Bob", last_updated_turn="turn-010"),  # 90 turns stale
+        ]
+        result, _ = _select_context_aware_entities(
+            entities, None,
+            current_turn=100, recency_window=10)
+        ids = [e["id"] for e in result]
+        # Both kept — no staleness filtering without turn_text
+        assert "char-a" in ids
+        assert "char-b" in ids
 
 
 # ---------------------------------------------------------------------------
@@ -547,3 +599,45 @@ class TestBoundedWithTurnText:
         # but context-aware => they should have full detail
         assert "A quiet settlement" in result
         assert "Local innkeeper" in result
+
+    def test_staleness_trims_even_under_budget(self):
+        """With turn_text, stale backfill entities are excluded even if budget allows them."""
+        mentioned = _make_entity("char-m", "Mentioned",
+                                 identity="Active NPC",
+                                 last_updated_turn="turn-100")
+        recent_backfill = _make_entity("char-r", "RecentBackfill",
+                                       identity="Recently active",
+                                       last_updated_turn="turn-080")
+        stale_backfill = _make_entity("char-s", "StaleBackfill",
+                                      identity="Ancient entity from long ago",
+                                      last_updated_turn="turn-010")
+        catalogs = _make_catalogs([mentioned, recent_backfill, stale_backfill])
+        # Budget is huge — everything would fit
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100,
+            entity_context_budget=5000,
+            recency_window=10,
+            turn_text="Mentioned spoke up")
+        # Mentioned is priority, always in
+        assert "char-m" in result
+        # Recent backfill (20 turns old) is within 50-turn threshold
+        assert "char-r" in result
+        # Stale backfill (90 turns old) exceeds 50-turn threshold, excluded
+        assert "char-s" not in result
+
+    def test_no_staleness_without_turn_text(self):
+        """Without turn_text, all entities kept regardless of age (fast-path)."""
+        entities = [
+            _make_entity("char-r", "Recent", identity="New",
+                         last_updated_turn="turn-098"),
+            _make_entity("char-s", "Stale", identity="Old but present",
+                         last_updated_turn="turn-010"),
+        ]
+        catalogs = _make_catalogs(entities)
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100,
+            entity_context_budget=5000,
+            recency_window=10)
+        # Without turn_text, fast-path fires (or staleness not applied)
+        assert "char-r" in result
+        assert "char-s" in result

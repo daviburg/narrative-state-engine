@@ -393,6 +393,10 @@ _DEFAULT_RECENCY_WINDOW = 10
 # Default fraction of context_length allocated to the entity list
 _DEFAULT_ENTITY_BUDGET_FRACTION = 0.25
 
+# Backfill entities older than this many turns are excluded from the prompt
+# (priority entities — mentioned, co-located, one-hop — are always kept)
+_DEFAULT_STALENESS_THRESHOLD = 50
+
 # Minimum entity name length to avoid false-positive keyword matches
 _MIN_NAME_LENGTH_FOR_MATCH = 3
 
@@ -583,11 +587,17 @@ def _select_context_aware_entities(
         one_hop_ids = _find_one_hop_targets(
             mentioned_ids, mentioned_ids | colocated_ids, by_id)
 
-    # --- Tier 4: Recency backfill ---
+    # --- Tier 4: Recency backfill (staleness-filtered) ---
     priority_ids = mentioned_ids | colocated_ids | one_hop_ids
 
     def _sort_key(e: dict) -> int:
         return _parse_turn_number(e.get("last_updated_turn")) or 0
+
+    # Staleness cutoff: backfill entities older than this are excluded
+    # Only applies when context-aware selection is active (turn_text provided)
+    staleness_cutoff: int | None = None
+    if current_turn is not None and turn_text:
+        staleness_cutoff = current_turn - _DEFAULT_STALENESS_THRESHOLD
 
     # Build ordered result: each tier sorted by recency descending
     result: list[dict] = []
@@ -597,8 +607,14 @@ def _select_context_aware_entities(
         tier.sort(key=_sort_key, reverse=True)
         result.extend(tier)
 
-    # Backfill: remaining entities sorted by recency
+    # Backfill: remaining entities sorted by recency, excluding stale ones
     backfill = [e for e in all_entities if e["id"] not in priority_ids]
+    if staleness_cutoff is not None:
+        backfill = [
+            e for e in backfill
+            if (_parse_turn_number(e.get("last_updated_turn")) or 0)
+            >= staleness_cutoff
+        ]
     backfill.sort(key=_sort_key, reverse=True)
     result.extend(backfill)
 
@@ -666,14 +682,18 @@ def format_known_entities_bounded(
     if not all_entities:
         return "(none — empty catalog)"
 
-    # If no budget constraint, fall back to unbounded format
-    if budget is None:
+    # If no budget constraint and no turn text for context-aware filtering,
+    # fall back to unbounded format
+    if budget is None and not turn_text:
         return format_known_entities(catalogs)
 
-    # Fast-path: if full unbounded output fits within budget, return it
-    # directly so that no entities are needlessly degraded to brief format.
+    # Fast-path: if full unbounded output fits within budget AND no turn
+    # text is available for context-aware filtering, return it directly so
+    # that no entities are needlessly degraded to brief format.
+    # When turn_text IS provided, we always use context-aware selection to
+    # proactively trim stale entities even when under budget.
     unbounded = format_known_entities(catalogs)
-    if _estimate_tokens(unbounded) <= budget:
+    if not turn_text and _estimate_tokens(unbounded) <= budget:
         return unbounded
 
     # Order entities by contextual relevance when turn text is available,
@@ -701,7 +721,7 @@ def format_known_entities_bounded(
 
     # If output exceeds budget, degrade lowest-priority entities from the
     # end of the list (backfill tier first, then one-hop, etc.).
-    if used > budget and len(lines) > 1:
+    if budget is not None and used > budget and len(lines) > 1:
         # Degrade from the end (lowest priority) to brief first
         for i in range(len(ordered) - 1, -1, -1):
             current_line = _format_entity_brief(ordered[i])
@@ -713,7 +733,7 @@ def format_known_entities_bounded(
 
     # If still over budget after degrading to brief, omit from the end
     omitted = 0
-    if used > budget and len(lines) > 1:
+    if budget is not None and used > budget and len(lines) > 1:
         while lines and used > budget:
             lines.pop()
             omitted += 1
