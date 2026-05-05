@@ -333,8 +333,13 @@ class TestBuildLocationIndex:
         loc_names = {"loc-tavern": "The Tavern"}
         index = build_location_index(entities, loc_names)
         assert "loc-tavern" in index
-        tavern_ids = {e["id"] for e in index["loc-tavern"]["entities"]}
+        tavern_entries = index["loc-tavern"]["entities"]
+        tavern_ids = {e["id"] for e in tavern_entries}
         assert "char-wanderer" in tavern_ids
+        # Verify spatial-derived entry includes relationship and last_updated_turn
+        wanderer = [e for e in tavern_entries if e["id"] == "char-wanderer"][0]
+        assert wanderer["relationship"] == "inside"
+        assert wanderer["last_updated_turn"] == "turn-010"
 
     def test_resolved_spatial_relationship_excluded(self):
         """Resolved spatial relationships should not place entity at location."""
@@ -387,6 +392,9 @@ class TestBuildLocationIndex:
         forge_entries = index["loc-forge"]["entities"]
         forge_ids = [e["id"] for e in forge_entries]
         assert forge_ids.count("char-smith") == 1
+        # Verify relationship is merged from spatial entry into kept entry
+        smith = [e for e in forge_entries if e["id"] == "char-smith"][0]
+        assert smith["relationship"] == "resides_at"
 
 
 # ---------------------------------------------------------------------------

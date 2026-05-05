@@ -116,14 +116,20 @@ def build_location_index(
                 entry["last_updated_turn"] = last_updated
             index.setdefault(target_id, []).append(entry)
 
-    # Deduplicate: same entity may appear via both sources at same location
+    # Deduplicate: same entity may appear via both sources at same location.
+    # When both exist, merge spatial-relationship fields into the kept entry.
     for loc_id in index:
-        seen_ids: set[str] = set()
+        seen: dict[str, dict] = {}
         deduped: list[dict] = []
         for entry in index[loc_id]:
-            if entry["id"] not in seen_ids:
-                seen_ids.add(entry["id"])
+            eid = entry["id"]
+            if eid not in seen:
+                seen[eid] = entry
                 deduped.append(entry)
+            else:
+                # Merge relationship from spatial entry into existing entry
+                if "relationship" in entry and "relationship" not in seen[eid]:
+                    seen[eid]["relationship"] = entry["relationship"]
         index[loc_id] = deduped
 
     # Wrap with location names
