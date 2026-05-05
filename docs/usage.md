@@ -8,7 +8,7 @@
 - No external Python packages required for core tools
 - **Optional** — for LLM-based semantic extraction:
   - `pip install -r requirements-llm.txt`
-  - An OpenAI-compatible LLM endpoint (OpenAI API, Ollama, etc.)
+  - An OpenAI-compatible LLM endpoint (llama-server, OpenAI API, Ollama, etc.)
   - Configure `config/llm.json` with provider, model, and endpoint
 
 ### Creating a New Session
@@ -47,6 +47,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 |---|---|---|---|---|
 | `qwen2.5:3b` | 3B | Q4_K_M | ~2.5 GB | Poor — 0% item recall, frequent hallucinations, ID format violations |
 | `qwen2.5:14b` | 14B | Q4_K_M | ~9 GB | Good — reliable entity classification, items extracted, acceptable coreference |
+| `Qwen3.5-9B-Q4_K_M` (llama-server) | 9B | Q4_K_M | ~5.3 GB | Very good — significant quality jump over qwen2.5:14b despite fewer parameters. Reliable JSON, accurate entity typing, strong coreference. Thinking mode disabled via `--reasoning-format none`. See [quality notes](#qwen35-9b-quality-observations) below. |
 | `qwen3-8b-int4-ov` (OpenVINO) | 8B | INT4 sym | ~4.5 GB | Good — reliable JSON, needs `skip_response_format`, thinking output parsed automatically |
 | `gemini-2.5-flash` (Google) | Unknown | N/A | Cloud | Very good — fast, low cost (~$0.30/run), 1M token context, strong JSON mode |
 | `gpt-4o` (OpenAI) | Unknown | N/A | Cloud | Best — accurate structured JSON, strong coreference, minimal hallucination |
@@ -55,11 +56,23 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 
 | GPU VRAM | Maximum Model Size (Q4 quantization) |
 |---|---|
-| 8 GB | Up to 7B |
+| 8 GB | Up to 7B (up to 9B with reduced context) |
 | 12 GB | Up to 14B |
 | 16 GB | Up to 22B |
 | 24 GB | Up to 32B |
 | 31 GB (Arc Pro B70) | Up to 70B (INT4 sym, OpenVINO) |
+
+### Qwen3.5-9B Quality Observations
+
+Qwen3.5-9B (Q4_K_M quantization, served via llama-server) delivers a measurable quality improvement over the previous best local model (qwen2.5:14b) despite having fewer parameters:
+
+- **Entity classification accuracy** — fewer type-prefix errors (e.g., items no longer misclassified as locations)
+- **Coreference resolution** — significantly better at recognizing when different descriptions refer to the same entity, reducing duplicate catalog entries
+- **Relationship detection** — captures more nuanced inter-entity relationships with appropriate confidence scores
+- **JSON compliance** — reliable structured output without needing `response_format` enforcement. On llama-server, use `--reasoning-format none` to fully disable thinking blocks (unlike qwen3-8b where `<think>` blocks cannot be disabled at the server level). This is a Qwen3.5-specific improvement.
+- **Context efficiency** — the 9B dense architecture uses context more effectively than the 14B qwen2.5 at equivalent quantization
+
+This model is the recommended choice for local extraction when a GPU with 12+ GB VRAM is available. On an 8 GB GPU it fits with reduced context (~8K). On the RTX 4070 (12 GB), it runs at ~61 tok/s with room for a 32K context window. On the Intel Arc Pro B70 (31 GB), it achieves ~56 tok/s via SYCL.
 
 ### Known Limitations of Small Models (<7B)
 
@@ -113,7 +126,57 @@ export GEMINI_API_KEY="your-key-here"
 
 ### Using a Local Model
 
-Configure Ollama or any OpenAI-compatible server in `config/llm.json`:
+The recommended local backend is **llama-server** (from [llama.cpp](https://github.com/ggml-org/llama.cpp)), which exposes an OpenAI-compatible `/v1` endpoint with true parallel slot processing. Download a pre-built release from the [llama.cpp releases page](https://github.com/ggml-org/llama.cpp/releases) — CUDA, Vulkan, and SYCL builds are available.
+
+```bash
+# Single-slot baseline (simplest setup)
+llama-server -m Qwen3.5-9B-Q4_K_M.gguf \
+    -ngl 999 -c 32768 --flash-attn on -t 1 -np 1 --port 8080 \
+    --reasoning-format none
+
+# Parallel setup (4 concurrent extraction phases)
+llama-server -m Qwen3.5-9B-Q4_K_M.gguf \
+    -ngl 999 -c 32768 --flash-attn on -t 1 -np 4 --port 8080 \
+    --reasoning-format none
+```
+
+Configure `config/llm.json` (parallel example):
+
+```json
+{
+  "provider": "openai",
+  "base_url": "http://localhost:8080/v1",
+  "model": "Qwen3.5-9B-Q4_K_M",
+  "api_key_env": "",
+  "temperature": 0.0,
+  "max_tokens": 4096,
+  "pc_max_tokens": 8192,
+  "context_length": 32768,
+  "timeout_seconds": 120,
+  "retry_attempts": 3,
+  "batch_delay_ms": 0,
+  "parallel_workers": 4
+}
+```
+
+Key flags:
+
+- **`-ngl 999`** — offload all layers to GPU
+- **`-c 32768`** — context window size (adjust to fit VRAM)
+- **`--reasoning-format none`** — disable thinking mode for Qwen3.5 (avoids `<think>` blocks consuming output tokens)
+- **`-np N`** — parallel slots for concurrent requests (use with `parallel_workers` in `config/llm.json`)
+- **`--flash-attn on`** — enable flash attention (slight memory savings)
+
+> **Why llama-server over Ollama?** llama-server gives direct control over
+> context size, parallel slots, and reasoning mode via CLI flags. Ollama
+> wraps llama.cpp but requires Modelfile variants for context size changes,
+> serializes concurrent requests on consumer GPUs, and its `/v1` endpoint
+> ignores runtime `num_ctx` overrides. For extraction workloads, llama-server
+> delivers measurably higher throughput.
+
+### Using Ollama
+
+Ollama is an alternative local backend. Configure `config/llm.json`:
 
 ```json
 {
@@ -175,6 +238,57 @@ restarts.
 
 See `config/ollama/README.md` for details on adding variants for other base
 models.
+
+### Using llama-server on Intel Arc (SYCL)
+
+llama.cpp supports Intel Arc GPUs via the SYCL backend. Pre-built binaries
+are available from [llama.cpp releases](https://github.com/ggml-org/llama.cpp/releases)
+(look for `ubuntu-sycl-fp16-x64`). A Vulkan build is also available as a
+fallback but runs ~34% slower.
+
+#### Launch (Intel Arc Pro B70)
+
+```bash
+export LD_LIBRARY_PATH="$HOME/llama-b9010-sycl/llama-b9010:/opt/intel/oneapi/redist/lib:/opt/intel/oneapi/umf/1.0/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+export ONEAPI_DEVICE_SELECTOR=level_zero:0
+export ZES_ENABLE_SYSMAN=1
+export UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1
+
+~/llama-b9010-sycl/llama-b9010/llama-server \
+    -m /path/to/Qwen3.5-9B-Q4_K_M.gguf \
+    --host 127.0.0.1 --port 8080 -ngl 999 -c 32768 \
+    --flash-attn on -t 1 -np 1 \
+    --reasoning-format none
+```
+
+Environment variables provide ~13% speedup over defaults:
+
+- **`UR_L0_ENABLE_RELAXED_ALLOCATION_LIMITS=1`** — allows larger GPU allocations
+- **`ONEAPI_DEVICE_SELECTOR=level_zero:0`** — pin to the discrete GPU
+- **`ZES_ENABLE_SYSMAN=1`** — enable system management interface
+
+> **Remote access:** To serve requests from other machines, change `--host 127.0.0.1`
+> to `--host 0.0.0.0`. llama-server has no authentication — only bind to all
+> interfaces on trusted networks or behind a firewall.
+
+#### B70 Performance (Qwen3.5-9B Q4_K_M, 5.3 GB)
+
+| Backend | Raw Decode (tok/s) | Server (tok/s) | PP512 (tok/s) |
+|---|---|---|---|
+| SYCL FP16 | 60 | 56 | 2267 |
+| Vulkan (Mesa ANV) | 40.5 | 37 | 1597 |
+
+The B70 is memory-bandwidth limited at ~60 tok/s for this model.
+No runtime parameter changes (KV quant, batch size, thread count, flash
+attention) break this ceiling. Lighter quantizations (IQ4_XS, Q3_K_M)
+are the only lever for faster decode — see [issue #284](https://github.com/daviburg/narrative-state-engine/issues/284).
+
+#### Vulkan Fallback
+
+A Vulkan build (`ubuntu-vulkan-x64` release asset) works on the B70 via
+the Mesa ANV driver. It starts faster (no SYCL JIT warmup) but is 34%
+slower. Keep it deployed as a fallback for when SYCL support breaks or a
+new model architecture isn't supported in the SYCL backend.
 
 ### Using OpenVINO (Intel Arc / Xeon GPUs)
 
@@ -538,18 +652,18 @@ The semantic extraction pipeline uses an LLM to automatically extract entities, 
    pip install -r requirements-llm.txt
    ```
 
-2. Configure `config/llm.json` (defaults to local Ollama):
+2. Configure `config/llm.json` (recommended: llama-server):
    ```json
    {
      "provider": "openai",
-     "base_url": "http://localhost:11434/v1",
-     "model": "qwen2.5:14b-8k",
+     "base_url": "http://localhost:8080/v1",
+     "model": "Qwen3.5-9B-Q4_K_M",
      "api_key_env": ""
    }
    ```
 
-   For Ollama, also create a context-tuned model variant first — see
-   [Setting the Context Size](#setting-the-context-size-ollama) above.
+   See [Using a Local Model](#using-a-local-model) for llama-server launch commands
+   and [Using Ollama](#using-ollama) if you prefer Ollama.
 
    For a cloud provider (e.g. OpenAI):
    ```json
