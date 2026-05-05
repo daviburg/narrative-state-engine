@@ -309,6 +309,93 @@ class TestBuildLocationIndex:
         ids = [e["id"] for e in index["loc-camp"]["entities"]]
         assert ids == sorted(ids)
 
+    def test_spatial_relationships_indexed(self):
+        """Entities with spatial relationships to locations appear in location_index."""
+        entities = [
+            {
+                "id": "char-wanderer",
+                "name": "wanderer",
+                "type": "character",
+                "first_seen_turn": "turn-005",
+                "last_updated_turn": "turn-010",
+                "volatile_state": {"location": "near the fire"},
+                "relationships": [
+                    {
+                        "target_id": "loc-tavern",
+                        "current_relationship": "inside",
+                        "type": "spatial",
+                        "status": "active",
+                        "last_updated_turn": "turn-010",
+                    },
+                ],
+            },
+        ]
+        loc_names = {"loc-tavern": "The Tavern"}
+        index = build_location_index(entities, loc_names)
+        assert "loc-tavern" in index
+        tavern_entries = index["loc-tavern"]["entities"]
+        tavern_ids = {e["id"] for e in tavern_entries}
+        assert "char-wanderer" in tavern_ids
+        # Verify spatial-derived entry includes relationship and last_updated_turn
+        wanderer = [e for e in tavern_entries if e["id"] == "char-wanderer"][0]
+        assert wanderer["relationship"] == "inside"
+        assert wanderer["last_updated_turn"] == "turn-010"
+
+    def test_resolved_spatial_relationship_excluded(self):
+        """Resolved spatial relationships should not place entity at location."""
+        entities = [
+            {
+                "id": "char-departed",
+                "name": "departed one",
+                "type": "character",
+                "first_seen_turn": "turn-001",
+                "last_updated_turn": "turn-020",
+                "volatile_state": {},
+                "relationships": [
+                    {
+                        "target_id": "loc-village",
+                        "current_relationship": "departed_from",
+                        "type": "spatial",
+                        "status": "resolved",
+                        "last_updated_turn": "turn-020",
+                    },
+                ],
+            },
+        ]
+        index = build_location_index(entities, {"loc-village": "the village"})
+        assert "loc-village" not in index
+
+    def test_spatial_deduplicates_with_volatile_state(self):
+        """Entity at location via both volatile_state and spatial rel appears once."""
+        entities = [
+            {
+                "id": "char-smith",
+                "name": "blacksmith",
+                "type": "character",
+                "first_seen_turn": "turn-001",
+                "last_updated_turn": "turn-005",
+                "volatile_state": {"location": "loc-forge"},
+                "relationships": [
+                    {
+                        "target_id": "loc-forge",
+                        "current_relationship": "resides_at",
+                        "type": "spatial",
+                        "status": "active",
+                        "last_updated_turn": "turn-005",
+                    },
+                ],
+            },
+        ]
+        loc_names = {"loc-forge": "The Forge"}
+        index = build_location_index(entities, loc_names)
+        assert "loc-forge" in index
+        forge_entries = index["loc-forge"]["entities"]
+        forge_ids = [e["id"] for e in forge_entries]
+        assert forge_ids.count("char-smith") == 1
+        # Verify relationship is merged from spatial entry into kept entry
+        smith = [e for e in forge_entries if e["id"] == "char-smith"][0]
+        assert smith["relationship"] == "resides_at"
+
 
 # ---------------------------------------------------------------------------
 # Test: build_turn_activity

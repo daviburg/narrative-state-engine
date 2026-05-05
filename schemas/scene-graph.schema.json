@@ -31,7 +31,7 @@
           },
           "entities": {
             "type": "array",
-            "description": "Entities whose volatile_state.location points to this location.",
+            "description": "Entities present at this location (from volatile_state.location or spatial relationships).",
             "items": {
               "type": "object",
               "required": ["id", "name", "type"],
@@ -50,6 +50,10 @@
                 "last_updated_turn": {
                   "type": "string",
                   "pattern": "^turn-[0-9]{3,}$"
+                },
+                "relationship": {
+                  "type": "string",
+                  "description": "Spatial relationship description from a relationship entry (e.g. 'resides in', 'guards')."
                 }
               }
             }
