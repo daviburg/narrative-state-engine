@@ -34,7 +34,8 @@ tools/update_state.py                  tools/semantic_extraction.py  (optional, 
       |                                          |     +---> reconcile_segments()
       |                                          |     +---> framework/catalogs/*.json
       |                                          |
-      v                                          +---> framework/catalogs/events.json
+      |                                          +---> framework/catalogs/events.json
+      |                                          +---> framework/catalogs/timeline.json (temporal #263)
       v                                          |
       +------------------------------------------+
       |
@@ -132,7 +133,8 @@ A running profile of inferred DM behavior patterns, populated from two data sour
 
 An automated pipeline that uses an LLM to extract structured data from transcript turns.
 
-- **Four-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor
+- **Five-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor
+- **Intra-turn parallelism** (#282): When `parallel_workers > 1` in `config/llm.json`, entity detail, PC detail, relationship mapping, and event extraction run concurrently via `ThreadPoolExecutor` after discovery completes. Results are merged sequentially (entities → relationships → events) to maintain catalog consistency. The inter-call delay is applied once per turn instead of between each call. With `parallel_workers: 1` (default), the pipeline uses the original sequential execution path.
 - Prompt templates in `templates/extraction/` define each agent's behavior
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`; includes per-pair relationship consolidation, `_dedup_relationships()` safety net (#183), and `cleanup_dangling_relationships()` to remove refs to non-existent entities (#184)
@@ -164,17 +166,33 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - Biography sections use LLM-generated descriptive titles (not generic "Phase" labels), cached in `.synthesis.json` sidecars
 - Wiki pages include cross-page entity links: the first mention of each known entity in biography prose, relationship tables, event timelines, and member/connection lists is a clickable markdown link to that entity's wiki page. Link resolution uses relative paths across entity types.
 - **Coreference hints** (`apply_coreference_hints`): Optional manual merge rules in `sessions/*/coreference-hints.json`. Each entry maps a canonical entity ID to variant names and ID patterns. After the automatic dedup pass, the pipeline loads any hints file from the session directory and deterministically merges variant entities into their canonical counterpart — absorbing relationships, events, and stable attributes, deleting variant files, and rewriting all dangling references. Validated against `schemas/coreference-hints.schema.json`.
+- **Temporal extraction integration** (#263): The semantic extraction pipeline calls `temporal_extraction.extract_temporal_signals()` per-turn after event extraction (Phase 5). Pattern-based detection identifies season transitions, time-skip language, biological markers, and construction milestones directly from turn text and finalized events. Signals are merged into the timeline via `merge_temporal_signals()` with deduplication by `(source_turn, type, season, raw_text)`. The timeline is loaded alongside catalogs and events, saved at every checkpoint and at the end of extraction, and reconciled across segments in segmented mode. The extraction log records `temporal_ok`, `temporal_error`, and `new_temporal_signals` per turn. When `timeline` is not passed to `extract_and_merge()` (legacy callers), temporal extraction is skipped gracefully.
+
+### Story Summary Layer (Framework)
+
+High-level narrative arc summary generated from extracted data.
+
+- `framework/story/summary.md` — concise campaign overview with arc descriptions, player character status, and open questions
+- `tools/generate_story_summary.py` — reads events, plot threads, entity catalogs, and timeline data to produce the summary
+- **LLM mode** (default): assembles structured prompt from catalog data and calls the configured LLM for narrative synthesis
+- **Data-only mode** (`--no-llm`): produces a structured markdown summary from catalog data without LLM calls
+- Automatically falls back to data-only mode if the LLM call fails
+- Full regeneration each run (not incremental) — the summary is a derived artifact
 
 ### Timeline Layer (Framework)
 
 Estimated timeline of in-game events, anchored to a configurable reference point.
 
 - `framework/catalogs/timeline.json` — temporal markers with day estimates, seasons, and confidence scores
+- `framework/catalogs/timeline.md` — narrative timeline wiki page (auto-generated)
 - `tools/temporal_extraction.py` — pattern-based extraction of season keywords, biological markers, construction milestones, and time-skip language
 - `templates/extraction/temporal-signals.md` — optional LLM prompt template for ambiguous temporal estimation
 - Calibrated from biological markers (pregnancies), construction timelines, and seasonal descriptions
 - Reference anchor defaults to turn-001 (Day 0); a named anchor (e.g., settlement founding) can be set in config
 - Feeds into wiki page generation for character ages and event dating (estimated day column in event timelines, season labels in infoboxes)
+- **Season flicker filtering** (#275, #277): Low-confidence season signals are filtered using a sliding-window approach to prevent noise from regex false positives (e.g., "summer" keywords appearing in a winter-dominant story). A signal is kept only if its confidence ≥ threshold (default 0.6) OR at least `min_support` (default 1) neighboring season entries within a per-side radius of `window_size` (default 5) share the same base season. Non-season entries are never filtered. Base season detection itself requires at least 2 distinct keyword pattern matches and a margin of 2 over the runner-up to avoid false positives from single keyword occurrences.
+- **Anchor event detection** (#275): The system auto-detects the most significant temporal anchor from timeline data — preferring explicit `anchor_event` type entries, then falling back to the first `time_skip` or `biological_marker`.
+- **Narrative timeline wiki page** (#275, #278): `generate_wiki_pages.py --type timeline` (or default full generation) produces `timeline.md` with: (1) a Current Position infobox showing estimated day, season, anchor, and confidence; (2) a structured narrative summary with story progression beats (when `events.json` is available) or a concise fallback; (3) reference tables for season progression, time passages, biological markers, and other milestones. The narrative groups biological markers into pregnancy-birth cycles and uses event catalog data for period-based story summaries.
 
 ---
 
@@ -214,6 +232,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/dm_profile_analyzer.py` | DM behavioral profile analysis from transcript and user input (#260) |
 | `tools/temporal_extraction.py` | Pattern-based temporal signal extraction and day estimation |
 | `tools/catalog_merger.py` | Merge extracted entities into framework catalog files |
+| `tools/generate_story_summary.py` | Generate high-level story arc summary from extracted data (LLM or data-only mode) |
 | `tools/build_scene_graph.py` | Build cross-type spatial/temporal index from entity catalogs (#257) |
 | `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, Google Gemini, etc.) |
 | `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files; supports `-Framework`/`-PlayerLabel` passthrough and safe argument quoting for values with spaces |
