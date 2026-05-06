@@ -174,6 +174,35 @@ Key flags:
 > ignores runtime `num_ctx` overrides. For extraction workloads, llama-server
 > delivers measurably higher throughput.
 
+### Fallback Provider
+
+When the primary LLM exhausts all `retry_attempts`, the client can
+automatically route the request to a fallback provider. Configure
+a `"fallback"` block inside `config/llm.json`:
+
+```json
+{
+  "provider": "openai",
+  "base_url": "http://192.168.10.169:8000/v1",
+  "model": "qwen3-8b-int4-ov",
+  "timeout_seconds": 600,
+  "retry_attempts": 3,
+  "skip_response_format": true,
+  "fallback": {
+    "base_url": "http://localhost:8081/v1",
+    "model": "qwen3.5-9b-q4_k_m",
+    "timeout_seconds": 300,
+    "skip_response_format": true
+  }
+}
+```
+
+The `fallback` block accepts the same keys as the top-level config.
+Any key in the fallback overrides the primary value; unspecified keys
+inherit from the primary config. `LLMTruncationError` and
+`QuotaExhaustedError` are never retried through the fallback — they
+propagate immediately.
+
 ### Using Ollama
 
 Ollama is an alternative local backend. Configure `config/llm.json`:

@@ -141,6 +141,24 @@ class LLMClient:
             "consecutive_rate_limit_threshold", 10)
         self.stats = RetryStats()
 
+        # Fallback LLM provider — used when primary exhausts retries.
+        # Configured via a "fallback" block in llm.json.
+        self._fallback_client = None
+        fallback_cfg = self.config.get("fallback")
+        if fallback_cfg and not overrides:
+            # Build a merged config for the fallback client
+            fb_config = dict(self.config)
+            fb_config.pop("fallback", None)  # prevent recursion
+            fb_config.update(fallback_cfg)
+            try:
+                self._fallback_client = LLMClient.__new__(LLMClient)
+                self._fallback_client.__init__(
+                    config_path=config_path,
+                    overrides=fb_config,
+                )
+            except Exception:
+                self._fallback_client = None
+
         # Force sequential execution for cloud providers — parallel bursts
         # would trip rate limits / quota thresholds (#282 review).
         if self.parallel_workers > 1 and self._is_cloud_provider:
@@ -487,6 +505,33 @@ class LLMClient:
             except Exception as e:
                 last_error = e
                 self._handle_retry(attempt, e)
+
+        # Primary provider exhausted — try fallback if configured.
+        if self._fallback_client is not None:
+            try:
+                print(
+                    f"  PRIMARY FAILED ({self.retry_attempts} attempts), "
+                    f"trying fallback provider ({self._fallback_client.model})...",
+                    file=sys.stderr,
+                )
+                result = self._fallback_client.extract_json(
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    schema=schema,
+                    timeout=timeout,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                )
+                self.stats.record_success()
+                return result
+            except (LLMTruncationError, QuotaExhaustedError):
+                raise
+            except Exception as fb_err:
+                raise LLMExtractionError(
+                    f"Failed after {self.retry_attempts} primary attempts "
+                    f"and fallback attempt. Primary: {last_error} | "
+                    f"Fallback: {fb_err}"
+                ) from fb_err
 
         raise LLMExtractionError(
             f"Failed after {self.retry_attempts} attempts. Last error: {last_error}"
