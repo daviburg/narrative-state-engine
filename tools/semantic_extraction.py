@@ -180,20 +180,35 @@ def _sanitize_pc_catalog_entry(catalogs: dict) -> None:
                     file=sys.stderr,
                 )
                 entity["stable_attributes"] = {k: v for k, v in sa.items() if k in PC_ALLOWED_ATTRS}
-            # Filter aliases (#214)
+            # Filter aliases (#214, #302)
             aliases_attr = sa.get("aliases")
             if isinstance(aliases_attr, dict):
-                aliases_attr["value"] = _filter_pc_aliases(aliases_attr.get("value", []))
+                known_names = _collect_known_entity_names(catalogs) - {entity.get("name", "").strip().lower()}
+                aliases_attr["value"] = _filter_pc_aliases(aliases_attr.get("value", []), known_names)
         # Prune volatile_state (#214)
         _prune_pc_volatile_state(entity)
         break
 
 
-def _filter_pc_aliases(aliases: list[str] | str) -> list[str]:
+def _collect_known_entity_names(catalogs: dict) -> set[str]:
+    """Build a set of lowercased primary entity names from all catalogs."""
+    names: set[str] = set()
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            name = entity.get("name", "")
+            if name and isinstance(name, str):
+                names.add(name.strip().lower())
+    return names
+
+
+def _filter_pc_aliases(aliases: list[str] | str, known_entity_names: set[str] | None = None) -> list[str]:
     """Remove invalid PC aliases: blocklisted words, too-short, common words (#214).
 
     Accepts either a list of aliases or a comma-separated string and returns
     a consistently filtered list (capped at _PC_ALIAS_MAX_COUNT).
+
+    If *known_entity_names* is provided (a set of lowercased entity names),
+    aliases matching another entity's primary name are also rejected (#302).
     """
     if isinstance(aliases, str):
         aliases = [part.strip() for part in aliases.split(",") if part.strip()]
@@ -214,9 +229,34 @@ def _filter_pc_aliases(aliases: list[str] | str) -> list[str]:
         if len(alias) < _PC_ALIAS_MIN_LENGTH:
             print(f"  COERCE: rejected PC alias '{alias}' (too short)", file=sys.stderr)
             continue
+        if known_entity_names and low in known_entity_names:
+            print(f"  COERCE: rejected alias '{alias}' (conflicts with existing entity)", file=sys.stderr)
+            continue
         cleaned.append(alias)
     if len(cleaned) > _PC_ALIAS_MAX_COUNT:
         cleaned = cleaned[-_PC_ALIAS_MAX_COUNT:]
+    return cleaned
+
+
+def _filter_entity_aliases(aliases: list[str], entity_name: str, known_entity_names: set[str]) -> list[str]:
+    """Remove aliases that conflict with other entities' primary names (#302).
+
+    Unlike _filter_pc_aliases, this does not apply blocklist/length rules —
+    it only rejects aliases matching another entity's name (case-insensitive).
+    The entity's own name is excluded from the conflict check.
+    """
+    if not known_entity_names:
+        return aliases
+    own_lower = entity_name.strip().lower() if entity_name else ""
+    filter_set = known_entity_names - {own_lower} if own_lower else known_entity_names
+    cleaned = []
+    for alias in aliases:
+        if not isinstance(alias, str) or not alias.strip():
+            continue
+        if alias.strip().lower() in filter_set:
+            print(f"  COERCE: rejected alias '{alias}' (conflicts with existing entity)", file=sys.stderr)
+            continue
+        cleaned.append(alias)
     return cleaned
 
 
@@ -1429,12 +1469,13 @@ def _pc_partial_merge(catalogs: dict, entity_data: dict, turn_id: str) -> bool:
         pc_entry["last_updated_turn"] = turn_id
         if entity_data.get("status_updated_turn"):
             pc_entry["status_updated_turn"] = entity_data["status_updated_turn"]
-        # Post-merge quality guards (#214)
+        # Post-merge quality guards (#214, #302)
         _prune_pc_volatile_state(pc_entry)
         sa_entry = pc_entry.get("stable_attributes", {})
         aliases_attr = sa_entry.get("aliases")
         if isinstance(aliases_attr, dict) and isinstance(aliases_attr.get("value"), list):
-            aliases_attr["value"] = _filter_pc_aliases(aliases_attr["value"])
+            known_names = _collect_known_entity_names(catalogs) - {pc_entry.get("name", "").strip().lower()}
+            aliases_attr["value"] = _filter_pc_aliases(aliases_attr["value"], known_names)
         print(
             f"  PC partial merge: merged {merged_fields} at {turn_id} "
             f"(attempted: {attempted_fields}, last_updated_turn => {turn_id})",
@@ -3537,7 +3578,7 @@ def _merge_pc_aliases(
                     normalized.append(text)
         else:
             normalized = []
-        cleaned = _filter_pc_aliases(normalized)
+        cleaned = _filter_pc_aliases(normalized, _collect_known_entity_names(catalogs) - {pc_entry.get("name", "").strip().lower()})
         if cleaned != normalized:
             aliases_attr["value"] = cleaned
 
