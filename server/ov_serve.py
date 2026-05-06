@@ -159,7 +159,7 @@ async def lifespan(app: FastAPI):
     try:
         await batch_worker_task
     except asyncio.CancelledError:
-        pass
+        pass  # Expected: we just cancelled it above
     print("Shutting down...")
 
 app = FastAPI(title="OpenVINO GenAI Server", lifespan=lifespan)
