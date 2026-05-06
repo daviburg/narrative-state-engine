@@ -235,6 +235,69 @@ class TestParseJsonThinkStripping:
 
 
 # ---------------------------------------------------------------------------
+# Fallback JSON extraction (inline preamble handling)
+# ---------------------------------------------------------------------------
+
+class TestFallbackJsonExtraction:
+    """Verify _parse_json_response fallback handles inline preamble text."""
+
+    def _make_client(self, tmp_path):
+        cfg = _write_config(tmp_path)
+        return LLMClient(config_path=cfg)
+
+    def test_preamble_before_json(self, tmp_path):
+        """Model emits reasoning text before JSON object."""
+        client = self._make_client(tmp_path)
+        raw = 'Okay, let\'s analyze this turn.\n\n{"entities": [{"name": "Elf"}]}'
+        result = client._parse_json_response(raw)
+        assert result == {"entities": [{"name": "Elf"}]}
+
+    def test_preamble_with_braces_before_json(self, tmp_path):
+        """Preamble contains non-JSON braces (e.g. {foo}) before real JSON."""
+        client = self._make_client(tmp_path)
+        raw = 'The structure {unclear} needs analysis.\n{"entities": []}'
+        result = client._parse_json_response(raw)
+        assert result == {"entities": []}
+
+    def test_braces_in_json_strings(self, tmp_path):
+        """JSON containing brace characters inside string values."""
+        client = self._make_client(tmp_path)
+        raw = 'Preamble text\n{"desc": "a {curly} thing", "count": 1}'
+        result = client._parse_json_response(raw)
+        assert result == {"desc": "a {curly} thing", "count": 1}
+
+    def test_trailing_text_after_json(self, tmp_path):
+        """Model emits text after JSON — should still parse the object."""
+        client = self._make_client(tmp_path)
+        raw = '{"entities": []}\n\nHope that helps!'
+        result = client._parse_json_response(raw)
+        assert result == {"entities": []}
+
+    def test_no_json_at_all_raises_with_details(self, tmp_path):
+        """No JSON anywhere — error includes original parse details."""
+        from llm_client import LLMExtractionError
+        client = self._make_client(tmp_path)
+        raw = 'This is just plain text with no JSON at all.'
+        try:
+            client._parse_json_response(raw)
+            assert False, "Should have raised"
+        except LLMExtractionError as e:
+            assert "Initial parse error" in str(e)
+            assert "no valid JSON object found" in str(e)
+
+    def test_invalid_json_after_preamble_raises_with_details(self, tmp_path):
+        """Malformed JSON after preamble — error includes candidate error."""
+        from llm_client import LLMExtractionError
+        client = self._make_client(tmp_path)
+        raw = 'Here is the result:\n{"entities": [INVALID]}'
+        try:
+            client._parse_json_response(raw)
+            assert False, "Should have raised"
+        except LLMExtractionError as e:
+            assert "Initial parse error" in str(e)
+
+
+# ---------------------------------------------------------------------------
 # Malformed confidence repair (#290)
 # ---------------------------------------------------------------------------
 
