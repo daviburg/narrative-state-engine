@@ -20,6 +20,7 @@ Usage:
 import argparse
 import asyncio
 import os
+import re
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -37,6 +38,8 @@ CACHE_DIR = ""
 MODEL_NAME = ""
 BATCH_WAIT_MS = 50  # Max time to wait for batch to fill
 MAX_BATCH_SIZE = 8   # Max requests per batch
+CACHE_SIZE_GB = 8    # KV cache size in GB
+EXTRA_STOP_TOKEN_IDS: set = set()  # Additional stop token IDs beyond EOS
 
 # --- Request/Response Models ---
 
@@ -138,7 +141,7 @@ async def lifespan(app: FastAPI):
     start = time.perf_counter()
 
     sched_cfg = ov_genai.SchedulerConfig()
-    sched_cfg.cache_size = 8  # 8GB KV cache
+    sched_cfg.cache_size = CACHE_SIZE_GB
     sched_cfg.enable_prefix_caching = True
 
     pipeline = ov_genai.ContinuousBatchingPipeline(
@@ -192,6 +195,17 @@ async def chat_completions(request: ChatCompletionRequest):
     if pipeline is None:
         raise HTTPException(status_code=503, detail="Model not loaded")
 
+    # Validate n parameter — only single generation supported
+    if request.n is not None and request.n != 1:
+        raise HTTPException(status_code=400, detail="Only n=1 is supported")
+
+    # Validate model field if provided
+    if request.model and request.model != MODEL_NAME:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Model '{request.model}' not found. Available: {MODEL_NAME}"
+        )
+
     # Build messages for chat template
     messages = [{"role": m.role, "content": m.content} for m in request.messages]
 
@@ -209,10 +223,10 @@ async def chat_completions(request: ChatCompletionRequest):
     gen_config.temperature = request.temperature if request.temperature and request.temperature > 0 else 0.01
     gen_config.do_sample = (request.temperature or 0) > 0
     gen_config.top_p = request.top_p or 1.0
-    # Derive EOS token from tokenizer; fall back to model's default if available
+    # Derive EOS token from tokenizer; include any extra stop token IDs from CLI
     eos_id = tokenizer.get_eos_token_id()
     gen_config.eos_token_id = eos_id
-    gen_config.stop_token_ids = {eos_id}
+    gen_config.stop_token_ids = {eos_id} | EXTRA_STOP_TOKEN_IDS
 
     # Submit to batch queue and wait for result
     loop = asyncio.get_running_loop()
@@ -223,14 +237,14 @@ async def chat_completions(request: ChatCompletionRequest):
     # Count output tokens to detect truncation
     raw_output_tokens = count_tokens(output_text)
 
-    # Strip thinking block if present (safety net — should be empty with enable_thinking=False)
-    if output_text.startswith("<think>"):
-        think_end = output_text.find("</think>")
-        if think_end != -1:
-            output_text = output_text[think_end + len("</think>"):].lstrip("\n")
-        else:
-            # No closing </think> — model emitted tag but went straight to content
-            output_text = output_text[len("<think>"):].lstrip("\n")
+    # Strip any thinking blocks from output (safety net — should be empty with
+    # enable_thinking=False, but handles edge cases like leading whitespace or
+    # multiple blocks)
+    output_text = re.sub(r"<think>.*?</think>\s*", "", output_text, flags=re.DOTALL)
+    # Handle unclosed <think> tag (model started thinking but didn't close)
+    if "<think>" in output_text:
+        output_text = output_text[:output_text.index("<think>")] + output_text[output_text.index("<think>") + len("<think>"):]
+    output_text = output_text.lstrip("\n")
 
     # Detect truncation: if raw tokens used nearly all of max_new_tokens budget
     finish_reason = "stop"
@@ -246,7 +260,7 @@ async def chat_completions(request: ChatCompletionRequest):
     response = ChatCompletionResponse(
         id=resp_id,
         created=int(time.time()),
-        model=request.model or MODEL_NAME,
+        model=MODEL_NAME,
         choices=[
             ChatCompletionChoice(
                 index=0,
@@ -273,6 +287,10 @@ if __name__ == "__main__":
                         help="Path to OpenVINO IR model directory (or set OV_MODEL_DIR env)")
     parser.add_argument("--batch-wait-ms", type=int, default=BATCH_WAIT_MS)
     parser.add_argument("--max-batch-size", type=int, default=MAX_BATCH_SIZE)
+    parser.add_argument("--cache-size-gb", type=int, default=CACHE_SIZE_GB,
+                        help="KV cache size in GB (default: 8)")
+    parser.add_argument("--stop-token-ids", type=str, default="",
+                        help="Comma-separated extra stop token IDs (beyond EOS)")
     args = parser.parse_args()
 
     MODEL_DIR = args.model_dir
@@ -280,5 +298,8 @@ if __name__ == "__main__":
     MODEL_NAME = os.path.basename(MODEL_DIR.rstrip("/"))
     BATCH_WAIT_MS = args.batch_wait_ms
     MAX_BATCH_SIZE = args.max_batch_size
+    CACHE_SIZE_GB = args.cache_size_gb
+    if args.stop_token_ids:
+        EXTRA_STOP_TOKEN_IDS = {int(x.strip()) for x in args.stop_token_ids.split(",")}
 
     uvicorn.run(app, host=args.host, port=args.port)
