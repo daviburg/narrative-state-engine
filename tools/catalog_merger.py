@@ -966,16 +966,24 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
         else:
             entity.pop("first_seen_turn", None)
 
-    # Build known entity names for alias cross-reference guard (#302)
-    known_entity_names: set[str] = set()
-    for _cat_entities in catalogs.values():
-        for _ent in _cat_entities:
-            _n = _ent.get("name", "")
-            if _n and isinstance(_n, str):
-                known_entity_names.add(_n.strip().lower())
+    # Lazily build known entity names only when alias filtering is needed (#302)
+    def _get_known_names() -> set[str]:
+        names: set[str] = set()
+        for _cat_entities in catalogs.values():
+            for _ent in _cat_entities:
+                _n = _ent.get("name", "")
+                if _n and isinstance(_n, str):
+                    names.add(_n.strip().lower())
+        return names
 
     if existing is not None:
         idx, current = existing
+        # Only compute known names when the update touches aliases
+        _needs_alias_check = bool(
+            entity.get("stable_attributes", {}).get("aliases")
+            or (entity.get("name") and entity["name"] != current.get("name"))
+        )
+        known_entity_names = _get_known_names() if _needs_alias_check else None
         _update_existing_entity(current, entity, known_entity_names=known_entity_names)
         catalogs[catalog_file][idx] = current
     else:
@@ -983,6 +991,21 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
         required_base = ["id", "name", "type", "first_seen_turn"]
         has_desc = entity.get("identity")
         if all(entity.get(f) for f in required_base) and has_desc:
+            # Filter aliases on new entities before appending (#302)
+            sa = entity.get("stable_attributes", {})
+            aliases_attr = sa.get("aliases")
+            if isinstance(aliases_attr, dict) and isinstance(aliases_attr.get("value"), list):
+                known_entity_names = _get_known_names()
+                entity_name = entity.get("name", "")
+                if entity.get("id") == "char-player":
+                    from semantic_extraction import _filter_pc_aliases
+                    filter_set = known_entity_names - {entity_name.strip().lower()} if entity_name else known_entity_names
+                    aliases_attr["value"] = _filter_pc_aliases(aliases_attr["value"], filter_set)
+                else:
+                    from semantic_extraction import _filter_entity_aliases
+                    aliases_attr["value"] = _filter_entity_aliases(
+                        aliases_attr["value"], entity_name, known_entity_names
+                    )
             catalogs[catalog_file].append(entity)
         else:
             missing = [f for f in required_base if not entity.get(f)]

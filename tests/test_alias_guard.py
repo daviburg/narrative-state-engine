@@ -6,6 +6,7 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from semantic_extraction import _filter_pc_aliases, _filter_entity_aliases, _collect_known_entity_names
+from catalog_merger import merge_entity
 
 
 def test_alias_rejected_when_matching_existing_entity():
@@ -65,3 +66,72 @@ def test_collect_known_entity_names():
     assert "maelis" in names
     assert "rune" in names
     assert "the rusty tankard" in names
+
+
+# --- Integration tests: merge_entity with alias cross-reference ---
+
+
+def test_merge_entity_strips_conflicting_alias_on_update():
+    """merge_entity() strips aliases conflicting with other entity names during update."""
+    catalogs = {
+        "characters.json": [
+            {"id": "char-player", "name": "Kael", "type": "character",
+             "identity": "The player character", "first_seen_turn": "turn-001",
+             "stable_attributes": {"aliases": {"value": ["Shadow"]}}},
+            {"id": "char-maelis", "name": "Maelis", "type": "character",
+             "identity": "An NPC mage", "first_seen_turn": "turn-001"},
+        ],
+    }
+    # Update char-player with an alias that matches "Maelis"
+    update = {
+        "id": "char-player", "type": "character",
+        "stable_attributes": {"aliases": {"value": ["Shadow", "Maelis", "Nightblade"]}},
+        "last_updated_turn": "turn-050",
+    }
+    merge_entity(catalogs, update)
+    pc = catalogs["characters.json"][0]
+    alias_list = pc["stable_attributes"]["aliases"]["value"]
+    assert "Maelis" not in alias_list
+    assert "Shadow" in alias_list
+    assert "Nightblade" in alias_list
+
+
+def test_merge_entity_keeps_non_conflicting_alias_on_update():
+    """merge_entity() keeps aliases that don't conflict with any entity name."""
+    catalogs = {
+        "characters.json": [
+            {"id": "char-npc", "name": "Thorne", "type": "character",
+             "identity": "A guard captain", "first_seen_turn": "turn-010",
+             "stable_attributes": {}},
+        ],
+    }
+    update = {
+        "id": "char-npc", "type": "character",
+        "stable_attributes": {"aliases": {"value": ["Chief", "Captain"]}},
+        "last_updated_turn": "turn-020",
+    }
+    merge_entity(catalogs, update)
+    npc = catalogs["characters.json"][0]
+    alias_list = npc["stable_attributes"]["aliases"]["value"]
+    assert "Chief" in alias_list
+    assert "Captain" in alias_list
+
+
+def test_merge_entity_filters_aliases_on_new_entity():
+    """merge_entity() filters conflicting aliases when appending a new entity."""
+    catalogs = {
+        "characters.json": [
+            {"id": "char-maelis", "name": "Maelis", "type": "character",
+             "identity": "An NPC", "first_seen_turn": "turn-001"},
+        ],
+    }
+    new_entity = {
+        "id": "char-lyra", "name": "Lyra", "type": "character",
+        "identity": "A bard", "first_seen_turn": "turn-020",
+        "stable_attributes": {"aliases": {"value": ["Songbird", "Maelis"]}},
+    }
+    merge_entity(catalogs, new_entity)
+    lyra = next(e for e in catalogs["characters.json"] if e["id"] == "char-lyra")
+    alias_list = lyra["stable_attributes"]["aliases"]["value"]
+    assert "Maelis" not in alias_list
+    assert "Songbird" in alias_list
