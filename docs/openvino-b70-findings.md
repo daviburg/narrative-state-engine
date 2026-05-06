@@ -192,7 +192,7 @@ This initial investigation has significant methodological problems that invalida
 ### Methodology Fixes Applied
 
 All Phase 1 caveats addressed:
-- **Thinking disabled**: Chat template with `enable_thinking=false` prepends empty `<think>\n</think>\n\n` block, model outputs clean JSON
+- **Thinking disabled**: Chat template with `enable_thinking=false` prepends empty `<think>\n</think>\n\n` block, suppressing structured reasoning tokens. Note: the model may still emit brief inline reasoning text (e.g. "Okay, let's analyze...") before JSON — this is not the `<think>` mechanism but normal model verbosity, handled client-side by the fallback JSON extractor in `tools/llm_client.py`
 - **Model cache enabled**: `CACHE_DIR` reduces load time from 17.8s → 2.1-2.4s
 - **ContinuousBatchingPipeline tested**: Batched inference with `SchedulerConfig`
 - **Prefix caching enabled**: `sched_cfg.enable_prefix_caching = True`
@@ -274,6 +274,6 @@ For 344 turns with realistic extraction prompts:
 - **Per-request speed is lower than llama-server**: 38 tok/s single-stream OpenVINO vs 60 tok/s llama-server. But this is irrelevant when batching gives 4x aggregate throughput
 - **OVMS is unnecessary**: The native Python `ContinuousBatchingPipeline` API provides batching, prefix caching, and KV management without Docker complexity
 - **Model cache eliminates startup cost**: 17.8s → 2.1s load time with `CACHE_DIR`
-- **Thinking suppression works**: `enable_thinking=false` in chat template produces clean JSON output
+- **Thinking suppression works**: `enable_thinking=false` in chat template suppresses structured `<think>` reasoning blocks (which would otherwise consume 2000–3000 tokens). The model may still emit brief inline reasoning text before JSON; this is handled by the fallback JSON extractor in `tools/llm_client.py`
 - **Practical implication**: If we process 4 extraction turns concurrently, 344 turns completes in ~35-50 minutes vs ~2h with llama-server
 - **Next step**: Build a simple Python REST wrapper around `ContinuousBatchingPipeline` to replace llama-server for extraction workloads

@@ -513,11 +513,35 @@ class LLMClient:
 
         try:
             return json.loads(text)
-        except json.JSONDecodeError as e:
-            raise LLMExtractionError(
-                f"Failed to parse JSON from LLM response: {e}\n"
-                f"Raw response (first 500 chars): {raw_text[:500]}"
-            )
+        except json.JSONDecodeError as initial_err:
+            initial_error = initial_err
+
+        # Fallback: model may have emitted reasoning text before/after JSON.
+        # Use json.JSONDecoder().raw_decode which correctly handles braces
+        # inside string literals and continues scanning on failure.
+        decoder = json.JSONDecoder()
+        search_start = 0
+        last_candidate_err = None
+        while search_start < len(text):
+            brace_pos = text.find("{", search_start)
+            if brace_pos == -1:
+                break
+            try:
+                obj, end_idx = decoder.raw_decode(text, brace_pos)
+                return obj
+            except json.JSONDecodeError as e:
+                last_candidate_err = e
+                # Skip past this position and try the next '{'
+                search_start = brace_pos + 1
+
+        detail = f"Initial parse error: {initial_error}"
+        if last_candidate_err and last_candidate_err is not initial_error:
+            detail += f"\nFallback candidate error: {last_candidate_err}"
+        raise LLMExtractionError(
+            f"Failed to parse JSON from LLM response: no valid JSON object found.\n"
+            f"{detail}\n"
+            f"Raw response (first 500 chars): {raw_text[:500]}"
+        )
 
     @staticmethod
     def _fix_malformed_confidence(match: re.Match) -> str:
