@@ -1,7 +1,7 @@
 # Qwen3.5 OpenVINO Evaluation Results
 
 **Date:** 2026-05-05 (updated 2026-05-07)  
-**Server:** arclight (192.168.10.169), Ubuntu 26.04, Intel Arc Pro B70 (24GB)  
+**Server:** Ubuntu 26.04, Intel Arc Pro B70 (24GB VRAM), 32 CPU cores, 30GB RAM  
 **Verdict: BLOCKED — Hybrid linear-attention models produce garbage output after INT4 quantization**
 
 ---
