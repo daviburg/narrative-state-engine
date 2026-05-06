@@ -48,7 +48,7 @@ Semantic extraction uses an LLM to identify entities, relationships, and events 
 | `qwen2.5:3b` | 3B | Q4_K_M | ~2.5 GB | Poor — 0% item recall, frequent hallucinations, ID format violations |
 | `qwen2.5:14b` | 14B | Q4_K_M | ~9 GB | Good — reliable entity classification, items extracted, acceptable coreference |
 | `Qwen3.5-9B-Q4_K_M` (llama-server) | 9B | Q4_K_M | ~5.3 GB | Very good — significant quality jump over qwen2.5:14b despite fewer parameters. Reliable JSON, accurate entity typing, strong coreference. Thinking mode disabled via `--reasoning-format none`. See [quality notes](#qwen35-9b-quality-observations) below. |
-| `qwen3-8b-int4-ov` (OpenVINO) | 8B | INT4 sym | ~4.5 GB | Good — reliable JSON, needs `skip_response_format`, thinking output parsed automatically |
+| `qwen3-8b-int4-ov` (OpenVINO) | 8B | INT4 sym | ~4.5 GB | Good — reliable JSON, needs `skip_response_format`, thinking suppressed via `enable_thinking=False` in chat template |
 | `gemini-2.5-flash` (Google) | Unknown | N/A | Cloud | Very good — fast, low cost (~$0.30/run), 1M token context, strong JSON mode |
 | `gpt-4o` (OpenAI) | Unknown | N/A | Cloud | Best — accurate structured JSON, strong coreference, minimal hallucination |
 
@@ -307,7 +307,7 @@ configurations and the concurrency constraints that matter for extraction.
 
 The extraction pipeline connects to any OpenAI-compatible endpoint. For Intel
 Arc GPUs, serve the model with OpenVINO's `ContinuousBatchingPipeline` behind
-a FastAPI wrapper:
+a FastAPI wrapper that exposes an OpenAI-compatible `/v1/chat/completions` API.
 
 ```bash
 # On the inference server (e.g. Ubuntu + Intel Arc Pro B70)
@@ -317,10 +317,22 @@ pip install openvino openvino-genai optimum[openvino] fastapi uvicorn
 optimum-cli export openvino --model Qwen/Qwen3-8B --weight-format int4_sym \
     --trust-remote-code ./models/qwen3-8b-int4-ov
 
-# Start the server (use any OpenAI-compatible wrapper around ContinuousBatchingPipeline)
-# For example, using openvino_genai's built-in server or a custom FastAPI wrapper:
-python -m openvino_genai.server --model ./models/qwen3-8b-int4-ov --port 8000
+# Start the server (any OpenAI-compatible wrapper around ContinuousBatchingPipeline)
+python ov_serve.py --model ./models/qwen3-8b-int4-ov --port 8000
 ```
+
+The server wrapper should handle:
+
+- **Thinking suppression** — pass `enable_thinking=False` (a Python `bool`) in
+  the chat template's `extra_context` dict when calling
+  `tokenizer.apply_chat_template(..., extra_context={'enable_thinking': False})`.
+  This prevents qwen3 models from wasting ~80% of output tokens on `<think>`
+  blocks. Unlike llama-server's `--reasoning-format none`, OpenVINO controls
+  this at the tokenizer level.
+- **Continuous batching** — queue concurrent requests and process them in
+  batches for higher aggregate throughput.
+- **Robust output parsing** — strip any residual `<think>` blocks and
+  markdown fences before returning content.
 
 Configure `config/llm.json` on the client machine:
 
@@ -352,6 +364,26 @@ Key settings for OpenVINO servers:
   after discovery completes.
 - **`temperature: 0.3`** — Avoid 0.0 with qwen3 models (can cause empty
   responses or infinite thinking loops).
+
+#### Thinking Suppression
+
+Qwen3 models generate `<think>...</think>` blocks by default, which consume
+~80% of output tokens (2000-3000 thinking tokens vs 200-500 JSON tokens).
+This dramatically slows extraction and increases truncation risk.
+
+- **llama-server**: use `--reasoning-format none` to disable thinking entirely.
+- **OpenVINO**: pass `enable_thinking=False` (a Python `bool`) in the chat
+  template's `extra_context` parameter when calling `apply_chat_template()`.
+  The extraction pipeline's JSON parser also strips any residual `<think>`
+  blocks as a safety net.
+
+#### Server Restart After Interrupted Extraction
+
+If an extraction run is killed mid-flight (e.g. Ctrl+C, terminal closed),
+the OpenVINO server may retain orphan requests in its batch queue. These
+occupy generation slots and can cause subsequent requests to queue
+indefinitely. **Restart the server process** after killing an extraction run
+to flush the request queue.
 
 #### Server Batching Behavior
 
