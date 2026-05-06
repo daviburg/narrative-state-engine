@@ -968,6 +968,23 @@ Variant entities are merged into the canonical entity: relationships, events,
 and stable attributes are absorbed, variant files are deleted from disk, and
 all dangling references are rewritten.
 
+### Post-Extraction Dedup
+
+After extraction completes, run the dedup audit to identify and merge duplicate entities:
+
+```bash
+# Generate candidates, score with LLM, write review file (safe — no changes)
+python tools/dedup_audit.py
+
+# Also auto-merge high-confidence pairs (>=0.9)
+python tools/dedup_audit.py --auto-merge
+
+# Custom review file location
+python tools/dedup_audit.py --review-file path/to/review.json
+```
+
+Review `dedup-review.json` for medium-confidence pairs. Set `"action": "merge"` or `"action": "keep_separate"` for each entry, then re-run with `--auto-merge` to apply approved merges.
+
 ### Incremental Mode (Ingest)
 
 Pass `--extract` to `ingest_turn.py` to run semantic extraction on a single new turn:
