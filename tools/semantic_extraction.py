@@ -1474,6 +1474,46 @@ _GENERIC_STEMS = {
     "his", "hers", "its", "their", "theirs",
 }
 
+# --- Type classification filters (#303) ---
+# Names that are clearly non-sentient and should never be type "character"
+_NON_CHARACTER_NAMES = {
+    "birth", "death", "feast", "meal", "method", "treatment", "protocol",
+    "sickness", "plague", "disease", "disruption", "precision", "field",
+    "pattern", "fragment", "belly", "structure", "fire",
+}
+
+# Names that are clearly non-spatial and should never be type "location"
+_NON_LOCATION_NAMES = {"feast", "celebration", "fragment", "birth", "death"}
+
+
+def _is_misclassified_character(entity: dict) -> bool:
+    """Return True if entity is obviously not a character."""
+    if entity.get("type") != "character":
+        return False
+    name = entity.get("name", "").lower().strip()
+    # Reject if name is a known non-character word
+    if name in _NON_CHARACTER_NAMES:
+        return True
+    # Reject "my {word}" pattern (body parts/possessions)
+    if name.startswith("my "):
+        return True
+    # Reject if name is entirely lowercase single word (no proper noun capitalization)
+    original_name = entity.get("name", "").strip()
+    if " " not in original_name and original_name == original_name.lower() and len(original_name) > 2:
+        return True
+    return False
+
+
+def _is_misclassified_location(entity: dict) -> bool:
+    """Return True if entity is obviously not a location."""
+    if entity.get("type") != "location":
+        return False
+    name = entity.get("name", "").lower().strip()
+    if name in _NON_LOCATION_NAMES:
+        return True
+    return False
+
+
 # Meta-labels that should never be accepted as PC aliases (#186)
 _PC_ALIAS_BLOCKLIST = {
     "player character", "pc", "player", "the player",
@@ -2024,6 +2064,32 @@ def extract_and_merge(
             continue
         filtered_qualified.append(entity_ref)
     qualified = filtered_qualified
+
+    # Reject misclassified characters and locations (#303)
+    _type_filtered = []
+    for entity_ref in qualified:
+        if _is_misclassified_character(entity_ref):
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as character "
+                  f"(non-sentient name pattern)", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "misclassified_character",
+            })
+            continue
+        if _is_misclassified_location(entity_ref):
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as location "
+                  f"(non-spatial name pattern)", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "misclassified_location",
+            })
+            continue
+        _type_filtered.append(entity_ref)
+    qualified = _type_filtered
 
     # --- Pre-compute task inputs for phases 2-4 ---
 
