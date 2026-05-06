@@ -1870,6 +1870,7 @@ def extract_and_merge(
         current_turn=current_turn_num,
         context_length=_ctx_len,
         entity_context_budget=_entity_budget,
+        turn_text=turn.get("text"),
     )
     # discovery_temperature override (#251) — allows a higher temperature
     # for entity discovery without affecting detail/relationship/event phases.

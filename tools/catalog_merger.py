@@ -393,6 +393,233 @@ _DEFAULT_RECENCY_WINDOW = 10
 # Default fraction of context_length allocated to the entity list
 _DEFAULT_ENTITY_BUDGET_FRACTION = 0.25
 
+# Backfill entities older than this many turns are excluded from the prompt
+# (priority entities — mentioned, co-located, one-hop — are always kept)
+_DEFAULT_STALENESS_THRESHOLD = 50
+
+# Minimum entity name length to avoid false-positive keyword matches
+_MIN_NAME_LENGTH_FOR_MATCH = 3
+
+
+def _entity_names(entity: dict) -> list[str]:
+    """Return the entity's name and aliases as a list of strings."""
+    names = [entity["name"]]
+    sa = entity.get("stable_attributes", {}).get("aliases")
+    if sa:
+        val = sa.get("value", "") if isinstance(sa, dict) else sa
+        if isinstance(val, list):
+            names.extend(val)
+        elif isinstance(val, str) and val:
+            names.append(val)
+    return names
+
+
+def _find_mentioned_entities(
+    all_entities: list[dict],
+    turn_text: str,
+) -> set[str]:
+    """Return IDs of entities whose name or alias appears in *turn_text*.
+
+    Uses word-boundary-aware matching to avoid false positives (e.g.
+    "elder" inside "beelder", or "the camp" inside "campfire").
+    Multi-word names use non-word-character boundaries; single words
+    use ``\\b``.  Names shorter than ``_MIN_NAME_LENGTH_FOR_MATCH``
+    characters are skipped.
+    """
+    if not turn_text:
+        return set()
+
+    text_lower = turn_text.lower()
+    mentioned: set[str] = set()
+    for entity in all_entities:
+        for name in _entity_names(entity):
+            if len(name) < _MIN_NAME_LENGTH_FOR_MATCH:
+                continue
+            escaped = re.escape(name.lower())
+            if " " in name:
+                # Multi-word: non-word boundaries at both ends
+                pattern = r"(?<!\w)" + escaped + r"(?!\w)"
+            else:
+                # Single-word: word boundary
+                pattern = r"\b" + escaped + r"\b"
+            if re.search(pattern, text_lower):
+                mentioned.add(entity["id"])
+                break
+    return mentioned
+
+
+def _get_entity_location(entity: dict) -> str | None:
+    """Return the entity's volatile_state.location, or None."""
+    vs = entity.get("volatile_state")
+    if isinstance(vs, dict):
+        loc = vs.get("location")
+        if loc and isinstance(loc, str):
+            return loc
+    return None
+
+
+def _collect_relevant_locations(mentioned_ids: set[str], by_id: dict[str, dict]) -> set[str]:
+    """Build the set of relevant location identifiers from mentioned entities.
+
+    Includes both entity names/aliases (lowered) **and** entity IDs for
+    location-type entities, plus the ``volatile_state.location`` value of
+    every mentioned entity.  This ensures matching works whether catalogs
+    store locations as human-readable names or as ``loc-*`` IDs.
+    """
+    relevant: set[str] = set()
+    for eid in mentioned_ids:
+        entity = by_id.get(eid)
+        if entity is None:
+            continue
+        # If a mentioned entity IS a location, its ID and names are
+        # location references
+        if entity.get("type") == "location":
+            relevant.add(entity["id"].lower())
+            for n in _entity_names(entity):
+                relevant.add(n.lower())
+        # If a mentioned entity has a location, that location is relevant
+        loc = _get_entity_location(entity)
+        if loc:
+            relevant.add(loc.lower())
+    return relevant
+
+
+def _find_colocated_entities(
+    all_entities: list[dict],
+    mentioned_ids: set[str],
+    relevant_locations: set[str],
+) -> set[str]:
+    """Return IDs of entities co-located with mentioned entities."""
+    colocated: set[str] = set()
+    if not relevant_locations:
+        return colocated
+    for entity in all_entities:
+        if entity["id"] in mentioned_ids:
+            continue
+        # Check if entity's location matches a relevant location
+        loc = _get_entity_location(entity)
+        if loc and loc.lower() in relevant_locations:
+            colocated.add(entity["id"])
+        # Check if entity IS a location that's relevant (by ID or name)
+        if entity.get("type") == "location":
+            if entity["id"].lower() in relevant_locations:
+                colocated.add(entity["id"])
+                continue
+            for n in _entity_names(entity):
+                if n.lower() in relevant_locations:
+                    colocated.add(entity["id"])
+                    break
+    return colocated
+
+
+def _find_one_hop_targets(
+    mentioned_ids: set[str],
+    exclude_ids: set[str],
+    by_id: dict[str, dict],
+) -> set[str]:
+    """Return IDs of active relationship targets of mentioned entities.
+
+    Only ``active`` (or unset) relationship status is followed; ``dormant``
+    and ``resolved`` relationships are skipped to avoid dragging in stale
+    entities.
+    """
+    one_hop: set[str] = set()
+    for eid in mentioned_ids:
+        entity = by_id.get(eid)
+        if entity is None:
+            continue
+        for rel in entity.get("relationships") or []:
+            status = rel.get("status", "active")
+            if status != "active":
+                continue
+            target = rel.get("target_id")
+            if (target and target in by_id
+                    and target not in mentioned_ids
+                    and target not in exclude_ids):
+                one_hop.add(target)
+    return one_hop
+
+
+def _select_context_aware_entities(
+    all_entities: list[dict],
+    turn_text: str | None,
+    current_turn: int | None,
+    recency_window: int,
+) -> tuple[list[dict], set[str]]:
+    """Return entities ordered by contextual relevance and their priority IDs.
+
+    Priority tiers (entities appear at most once, in the highest tier they
+    qualify for):
+
+    1. **Mentioned** — entity name or alias appears in turn text.
+    2. **Co-located** — shares a location with a mentioned entity, or is at
+       a mentioned location.  Matches both location names and ``loc-*`` IDs.
+    3. **One-hop relationships** — is an *active* relationship target of a
+       mentioned entity (dormant/resolved relationships are skipped).
+    4. **Recency backfill** — most recently updated entities not already
+       selected.
+
+    Within each tier, entities are sorted by ``last_updated_turn`` descending.
+
+    When *turn_text* is ``None`` or empty, falls back to pure recency
+    ordering (equivalent to the pre-#233 behaviour).
+
+    Returns:
+        A tuple of (ordered_entities, priority_ids) where *priority_ids*
+        is the union of mentioned, co-located, and one-hop entity IDs.
+    """
+    # Build an id→entity lookup
+    by_id: dict[str, dict] = {e["id"]: e for e in all_entities}
+
+    # --- Tier 1: Mentioned entities ---
+    mentioned_ids = _find_mentioned_entities(all_entities, turn_text or "")
+
+    # --- Tier 2: Co-located entities ---
+    colocated_ids: set[str] = set()
+    if mentioned_ids:
+        relevant_locations = _collect_relevant_locations(mentioned_ids, by_id)
+        colocated_ids = _find_colocated_entities(
+            all_entities, mentioned_ids, relevant_locations)
+
+    # --- Tier 3: One-hop relationship targets (active only) ---
+    one_hop_ids: set[str] = set()
+    if mentioned_ids:
+        one_hop_ids = _find_one_hop_targets(
+            mentioned_ids, mentioned_ids | colocated_ids, by_id)
+
+    # --- Tier 4: Recency backfill (staleness-filtered) ---
+    priority_ids = mentioned_ids | colocated_ids | one_hop_ids
+
+    def _sort_key(e: dict) -> int:
+        return _parse_turn_number(e.get("last_updated_turn")) or 0
+
+    # Staleness cutoff: backfill entities older than this are excluded
+    # Only applies when context-aware selection is active (turn_text provided)
+    staleness_cutoff: int | None = None
+    if current_turn is not None and turn_text:
+        staleness_cutoff = current_turn - _DEFAULT_STALENESS_THRESHOLD
+
+    # Build ordered result: each tier sorted by recency descending
+    result: list[dict] = []
+
+    for tier_ids in (mentioned_ids, colocated_ids, one_hop_ids):
+        tier = [by_id[eid] for eid in tier_ids if eid in by_id]
+        tier.sort(key=_sort_key, reverse=True)
+        result.extend(tier)
+
+    # Backfill: remaining entities sorted by recency, excluding stale ones
+    backfill = [e for e in all_entities if e["id"] not in priority_ids]
+    if staleness_cutoff is not None:
+        backfill = [
+            e for e in backfill
+            if (_parse_turn_number(e.get("last_updated_turn")) or 0)
+            >= staleness_cutoff
+        ]
+    backfill.sort(key=_sort_key, reverse=True)
+    result.extend(backfill)
+
+    return result, priority_ids
+
 
 def format_known_entities_bounded(
     catalogs: dict,
@@ -401,16 +628,24 @@ def format_known_entities_bounded(
     context_length: int | None = None,
     entity_context_budget: int | None = None,
     recency_window: int | None = None,
+    turn_text: str | None = None,
 ) -> str:
     """Format known entities with a configurable token budget.
 
-    Entities active within *recency_window* turns get full detail (identity +
-    aliases).  Remaining entities get a brief format (ID | name | type).  If
-    the result still exceeds the budget, dormant entities are omitted and a
-    note is appended.
+    When *turn_text* is provided, entities are selected by contextual
+    relevance (#233): mentioned entities first, then co-located, then
+    one-hop relationship targets, then recency backfill.  Within each
+    tier, entities active within *recency_window* turns get full detail
+    (identity + aliases); others get brief format (ID | name | type).
 
-    When no budget constraint applies (budget is None / large enough, or there
-    are few entities), this produces the same output as
+    When *turn_text* is ``None``, falls back to pure recency-based
+    selection (the pre-#233 behaviour).
+
+    If the result still exceeds the budget, lower-priority entities are
+    omitted and a note is appended.
+
+    When no budget constraint applies (budget is None / large enough, or
+    there are few entities), this produces the same output as
     ``format_known_entities()``.
 
     Args:
@@ -424,6 +659,9 @@ def format_known_entities_bounded(
             Overrides the fraction-based default.
         recency_window: Number of recent turns for which entities get full
             detail.  Defaults to ``_DEFAULT_RECENCY_WINDOW``.
+        turn_text: The current turn's text content.  When provided, enables
+            context-aware entity selection based on mentions, co-location,
+            and relationships.
 
     Returns:
         Formatted entity list string, possibly with a truncation note.
@@ -444,69 +682,62 @@ def format_known_entities_bounded(
     if not all_entities:
         return "(none — empty catalog)"
 
-    # If no budget constraint, fall back to unbounded format
-    if budget is None:
+    # If no budget constraint and no turn text for context-aware filtering,
+    # fall back to unbounded format
+    if budget is None and not turn_text:
         return format_known_entities(catalogs)
 
-    # Fast-path: if full unbounded output fits within budget, return it
-    # directly so that no entities are needlessly degraded to brief format.
+    # Fast-path: if full unbounded output fits within budget AND no turn
+    # text is available for context-aware filtering, return it directly so
+    # that no entities are needlessly degraded to brief format.
+    # When turn_text IS provided, we always use context-aware selection to
+    # proactively trim stale entities even when under budget.
     unbounded = format_known_entities(catalogs)
-    if _estimate_tokens(unbounded) <= budget:
+    if not turn_text and _estimate_tokens(unbounded) <= budget:
         return unbounded
 
-    # Partition into recent vs dormant based on last_updated_turn
-    recent: list[dict] = []
-    dormant: list[dict] = []
-    for entity in all_entities:
-        turn_num = _parse_turn_number(entity.get("last_updated_turn"))
-        if current_turn is None or turn_num is None:
-            # If we can't determine recency, treat as recent (safe default)
-            recent.append(entity)
-        elif current_turn - turn_num <= recency_window:
-            recent.append(entity)
-        else:
-            dormant.append(entity)
-
-    # Sort dormant by last_updated_turn descending so most-recently-seen
-    # are added first when budget allows
-    dormant.sort(
-        key=lambda e: _parse_turn_number(e.get("last_updated_turn")) or 0,
-        reverse=True,
+    # Order entities by contextual relevance when turn text is available,
+    # otherwise fall back to recency-only partitioning.
+    ordered, priority_ids = _select_context_aware_entities(
+        all_entities, turn_text, current_turn, recency_window,
     )
 
-    # Phase 1: Recent entities in full detail
-    lines: list[str] = [_format_entity_full(e) for e in recent]
+    # Build lines in context-aware order
+    lines: list[str] = []
+    for entity in ordered:
+        turn_num = _parse_turn_number(entity.get("last_updated_turn"))
+        is_recent = (
+            current_turn is None
+            or turn_num is None
+            or current_turn - turn_num <= recency_window
+        )
+        is_priority = entity["id"] in priority_ids
+        if is_recent or is_priority:
+            lines.append(_format_entity_full(entity))
+        else:
+            lines.append(_format_entity_brief(entity))
+
     used = _estimate_tokens("\n".join(lines)) if lines else 0
 
-    # Phase 1b: If recent tier alone exceeds budget, degrade the oldest
-    # recent entities to brief format until we fit.
-    if used > budget and len(recent) > 1:
-        # Sort recent by recency (most recent first) so we keep detailed
-        # entries for the newest entities and degrade older ones.
-        indexed = sorted(
-            range(len(recent)),
-            key=lambda i: _parse_turn_number(
-                recent[i].get("last_updated_turn")) or 0,
-            reverse=True,
-        )
-        # Rebuild lines: try full first, degrade from oldest-recent inward
-        lines = [_format_entity_full(e) for e in recent]
-        for idx in reversed(indexed):  # oldest-recent first
-            lines[idx] = _format_entity_brief(recent[idx])
-            used = _estimate_tokens("\n".join(lines))
-            if used <= budget:
-                break
+    # If output exceeds budget, degrade lowest-priority entities from the
+    # end of the list (backfill tier first, then one-hop, etc.).
+    if budget is not None and used > budget and len(lines) > 1:
+        # Degrade from the end (lowest priority) to brief first
+        for i in range(len(ordered) - 1, -1, -1):
+            current_line = _format_entity_brief(ordered[i])
+            if lines[i] != current_line:
+                lines[i] = current_line
+                used = _estimate_tokens("\n".join(lines))
+                if used <= budget:
+                    break
 
-    # Phase 2: Add dormant entities in brief format while within budget
+    # If still over budget after degrading to brief, omit from the end
     omitted = 0
-    for entity in dormant:
-        line = _format_entity_brief(entity)
-        line_cost = _estimate_tokens(line + "\n")
-        if used + line_cost <= budget:
-            lines.append(line)
-            used += line_cost
-        else:
+    if budget is not None and used > budget and len(lines) > 1:
+        while lines and used > budget:
+            lines.pop()
             omitted += 1
+            used = _estimate_tokens("\n".join(lines)) if lines else 0
 
     result = "\n".join(lines)
 
