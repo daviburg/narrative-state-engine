@@ -19,7 +19,7 @@ Usage:
 """
 import argparse
 import asyncio
-import json
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -28,14 +28,13 @@ from typing import Optional
 
 import openvino_genai as ov_genai
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import uvicorn
 
-# --- Configuration ---
-MODEL_DIR = "/home/nse-agent/models/qwen3-8b-int4-ov"
-CACHE_DIR = MODEL_DIR + "/ov_cache"
-MODEL_NAME = "qwen3-8b-int4-ov"
+# --- Configuration (overridden by CLI args / env vars) ---
+MODEL_DIR = os.environ.get("OV_MODEL_DIR", "")
+CACHE_DIR = ""
+MODEL_NAME = ""
 BATCH_WAIT_MS = 50  # Max time to wait for batch to fill
 MAX_BATCH_SIZE = 8   # Max requests per batch
 
@@ -46,7 +45,7 @@ class ChatMessage(BaseModel):
     content: str
 
 class ChatCompletionRequest(BaseModel):
-    model: str = MODEL_NAME
+    model: Optional[str] = None
     messages: list[ChatMessage]
     max_tokens: Optional[int] = Field(default=2048, alias="max_tokens")
     temperature: Optional[float] = 0.0
@@ -89,15 +88,16 @@ batch_worker_task = None
 async def batch_worker():
     """Collect requests into batches and process them together."""
     global pipeline, tokenizer
+    loop = asyncio.get_running_loop()
     while True:
         # Wait for at least one request
         first = await batch_queue.get()
         batch = [first]
 
         # Collect more requests for up to BATCH_WAIT_MS
-        deadline = asyncio.get_event_loop().time() + BATCH_WAIT_MS / 1000.0
+        deadline = loop.time() + BATCH_WAIT_MS / 1000.0
         while len(batch) < MAX_BATCH_SIZE:
-            remaining = deadline - asyncio.get_event_loop().time()
+            remaining = deadline - loop.time()
             if remaining <= 0:
                 break
             try:
@@ -112,13 +112,14 @@ async def batch_worker():
 
         start = time.perf_counter()
         try:
-            results = await asyncio.get_event_loop().run_in_executor(
+            results = await loop.run_in_executor(
                 None, pipeline.generate, prompts, gen_configs
             )
             elapsed = time.perf_counter() - start
 
             total_tokens = 0
             for i, (req, result) in enumerate(zip(batch, results)):
+                # m_generation_ids is the public output field in openvino_genai
                 output_text = result.m_generation_ids[0]
                 total_tokens += count_tokens(output_text)
                 req.future.set_result((output_text, elapsed))
@@ -155,6 +156,10 @@ async def lifespan(app: FastAPI):
     yield
 
     batch_worker_task.cancel()
+    try:
+        await batch_worker_task
+    except asyncio.CancelledError:
+        pass
     print("Shutting down...")
 
 app = FastAPI(title="OpenVINO GenAI Server", lifespan=lifespan)
@@ -204,11 +209,13 @@ async def chat_completions(request: ChatCompletionRequest):
     gen_config.temperature = request.temperature if request.temperature and request.temperature > 0 else 0.01
     gen_config.do_sample = (request.temperature or 0) > 0
     gen_config.top_p = request.top_p or 1.0
-    gen_config.eos_token_id = 151645
-    gen_config.stop_token_ids = {151643, 151645}
+    # Derive EOS token from tokenizer; fall back to model's default if available
+    eos_id = tokenizer.get_eos_token_id()
+    gen_config.eos_token_id = eos_id
+    gen_config.stop_token_ids = {eos_id}
 
     # Submit to batch queue and wait for result
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     batch_req = BatchRequest(prompt=prompt, gen_config=gen_config, future=loop.create_future())
     await batch_queue.put(batch_req)
     output_text, elapsed = await batch_req.future
@@ -239,7 +246,7 @@ async def chat_completions(request: ChatCompletionRequest):
     response = ChatCompletionResponse(
         id=resp_id,
         created=int(time.time()),
-        model=request.model,
+        model=request.model or MODEL_NAME,
         choices=[
             ChatCompletionChoice(
                 index=0,
@@ -259,16 +266,18 @@ async def chat_completions(request: ChatCompletionRequest):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OpenVINO GenAI Server")
     parser.add_argument("--port", type=int, default=8000)
-    parser.add_argument("--host", type=str, default="0.0.0.0")
-    parser.add_argument("--model-dir", type=str, default=MODEL_DIR)
+    parser.add_argument("--host", type=str, default="127.0.0.1",
+                        help="Bind address (use 0.0.0.0 to expose on network)")
+    parser.add_argument("--model-dir", type=str, default=MODEL_DIR or None,
+                        required=not MODEL_DIR,
+                        help="Path to OpenVINO IR model directory (or set OV_MODEL_DIR env)")
     parser.add_argument("--batch-wait-ms", type=int, default=BATCH_WAIT_MS)
     parser.add_argument("--max-batch-size", type=int, default=MAX_BATCH_SIZE)
     args = parser.parse_args()
 
-    if args.model_dir != MODEL_DIR:
-        MODEL_DIR = args.model_dir
-        CACHE_DIR = MODEL_DIR + "/ov_cache"
-
+    MODEL_DIR = args.model_dir
+    CACHE_DIR = MODEL_DIR + "/ov_cache"
+    MODEL_NAME = os.path.basename(MODEL_DIR.rstrip("/"))
     BATCH_WAIT_MS = args.batch_wait_ms
     MAX_BATCH_SIZE = args.max_batch_size
 
