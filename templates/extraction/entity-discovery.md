@@ -24,6 +24,15 @@ PLAYER CHARACTER RULE:
   as a PC signal — NPCs introduce themselves too. The key differentiator is second-person
   narration ("you") vs third-person narration ("he/she/they").
 
+Type classification guide:
+- "character" / "creature": A sentient being with its own will and agency. Must be able to speak, act, or make decisions. NEVER use for diseases, body parts, events, abstract forces, methods, natural formations, or gatherings.
+- "location": A physical place where scenes occur. NEVER use for events (feasts, celebrations), character names, or abstract concepts.
+- "item": A discrete physical object that can be held, used, or interacted with. Includes weapons, tools, containers, substances, traps, and quest objects.
+- "faction": A group of beings acting as a unit. Use for tribes, guilds, patrols, or any named collective.
+- "concept": An abstract force, principle, disease, method, event, phenomenon, or system. Use this for anything that is NOT a physical being, place, object, or group. Examples: a plague, a celebration, a magical disruption, a treatment protocol, a pattern.
+
+When in doubt between "character" and "concept": if the entity cannot hold a conversation or physically move to a new location under its own will, it is a "concept", not a "character".
+
 Rules:
 - Only extract entities that appear in or are directly referenced in the provided turn text.
 - Do NOT invent entities not mentioned in the text.

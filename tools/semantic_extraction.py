@@ -1494,6 +1494,147 @@ _GENERIC_STEMS = {
     "his", "hers", "its", "their", "theirs",
 }
 
+# --- Type classification filters (#303) ---
+# Leading articles stripped before matching against blocklists.
+_LEADING_ARTICLE_RE = re.compile(r"^(?:the|a|an)\s+", re.IGNORECASE)
+
+# Extra non-character words beyond _PC_ALIAS_WORD_BLOCKLIST.
+_NON_CHARACTER_EXTRAS = {
+    "birth", "belly", "feast", "meal", "sickness", "disease",
+    "structure", "fragment", "celebration",
+}
+# Words in _PC_ALIAS_WORD_BLOCKLIST that ARE valid character names/roles and
+# must not trigger the type classification filter.
+_CHARACTER_ROLE_ALLOWLIST = {
+    "chief", "elder", "healer", "raider", "warrior",
+    "guard", "scout", "shaman", "merchant", "captain",
+    "hunters", "spirit",
+}
+# Derive from _PC_ALIAS_WORD_BLOCKLIST to avoid drift (review comment).
+# _PC_ALIAS_WORD_BLOCKLIST is defined below — use lazy init via function.
+_NON_CHARACTER_NAMES: set[str] | None = None
+
+
+def _get_non_character_names() -> set[str]:
+    global _NON_CHARACTER_NAMES
+    if _NON_CHARACTER_NAMES is None:
+        _NON_CHARACTER_NAMES = (
+            _NON_CHARACTER_EXTRAS
+            | _PC_ALIAS_WORD_BLOCKLIST
+        ) - _CHARACTER_ROLE_ALLOWLIST
+    return _NON_CHARACTER_NAMES
+
+
+# Names that are clearly non-spatial and should never be type "location"
+_NON_LOCATION_NAMES = {"feast", "celebration", "fragment", "birth", "death"}
+
+
+def _strip_leading_article(name: str) -> str:
+    """Strip leading 'the', 'a', 'an' from a name for blocklist matching."""
+    return _LEADING_ARTICLE_RE.sub("", name)
+
+
+def _is_misclassified_character(entity: dict) -> bool:
+    """Return True if entity is obviously not a character/creature."""
+    if entity.get("type") not in ("character", "creature"):
+        return False
+    raw_name = entity.get("name", "").strip()
+    name = raw_name.lower()
+    stripped = _strip_leading_article(name).strip()
+    non_char = _get_non_character_names()
+    # Reject if name (or name with article stripped) matches blocklist
+    if name in non_char or stripped in non_char:
+        return True
+    # Reject if the head noun (last token) is a blocklisted word (#303 review)
+    head = stripped.split()[-1] if stripped else ""
+    if head and head in non_char:
+        return True
+    # Reject "my {word}" pattern (body parts/possessions)
+    if name.startswith("my "):
+        return True
+    # Reject single lowercase words that appear in the non-character blocklist.
+    # Do NOT reject arbitrary single-word names — they may be valid LLM output
+    # for proper nouns (e.g. "kael") that the model chose not to capitalize.
+    return False
+
+
+def _is_misclassified_location(entity: dict) -> bool:
+    """Return True if entity is obviously not a location."""
+    if entity.get("type") != "location":
+        return False
+    name = entity.get("name", "").lower().strip()
+    stripped = _strip_leading_article(name).strip()
+    if name in _NON_LOCATION_NAMES or stripped in _NON_LOCATION_NAMES:
+        return True
+    return False
+
+
+def _build_catalog_name_index(catalogs: dict) -> dict[str, dict]:
+    """Build a normalized-name -> entity lookup across all catalogs.
+
+    Maps both primary names and aliases (lowercased, article-stripped) to
+    the owning entity dict.  Used for O(1) cross-catalog conflict checks.
+    """
+    index: dict[str, dict] = {}  # normalized name -> entity
+    for _filename, entities in catalogs.items():
+        for existing in entities:
+            # Primary name
+            existing_name = existing.get("name", "").strip().lower()
+            existing_stripped = _strip_leading_article(existing_name).strip()
+            if existing_name:
+                index.setdefault(existing_name, existing)
+            if existing_stripped and existing_stripped != existing_name:
+                index.setdefault(existing_stripped, existing)
+            # Aliases
+            sa_aliases = existing.get("stable_attributes", {}).get("aliases")
+            if isinstance(sa_aliases, dict):
+                val = sa_aliases.get("value", "")
+                alias_list = val if isinstance(val, list) else [a.strip() for a in str(val).split(",") if a.strip()]
+            else:
+                alias_list = []
+            for alias in alias_list:
+                if not isinstance(alias, str):
+                    continue
+                alias_lower = alias.strip().lower()
+                alias_stripped = _strip_leading_article(alias_lower).strip()
+                if alias_lower:
+                    index.setdefault(alias_lower, existing)
+                if alias_stripped and alias_stripped != alias_lower:
+                    index.setdefault(alias_stripped, existing)
+    return index
+
+
+def _find_cross_catalog_type_conflict(
+    entity: dict,
+    catalogs: dict,
+    _name_index: dict[str, dict] | None = None,
+) -> dict | None:
+    """Check if entity name already exists in catalogs under a different type.
+
+    Returns the conflicting existing catalog entry if found, or None.
+    Applies to both is_new=True (LLM missed existing entry) and is_new=False
+    entities (LLM referenced wrong ID/type for a known name).
+
+    When _name_index is provided (pre-built via _build_catalog_name_index),
+    lookups are O(1).  Otherwise falls back to building it on demand.
+    """
+    incoming_name = entity.get("name", "").strip().lower()
+    if not incoming_name:
+        return None
+    incoming_stripped = _strip_leading_article(incoming_name).strip()
+    incoming_type = entity.get("type", "")
+
+    if _name_index is None:
+        _name_index = _build_catalog_name_index(catalogs)
+
+    # Check primary name and article-stripped variant
+    for candidate_name in (incoming_name, incoming_stripped):
+        existing = _name_index.get(candidate_name)
+        if existing and existing.get("type", "") != incoming_type:
+            return existing
+    return None
+
+
 # Meta-labels that should never be accepted as PC aliases (#186)
 _PC_ALIAS_BLOCKLIST = {
     "player character", "pc", "player", "the player",
@@ -2044,6 +2185,52 @@ def extract_and_merge(
             continue
         filtered_qualified.append(entity_ref)
     qualified = filtered_qualified
+
+    # Reject misclassified characters and locations (#303)
+    _type_filtered = []
+    for entity_ref in qualified:
+        if _is_misclassified_character(entity_ref):
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as {entity_ref.get('type')} "
+                  f"(non-sentient name pattern)", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "misclassified_character",
+            })
+            continue
+        if _is_misclassified_location(entity_ref):
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as location "
+                  f"(non-spatial name pattern)", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "misclassified_location",
+            })
+            continue
+        _type_filtered.append(entity_ref)
+    qualified = _type_filtered
+
+    # Reject entities whose name already exists in catalogs under a different type (#303)
+    _catalog_name_index = _build_catalog_name_index(catalogs)
+    _cross_catalog_filtered = []
+    for entity_ref in qualified:
+        conflict = _find_cross_catalog_type_conflict(entity_ref, catalogs, _catalog_name_index)
+        if conflict:
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as {entity_ref.get('type')} "
+                  f"— already exists as {conflict.get('type')} "
+                  f"(id={conflict.get('id')})", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "cross_catalog_type_conflict",
+                "conflicting_id": conflict.get("id"),
+            })
+            continue
+        _cross_catalog_filtered.append(entity_ref)
+    qualified = _cross_catalog_filtered
 
     # --- Pre-compute task inputs for phases 2-4 ---
 
