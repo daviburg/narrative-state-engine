@@ -39,6 +39,7 @@ MODEL_NAME = ""
 BATCH_WAIT_MS = 50  # Max time to wait for batch to fill
 MAX_BATCH_SIZE = 8   # Max requests per batch
 CACHE_SIZE_GB = 8    # KV cache size in GB
+REQUEST_TIMEOUT_S = 600  # Per-request timeout (seconds); 0 = no timeout
 EXTRA_STOP_TOKEN_IDS: set = set()  # Additional stop token IDs beyond EOS
 
 # --- Request/Response Models ---
@@ -89,7 +90,13 @@ batch_queue: asyncio.Queue = None
 batch_worker_task = None
 
 async def batch_worker():
-    """Collect requests into batches and process them together."""
+    """Collect requests into batches and process them together.
+
+    Includes a per-batch timeout watchdog: if pipeline.generate() doesn't
+    return within REQUEST_TIMEOUT_S, all requests in the batch are failed
+    with a timeout error and the pipeline is reloaded to clear the stuck
+    state.
+    """
     global pipeline, tokenizer
     loop = asyncio.get_running_loop()
     while True:
@@ -109,14 +116,16 @@ async def batch_worker():
             except asyncio.TimeoutError:
                 break
 
-        # Process batch
+        # Process batch with timeout protection
         prompts = [r.prompt for r in batch]
         gen_configs = [r.gen_config for r in batch]
 
         start = time.perf_counter()
         try:
-            results = await loop.run_in_executor(
-                None, pipeline.generate, prompts, gen_configs
+            timeout = REQUEST_TIMEOUT_S if REQUEST_TIMEOUT_S > 0 else None
+            results = await asyncio.wait_for(
+                loop.run_in_executor(None, pipeline.generate, prompts, gen_configs),
+                timeout=timeout,
             )
             elapsed = time.perf_counter() - start
 
@@ -129,10 +138,44 @@ async def batch_worker():
 
             tok_s = total_tokens / elapsed if elapsed > 0 else 0
             print(f"[batch={len(batch)}] {total_tokens} tok in {elapsed:.2f}s ({tok_s:.1f} tok/s aggregate)")
+        except asyncio.TimeoutError:
+            elapsed = time.perf_counter() - start
+            print(f"[WATCHDOG] Batch of {len(batch)} request(s) timed out after {elapsed:.0f}s — reloading pipeline")
+            for req in batch:
+                if not req.future.done():
+                    req.future.set_exception(
+                        HTTPException(status_code=504, detail=f"Generation timed out after {elapsed:.0f}s")
+                    )
+            # Reload pipeline to clear stuck state
+            await _reload_pipeline()
         except Exception as e:
             for req in batch:
                 if not req.future.done():
                     req.future.set_exception(e)
+
+
+async def _reload_pipeline():
+    """Reload the model pipeline to recover from a stuck state."""
+    global pipeline, tokenizer
+    print("[WATCHDOG] Reloading model pipeline...")
+    start = time.perf_counter()
+    loop = asyncio.get_running_loop()
+    try:
+        sched_cfg = ov_genai.SchedulerConfig()
+        sched_cfg.cache_size = CACHE_SIZE_GB
+        sched_cfg.enable_prefix_caching = True
+        pipeline = await loop.run_in_executor(
+            None,
+            lambda: ov_genai.ContinuousBatchingPipeline(
+                MODEL_DIR, sched_cfg, 'GPU', {'CACHE_DIR': CACHE_DIR}
+            ),
+        )
+        tokenizer = pipeline.get_tokenizer()
+        elapsed = time.perf_counter() - start
+        print(f"[WATCHDOG] Pipeline reloaded in {elapsed:.1f}s")
+    except Exception as e:
+        elapsed = time.perf_counter() - start
+        print(f"[WATCHDOG] Pipeline reload FAILED after {elapsed:.1f}s: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -150,7 +193,7 @@ async def lifespan(app: FastAPI):
     tokenizer = pipeline.get_tokenizer()
 
     elapsed = time.perf_counter() - start
-    print(f"Model loaded in {elapsed:.1f}s (prefix caching enabled, batch_wait={BATCH_WAIT_MS}ms, max_batch={MAX_BATCH_SIZE})")
+    print(f"Model loaded in {elapsed:.1f}s (prefix caching enabled, batch_wait={BATCH_WAIT_MS}ms, max_batch={MAX_BATCH_SIZE}, request_timeout={REQUEST_TIMEOUT_S}s)")
 
     # Start batch worker
     batch_queue = asyncio.Queue()
@@ -177,7 +220,13 @@ def count_tokens(text: str) -> int:
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "model": MODEL_NAME}
+    queue_size = batch_queue.qsize() if batch_queue else 0
+    return {
+        "status": "ok",
+        "model": MODEL_NAME,
+        "queue_depth": queue_size,
+        "request_timeout_s": REQUEST_TIMEOUT_S,
+    }
 
 @app.get("/v1/models")
 async def list_models():
@@ -289,6 +338,8 @@ if __name__ == "__main__":
     parser.add_argument("--max-batch-size", type=int, default=MAX_BATCH_SIZE)
     parser.add_argument("--cache-size-gb", type=int, default=CACHE_SIZE_GB,
                         help="KV cache size in GB (default: 8)")
+    parser.add_argument("--request-timeout", type=int, default=REQUEST_TIMEOUT_S,
+                        help="Per-request timeout in seconds; 0 = no timeout (default: 600)")
     parser.add_argument("--stop-token-ids", type=str, default="",
                         help="Comma-separated extra stop token IDs (beyond EOS)")
     args = parser.parse_args()
@@ -299,6 +350,7 @@ if __name__ == "__main__":
     BATCH_WAIT_MS = args.batch_wait_ms
     MAX_BATCH_SIZE = args.max_batch_size
     CACHE_SIZE_GB = args.cache_size_gb
+    REQUEST_TIMEOUT_S = args.request_timeout
     if args.stop_token_ids:
         EXTRA_STOP_TOKEN_IDS = {int(x.strip()) for x in args.stop_token_ids.split(",")}
 
