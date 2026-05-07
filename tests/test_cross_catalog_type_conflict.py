@@ -136,3 +136,13 @@ class TestCrossCatalogConflict:
         entity = _make_discovery("Fenouille", "location")
         conflict = _find_cross_catalog_type_conflict(entity, catalogs)
         assert conflict is None
+
+    def test_non_string_aliases_no_crash(self):
+        """Non-string elements in aliases list should not crash (#305 review)."""
+        entry = _make_catalog_entry("char-elder", "Elder", "character",
+                                    aliases=["Old One", None, 42, "Sage"])
+        catalogs = {"characters.json": [entry]}
+        entity = _make_discovery("Sage", "location", proposed_id="loc-sage")
+        conflict = _find_cross_catalog_type_conflict(entity, catalogs)
+        assert conflict is not None
+        assert conflict["id"] == "char-elder"

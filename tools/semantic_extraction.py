@@ -1515,8 +1515,8 @@ def _strip_leading_article(name: str) -> str:
 
 
 def _is_misclassified_character(entity: dict) -> bool:
-    """Return True if entity is obviously not a character."""
-    if entity.get("type") != "character":
+    """Return True if entity is obviously not a character/creature."""
+    if entity.get("type") not in ("character", "creature"):
         return False
     raw_name = entity.get("name", "").strip()
     name = raw_name.lower()
@@ -1532,9 +1532,9 @@ def _is_misclassified_character(entity: dict) -> bool:
     # Reject "my {word}" pattern (body parts/possessions)
     if name.startswith("my "):
         return True
-    # Reject if name is entirely lowercase single word (no proper noun capitalization)
-    if " " not in raw_name and raw_name == raw_name.lower() and len(raw_name) > 2:
-        return True
+    # Reject single lowercase words that appear in the non-character blocklist.
+    # Do NOT reject arbitrary single-word names — they may be valid LLM output
+    # for proper nouns (e.g. "kael") that the model chose not to capitalize.
     return False
 
 
@@ -1549,30 +1549,23 @@ def _is_misclassified_location(entity: dict) -> bool:
     return False
 
 
-def _find_cross_catalog_type_conflict(entity: dict, catalogs: dict) -> dict | None:
-    """Check if entity name already exists in catalogs under a different type.
+def _build_catalog_name_index(catalogs: dict) -> dict[str, dict]:
+    """Build a normalized-name -> entity lookup across all catalogs.
 
-    Returns the conflicting existing catalog entry if found, or None.
-    Applies to both is_new=True (LLM missed existing entry) and is_new=False
-    entities (LLM referenced wrong ID/type for a known name).
+    Maps both primary names and aliases (lowercased, article-stripped) to
+    the owning entity dict.  Used for O(1) cross-catalog conflict checks.
     """
-    incoming_name = entity.get("name", "").strip().lower()
-    if not incoming_name:
-        return None
-    incoming_stripped = _strip_leading_article(incoming_name).strip()
-    incoming_type = entity.get("type", "")
-
+    index: dict[str, dict] = {}  # normalized name -> entity
     for _filename, entities in catalogs.items():
         for existing in entities:
-            existing_type = existing.get("type", "")
-            if existing_type == incoming_type:
-                continue
-            # Check primary name
+            # Primary name
             existing_name = existing.get("name", "").strip().lower()
             existing_stripped = _strip_leading_article(existing_name).strip()
-            if incoming_name == existing_name or incoming_stripped == existing_stripped:
-                return existing
-            # Check aliases (stable_attributes.aliases.value)
+            if existing_name:
+                index.setdefault(existing_name, existing)
+            if existing_stripped and existing_stripped != existing_name:
+                index.setdefault(existing_stripped, existing)
+            # Aliases
             sa_aliases = existing.get("stable_attributes", {}).get("aliases")
             if isinstance(sa_aliases, dict):
                 val = sa_aliases.get("value", "")
@@ -1580,10 +1573,45 @@ def _find_cross_catalog_type_conflict(entity: dict, catalogs: dict) -> dict | No
             else:
                 alias_list = []
             for alias in alias_list:
+                if not isinstance(alias, str):
+                    continue
                 alias_lower = alias.strip().lower()
                 alias_stripped = _strip_leading_article(alias_lower).strip()
-                if incoming_name == alias_lower or incoming_stripped == alias_stripped:
-                    return existing
+                if alias_lower:
+                    index.setdefault(alias_lower, existing)
+                if alias_stripped and alias_stripped != alias_lower:
+                    index.setdefault(alias_stripped, existing)
+    return index
+
+
+def _find_cross_catalog_type_conflict(
+    entity: dict,
+    catalogs: dict,
+    _name_index: dict[str, dict] | None = None,
+) -> dict | None:
+    """Check if entity name already exists in catalogs under a different type.
+
+    Returns the conflicting existing catalog entry if found, or None.
+    Applies to both is_new=True (LLM missed existing entry) and is_new=False
+    entities (LLM referenced wrong ID/type for a known name).
+
+    When _name_index is provided (pre-built via _build_catalog_name_index),
+    lookups are O(1).  Otherwise falls back to building it on demand.
+    """
+    incoming_name = entity.get("name", "").strip().lower()
+    if not incoming_name:
+        return None
+    incoming_stripped = _strip_leading_article(incoming_name).strip()
+    incoming_type = entity.get("type", "")
+
+    if _name_index is None:
+        _name_index = _build_catalog_name_index(catalogs)
+
+    # Check primary name and article-stripped variant
+    for candidate_name in (incoming_name, incoming_stripped):
+        existing = _name_index.get(candidate_name)
+        if existing and existing.get("type", "") != incoming_type:
+            return existing
     return None
 
 
@@ -2143,7 +2171,7 @@ def extract_and_merge(
     for entity_ref in qualified:
         if _is_misclassified_character(entity_ref):
             eid = get_entity_id(entity_ref)
-            print(f"  FILTER: rejected '{entity_ref.get('name')}' as character "
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as {entity_ref.get('type')} "
                   f"(non-sentient name pattern)", file=sys.stderr)
             _discovery_filtered.append({
                 "name": entity_ref.get("name", ""),
@@ -2165,9 +2193,10 @@ def extract_and_merge(
     qualified = _type_filtered
 
     # Reject entities whose name already exists in catalogs under a different type (#303)
+    _catalog_name_index = _build_catalog_name_index(catalogs)
     _cross_catalog_filtered = []
     for entity_ref in qualified:
-        conflict = _find_cross_catalog_type_conflict(entity_ref, catalogs)
+        conflict = _find_cross_catalog_type_conflict(entity_ref, catalogs, _catalog_name_index)
         if conflict:
             eid = get_entity_id(entity_ref)
             print(f"  FILTER: rejected '{entity_ref.get('name')}' as {entity_ref.get('type')} "

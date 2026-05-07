@@ -51,6 +51,26 @@ class TestProperNameNotRejected:
     def test_theron_not_rejected(self):
         assert not _is_misclassified_character({"name": "Theron", "type": "character"})
 
+    def test_lowercase_kael_not_rejected(self):
+        """Single lowercase proper noun should NOT be rejected (#305 review)."""
+        assert not _is_misclassified_character({"name": "kael", "type": "character"})
+
+    def test_lowercase_rune_not_rejected(self):
+        assert not _is_misclassified_character({"name": "rune", "type": "character"})
+
+
+class TestCreatureTypeAlsoCovered:
+    """Creature type should be filtered the same as character (#305 review)."""
+
+    def test_plague_as_creature_rejected(self):
+        assert _is_misclassified_character({"name": "plague", "type": "creature"})
+
+    def test_sickness_as_creature_rejected(self):
+        assert _is_misclassified_character({"name": "the sickness", "type": "creature"})
+
+    def test_valid_creature_not_rejected(self):
+        assert not _is_misclassified_character({"name": "Shadow Wolf", "type": "creature"})
+
 
 class TestMultiWordDescriptiveNotRejected:
     def test_the_elder_not_rejected(self):
