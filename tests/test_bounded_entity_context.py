@@ -33,8 +33,8 @@ def _make_catalogs(entities):
 
 class TestEstimateTokens:
     def test_basic(self):
-        assert _estimate_tokens("abcd") == 1
-        assert _estimate_tokens("a" * 100) == 25
+        assert _estimate_tokens("abc") == 1
+        assert _estimate_tokens("a" * 100) == 33
 
     def test_empty(self):
         assert _estimate_tokens("") == 1  # min 1
@@ -96,11 +96,12 @@ class TestBoundedFormatRecentPrioritization:
                                 aliases=["D", "Dormy"],
                                 last_updated_turn="turn-010")]
         catalogs = _make_catalogs(recent + dormant)
-        # Budget of 20 tokens is below unbounded size (31 tokens), so
-        # the fast-path won't apply and tiering kicks in.
+        # Budget is enough for one full line + one brief line but below the
+        # unbounded output with both entities in full detail, so tiering
+        # kicks in and the dormant entity gets degraded to brief.
         result = format_known_entities_bounded(
             catalogs, current_turn=100,
-            entity_context_budget=20,
+            entity_context_budget=27,
             recency_window=10)
         # Recent entity should have full detail
         assert "Active hero" in result
