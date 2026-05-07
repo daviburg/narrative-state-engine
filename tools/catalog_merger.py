@@ -1123,9 +1123,13 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
                                  "source_turn": alias_turn}
             current["name"] = update["name"]
 
-    # Update last_updated_turn
+    # Update last_updated_turn — keep the latest (max) to prevent
+    # re-extraction of earlier turns from regressing the value (#314).
     if update.get("last_updated_turn"):
-        current["last_updated_turn"] = update["last_updated_turn"]
+        existing_num = _parse_turn_number(current.get("last_updated_turn"))
+        update_num = _parse_turn_number(update["last_updated_turn"])
+        if not existing_num or (update_num and update_num >= existing_num):
+            current["last_updated_turn"] = update["last_updated_turn"]
 
     # Update notes
     if update.get("notes"):

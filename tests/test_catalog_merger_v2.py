@@ -929,3 +929,37 @@ class TestMergeRelationshipsDedup:
         rels = catalogs["characters.json"][0]["relationships"]
         assert len(rels) == 1
         assert rels[0]["current_relationship"] == "close friend"
+
+
+class TestLastUpdatedTurnRegression:
+    """Re-extraction of an earlier turn must not regress last_updated_turn (#314)."""
+
+    def test_reextraction_does_not_regress_last_updated_turn(self):
+        """Merging an update from an earlier turn keeps the later last_updated_turn."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-hero", "Hero",
+                                first_seen_turn="turn-100",
+                                last_updated_turn="turn-289"),
+            ]
+        }
+        update = _make_v2_entity("char-hero", "Hero",
+                                 first_seen_turn="turn-100",
+                                 last_updated_turn="turn-210")
+        merge_entity(catalogs, update)
+        assert catalogs["characters.json"][0]["last_updated_turn"] == "turn-289"
+
+    def test_forward_update_advances_last_updated_turn(self):
+        """Normal forward extraction still advances last_updated_turn."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-hero", "Hero",
+                                first_seen_turn="turn-100",
+                                last_updated_turn="turn-200"),
+            ]
+        }
+        update = _make_v2_entity("char-hero", "Hero",
+                                 first_seen_turn="turn-100",
+                                 last_updated_turn="turn-250")
+        merge_entity(catalogs, update)
+        assert catalogs["characters.json"][0]["last_updated_turn"] == "turn-250"
