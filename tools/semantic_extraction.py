@@ -1552,11 +1552,10 @@ def _is_misclassified_location(entity: dict) -> bool:
 def _find_cross_catalog_type_conflict(entity: dict, catalogs: dict) -> dict | None:
     """Check if entity name already exists in catalogs under a different type.
 
-    Only applies to entities marked is_new=True.  Returns the conflicting
-    existing catalog entry if found, or None.
+    Returns the conflicting existing catalog entry if found, or None.
+    Applies to both is_new=True (LLM missed existing entry) and is_new=False
+    entities (LLM referenced wrong ID/type for a known name).
     """
-    if not entity.get("is_new", True):
-        return None
     incoming_name = entity.get("name", "").strip().lower()
     if not incoming_name:
         return None

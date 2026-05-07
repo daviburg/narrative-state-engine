@@ -96,14 +96,26 @@ class TestCrossCatalogConflict:
         assert conflict is not None
         assert conflict["id"] == "char-elder"
 
-    def test_not_new_entity_skipped(self):
-        """Entities with is_new=False should not be checked."""
+    def test_is_new_false_with_type_conflict_still_caught(self):
+        """Entities with is_new=False but wrong type should still be caught."""
         catalogs = {
             "characters.json": [
                 _make_catalog_entry("char-fenouille", "Fenouille", "character"),
             ],
         }
         entity = _make_discovery("Fenouille", "location", is_new=False)
+        conflict = _find_cross_catalog_type_conflict(entity, catalogs)
+        assert conflict is not None
+        assert conflict["id"] == "char-fenouille"
+
+    def test_is_new_false_same_type_no_conflict(self):
+        """Entities with is_new=False and correct type should not conflict."""
+        catalogs = {
+            "characters.json": [
+                _make_catalog_entry("char-fenouille", "Fenouille", "character"),
+            ],
+        }
+        entity = _make_discovery("Fenouille", "character", is_new=False)
         conflict = _find_cross_catalog_type_conflict(entity, catalogs)
         assert conflict is None
 
