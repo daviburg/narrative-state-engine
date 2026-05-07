@@ -486,3 +486,74 @@ class TestTruncationDetection:
                 )
             # Should only be called once — no retries
             assert call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# Fallback provider
+# ---------------------------------------------------------------------------
+
+
+class TestFallbackProvider:
+    """Verify fallback LLM provider is used when primary exhausts retries."""
+
+    def test_fallback_client_initialized(self, tmp_path):
+        """Fallback client is created when config has a fallback block."""
+        cfg = _write_config(tmp_path, overrides={
+            "fallback": {
+                "base_url": "http://localhost:8081/v1",
+                "model": "fallback-model",
+                "timeout_seconds": 300,
+            }
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._fallback_client is not None
+        assert client._fallback_client.model == "fallback-model"
+
+    def test_no_fallback_without_config(self, tmp_path):
+        """No fallback client when config lacks a fallback block."""
+        cfg = _write_config(tmp_path)
+        client = LLMClient(config_path=cfg)
+        assert client._fallback_client is None
+
+    def test_fallback_called_on_primary_failure(self, tmp_path):
+        """Fallback extract_json is called when primary exhausts retries."""
+        cfg = _write_config(tmp_path, overrides={
+            "retry_attempts": 1,
+            "fallback": {
+                "base_url": "http://localhost:8081/v1",
+                "model": "fallback-model",
+            }
+        })
+        client = LLMClient(config_path=cfg)
+
+        # Primary always fails
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=Exception("primary failed")):
+            # Fallback succeeds
+            with patch.object(client._fallback_client, "extract_json",
+                              return_value={"entities": []}) as mock_fb:
+                result = client.extract_json(
+                    system_prompt="sys", user_prompt="user"
+                )
+                assert result == {"entities": []}
+                mock_fb.assert_called_once()
+
+    def test_fallback_failure_raises_combined_error(self, tmp_path):
+        """If both primary and fallback fail, error includes both messages."""
+        cfg = _write_config(tmp_path, overrides={
+            "retry_attempts": 1,
+            "fallback": {
+                "base_url": "http://localhost:8081/v1",
+                "model": "fallback-model",
+            }
+        })
+        client = LLMClient(config_path=cfg)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=Exception("primary failed")):
+            with patch.object(client._fallback_client, "extract_json",
+                              side_effect=LLMExtractionError("fallback failed")):
+                with pytest.raises(LLMExtractionError, match="Fallback"):
+                    client.extract_json(
+                        system_prompt="sys", user_prompt="user"
+                    )

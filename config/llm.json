@@ -15,5 +15,11 @@
   "entity_refresh_interval": 50,
   "entity_refresh_batch_size": 10,
   "checkpoint_interval": 25,
-  "skip_response_format": true
+  "skip_response_format": true,
+  "fallback": {
+    "base_url": "http://localhost:8081/v1",
+    "model": "qwen3.5-9b-q4_k_m",
+    "timeout_seconds": 300,
+    "skip_response_format": true
+  }
 }
