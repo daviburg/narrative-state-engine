@@ -15,7 +15,7 @@ A structured knowledge extraction and state-tracking engine for AI-driven narrat
 - A **structured state layer** that extracts entities, relationships, and events from narrative text and maintains them as a schema-defined, evolving knowledge base (validated when `jsonschema` is installed or when running `tools/validate.py`)
 - A **player-side assistant** that independently tracks canonical world state, not relying on the DM's narration alone
 - A **schema-first extraction pipeline** using LLMs (local or cloud) to convert unstructured narrative into structured, provenance-tracked data
-- **Provider-agnostic** — runs on local models (Ollama, llama-server, OpenVINO) or cloud APIs (Gemini, OpenAI) with a config change; supports automatic fallback to a secondary provider when the primary is unavailable
+- **Provider-agnostic** — runs on local models (Ollama, llama-server, OpenVINO) or cloud APIs (Gemini, OpenAI) with a config change; supports automatic fallback to a secondary provider when the primary exhausts retries
 
 ## What This Is Not
 
@@ -152,9 +152,9 @@ tools/
   analyze_next_move.py           # Generate next-move analysis and prompt candidates
   validate.py                    # Validate JSON files against schemas
   semantic_extraction.py         # LLM-based entity/relationship/event extraction
-  catalog_merger.py              # Merge extracted data into framework catalogs
+  catalog_merger.py              # Merge extracted data into framework catalogs (includes context-aware entity selection)
   llm_client.py                  # Provider-agnostic LLM client wrapper (with fallback provider support)
-  build_context.py               # Build focused per-turn entity context (context-aware selection)
+  build_context.py               # Build focused per-turn entity context
   extract_structured_data.py     # Extract inline game markers and temporal events
   generate_wiki_pages.py         # Generate markdown wiki pages from V2 entity files
   migrate_catalogs_v2.py         # One-time V1→V2 catalog layout migration
