@@ -430,8 +430,8 @@ class LLMClient:
 
         # --- Input budget pre-flight check ---
         # Estimate whether input + requested output can fit in the context
-        # window.  Uses a conservative 3 chars/token heuristic.  Warns on
-        # tight fits; raises on clear overflows so callers can skip or trim.
+        # window.  Uses a conservative 3 chars/token heuristic.  Emits
+        # WARNING on overflow and NOTICE on tight fits (< 5% headroom).
         effective_max = max_tokens if max_tokens is not None else self.max_tokens
         if self.context_length:
             input_chars = len(system_prompt) + len(user_prompt)

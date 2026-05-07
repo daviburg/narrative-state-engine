@@ -3,13 +3,23 @@
 Tests the WARNING/NOTICE messages emitted to stderr when estimated
 input + output approaches or exceeds the context window.
 """
+import contextlib
 import io
 import json
 import sys
 import os
 import unittest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'tools'))
+
+# Mock openai so tests don't depend on optional LLM dependency
+if "openai" not in sys.modules:
+    _mock_openai = MagicMock()
+    _mock_openai.OpenAI = MagicMock
+    sys.modules["openai"] = _mock_openai
+
+from llm_client import LLMClient
 
 
 def _make_llm_client(context_length=32768, max_tokens=4096):
@@ -30,7 +40,6 @@ def _make_llm_client(context_length=32768, max_tokens=4096):
     try:
         with os.fdopen(fd, 'w') as f:
             json.dump(config, f)
-        from llm_client import LLMClient
         client = LLMClient(path)
     finally:
         os.unlink(path)
@@ -41,14 +50,11 @@ def _capture_preflight(client, sys_prompt, user_prompt, max_tokens=None):
     """Call extract_json and capture stderr. Expects the LLM call to fail
     (no server) — we only care about the pre-flight output."""
     stderr = io.StringIO()
-    old_stderr = sys.stderr
-    sys.stderr = stderr
-    try:
-        client.extract_json(sys_prompt, user_prompt, max_tokens=max_tokens)
-    except Exception:
-        pass  # Expected — no server running on port 59999
-    finally:
-        sys.stderr = old_stderr
+    with contextlib.redirect_stderr(stderr):
+        try:
+            client.extract_json(sys_prompt, user_prompt, max_tokens=max_tokens)
+        except Exception:
+            pass  # Expected — no server running on port 59999
     return stderr.getvalue()
 
 
