@@ -346,21 +346,23 @@ pip install openvino openvino-genai optimum[openvino] fastapi uvicorn
 optimum-cli export openvino --model Qwen/Qwen3-8B --weight-format int4_sym \
     --trust-remote-code ./models/qwen3-8b-int4-ov
 
-# Start the server (any OpenAI-compatible wrapper around ContinuousBatchingPipeline)
-python ov_serve.py --model ./models/qwen3-8b-int4-ov --port 8000
+# Start the server using the included ov_serve.py (#299)
+python server/ov_serve.py --model ./models/qwen3-8b-int4-ov --port 8000
 ```
 
-The server wrapper should handle:
+The included `server/ov_serve.py` provides:
 
-- **Thinking suppression** — pass `enable_thinking=False` (a Python `bool`) in
-  the chat template's `extra_context` dict when calling
-  `tokenizer.apply_chat_template(..., extra_context={'enable_thinking': False})`.
-  This prevents qwen3 models from wasting ~80% of output tokens on `<think>`
+- **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/models`, `/health` endpoints
+- **Thinking suppression** — passes `enable_thinking=False` in
+  `apply_chat_template(..., extra_context={'enable_thinking': False})`,
+  preventing qwen3 models from wasting ~80% of output tokens on `<think>`
   blocks. Unlike llama-server's `--reasoning-format none`, OpenVINO controls
   this at the tokenizer level.
-- **Continuous batching** — queue concurrent requests and process them in
-  batches for higher aggregate throughput.
-- **Robust output parsing** — strip any residual `<think>` blocks and
+- **Continuous batching** — queues concurrent requests and processes them in
+  batches via `ContinuousBatchingPipeline` for higher aggregate throughput.
+- **Prefix caching** — reuses KV cache for shared prompt prefixes across
+  requests in the same batch.
+- **Robust output parsing** — strips any residual `<think>` blocks and
   markdown fences before returning content.
 
 Configure `config/llm.json` on the client machine:
@@ -405,6 +407,21 @@ This dramatically slows extraction and increases truncation risk.
   template's `extra_context` parameter when calling `apply_chat_template()`.
   The extraction pipeline's JSON parser also strips any residual `<think>`
   blocks as a safety net.
+
+#### Fallback JSON Parser (#300)
+
+The LLM client includes a multi-tier JSON parser that handles non-standard
+model output gracefully:
+
+1. **Direct parse** — attempt `json.loads()` on the raw response content
+2. **Think-block stripping** — remove `<think>...</think>` blocks and retry
+3. **Fence extraction** — extract content from `` ```json ... ``` `` fences
+4. **Object scanning** — scan for the first valid `{...}` JSON object in the
+   output (handles cases where reasoning text precedes the JSON)
+
+This eliminates the need for `response_format` enforcement on thinking-capable
+models and recovers valid JSON from outputs that include reasoning preambles
+or markdown formatting.
 
 #### Server Restart After Interrupted Extraction
 
