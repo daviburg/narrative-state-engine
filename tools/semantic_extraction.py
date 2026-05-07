@@ -1475,31 +1475,65 @@ _GENERIC_STEMS = {
 }
 
 # --- Type classification filters (#303) ---
-# Names that are clearly non-sentient and should never be type "character"
-_NON_CHARACTER_NAMES = {
-    "birth", "death", "feast", "meal", "method", "treatment", "protocol",
-    "sickness", "plague", "disease", "disruption", "precision", "field",
-    "pattern", "fragment", "belly", "structure", "fire",
+# Leading articles stripped before matching against blocklists.
+_LEADING_ARTICLE_RE = re.compile(r"^(?:the|a|an)\s+", re.IGNORECASE)
+
+# Extra non-character words beyond _PC_ALIAS_WORD_BLOCKLIST.
+_NON_CHARACTER_EXTRAS = {
+    "birth", "belly", "feast", "meal", "sickness", "disease",
+    "structure", "fragment", "celebration",
 }
+# Words in _PC_ALIAS_WORD_BLOCKLIST that ARE valid character names/roles and
+# must not trigger the type classification filter.
+_CHARACTER_ROLE_ALLOWLIST = {
+    "chief", "elder", "healer", "raider", "warrior",
+    "guard", "scout", "shaman", "merchant", "captain",
+    "hunters", "spirit",
+}
+# Derive from _PC_ALIAS_WORD_BLOCKLIST to avoid drift (review comment).
+# _PC_ALIAS_WORD_BLOCKLIST is defined below — use lazy init via function.
+_NON_CHARACTER_NAMES: set[str] | None = None
+
+
+def _get_non_character_names() -> set[str]:
+    global _NON_CHARACTER_NAMES
+    if _NON_CHARACTER_NAMES is None:
+        _NON_CHARACTER_NAMES = (
+            _NON_CHARACTER_EXTRAS
+            | _PC_ALIAS_WORD_BLOCKLIST
+        ) - _CHARACTER_ROLE_ALLOWLIST
+    return _NON_CHARACTER_NAMES
+
 
 # Names that are clearly non-spatial and should never be type "location"
 _NON_LOCATION_NAMES = {"feast", "celebration", "fragment", "birth", "death"}
+
+
+def _strip_leading_article(name: str) -> str:
+    """Strip leading 'the', 'a', 'an' from a name for blocklist matching."""
+    return _LEADING_ARTICLE_RE.sub("", name)
 
 
 def _is_misclassified_character(entity: dict) -> bool:
     """Return True if entity is obviously not a character."""
     if entity.get("type") != "character":
         return False
-    name = entity.get("name", "").lower().strip()
-    # Reject if name is a known non-character word
-    if name in _NON_CHARACTER_NAMES:
+    raw_name = entity.get("name", "").strip()
+    name = raw_name.lower()
+    stripped = _strip_leading_article(name).strip()
+    non_char = _get_non_character_names()
+    # Reject if name (or name with article stripped) matches blocklist
+    if name in non_char or stripped in non_char:
+        return True
+    # Reject if the head noun (last token) is a blocklisted word (#303 review)
+    head = stripped.split()[-1] if stripped else ""
+    if head and head in non_char:
         return True
     # Reject "my {word}" pattern (body parts/possessions)
     if name.startswith("my "):
         return True
     # Reject if name is entirely lowercase single word (no proper noun capitalization)
-    original_name = entity.get("name", "").strip()
-    if " " not in original_name and original_name == original_name.lower() and len(original_name) > 2:
+    if " " not in raw_name and raw_name == raw_name.lower() and len(raw_name) > 2:
         return True
     return False
 
@@ -1509,7 +1543,8 @@ def _is_misclassified_location(entity: dict) -> bool:
     if entity.get("type") != "location":
         return False
     name = entity.get("name", "").lower().strip()
-    if name in _NON_LOCATION_NAMES:
+    stripped = _strip_leading_article(name).strip()
+    if name in _NON_LOCATION_NAMES or stripped in _NON_LOCATION_NAMES:
         return True
     return False
 
