@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import warnings
 
 # Maps entity types to catalog bucket keys (keyed by legacy filenames for
@@ -926,6 +927,31 @@ def _parse_turn_number(turn_id: str | None) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Alias cross-reference guard (#302)
+# ---------------------------------------------------------------------------
+
+def _filter_entity_aliases(aliases: list[str], entity_name: str, known_entity_names: set[str]) -> list[str]:
+    """Remove aliases that conflict with other entities' primary names (#302).
+
+    Rejects aliases matching another entity's name (case-insensitive).
+    The entity's own name is excluded from the conflict check.
+    """
+    if not known_entity_names:
+        return aliases
+    own_lower = entity_name.strip().lower() if entity_name else ""
+    filter_set = known_entity_names - {own_lower} if own_lower else known_entity_names
+    cleaned = []
+    for alias in aliases:
+        if not isinstance(alias, str) or not alias.strip():
+            continue
+        if alias.strip().lower() in filter_set:
+            print(f"  COERCE: rejected alias '{alias}' (conflicts with existing entity)", file=sys.stderr)
+            continue
+        cleaned.append(alias)
+    return cleaned
+
+
+# ---------------------------------------------------------------------------
 # Entity merge
 # ---------------------------------------------------------------------------
 
@@ -997,15 +1023,9 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
             if isinstance(aliases_attr, dict) and isinstance(aliases_attr.get("value"), list):
                 known_entity_names = _get_known_names()
                 entity_name = entity.get("name", "")
-                if entity.get("id") == "char-player":
-                    from semantic_extraction import _filter_pc_aliases
-                    filter_set = known_entity_names - {entity_name.strip().lower()} if entity_name else known_entity_names
-                    aliases_attr["value"] = _filter_pc_aliases(aliases_attr["value"], filter_set)
-                else:
-                    from semantic_extraction import _filter_entity_aliases
-                    aliases_attr["value"] = _filter_entity_aliases(
-                        aliases_attr["value"], entity_name, known_entity_names
-                    )
+                aliases_attr["value"] = _filter_entity_aliases(
+                    aliases_attr["value"], entity_name, known_entity_names
+                )
             catalogs[catalog_file].append(entity)
         else:
             missing = [f for f in required_base if not entity.get(f)]
@@ -1041,7 +1061,6 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
             sa_merged = current["stable_attributes"]
             aliases_merged = sa_merged.get("aliases")
             if isinstance(aliases_merged, dict) and isinstance(aliases_merged.get("value"), list):
-                from semantic_extraction import _filter_entity_aliases
                 entity_name = current.get("name", "")
                 aliases_merged["value"] = _filter_entity_aliases(
                     aliases_merged["value"], entity_name, known_entity_names

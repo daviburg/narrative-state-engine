@@ -5,8 +5,8 @@ import os
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from semantic_extraction import _filter_pc_aliases, _filter_entity_aliases, _collect_known_entity_names
-from catalog_merger import merge_entity
+from semantic_extraction import _filter_pc_aliases, _collect_known_entity_names
+from catalog_merger import merge_entity, _filter_entity_aliases
 
 
 def test_alias_rejected_when_matching_existing_entity():

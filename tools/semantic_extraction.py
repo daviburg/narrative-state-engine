@@ -43,6 +43,7 @@ from catalog_merger import (
     _strip_any_prefix,
     _levenshtein,
     CATALOG_KEYS,
+    _filter_entity_aliases,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
@@ -235,28 +236,6 @@ def _filter_pc_aliases(aliases: list[str] | str, known_entity_names: set[str] | 
         cleaned.append(alias)
     if len(cleaned) > _PC_ALIAS_MAX_COUNT:
         cleaned = cleaned[-_PC_ALIAS_MAX_COUNT:]
-    return cleaned
-
-
-def _filter_entity_aliases(aliases: list[str], entity_name: str, known_entity_names: set[str]) -> list[str]:
-    """Remove aliases that conflict with other entities' primary names (#302).
-
-    Unlike _filter_pc_aliases, this does not apply blocklist/length rules —
-    it only rejects aliases matching another entity's name (case-insensitive).
-    The entity's own name is excluded from the conflict check.
-    """
-    if not known_entity_names:
-        return aliases
-    own_lower = entity_name.strip().lower() if entity_name else ""
-    filter_set = known_entity_names - {own_lower} if own_lower else known_entity_names
-    cleaned = []
-    for alias in aliases:
-        if not isinstance(alias, str) or not alias.strip():
-            continue
-        if alias.strip().lower() in filter_set:
-            print(f"  COERCE: rejected alias '{alias}' (conflicts with existing entity)", file=sys.stderr)
-            continue
-        cleaned.append(alias)
     return cleaned
 
 
