@@ -15,7 +15,7 @@ A structured knowledge extraction and state-tracking engine for AI-driven narrat
 - A **structured state layer** that extracts entities, relationships, and events from narrative text and maintains them as a schema-defined, evolving knowledge base (validated when `jsonschema` is installed or when running `tools/validate.py`)
 - A **player-side assistant** that independently tracks canonical world state, not relying on the DM's narration alone
 - A **schema-first extraction pipeline** using LLMs (local or cloud) to convert unstructured narrative into structured, provenance-tracked data
-- **Provider-agnostic** — runs on local models (Ollama) or cloud APIs (Gemini, OpenAI) with a config change
+- **Provider-agnostic** — runs on local models (Ollama, llama-server, OpenVINO) or cloud APIs (Gemini, OpenAI) with a config change; supports automatic fallback to a secondary provider when the primary exhausts retries
 
 ## What This Is Not
 
@@ -35,7 +35,7 @@ LLMs lose coherence over long interactions. Chat history is not memory. When a c
 Given a sequence of DM outputs and player prompts, the system:
 
 1. **Preserves** the exact transcript as an immutable source of truth
-2. **Extracts** entities, relationships, events, and temporal markers via a four-agent LLM pipeline
+2. **Extracts** entities, relationships, events, and temporal markers via a five-agent LLM pipeline
 3. **Maintains** a schema-defined knowledge base of characters, locations, factions, items, relationships, and events — plot threads are tracked separately and currently maintained manually or with Copilot assistance rather than by the automated extraction pipeline
 4. **Tracks** player objectives, evidence classification, and DM behavior patterns
 5. **Analyzes** the current situation and generates candidate next-player prompts
@@ -60,7 +60,7 @@ docs/
   idea-discussion.md
 
 config/
-  llm.json                     # LLM provider settings (model, endpoint)
+  llm.json                     # LLM provider settings (model, endpoint, fallback provider)
 
 schemas/
   turn.schema.json
@@ -152,15 +152,19 @@ tools/
   analyze_next_move.py           # Generate next-move analysis and prompt candidates
   validate.py                    # Validate JSON files against schemas
   semantic_extraction.py         # LLM-based entity/relationship/event extraction
-  catalog_merger.py              # Merge extracted data into framework catalogs
-  llm_client.py                  # Provider-agnostic LLM client wrapper
+  catalog_merger.py              # Merge extracted data into framework catalogs (includes context-aware entity selection)
+  llm_client.py                  # Provider-agnostic LLM client wrapper (with fallback provider support)
   build_context.py               # Build focused per-turn entity context
   extract_structured_data.py     # Extract inline game markers and temporal events
   generate_wiki_pages.py         # Generate markdown wiki pages from V2 entity files
   migrate_catalogs_v2.py         # One-time V1→V2 catalog layout migration
   synthesis.py                   # Data foundation for wiki synthesis: event grouping, phase segmentation, relationship arc summarization
   narrative_synthesis.py         # LLM-powered narrative wiki page generation (LLM calls and page assembly)
+  dedup_audit.py                 # LLM-assisted post-extraction dedup (identify, score, merge/flag duplicates)
   export_book_skeleton.py        # Generate book/fiction outline (placeholder)
+
+server/
+  ov_serve.py                    # OpenVINO GenAI REST server (OpenAI-compatible endpoint)
 
 examples/
   demo-session/

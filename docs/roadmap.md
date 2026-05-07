@@ -97,13 +97,21 @@ Goals:
 
 **NPU investigation (#65):** AMD XDNA1 (Phoenix) NPU cannot run LLM inference — AMD only supports LLMs on Strix Point (XDNA2) and newer. The Radeon 780M iGPU (~10-15 tok/s) is too slow to be useful. A dedicated GPU server (e.g., used RTX 3090 in a separate machine) is the viable path to exceed RTX 4070 performance.
 
-Remaining work:
-- Fallback provider chain in `tools/llm_client.py` (local → cloud)
-- CLI `--provider` override for per-run provider selection
-- Batch processing mode for unattended overnight extraction (**partially implemented** via detached helper scripts: `tools/start_extraction_detached.ps1`, `tools/watch_extraction_detached.ps1`, `tools/stop_extraction_detached.ps1`; launcher now safely quotes spaced arguments and supports framework/player-label passthrough)
+Completed:
+- **Fallback provider chain** (#301): When the primary LLM exhausts all `retry_attempts`, the client automatically routes to a fallback provider configured via the `"fallback"` block in `config/llm.json`. `LLMTruncationError` and `QuotaExhaustedError` bypass the fallback and propagate immediately.
+- **OpenVINO GenAI REST server** (#299): `server/ov_serve.py` provides an OpenAI-compatible `/v1/chat/completions` endpoint using `ContinuousBatchingPipeline` with prefix caching, dynamic batching, and thinking suppression for Intel Arc GPUs.
+- **Context-aware entity selection** (#296): Multi-tier entity context selection for discovery prompts — mentioned entities, co-located entities, one-hop relationships, then recency backfill — replacing recency-only ordering.
+- **Entity type classification guidance** (#305): The entity discovery template includes a compact type classification guide with positive examples and explicit NEVER-use rules, plus a post-discovery programmatic filter that rejects misclassified entities.
+- **Alias conflict rejection guard** (#307): `_filter_pc_aliases()` and `_filter_entity_aliases()` cross-reference aliases against all entity names in the catalog, rejecting any alias that matches another entity's primary name.
+- **LLM-assisted dedup audit** (#306): `tools/dedup_audit.py` identifies duplicate entities via name similarity heuristics, scores candidate pairs with an LLM call, auto-merges high-confidence duplicates (≥0.9) or flags medium-confidence pairs for human review.
+- **Thinking suppression + fallback JSON parser** (#300): Robust output parsing strips `<think>` blocks, handles markdown code fences, and scans for valid JSON objects when initial parse fails.
+- Batch processing mode for unattended overnight extraction (**implemented** via detached helper scripts: `tools/start_extraction_detached.ps1`, `tools/watch_extraction_detached.ps1`, `tools/stop_extraction_detached.ps1`; launcher safely quotes spaced arguments and supports framework/player-label passthrough)
 - Provider setup documentation in `docs/usage.md`
-- Quality validation of `qwen2.5:7b` as a faster alternative to 14B
 - **Segmented extraction** (#141, #197): Long sessions are extracted in configurable segments to stay within model context limits. Each segment starts with a clean entity catalog; a reconciliation pass merges the results. The bootstrap default now auto-enables `--segment-size 100` when session size exceeds 150 turns (pass `--segment-size 0` to disable).
+
+Remaining work:
+- CLI `--provider` override for per-run provider selection
+- Quality validation of `qwen2.5:7b` as a faster alternative to 14B
 
 Design implications for earlier phases:
 - Keep context loading modular (catalog-first) so smaller local models can handle targeted tasks
