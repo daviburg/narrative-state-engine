@@ -39,7 +39,8 @@ MODEL_NAME = ""
 BATCH_WAIT_MS = 50  # Max time to wait for batch to fill
 MAX_BATCH_SIZE = 8   # Max requests per batch
 CACHE_SIZE_GB = 8    # KV cache size in GB
-REQUEST_TIMEOUT_S = 600  # Per-request timeout (seconds); 0 = no timeout
+REQUEST_TIMEOUT_S = 600  # Batch generation timeout (seconds); 0 = no timeout
+_pipeline_degraded = False  # Set True if reload fails; surfaced via /health
 EXTRA_STOP_TOKEN_IDS: set = set()  # Additional stop token IDs beyond EOS
 
 # --- Request/Response Models ---
@@ -92,10 +93,14 @@ batch_worker_task = None
 async def batch_worker():
     """Collect requests into batches and process them together.
 
-    Includes a per-batch timeout watchdog: if pipeline.generate() doesn't
-    return within REQUEST_TIMEOUT_S, all requests in the batch are failed
-    with a timeout error and the pipeline is reloaded to clear the stuck
-    state.
+    Includes a batch-generation timeout watchdog: if pipeline.generate()
+    doesn't return within REQUEST_TIMEOUT_S, all in-flight and queued
+    requests are failed with 504 and the pipeline is reloaded to clear
+    the stuck GPU state.
+
+    Note: asyncio.wait_for() cancels the Future but cannot interrupt the
+    underlying executor thread.  The pipeline reload replaces the model
+    object, so the orphaned thread's result is discarded on completion.
     """
     global pipeline, tokenizer
     loop = asyncio.get_running_loop()
@@ -146,6 +151,16 @@ async def batch_worker():
                     req.future.set_exception(
                         HTTPException(status_code=504, detail=f"Generation timed out after {elapsed:.0f}s")
                     )
+            # Drain any queued requests — they'd wait through a reload anyway
+            while not batch_queue.empty():
+                try:
+                    queued_req = batch_queue.get_nowait()
+                    if not queued_req.future.done():
+                        queued_req.future.set_exception(
+                            HTTPException(status_code=504, detail=f"Cancelled: pipeline reload after {elapsed:.0f}s timeout")
+                        )
+                except asyncio.QueueEmpty:
+                    break
             # Reload pipeline to clear stuck state
             await _reload_pipeline()
         except Exception as e:
@@ -156,7 +171,7 @@ async def batch_worker():
 
 async def _reload_pipeline():
     """Reload the model pipeline to recover from a stuck state."""
-    global pipeline, tokenizer
+    global pipeline, tokenizer, _pipeline_degraded
     print("[WATCHDOG] Reloading model pipeline...")
     start = time.perf_counter()
     loop = asyncio.get_running_loop()
@@ -171,9 +186,11 @@ async def _reload_pipeline():
             ),
         )
         tokenizer = pipeline.get_tokenizer()
+        _pipeline_degraded = False
         elapsed = time.perf_counter() - start
         print(f"[WATCHDOG] Pipeline reloaded in {elapsed:.1f}s")
     except Exception as e:
+        _pipeline_degraded = True
         elapsed = time.perf_counter() - start
         print(f"[WATCHDOG] Pipeline reload FAILED after {elapsed:.1f}s: {e}")
 
@@ -221,8 +238,9 @@ def count_tokens(text: str) -> int:
 @app.get("/health")
 async def health():
     queue_size = batch_queue.qsize() if batch_queue else 0
+    status = "degraded" if _pipeline_degraded else "ok"
     return {
-        "status": "ok",
+        "status": status,
         "model": MODEL_NAME,
         "queue_depth": queue_size,
         "request_timeout_s": REQUEST_TIMEOUT_S,
@@ -339,7 +357,7 @@ if __name__ == "__main__":
     parser.add_argument("--cache-size-gb", type=int, default=CACHE_SIZE_GB,
                         help="KV cache size in GB (default: 8)")
     parser.add_argument("--request-timeout", type=int, default=REQUEST_TIMEOUT_S,
-                        help="Per-request timeout in seconds; 0 = no timeout (default: 600)")
+                        help="Batch generation timeout in seconds; 0 = no timeout (default: 600)")
     parser.add_argument("--stop-token-ids", type=str, default="",
                         help="Comma-separated extra stop token IDs (beyond EOS)")
     args = parser.parse_args()
