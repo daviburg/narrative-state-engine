@@ -24,6 +24,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import warnings
 
 # Maps entity types to catalog bucket keys (keyed by legacy filenames for
@@ -926,6 +927,31 @@ def _parse_turn_number(turn_id: str | None) -> int | None:
 
 
 # ---------------------------------------------------------------------------
+# Alias cross-reference guard (#302)
+# ---------------------------------------------------------------------------
+
+def _filter_entity_aliases(aliases: list[str], entity_name: str, known_entity_names: set[str]) -> list[str]:
+    """Remove aliases that conflict with other entities' primary names (#302).
+
+    Rejects aliases matching another entity's name (case-insensitive).
+    The entity's own name is excluded from the conflict check.
+    """
+    if not known_entity_names:
+        return aliases
+    own_lower = entity_name.strip().lower() if entity_name else ""
+    filter_set = known_entity_names - {own_lower} if own_lower else known_entity_names
+    cleaned = []
+    for alias in aliases:
+        if not isinstance(alias, str) or not alias.strip():
+            continue
+        if alias.strip().lower() in filter_set:
+            print(f"  COERCE: rejected alias '{alias}' (conflicts with existing entity)", file=sys.stderr)
+            continue
+        cleaned.append(alias)
+    return cleaned
+
+
+# ---------------------------------------------------------------------------
 # Entity merge
 # ---------------------------------------------------------------------------
 
@@ -966,15 +992,40 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
         else:
             entity.pop("first_seen_turn", None)
 
+    # Lazily build known entity names only when alias filtering is needed (#302)
+    def _get_known_names() -> set[str]:
+        names: set[str] = set()
+        for _cat_entities in catalogs.values():
+            for _ent in _cat_entities:
+                _n = _ent.get("name", "")
+                if _n and isinstance(_n, str):
+                    names.add(_n.strip().lower())
+        return names
+
     if existing is not None:
         idx, current = existing
-        _update_existing_entity(current, entity)
+        # Only compute known names when the update touches aliases
+        _needs_alias_check = bool(
+            entity.get("stable_attributes", {}).get("aliases")
+            or (entity.get("name") and entity["name"] != current.get("name"))
+        )
+        known_entity_names = _get_known_names() if _needs_alias_check else None
+        _update_existing_entity(current, entity, known_entity_names=known_entity_names)
         catalogs[catalog_file][idx] = current
     else:
         # Ensure required fields for new entity
         required_base = ["id", "name", "type", "first_seen_turn"]
         has_desc = entity.get("identity")
         if all(entity.get(f) for f in required_base) and has_desc:
+            # Filter aliases on new entities before appending (#302)
+            sa = entity.get("stable_attributes", {})
+            aliases_attr = sa.get("aliases")
+            if isinstance(aliases_attr, dict) and isinstance(aliases_attr.get("value"), list):
+                known_entity_names = _get_known_names()
+                entity_name = entity.get("name", "")
+                aliases_attr["value"] = _filter_entity_aliases(
+                    aliases_attr["value"], entity_name, known_entity_names
+                )
             catalogs[catalog_file].append(entity)
         else:
             missing = [f for f in required_base if not entity.get(f)]
@@ -983,7 +1034,7 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
             print(f"  WARNING: New entity '{entity_id}' missing required fields: {missing}. Skipping.")
 
 
-def _update_existing_entity(current: dict, update: dict) -> None:
+def _update_existing_entity(current: dict, update: dict, *, known_entity_names: set[str] | None = None) -> None:
     """Update an existing entity with new information."""
     is_pc = current.get("id") == "char-player"
 
@@ -1005,6 +1056,15 @@ def _update_existing_entity(current: dict, update: dict) -> None:
             current["stable_attributes"] = {}
         for key, value in update["stable_attributes"].items():
             current["stable_attributes"][key] = value
+        # Cross-reference guard: reject aliases matching other entity names (#302)
+        if known_entity_names:
+            sa_merged = current["stable_attributes"]
+            aliases_merged = sa_merged.get("aliases")
+            if isinstance(aliases_merged, dict) and isinstance(aliases_merged.get("value"), list):
+                entity_name = current.get("name", "")
+                aliases_merged["value"] = _filter_entity_aliases(
+                    aliases_merged["value"], entity_name, known_entity_names
+                )
 
     # Merge volatile_state
     if update.get("volatile_state"):
@@ -1021,7 +1081,7 @@ def _update_existing_entity(current: dict, update: dict) -> None:
             # Record the LLM-proposed name as a PC alias without renaming
             from semantic_extraction import _filter_pc_aliases
             candidate_name = update["name"]
-            filtered = _filter_pc_aliases([candidate_name])
+            filtered = _filter_pc_aliases([candidate_name], known_entity_names)
             if filtered:  # Only add if it passes alias validation
                 sa_pc = current.setdefault("stable_attributes", {})
                 aliases_pc = sa_pc.setdefault("aliases", {"value": []})
