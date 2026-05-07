@@ -4,20 +4,13 @@ import json
 import os
 import sys
 import tempfile
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from dedup_audit import (
-    AUTO_MERGE_THRESHOLD,
-    REVIEW_THRESHOLD,
     generate_candidates,
     process_results,
-    score_pair,
-    _normalize_name,
-    _edit_distance,
 )
 
 
@@ -215,3 +208,45 @@ class TestScoring:
                 assert "action" in entry
                 assert entry["action"] is None
                 assert 0.0 <= entry["confidence"] <= 1.0
+
+    def test_auto_merge_writes_hints_and_persists(self):
+        """Auto-merge path writes coreference hints and persists catalogs."""
+        scored_pairs = [{
+            "entity_a_id": "loc-camp",
+            "entity_b_id": "loc-campsite",
+            "entity_a_name": "The Camp",
+            "entity_b_name": "Campsite",
+            "canonical_name": "The Camp",
+            "variant_name": "Campsite",
+            "same_entity": True,
+            "confidence": 0.95,
+            "canonical_id": "loc-camp",
+            "rationale": "Same location",
+        }]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            review_file = os.path.join(tmpdir, "review.json")
+            with patch("semantic_extraction.apply_coreference_hints", return_value=["loc-campsite"]) as mock_apply, \
+                 patch("dedup_audit.load_catalogs", return_value={"locations.json": []}), \
+                 patch("dedup_audit.load_events", return_value=[]), \
+                 patch("dedup_audit.save_catalogs") as mock_save_cat, \
+                 patch("dedup_audit.save_events") as mock_save_ev:
+                result = process_results(
+                    scored_pairs, tmpdir, auto_merge=True,
+                    review_file=review_file, dry_run=False,
+                )
+
+            # Verify hints file was written
+            hints_path = os.path.join(tmpdir, "coreference-hints.json")
+            assert os.path.isfile(hints_path)
+            with open(hints_path, "r", encoding="utf-8") as f:
+                hints = json.load(f)
+            assert len(hints["character_groups"]) == 1
+            assert hints["character_groups"][0]["canonical_id"] == "loc-camp"
+            assert "loc-campsite" in hints["character_groups"][0]["variant_id_patterns"]
+
+            # Verify apply + persist were called
+            mock_apply.assert_called_once()
+            mock_save_cat.assert_called_once()
+            mock_save_ev.assert_called_once()
+
+            assert result["auto_merged"] == 1

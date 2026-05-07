@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from catalog_merger import load_catalogs, save_catalogs, CATALOG_KEYS
+from catalog_merger import load_catalogs, save_catalogs, load_events, save_events, CATALOG_KEYS
 from llm_client import LLMClient
 
 AUTO_MERGE_THRESHOLD = 0.9
@@ -30,10 +30,10 @@ You are a deduplication assistant for an RPG entity catalog.
 Given two entities from the same campaign, determine if they refer to the same in-world thing.
 
 Respond with JSON:
-{"same_entity": true/false, "confidence": 0.0-1.0, "canonical_id": "<id to keep>", "rationale": "<one sentence>"}
+{"same_entity": true/false, "confidence": 0.0-1.0, "canonical_id": "<id to keep — must be one of the two entity IDs provided>", "rationale": "<one sentence>"}
 
 Rules:
-- Consider name similarity, description overlap, relationships, events, source turns
+- Consider name similarity, description overlap, relationships, and source turns
 - If names differ only by typo/article/hyphenation, confidence should be high
 - If they share the same first_seen_turn and similar role, confidence should be high
 - If both have independent relationship graphs (different targets), they are likely distinct"""
@@ -186,10 +186,24 @@ def score_pair(client: "LLMClient", entity_a: dict, entity_b: dict) -> dict:
             "rationale": "LLM returned invalid response",
         }
 
+    # Defensive confidence parsing
+    try:
+        confidence = float(result.get("confidence", 0.0))
+    except (TypeError, ValueError):
+        confidence = 0.0
+    confidence = max(0.0, min(1.0, confidence))
+
+    # Validate canonical_id is one of the pair IDs
+    id_a = entity_a.get("id", "")
+    id_b = entity_b.get("id", "")
+    canonical_id = result.get("canonical_id", id_a)
+    if canonical_id not in (id_a, id_b):
+        canonical_id = id_a
+
     return {
         "same_entity": bool(result.get("same_entity", False)),
-        "confidence": float(result.get("confidence", 0.0)),
-        "canonical_id": result.get("canonical_id", entity_a.get("id", "")),
+        "confidence": confidence,
+        "canonical_id": canonical_id,
         "rationale": result.get("rationale", ""),
     }
 
@@ -256,15 +270,15 @@ def process_results(
         from semantic_extraction import apply_coreference_hints
 
         catalogs = load_catalogs(catalog_dir)
-        events_path = os.path.join(catalog_dir, "..", "story", "events.json")
-        events_list = []
-        if os.path.isfile(events_path):
-            with open(events_path, "r", encoding="utf-8") as f:
-                events_list = json.load(f)
+        events_list = load_events(catalog_dir)
 
         merged_ids = apply_coreference_hints(
             catalogs, events_list, catalog_dir, hints_path
         )
+
+        # Persist mutated catalogs and events back to disk
+        save_catalogs(catalog_dir, catalogs)
+        save_events(catalog_dir, events_list)
         print(f"  Applied merges, removed IDs: {merged_ids}")
 
     return {
@@ -294,6 +308,66 @@ def _build_coreference_hints(merge_pairs: list[dict]) -> dict:
     return {"character_groups": groups}
 
 
+def apply_review_file(review_file: str, catalog_dir: str, dry_run: bool = False) -> dict:
+    """Read a human-reviewed dedup-review.json and apply approved merges.
+
+    Entries with ``"action": "merge"`` are converted to coreference hints
+    and applied.  Returns summary stats.
+    """
+    with open(review_file, "r", encoding="utf-8") as f:
+        entries = json.load(f)
+
+    merge_pairs = []
+    kept_separate = 0
+    pending = 0
+
+    for entry in entries:
+        action = entry.get("action")
+        if action == "merge":
+            merge_pairs.append({
+                "entity_a_id": entry["entity_a"],
+                "entity_b_id": entry["entity_b"],
+                "confidence": entry.get("confidence", 1.0),
+                "rationale": entry.get("rationale", "human-approved"),
+                "canonical_id": entry.get("canonical_id", entry["entity_a"]),
+                "canonical_name": entry.get("canonical_id", entry["entity_a"]),
+                "variant_name": entry["entity_b"] if entry.get("canonical_id", entry["entity_a"]) == entry["entity_a"] else entry["entity_a"],
+            })
+        elif action == "keep_separate":
+            kept_separate += 1
+        else:
+            pending += 1
+
+    merged = 0
+    if merge_pairs and not dry_run:
+        hints = _build_coreference_hints(merge_pairs)
+        hints_path = os.path.join(catalog_dir, "coreference-hints.json")
+
+        existing_groups = []
+        if os.path.isfile(hints_path):
+            with open(hints_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+            existing_groups = existing.get("character_groups", [])
+
+        existing_groups.extend(hints["character_groups"])
+        merged_hints = {"character_groups": existing_groups}
+
+        with open(hints_path, "w", encoding="utf-8") as f:
+            json.dump(merged_hints, f, indent=2)
+
+        from semantic_extraction import apply_coreference_hints
+
+        catalogs = load_catalogs(catalog_dir)
+        events_list = load_events(catalog_dir)
+        apply_coreference_hints(catalogs, events_list, catalog_dir, hints_path)
+        save_catalogs(catalog_dir, catalogs)
+        save_events(catalog_dir, events_list)
+        merged = len(merge_pairs)
+        print(f"  Applied {merged} human-approved merges")
+
+    return {"merged": merged, "kept_separate": kept_separate, "pending": pending}
+
+
 def _entity_lookup(catalogs: dict) -> dict[str, dict]:
     """Build a lookup dict of entity_id -> entity from catalogs."""
     lookup = {}
@@ -318,10 +392,30 @@ def main():
         help="Score pairs but don't write any files",
     )
     parser.add_argument("--config", default="config/llm.json", help="LLM config file")
+    parser.add_argument(
+        "--apply-review",
+        action="store_true",
+        help="Apply merges from a human-reviewed dedup-review.json",
+    )
     args = parser.parse_args()
 
     print("=== Dedup Audit ===")
     print(f"Catalog dir: {args.catalog_dir}")
+
+    # --apply-review mode: consume a human-reviewed file
+    if args.apply_review:
+        if not os.path.isfile(args.review_file):
+            print(f"  Review file not found: {args.review_file}")
+            return
+        print(f"\nApplying reviewed merges from {args.review_file}...")
+        summary = apply_review_file(
+            args.review_file, args.catalog_dir, dry_run=args.dry_run,
+        )
+        print(f"\n=== Summary ===")
+        print(f"  Merged:         {summary['merged']}")
+        print(f"  Kept separate:  {summary['kept_separate']}")
+        print(f"  Pending:        {summary['pending']}")
+        return
 
     # Phase 1: Load catalogs and generate candidates
     print("\n[Phase 1] Generating candidates...")

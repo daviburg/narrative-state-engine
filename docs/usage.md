@@ -983,7 +983,11 @@ python tools/dedup_audit.py --auto-merge
 python tools/dedup_audit.py --review-file path/to/review.json
 ```
 
-Review `dedup-review.json` for medium-confidence pairs. Set `"action": "merge"` or `"action": "keep_separate"` for each entry, then re-run with `--auto-merge` to apply approved merges.
+Review `dedup-review.json` for medium-confidence pairs. Set `"action": "merge"` or `"action": "keep_separate"` for each entry, then apply approved merges:
+
+```bash
+python tools/dedup_audit.py --apply-review
+```
 
 ### Incremental Mode (Ingest)
 
