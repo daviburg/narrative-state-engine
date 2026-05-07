@@ -1549,6 +1549,45 @@ def _is_misclassified_location(entity: dict) -> bool:
     return False
 
 
+def _find_cross_catalog_type_conflict(entity: dict, catalogs: dict) -> dict | None:
+    """Check if entity name already exists in catalogs under a different type.
+
+    Only applies to entities marked is_new=True.  Returns the conflicting
+    existing catalog entry if found, or None.
+    """
+    if not entity.get("is_new", True):
+        return None
+    incoming_name = entity.get("name", "").strip().lower()
+    if not incoming_name:
+        return None
+    incoming_stripped = _strip_leading_article(incoming_name).strip()
+    incoming_type = entity.get("type", "")
+
+    for _filename, entities in catalogs.items():
+        for existing in entities:
+            existing_type = existing.get("type", "")
+            if existing_type == incoming_type:
+                continue
+            # Check primary name
+            existing_name = existing.get("name", "").strip().lower()
+            existing_stripped = _strip_leading_article(existing_name).strip()
+            if incoming_name == existing_name or incoming_stripped == existing_stripped:
+                return existing
+            # Check aliases (stable_attributes.aliases.value)
+            sa_aliases = existing.get("stable_attributes", {}).get("aliases")
+            if isinstance(sa_aliases, dict):
+                val = sa_aliases.get("value", "")
+                alias_list = val if isinstance(val, list) else [a.strip() for a in str(val).split(",") if a.strip()]
+            else:
+                alias_list = []
+            for alias in alias_list:
+                alias_lower = alias.strip().lower()
+                alias_stripped = _strip_leading_article(alias_lower).strip()
+                if incoming_name == alias_lower or incoming_stripped == alias_stripped:
+                    return existing
+    return None
+
+
 # Meta-labels that should never be accepted as PC aliases (#186)
 _PC_ALIAS_BLOCKLIST = {
     "player character", "pc", "player", "the player",
@@ -2125,6 +2164,25 @@ def extract_and_merge(
             continue
         _type_filtered.append(entity_ref)
     qualified = _type_filtered
+
+    # Reject entities whose name already exists in catalogs under a different type (#303)
+    _cross_catalog_filtered = []
+    for entity_ref in qualified:
+        conflict = _find_cross_catalog_type_conflict(entity_ref, catalogs)
+        if conflict:
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as {entity_ref.get('type')} "
+                  f"— already exists as {conflict.get('type')} "
+                  f"(id={conflict.get('id')})", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "cross_catalog_type_conflict",
+                "conflicting_id": conflict.get("id"),
+            })
+            continue
+        _cross_catalog_filtered.append(entity_ref)
+    qualified = _cross_catalog_filtered
 
     # --- Pre-compute task inputs for phases 2-4 ---
 
