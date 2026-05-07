@@ -447,8 +447,8 @@ def generate_item_summary(llm_client, item_input: dict) -> str:
 
 
 def _estimate_tokens(prompt: str, response: str) -> int:
-    """Rough token estimate (~4 chars per token)."""
-    return (len(prompt) + len(response)) // 4
+    """Rough token estimate (~3 chars per token)."""
+    return (len(prompt) + len(response)) // 3
 
 
 def _parse_biography_response(raw_response: str, fallback_name: str) -> tuple[str, str]:

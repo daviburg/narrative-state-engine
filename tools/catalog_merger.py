@@ -360,8 +360,13 @@ def format_known_entities(catalogs: dict) -> str:
 
 
 def _estimate_tokens(text: str) -> int:
-    """Rough token estimate: ~4 characters per token."""
-    return max(1, len(text) // 4)
+    """Rough token estimate: ~3 characters per token.
+
+    BPE tokenizers (Qwen, Llama, GPT) average 2.5–3.5 characters per
+    token depending on content.  Using 3 as the divisor is conservative
+    enough to avoid under-counting while keeping the estimate cheap.
+    """
+    return max(1, len(text) // 3)
 
 
 def _format_entity_full(entity: dict) -> str:
@@ -984,6 +989,8 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
             break
 
     # Guard: repair empty first_seen_turn before merge (#241)
+    # Primary stamping is now done in _coerce_entity_fields (programmatic
+    # layer), but keep this as a safety net for direct merge_entity callers.
     fst = entity.get("first_seen_turn")
     if not fst or (isinstance(fst, str) and not re.match(r"^turn-[0-9]{3,}$", fst)):
         fallback = entity.get("last_updated_turn", "")

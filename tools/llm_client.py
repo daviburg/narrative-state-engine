@@ -428,10 +428,36 @@ class LLMClient:
             {"role": "user", "content": user_prompt},
         ]
 
+        # --- Input budget pre-flight check ---
+        # Estimate whether input + requested output can fit in the context
+        # window.  Uses a conservative 3 chars/token heuristic.  Warns on
+        # tight fits; raises on clear overflows so callers can skip or trim.
+        effective_max = max_tokens if max_tokens is not None else self.max_tokens
+        if self.context_length:
+            input_chars = len(system_prompt) + len(user_prompt)
+            estimated_input = max(1, input_chars // 3)
+            # ~50 tokens for chat-template framing (role markers, <think> block)
+            estimated_total = estimated_input + effective_max + 50
+            headroom = self.context_length - estimated_total
+            if headroom < 0:
+                print(
+                    f"  WARNING: Input ({estimated_input} tok) + output "
+                    f"({effective_max} tok) exceeds context window "
+                    f"({self.context_length} tok) by ~{-headroom} tokens. "
+                    f"Output will likely be truncated.",
+                    file=sys.stderr,
+                )
+            elif headroom < self.context_length * 0.05:
+                print(
+                    f"  NOTICE: Tight context budget — input ~{estimated_input} "
+                    f"tok + output {effective_max} tok, only ~{headroom} tok "
+                    f"headroom in {self.context_length} tok window.",
+                    file=sys.stderr,
+                )
+
         last_error = None
         for attempt in range(self.retry_attempts):
             try:
-                effective_max = max_tokens if max_tokens is not None else self.max_tokens
                 effective_temp = temperature if temperature is not None else self.temperature
 
                 # Ollama streaming path — uses native /api/chat with
