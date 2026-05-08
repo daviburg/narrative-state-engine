@@ -100,13 +100,16 @@ async def async_client(_patch_globals):
     """Create an httpx AsyncClient bound to the FastAPI app with a running batch worker."""
     # We can't use the lifespan (it tries to load the real model),
     # so start the batch worker manually.
+    # Note: httpx.ASGITransport does not trigger ASGI lifespan events (it only
+    # handles HTTP scope), so the app's lifespan callback won't run here.
     import httpx
 
     ov_serve.batch_queue = asyncio.Queue()
     task = asyncio.create_task(ov_serve.batch_worker())
 
+    transport = httpx.ASGITransport(app=ov_serve.app, raise_app_exceptions=False)
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ov_serve.app),
+        transport=transport,
         base_url="http://testserver",
     ) as client:
         yield client
@@ -144,8 +147,9 @@ async def test_health_endpoint(_patch_globals):
     ov_serve.batch_queue = asyncio.Queue()
     task = asyncio.create_task(ov_serve.batch_worker())
 
+    transport = httpx.ASGITransport(app=ov_serve.app, raise_app_exceptions=False)
     async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=ov_serve.app),
+        transport=transport,
         base_url="http://testserver",
     ) as client:
         resp = await client.get("/health")
@@ -199,12 +203,25 @@ async def test_timeout_keep_alive_default():
 @pytest.mark.asyncio
 async def test_cli_timeout_keep_alive_forwarded_to_uvicorn():
     """Verify --timeout-keep-alive is parsed and forwarded to uvicorn.run()."""
-    with patch.object(ov_serve, "uvicorn") as mock_uvicorn:
-        ov_serve.main([
-            "--model-dir", "/tmp/fake-model",
-            "--timeout-keep-alive", "300",
-        ])
-        mock_uvicorn.run.assert_called_once()
-        call_kwargs = mock_uvicorn.run.call_args
-        assert call_kwargs.kwargs.get("timeout_keep_alive") == 300 or \
-            call_kwargs[1].get("timeout_keep_alive") == 300
+    # Save globals that main() mutates so other tests are not affected.
+    saved = {
+        attr: getattr(ov_serve, attr)
+        for attr in (
+            "MODEL_DIR", "CACHE_DIR", "MODEL_NAME", "BATCH_WAIT_MS",
+            "MAX_BATCH_SIZE", "CACHE_SIZE_GB", "REQUEST_TIMEOUT_S",
+            "TIMEOUT_KEEP_ALIVE", "EXTRA_STOP_TOKEN_IDS",
+        )
+    }
+    try:
+        with patch.object(ov_serve, "uvicorn") as mock_uvicorn:
+            ov_serve.main([
+                "--model-dir", "/tmp/fake-model",
+                "--timeout-keep-alive", "300",
+            ])
+            mock_uvicorn.run.assert_called_once()
+            call_kwargs = mock_uvicorn.run.call_args
+            assert call_kwargs.kwargs.get("timeout_keep_alive") == 300 or \
+                call_kwargs[1].get("timeout_keep_alive") == 300
+    finally:
+        for attr, val in saved.items():
+            setattr(ov_serve, attr, val)
