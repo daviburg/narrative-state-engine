@@ -2188,6 +2188,26 @@ def extract_and_merge(
     else:
         discovered = [e for e in discovered if isinstance(e, dict)]
 
+    # Expand compact discovery entries (#310): entries with only
+    # existing_id + confidence need name/type filled from catalogs
+    # so downstream code (detail selection, relationship builder) works.
+    _compact_count = 0
+    for entity in discovered:
+        if entity.get("existing_id") and not entity.get("name"):
+            _compact_count += 1
+            result = find_entity_by_id(catalogs, entity["existing_id"])
+            if result:
+                _, cat_entry = result
+                entity.setdefault("name", cat_entry.get("name", entity["existing_id"]))
+                entity.setdefault("type", cat_entry.get("type", "concept"))
+            else:
+                entity.setdefault("name", entity["existing_id"])
+                entity.setdefault("type", "concept")
+            entity.setdefault("is_new", False)
+            entity.setdefault("proposed_id", None)
+    if _compact_count:
+        print(f"  Expanded {_compact_count} compact discovery entries from catalog")
+
     # Post-process discovery results: ensure provenance and fix ID prefixes
     for entity in discovered:
         # Ensure source_turn is always set (smaller models may omit it)
