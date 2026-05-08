@@ -2,6 +2,9 @@
 
 Verifies that two sequential POST requests to /v1/chat/completions succeed
 without the TCP connection being dropped between them.
+
+Requires: fastapi, uvicorn, httpx, pytest-asyncio (server extras, not in
+core requirements.txt).  The module is skipped in CI where these are absent.
 """
 
 import asyncio
@@ -11,7 +14,12 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
-import pytest_asyncio
+
+# Skip the entire module when server-side dependencies are missing (CI).
+pytest.importorskip("fastapi")
+pytest.importorskip("httpx")
+pytest.importorskip("uvicorn")
+pytest_asyncio = pytest.importorskip("pytest_asyncio")
 
 # ---------------------------------------------------------------------------
 # Mock openvino_genai before importing ov_serve — save/restore to avoid
