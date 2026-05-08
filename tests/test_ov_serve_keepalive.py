@@ -225,3 +225,92 @@ async def test_cli_timeout_keep_alive_forwarded_to_uvicorn():
     finally:
         for attr, val in saved.items():
             setattr(ov_serve, attr, val)
+
+
+# ---------------------------------------------------------------------------
+# Prefix caching tests (#318)
+# ---------------------------------------------------------------------------
+
+
+def test_prefix_caching_disabled_by_default():
+    """Prefix caching defaults to False to avoid pipeline stalls (#318)."""
+    assert ov_serve.ENABLE_PREFIX_CACHING is False
+
+
+@pytest.mark.asyncio
+async def test_health_reports_prefix_caching(async_client):
+    """Health endpoint should report prefix_caching status (#318)."""
+    resp = await async_client.get("/health")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert "prefix_caching" in data
+    assert data["prefix_caching"] is False
+
+
+@pytest.mark.asyncio
+async def test_cli_prefix_caching_flag():
+    """--prefix-caching flag sets ENABLE_PREFIX_CACHING to True (#318)."""
+    saved = {
+        attr: getattr(ov_serve, attr)
+        for attr in (
+            "MODEL_DIR", "CACHE_DIR", "MODEL_NAME", "BATCH_WAIT_MS",
+            "MAX_BATCH_SIZE", "CACHE_SIZE_GB", "REQUEST_TIMEOUT_S",
+            "TIMEOUT_KEEP_ALIVE", "EXTRA_STOP_TOKEN_IDS",
+            "ENABLE_PREFIX_CACHING",
+        )
+    }
+    try:
+        with patch.object(ov_serve, "uvicorn") as mock_uvicorn:
+            ov_serve.main([
+                "--model-dir", "/tmp/fake-model",
+                "--prefix-caching",
+            ])
+            assert ov_serve.ENABLE_PREFIX_CACHING is True
+    finally:
+        for attr, val in saved.items():
+            setattr(ov_serve, attr, val)
+
+
+@pytest.mark.asyncio
+async def test_cli_no_prefix_caching_by_default():
+    """Without --prefix-caching flag, ENABLE_PREFIX_CACHING stays False (#318)."""
+    saved = {
+        attr: getattr(ov_serve, attr)
+        for attr in (
+            "MODEL_DIR", "CACHE_DIR", "MODEL_NAME", "BATCH_WAIT_MS",
+            "MAX_BATCH_SIZE", "CACHE_SIZE_GB", "REQUEST_TIMEOUT_S",
+            "TIMEOUT_KEEP_ALIVE", "EXTRA_STOP_TOKEN_IDS",
+            "ENABLE_PREFIX_CACHING",
+        )
+    }
+    try:
+        with patch.object(ov_serve, "uvicorn") as mock_uvicorn:
+            ov_serve.main([
+                "--model-dir", "/tmp/fake-model",
+            ])
+            assert ov_serve.ENABLE_PREFIX_CACHING is False
+    finally:
+        for attr, val in saved.items():
+            setattr(ov_serve, attr, val)
+
+
+@pytest.mark.asyncio
+async def test_identical_then_different_prompts_succeed(async_client):
+    """Three identical prompts followed by a different one must all succeed (#318).
+
+    This is the exact reproduction pattern from the issue: 3× same prompt,
+    then 1× different prompt.  With prefix caching disabled, this should
+    not stall.
+    """
+    # 3 identical requests
+    for i in range(3):
+        resp = await async_client.post(
+            "/v1/chat/completions", json=_chat_payload("Identical prompt")
+        )
+        assert resp.status_code == 200, f"Identical request {i} failed: {resp.text}"
+
+    # 1 different request — this is the one that hung with prefix caching
+    resp = await async_client.post(
+        "/v1/chat/completions", json=_chat_payload("Different prompt now")
+    )
+    assert resp.status_code == 200, f"Different request failed: {resp.text}"

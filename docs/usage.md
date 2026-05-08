@@ -365,7 +365,11 @@ The included `server/ov_serve.py` provides:
 - **Continuous batching** — queues concurrent requests and processes them in
   batches via `ContinuousBatchingPipeline` for higher aggregate throughput.
 - **Prefix caching** — reuses KV cache for shared prompt prefixes across
-  requests in the same batch.
+  requests in the same batch.  **Disabled by default** (#318) because
+  `ContinuousBatchingPipeline` can stall after processing repeated identical
+  prompts followed by a different prompt.  Enable with `--prefix-caching` if
+  your workload benefits and you can tolerate occasional stalls (the timeout
+  watchdog will recover automatically).
 - **Robust output parsing** — strips any residual `<think>` blocks before
   returning content (fence stripping is handled client-side by `llm_client.py`).
 - **HTTP keep-alive** (#316) — defaults to 120-second keep-alive timeout,

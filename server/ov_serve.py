@@ -43,6 +43,7 @@ REQUEST_TIMEOUT_S = 600  # Batch generation timeout (seconds); 0 = no timeout
 _pipeline_degraded = False  # Set True if reload fails; surfaced via /health
 EXTRA_STOP_TOKEN_IDS: set = set()  # Additional stop token IDs beyond EOS
 TIMEOUT_KEEP_ALIVE = 120  # HTTP keep-alive timeout in seconds
+ENABLE_PREFIX_CACHING = False  # Disabled by default — causes stalls (#318)
 
 # --- Request/Response Models ---
 
@@ -179,7 +180,7 @@ async def _reload_pipeline():
     try:
         sched_cfg = ov_genai.SchedulerConfig()
         sched_cfg.cache_size = CACHE_SIZE_GB
-        sched_cfg.enable_prefix_caching = True
+        sched_cfg.enable_prefix_caching = ENABLE_PREFIX_CACHING
         pipeline = await loop.run_in_executor(
             None,
             lambda: ov_genai.ContinuousBatchingPipeline(
@@ -203,7 +204,7 @@ async def lifespan(app: FastAPI):
 
     sched_cfg = ov_genai.SchedulerConfig()
     sched_cfg.cache_size = CACHE_SIZE_GB
-    sched_cfg.enable_prefix_caching = True
+    sched_cfg.enable_prefix_caching = ENABLE_PREFIX_CACHING
 
     pipeline = ov_genai.ContinuousBatchingPipeline(
         MODEL_DIR, sched_cfg, 'GPU', {'CACHE_DIR': CACHE_DIR}
@@ -211,7 +212,8 @@ async def lifespan(app: FastAPI):
     tokenizer = pipeline.get_tokenizer()
 
     elapsed = time.perf_counter() - start
-    print(f"Model loaded in {elapsed:.1f}s (prefix caching enabled, batch_wait={BATCH_WAIT_MS}ms, max_batch={MAX_BATCH_SIZE}, request_timeout={REQUEST_TIMEOUT_S}s)")
+    prefix_status = "enabled" if ENABLE_PREFIX_CACHING else "disabled"
+    print(f"Model loaded in {elapsed:.1f}s (prefix_caching={prefix_status}, batch_wait={BATCH_WAIT_MS}ms, max_batch={MAX_BATCH_SIZE}, request_timeout={REQUEST_TIMEOUT_S}s)")
 
     # Start batch worker
     batch_queue = asyncio.Queue()
@@ -245,6 +247,7 @@ async def health():
         "model": MODEL_NAME,
         "queue_depth": queue_size,
         "request_timeout_s": REQUEST_TIMEOUT_S,
+        "prefix_caching": ENABLE_PREFIX_CACHING,
     }
 
 @app.get("/v1/models")
@@ -364,6 +367,8 @@ def build_parser():
                         help="Comma-separated extra stop token IDs (beyond EOS)")
     parser.add_argument("--timeout-keep-alive", type=int, default=TIMEOUT_KEEP_ALIVE,
                         help="HTTP keep-alive timeout in seconds (default: 120)")
+    parser.add_argument("--prefix-caching", action="store_true", default=False,
+                        help="Enable KV-cache prefix caching (disabled by default — may stall, see #318)")
     return parser
 
 
@@ -371,6 +376,7 @@ def main(argv=None):
     """Parse CLI args, configure globals, and start the server."""
     global MODEL_DIR, CACHE_DIR, MODEL_NAME, BATCH_WAIT_MS, MAX_BATCH_SIZE
     global CACHE_SIZE_GB, REQUEST_TIMEOUT_S, TIMEOUT_KEEP_ALIVE, EXTRA_STOP_TOKEN_IDS
+    global ENABLE_PREFIX_CACHING
 
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -383,6 +389,7 @@ def main(argv=None):
     CACHE_SIZE_GB = args.cache_size_gb
     REQUEST_TIMEOUT_S = args.request_timeout
     TIMEOUT_KEEP_ALIVE = args.timeout_keep_alive
+    ENABLE_PREFIX_CACHING = args.prefix_caching
     if args.stop_token_ids:
         EXTRA_STOP_TOKEN_IDS = {int(x.strip()) for x in args.stop_token_ids.split(",")}
 
