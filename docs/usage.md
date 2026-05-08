@@ -347,7 +347,11 @@ optimum-cli export openvino --model Qwen/Qwen3-8B --weight-format int4_sym \
     --trust-remote-code ./models/qwen3-8b-int4-ov
 
 # Start the server using the included ov_serve.py (#299)
-python server/ov_serve.py --model ./models/qwen3-8b-int4-ov --port 8000
+python server/ov_serve.py --model-dir ./models/qwen3-8b-int4-ov --port 8000
+
+# For remote clients (multi-turn extraction), increase keep-alive timeout (#316)
+python server/ov_serve.py --model-dir ./models/qwen3-8b-int4-ov --port 8000 \
+    --host 0.0.0.0 --timeout-keep-alive 120
 ```
 
 The included `server/ov_serve.py` provides:
@@ -364,6 +368,9 @@ The included `server/ov_serve.py` provides:
   requests in the same batch.
 - **Robust output parsing** — strips any residual `<think>` blocks before
   returning content (fence stripping is handled client-side by `llm_client.py`).
+- **HTTP keep-alive** (#316) — defaults to 120-second keep-alive timeout,
+  preventing TCP connection drops between sequential extraction requests.
+  Configurable via `--timeout-keep-alive`.
 
 Configure `config/llm.json` on the client machine:
 
