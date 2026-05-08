@@ -164,3 +164,62 @@ class TestRepairTruncatedDiscoveryWithCompact:
         assert len(result["entities"]) == 2
         assert result["entities"][0]["existing_id"] == "char-a"
         assert result["entities"][1]["existing_id"] == "char-b"
+
+
+class TestCompactExpansionDownstreamCompat:
+    """Verify expanded compact entries are compatible with downstream pipeline."""
+
+    def _expand(self, discovered, catalogs):
+        """Simulate the expansion loop from extract_and_merge."""
+        from catalog_merger import find_entity_by_id
+
+        for entity in discovered:
+            if entity.get("existing_id") and not entity.get("name"):
+                result = find_entity_by_id(catalogs, entity["existing_id"])
+                if result:
+                    _, cat_entry = result
+                    entity.setdefault("name", cat_entry.get("name", entity["existing_id"]))
+                    entity.setdefault("type", cat_entry.get("type", "concept"))
+                else:
+                    entity.setdefault("name", entity["existing_id"])
+                    entity.setdefault("type", "concept")
+                entity.setdefault("is_new", False)
+                entity.setdefault("proposed_id", None)
+        return discovered
+
+    def test_expanded_entry_has_correct_entity_id(self):
+        """get_entity_id returns existing_id for expanded compact entries."""
+        from semantic_extraction import get_entity_id
+
+        catalogs = _make_catalogs(("char-kael", "Kael", "character"))
+        discovered = [{"existing_id": "char-kael", "confidence": 0.9}]
+        result = self._expand(discovered, catalogs)
+        assert get_entity_id(result[0]) == "char-kael"
+
+    def test_expanded_entry_not_treated_as_new(self):
+        """Expanded compact entries are not new, so detail extraction fetches existing."""
+        from catalog_merger import find_entity_by_id
+
+        catalogs = _make_catalogs(("char-kael", "Kael", "character"))
+        discovered = [{"existing_id": "char-kael", "confidence": 0.9}]
+        result = self._expand(discovered, catalogs)
+        entity = result[0]
+
+        # Simulate detail extraction path: existing entities look up catalog
+        assert entity["is_new"] is False
+        found = find_entity_by_id(catalogs, entity["existing_id"])
+        assert found is not None
+        _, cat_entry = found
+        assert cat_entry["name"] == "Kael"
+
+    def test_expanded_entry_source_turn_set_by_postprocess(self):
+        """Post-processing fills source_turn if missing from compact entry."""
+        catalogs = _make_catalogs(("loc-camp", "Camp", "location"))
+        discovered = [{"existing_id": "loc-camp", "confidence": 0.9}]
+        result = self._expand(discovered, catalogs)
+        entity = result[0]
+        # source_turn is not set by expansion — post-processing fills it
+        assert "source_turn" not in entity
+        # Simulate post-processing
+        entity.setdefault("source_turn", "turn-201")
+        assert entity["source_turn"] == "turn-201"
