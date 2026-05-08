@@ -345,7 +345,8 @@ async def chat_completions(request: ChatCompletionRequest):
 
     return response
 
-if __name__ == "__main__":
+def build_parser():
+    """Build the CLI argument parser."""
     parser = argparse.ArgumentParser(description="OpenVINO GenAI Server")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--host", type=str, default="127.0.0.1",
@@ -363,7 +364,16 @@ if __name__ == "__main__":
                         help="Comma-separated extra stop token IDs (beyond EOS)")
     parser.add_argument("--timeout-keep-alive", type=int, default=TIMEOUT_KEEP_ALIVE,
                         help="HTTP keep-alive timeout in seconds (default: 120)")
-    args = parser.parse_args()
+    return parser
+
+
+def main(argv=None):
+    """Parse CLI args, configure globals, and start the server."""
+    global MODEL_DIR, CACHE_DIR, MODEL_NAME, BATCH_WAIT_MS, MAX_BATCH_SIZE
+    global CACHE_SIZE_GB, REQUEST_TIMEOUT_S, TIMEOUT_KEEP_ALIVE, EXTRA_STOP_TOKEN_IDS
+
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     MODEL_DIR = args.model_dir
     CACHE_DIR = MODEL_DIR + "/ov_cache"
@@ -378,3 +388,7 @@ if __name__ == "__main__":
 
     uvicorn.run(app, host=args.host, port=args.port,
                timeout_keep_alive=TIMEOUT_KEEP_ALIVE)
+
+
+if __name__ == "__main__":
+    main()

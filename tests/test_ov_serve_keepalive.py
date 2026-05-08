@@ -14,14 +14,24 @@ import pytest
 import pytest_asyncio
 
 # ---------------------------------------------------------------------------
-# Mock openvino_genai before importing ov_serve
+# Mock openvino_genai before importing ov_serve — save/restore to avoid
+# leaking the mock into other test modules.
 # ---------------------------------------------------------------------------
+_orig_ov_module = sys.modules.get("openvino_genai")
 _mock_ov = MagicMock()
 sys.modules["openvino_genai"] = _mock_ov
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "server"))
 
 import ov_serve  # noqa: E402
+
+
+def teardown_module():
+    """Restore original openvino_genai module entry after all tests run."""
+    if _orig_ov_module is not None:
+        sys.modules["openvino_genai"] = _orig_ov_module
+    else:
+        sys.modules.pop("openvino_genai", None)
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -97,7 +107,7 @@ async def async_client(_patch_globals):
     try:
         await task
     except asyncio.CancelledError:
-        pass
+        pass  # Expected: we just cancelled the batch worker
 
 
 # ---------------------------------------------------------------------------
@@ -136,7 +146,7 @@ async def test_health_endpoint(_patch_globals):
     try:
         await task
     except asyncio.CancelledError:
-        pass
+        pass  # Expected: we just cancelled the batch worker
 
     assert resp.status_code == 200
     data = resp.json()
@@ -179,26 +189,14 @@ async def test_timeout_keep_alive_default():
 
 
 @pytest.mark.asyncio
-async def test_cli_timeout_keep_alive_argument():
-    """Verify --timeout-keep-alive is parsed and forwarded to uvicorn."""
-    with patch("uvicorn.run") as mock_run:
-        test_args = [
-            "ov_serve.py",
+async def test_cli_timeout_keep_alive_forwarded_to_uvicorn():
+    """Verify --timeout-keep-alive is parsed and forwarded to uvicorn.run()."""
+    with patch.object(ov_serve, "uvicorn") as mock_uvicorn:
+        ov_serve.main([
             "--model-dir", "/tmp/fake-model",
             "--timeout-keep-alive", "300",
-        ]
-        with patch("sys.argv", test_args):
-            # Re-run the __main__ block logic via argparse
-            parser = __import__("argparse").ArgumentParser()
-            parser.add_argument("--port", type=int, default=8000)
-            parser.add_argument("--host", type=str, default="127.0.0.1")
-            parser.add_argument("--model-dir", type=str, required=True)
-            parser.add_argument("--batch-wait-ms", type=int, default=50)
-            parser.add_argument("--max-batch-size", type=int, default=8)
-            parser.add_argument("--cache-size-gb", type=int, default=8)
-            parser.add_argument("--request-timeout", type=int, default=600)
-            parser.add_argument("--stop-token-ids", type=str, default="")
-            parser.add_argument("--timeout-keep-alive", type=int, default=120)
-            args = parser.parse_args(test_args[1:])
-
-            assert args.timeout_keep_alive == 300
+        ])
+        mock_uvicorn.run.assert_called_once()
+        call_kwargs = mock_uvicorn.run.call_args
+        assert call_kwargs.kwargs.get("timeout_keep_alive") == 300 or \
+            call_kwargs[1].get("timeout_keep_alive") == 300
