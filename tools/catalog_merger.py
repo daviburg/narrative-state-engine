@@ -473,10 +473,13 @@ def _find_mentioned_entities(
         for name in _entity_names(entity):
             if len(name) < _MIN_NAME_LENGTH_FOR_MATCH:
                 continue
-            # Skip single common-word names that cause false positives
-            if " " not in name and name.lower() in _COMMON_WORD_BLOCKLIST:
+            # Skip common-word names that cause false positives.
+            # Strip leading articles so "the land" -> "land" is caught too.
+            name_lower = name.lower()
+            _stripped = re.sub(r"^(?:the|a|an)\s+", "", name_lower)
+            if " " not in _stripped and _stripped in _COMMON_WORD_BLOCKLIST:
                 continue
-            escaped = re.escape(name.lower())
+            escaped = re.escape(name_lower)
             if " " in name:
                 # Multi-word: non-word boundaries at both ends
                 pattern = r"(?<!\w)" + escaped + r"(?!\w)"

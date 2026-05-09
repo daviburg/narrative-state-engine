@@ -694,6 +694,21 @@ class TestCommonWordBlocklist:
         mentioned = _find_mentioned_entities(entities, text)
         assert mentioned == {"char-anya", "char-borin"}
 
+    def test_article_prefix_blocklisted_word_skipped(self):
+        """Names like 'the land' should be blocked after stripping articles."""
+        entities = [
+            _make_entity("loc-land", "the land", etype="location"),
+            _make_entity("loc-field", "The Field", etype="location"),
+            _make_entity("loc-haven", "The Thornhaven", etype="location"),
+        ]
+        text = "They crossed the land and the field to reach The Thornhaven."
+        mentioned = _find_mentioned_entities(entities, text)
+        # "the land" -> "land" (blocklisted), "The Field" -> "field" (blocklisted)
+        assert "loc-land" not in mentioned
+        assert "loc-field" not in mentioned
+        # "The Thornhaven" -> "thornhaven" (not blocklisted, single word) — matches
+        assert "loc-haven" in mentioned
+
 
 # ---------------------------------------------------------------------------
 # One-hop expansion cap (#297)
