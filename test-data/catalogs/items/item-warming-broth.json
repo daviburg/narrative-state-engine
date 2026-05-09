@@ -1,0 +1,25 @@
+{
+  "id": "item-warming-broth",
+  "name": "warming broth",
+  "type": "item",
+  "identity": "A restorative item consumed to regain strength and vitality during the journey.",
+  "current_status": "Consumed by the player character, contributing to their recovery and ability to assist in camp tasks.",
+  "status_updated_turn": "turn-033",
+  "stable_attributes": {
+    "description": {
+      "value": "A nourishing broth made from local ingredients, designed to restore energy and endurance.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-033"
+    }
+  },
+  "volatile_state": {
+    "condition": "Consumed and effective in restoring strength",
+    "location": "Campfire area",
+    "current_activity": "Restored the player's strength to assist in camp tasks",
+    "last_updated_turn": "turn-033"
+  },
+  "first_seen_turn": "turn-033",
+  "last_updated_turn": "turn-033",
+  "relationships": []
+}

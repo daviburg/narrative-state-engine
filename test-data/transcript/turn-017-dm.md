@@ -1,0 +1,3 @@
+# turn-017 — DM
+
+You begin to speak, trying a few common tongues, then elven, each attempt met with blank stares. Your words, respectful and measured, seem to fall on deaf ears, or perhaps they are simply unintelligible to these people. The elder, a grizzled man with eyes like chips of flint, merely cocks his head, a frown deepening the lines on his face. He grunts something dismissive in his guttural tongue, waving a calloused hand. One of your original captors roughly shoves you forward, indicating you should kneel before the elder. The other villagers watch with cold, unreadable expressions, their hands never straying far from their crude weapons.

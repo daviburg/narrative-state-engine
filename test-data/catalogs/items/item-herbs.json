@@ -1,0 +1,66 @@
+{
+  "id": "item-herbs",
+  "name": "the longhouse herbs",
+  "type": "item",
+  "identity": "A collection of dried herbs stored in a hidden location, containing specific varieties like moonpetal, frost-bite balm, and winter's breath. These herbs are central to communal activities and are used for both practical and ritual purposes.",
+  "current_status": "Being meticulously sorted and stored in woven pouches by the player and other women, with the herbs later used in a communal meal and ritual procedures.",
+  "status_updated_turn": "turn-246",
+  "stable_attributes": {
+    "species": {
+      "value": "plant-based",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-247"
+    },
+    "aliases": {
+      "value": [
+        "dried herbs",
+        "longhouse herbs",
+        "warding herbs",
+        "herbs",
+        "moonpetal",
+        "a small cache of dried herbs"
+      ],
+      "inference": false,
+      "source_turn": "turn-043"
+    },
+    "race": {
+      "value": "n/a",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-247"
+    },
+    "class": {
+      "value": "ritual consumable",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-247"
+    },
+    "description": {
+      "value": "A collection of dried herbs stored in a hidden location, containing both familiar and potent varieties.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-087"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "being sorted and stored in woven pouches for ritual use, with precise preparation instructions for communal healing procedures",
+    "location": "hidden cache within the camp",
+    "condition": "Stable",
+    "last_updated_turn": "turn-246"
+  },
+  "first_seen_turn": "turn-040",
+  "last_updated_turn": "turn-246",
+  "relationships": [
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "stored_in",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-043",
+      "last_updated_turn": "turn-246"
+    }
+  ]
+}

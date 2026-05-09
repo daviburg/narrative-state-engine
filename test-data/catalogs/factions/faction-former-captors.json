@@ -1,0 +1,45 @@
+{
+  "id": "faction-former-captors",
+  "name": "the former captors",
+  "type": "faction",
+  "identity": "A group that previously held the player captive, now shown to have shifted from antagonists to allies by aiding the player's release and providing care.",
+  "current_status": "Assisting the player in their release from captivity by untangling icy vines and offering medicinal broth, indicating a change in their relationship.",
+  "status_updated_turn": "turn-029",
+  "stable_attributes": {
+    "role": {
+      "value": "Former captors who have since released the player and provided aid",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-029"
+    },
+    "appearance": {
+      "value": "Not explicitly described, but implied to be villagers with practical, survival-oriented attire",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-029"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Assisting the player in their release and providing medicinal care",
+    "location": "At the fire, during a gathering of villagers",
+    "condition": "Neutral and cooperative, with no signs of hostility",
+    "equipment": [
+      "icy vines (previously restraining the player)"
+    ],
+    "last_updated_turn": "turn-029"
+  },
+  "first_seen_turn": "turn-029",
+  "last_updated_turn": "turn-029",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "captured",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-029",
+      "last_updated_turn": "turn-029"
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "id": "faction-thorne-people",
+  "name": "Thorne People",
+  "type": "faction",
+  "identity": "Entity referenced in events (stub — auto-created from event data).",
+  "first_seen_turn": "turn-332",
+  "last_updated_turn": "turn-332",
+  "notes": "Auto-created by event-stub.",
+  "relationships": []
+}

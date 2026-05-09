@@ -1,0 +1,49 @@
+{
+  "id": "faction-caribou-herds",
+  "name": "Herds",
+  "type": "faction",
+  "identity": "A faction representing the herds and hunting practices of the tribe, crucial to sustenance and ecological balance. Their management of animal populations and hunting routes ensures the tribe's survival and growth, though recent pressures from southern tribes have led to leaner herds and necessitated adjustments in hunting strategies. The tribe now emphasizes collective shaping of the environment and decision-making over survival alone.",
+  "current_status": "Actively participating in council discussions on sustainable hunting practices, herd management, and ecological implications of new hunting routes. Highlighting the impact of southern tribes' pressure on herd health and the tribe's efforts to adapt through improved provisions, ecological balance, and new trade methods with southern tribes.",
+  "status_updated_turn": "turn-287",
+  "stable_attributes": {
+    "role": {
+      "value": "Hunting and sustainability",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-290"
+    },
+    "appearance": {
+      "value": "Not explicitly described, but associated with natural landscapes and hunting grounds",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-290"
+    },
+    "movement_patterns": {
+      "value": "Seasonal migrations with earlier and more urgent timing, primarily north and west",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-191"
+    },
+    "aliases": {
+      "value": [
+        "Herds",
+        "Hunters",
+        "Sustainers",
+        "caribou herds"
+      ],
+      "inference": false,
+      "source_turn": "turn-300"
+    }
+  },
+  "volatile_state": {
+    "condition": "Engaged and contributing to council discussions, with concerns about herd health and sustainability",
+    "location": "Council gathering in the longhouse",
+    "current_activity": "Providing insights on sustainable hunting and herd management, emphasizing the impact of southern tribes' pressure on herd health and the tribe's adjustments in hunting patterns and provisions. Discussing the need for ecological balance and new trade methods with southern tribes, as well as the tribe's evolving role in shaping the environment and collective decision-making.",
+    "last_updated_turn": "turn-287",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-189",
+  "last_updated_turn": "turn-287",
+  "notes": "Entity remains a faction representing the tribe's hunting and sustainability efforts. No new name or role changes detected. Updated identity to reflect the tribe's evolving focus on shaping the environment and collective decision-making.",
+  "relationships": []
+}

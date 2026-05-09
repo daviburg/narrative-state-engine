@@ -1,0 +1,243 @@
+[
+  {
+    "turn": 251,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 9.4,
+    "entity_count": 6,
+    "active": 0,
+    "passive": 6,
+    "spurious": 0,
+    "input_tokens_est": 12359,
+    "output_tokens_est": 285,
+    "error": null,
+    "entities": [
+      {
+        "name": "the man",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-the-man",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "Anya",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-anya",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the Shaman's Echo-Song",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-echo-song",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the healer",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-healer",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the pattern",
+        "type": "concept",
+        "is_new": false,
+        "existing_id": "item-geometric-plague",
+        "confidence": 0.9,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the clearing",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-clearing",
+        "confidence": 0.9,
+        "source_turn": "turn-251"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the man",
+        "Anya",
+        "the Shaman's Echo-Song",
+        "the healer",
+        "the pattern",
+        "the clearing"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 251,
+    "run": 2,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 5.2,
+    "entity_count": 7,
+    "active": 0,
+    "passive": 7,
+    "spurious": 0,
+    "input_tokens_est": 12359,
+    "output_tokens_est": 337,
+    "error": null,
+    "entities": [
+      {
+        "name": "the man",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-the-man",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "Anya",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-anya",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the Shaman's Echo-Song",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-echo-song",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the healer",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-healer",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the pattern",
+        "type": "concept",
+        "is_new": false,
+        "existing_id": "item-fragment-rhythm",
+        "confidence": 0.85,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the clearing",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-clearing",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the thawing landscape",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-thawing-earth",
+        "confidence": 0.9,
+        "source_turn": "turn-251"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the man",
+        "Anya",
+        "the Shaman's Echo-Song",
+        "the healer",
+        "the pattern",
+        "the clearing",
+        "the thawing landscape"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 251,
+    "run": 3,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 4.8,
+    "entity_count": 6,
+    "active": 1,
+    "passive": 4,
+    "spurious": 1,
+    "input_tokens_est": 12359,
+    "output_tokens_est": 341,
+    "error": null,
+    "entities": [
+      {
+        "name": "the man",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-the-man",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "Anya",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-anya",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the healer",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-healer",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the pattern",
+        "type": "concept",
+        "is_new": false,
+        "existing_id": null,
+        "proposed_id": "concept-the-pattern",
+        "description": "An alien, geometric affliction within the man that has been successfully disrupted and is now dissolving into irregular fragments.",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the clearing",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-clearing",
+        "confidence": 0.9,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the landscape",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-thawing-earth",
+        "confidence": 0.85,
+        "source_turn": "turn-251"
+      }
+    ],
+    "categories": {
+      "active": [
+        "the pattern"
+      ],
+      "passive": [
+        "the man",
+        "Anya",
+        "the healer",
+        "the clearing"
+      ],
+      "spurious": [
+        "the landscape"
+      ]
+    }
+  }
+]

@@ -1,0 +1,3 @@
+# turn-101 — DM
+
+You hold his gaze, your eyes soft but unwavering, a gentle challenge and an open question residing within their depths. The surprise in his eyes slowly softens, giving way to a deeper, more vulnerable emotion you haven't seen before. Without breaking eye contact, you gently reach for his hands, taking his calloused fingers in your own. The warmth of his skin, still cool from the arctic air but now flushed with a hint of embarrassment and something else, is a comforting anchor. You hold his gaze, a soft, expectant smile on your lips, silently inviting him to bridge the unspoken gap between you, to make the next move in this delicate dance. The sounds of the bustling camp fade into a distant hum, leaving only the quiet tension of your shared moment.

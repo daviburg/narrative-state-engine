@@ -1,0 +1,38 @@
+{
+  "id": "loc-shared-refuge",
+  "name": "the shared refuge",
+  "type": "location",
+  "identity": "A secluded sanctuary in the arctic wilderness where the player and the hunter retreat during the night. It symbolizes a safe haven and a space for intimacy, offering warmth and protection from the harsh environment.",
+  "current_status": "Serving as a private meeting ground for the player and the hunter, where they engage in acts of intimacy and strengthen their bond. The refuge is a contrast to the cold, dangerous outside world, and is now envisioned as a place to build a more secure and enchanted dwelling for their future child.",
+  "status_updated_turn": "turn-123",
+  "stable_attributes": {
+    "appearance": {
+      "value": "hidden from the arctic cold, surrounded by furs, intimate and warm",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-119"
+    },
+    "aliases": {
+      "value": [
+        "the sanctuary",
+        "night refuge"
+      ],
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-119"
+    }
+  },
+  "volatile_state": {
+    "condition": "warm and intimate",
+    "equipment": [
+      "shared furs"
+    ],
+    "location": "shared refuge",
+    "current_activity": "envisioning an enchanted dwelling for their child",
+    "last_updated_turn": "turn-123"
+  },
+  "first_seen_turn": "turn-119",
+  "last_updated_turn": "turn-123",
+  "notes": "The refuge's role as a sanctuary and its symbolic significance as a space for intimacy are inferred from the narrative. The new vision for an enchanted dwelling is inferred from the player's arcane arts and protective intentions.",
+  "relationships": []
+}

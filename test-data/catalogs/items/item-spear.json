@@ -1,0 +1,25 @@
+{
+  "id": "item-spear",
+  "name": "the spear",
+  "type": "item",
+  "identity": "A weapon used by the hunter, now laid aside after being sharpened near the main bonfire.",
+  "current_status": "Laid aside by the hunter after being sharpened, now with the hunter as the player offers him food.",
+  "status_updated_turn": "turn-071",
+  "stable_attributes": {
+    "description": {
+      "value": "A spear, likely used for hunting, previously being sharpened by the hunter.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-067"
+    }
+  },
+  "volatile_state": {
+    "condition": "Laid aside by the hunter",
+    "location": "With the hunter near the cooking fires",
+    "current_activity": "Player offers the hunter a bowl of stew, leading to a gesture of acknowledgment",
+    "last_updated_turn": "turn-071"
+  },
+  "first_seen_turn": "turn-067",
+  "last_updated_turn": "turn-071",
+  "relationships": []
+}

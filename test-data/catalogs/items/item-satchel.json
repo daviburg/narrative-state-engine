@@ -1,0 +1,35 @@
+{
+  "id": "item-satchel",
+  "name": "the satchel",
+  "type": "item",
+  "identity": "The satchel is the sole possession of a dying man, containing a single knife, dried roots, and a carved wooden figurine. It symbolizes his personal belongings and the remnants of his life before the sickness.",
+  "current_status": "The satchel remains open on the thawing earth, its contents left exposed as the healer monitors the dying man's condition. It is not touched again during the observation period.",
+  "status_updated_turn": "turn-237",
+  "stable_attributes": {
+    "appearance": {
+      "value": "A worn leather satchel, its contents spilled onto the ground",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-231"
+    },
+    "role": {
+      "value": "Personal possession of a dying man",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-231"
+    }
+  },
+  "volatile_state": {
+    "equipment": [
+      "single eating knife",
+      "pouch of dried roots",
+      "crudely carved wooden figurine"
+    ],
+    "location": "On the thawing earth, near the dying man",
+    "current_activity": "Remains open with contents spilled onto the ground, unattended during the observation period",
+    "last_updated_turn": "turn-237"
+  },
+  "first_seen_turn": "turn-231",
+  "last_updated_turn": "turn-237",
+  "relationships": []
+}

@@ -1,0 +1,44 @@
+{
+  "id": "loc-thawing-earth",
+  "name": "thawing earth",
+  "type": "location",
+  "identity": "A dynamic, evolving space for collaborative learning and knowledge-sharing, where the boundaries between teaching, observing, and practicing are blurred. It serves as a living classroom for understanding ecological balance, craftsmanship, and the cyclical nature of growth and decay.",
+  "current_status": "Serving as the central hub for teaching and demonstrating principles of sustainable design, ecological awareness, and collaborative knowledge-building. It hosts workshops, observations, and iterative learning processes.",
+  "status_updated_turn": "turn-294",
+  "stable_attributes": {
+    "appearance": {
+      "value": "thawing earth with hand-drawn sketches, a layered model of structures, and subtle signs of activity from workshops and demonstrations",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-294"
+    },
+    "location": {
+      "value": "near the longhouse and village outskirts",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-247"
+    },
+    "role": {
+      "value": "educational and collaborative space for ecological and structural learning",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-294"
+    }
+  },
+  "volatile_state": {
+    "condition": "active with collaborative energy and educational activity",
+    "equipment": [
+      "stylus and slate",
+      "layered model of structures",
+      "dirt sketches",
+      "tools for demonstration"
+    ],
+    "location": "thawing earth",
+    "current_activity": "Hosting workshops, demonstrations, and collaborative learning sessions on ecological principles, craftsmanship, and knowledge-sharing",
+    "last_updated_turn": "turn-294"
+  },
+  "first_seen_turn": "turn-247",
+  "last_updated_turn": "turn-294",
+  "notes": "",
+  "relationships": []
+}

@@ -1,0 +1,62 @@
+[
+  {
+    "turn": 251,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 4.9,
+    "entity_count": 0,
+    "active": 0,
+    "passive": 0,
+    "spurious": 0,
+    "input_tokens_est": 11531,
+    "output_tokens_est": 5,
+    "error": null,
+    "entities": [],
+    "categories": {
+      "active": [],
+      "passive": [],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 251,
+    "run": 2,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 0.1,
+    "entity_count": 0,
+    "active": 0,
+    "passive": 0,
+    "spurious": 0,
+    "input_tokens_est": 11531,
+    "output_tokens_est": 5,
+    "error": null,
+    "entities": [],
+    "categories": {
+      "active": [],
+      "passive": [],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 251,
+    "run": 3,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 0.1,
+    "entity_count": 0,
+    "active": 0,
+    "passive": 0,
+    "spurious": 0,
+    "input_tokens_est": 11531,
+    "output_tokens_est": 5,
+    "error": null,
+    "entities": [],
+    "categories": {
+      "active": [],
+      "passive": [],
+      "spurious": []
+    }
+  }
+]

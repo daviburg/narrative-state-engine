@@ -1,0 +1,29 @@
+{
+  "id": "item-rations-for-ten-days",
+  "name": "the rations for ten days",
+  "type": "item",
+  "identity": "A carefully prepared supply of food and provisions intended to sustain the tribe's departure party for ten days in the harsh mountain environment.",
+  "current_status": "Packed and assembled as part of the tribe's preparation for the expedition, stored securely within the longhouse before departure.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "description": {
+      "value": "A supply of dried and preserved food, including meat, grains, and foraged items, packed in quantities sufficient for ten days of travel.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-195"
+    }
+  },
+  "volatile_state": {
+    "location": "longhouse",
+    "equipment": [
+      "rations for ten days"
+    ],
+    "condition": "securely packed and stored",
+    "current_activity": "preparation for the expedition",
+    "last_updated_turn": "turn-211"
+  },
+  "first_seen_turn": "turn-195",
+  "last_updated_turn": "turn-211",
+  "notes": "",
+  "relationships": []
+}

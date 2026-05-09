@@ -1,0 +1,36 @@
+{
+  "id": "item-crude-tools",
+  "name": "crude tools",
+  "type": "item",
+  "identity": "Basic tools used by villagers for survival tasks, characterized by their simplicity and utility in daily labor.",
+  "current_status": "Being sharpened by villagers as part of their efforts to prepare for the coming cold season.",
+  "status_updated_turn": "turn-033",
+  "stable_attributes": {
+    "name": {
+      "value": "crude tools",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-033"
+    },
+    "type": {
+      "value": "item",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-033"
+    },
+    "description": {
+      "value": "Basic tools used by villagers for survival tasks",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-033"
+    }
+  },
+  "volatile_state": {
+    "location": "camp",
+    "current_activity": "being sharpened by villagers",
+    "last_updated_turn": "turn-033"
+  },
+  "first_seen_turn": "turn-033",
+  "last_updated_turn": "turn-033",
+  "relationships": []
+}

@@ -1,0 +1,24 @@
+{
+  "id": "item-bucket",
+  "name": "bucket",
+  "type": "item",
+  "identity": "A simple container used for carrying or fetching water.",
+  "current_status": "Being grabbed by the player to assist in fetching water.",
+  "status_updated_turn": "turn-062",
+  "stable_attributes": {
+    "appearance": {
+      "value": "basic wooden bucket",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-062"
+    }
+  },
+  "volatile_state": {
+    "location": "near water source",
+    "current_activity": "being used to fetch water",
+    "last_updated_turn": "turn-062"
+  },
+  "first_seen_turn": "turn-062",
+  "last_updated_turn": "turn-062",
+  "relationships": []
+}

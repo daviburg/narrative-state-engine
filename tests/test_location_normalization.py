@@ -54,6 +54,24 @@ class TestNormalizeEntityLocation:
         _normalize_entity_location(entity, catalogs)
         assert entity["volatile_state"]["location"] == "loc-longhouse"
 
+    def test_loc_id_with_leading_trailing_whitespace(self):
+        catalogs = _make_catalogs([_make_loc("loc-longhouse", "Longhouse")])
+        entity = {"volatile_state": {"location": " loc-longhouse "}}
+        _normalize_entity_location(entity, catalogs)
+        assert entity["volatile_state"]["location"] == "loc-longhouse"
+
+    def test_loc_id_uppercase_canonicalized(self):
+        catalogs = _make_catalogs([_make_loc("loc-longhouse", "Longhouse")])
+        entity = {"volatile_state": {"location": "LOC-longhouse"}}
+        _normalize_entity_location(entity, catalogs)
+        assert entity["volatile_state"]["location"] == "loc-longhouse"
+
+    def test_loc_id_mixed_case_whitespace(self):
+        catalogs = _make_catalogs([_make_loc("loc-longhouse", "Longhouse")])
+        entity = {"volatile_state": {"location": " LOC-Longhouse "}}
+        _normalize_entity_location(entity, catalogs)
+        assert entity["volatile_state"]["location"] == "loc-longhouse"
+
     def test_no_volatile_state(self):
         catalogs = _make_catalogs([_make_loc("loc-x", "X")])
         entity = {"id": "char-a", "name": "A"}
@@ -94,11 +112,12 @@ class TestNormalizeEntityLocation:
         _normalize_entity_location(entity, {"locations.json": []})
         assert entity["volatile_state"]["location"] == "somewhere"
 
-    def test_multiple_locations_first_match_wins(self):
+    def test_multiple_locations_same_name_skips_normalization(self):
+        """Ambiguous match: multiple locations share a name — preserve original."""
         catalogs = _make_catalogs([
             _make_loc("loc-a", "The Hall"),
             _make_loc("loc-b", "The Hall"),
         ])
         entity = {"volatile_state": {"location": "The Hall"}}
         _normalize_entity_location(entity, catalogs)
-        assert entity["volatile_state"]["location"] == "loc-a"
+        assert entity["volatile_state"]["location"] == "The Hall"

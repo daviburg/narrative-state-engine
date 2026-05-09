@@ -1,0 +1,45 @@
+{
+  "id": "loc-snow-laden-original",
+  "name": "the snow-laden forest",
+  "type": "location",
+  "identity": "A cold, isolated forest characterized by heavy snowfall and a mystical atmosphere. It serves as the setting for a complex ritual involving precise, non-contact healing practices, the cultivation of knowledge through observation, and symbolic action.",
+  "current_status": "A non-contact healing ritual is being conducted with the Shaman, Anya, the healer, and a patient, focusing on disrupting harmful patterns through precise, symbolic actions and careful observation. The ritual also involves the transmission of knowledge to the southern elders' shamans and the study of a mysterious fragment. The location is used for both ritualistic practices and the documentation of natural and spiritual patterns.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "description": {
+      "value": "A cold, isolated forest with heavy snowfall and a mystical atmosphere. The environment is described as silent and still, with a focus on the ritual's precision and the transmission of knowledge.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-294"
+    },
+    "appearance": {
+      "value": "Snow-covered trees, a still atmosphere, and an eerie silence that amplifies the ritual's intensity and the weight of knowledge being shared.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-294"
+    },
+    "role": {
+      "value": "Setting for a non-contact healing ritual involving precise, symbolic actions and observation of internal patterns, as well as a space for the transmission of knowledge to the southern elders' shamans and the study of a mysterious fragment.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-294"
+    }
+  },
+  "volatile_state": {
+    "condition": "Cold, still, and mystical. The ritual's energy is palpable, with a focus on precision, minimal disruption, and the subtle transmission of knowledge. The study of the fragment adds an additional layer of mystery and focus.",
+    "equipment": [
+      "ash",
+      "herbs",
+      "tools for marking time and breath",
+      "tools for recording observations",
+      "tools for the fragment study"
+    ],
+    "location": "the snow-laden forest",
+    "current_activity": "Conducting a non-contact healing ritual with precise, symbolic actions and careful observation of the patient's internal patterns, while also facilitating the transmission of knowledge to the southern elders' shamans and the study of a mysterious fragment through observation and documentation.",
+    "last_updated_turn": "turn-210"
+  },
+  "first_seen_turn": "turn-246",
+  "last_updated_turn": "turn-246",
+  "notes": "No open questions. The location's role as a setting for the ritual, knowledge transmission, and fragment study is well-defined.",
+  "relationships": []
+}

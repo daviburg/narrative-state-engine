@@ -1,0 +1,56 @@
+{
+  "id": "char-trapper",
+  "name": "the tracker",
+  "type": "character",
+  "identity": "A lean, observant figure with an innate ability to read patterns in the environment, particularly in snow and terrain. Known for his quiet presence and ability to anticipate movement and paths, he now also demonstrates a keen awareness of the subtle, structured influence of the stones.",
+  "current_status": "Engaged in a discussion with the player about his movements and observations, and preparing a trade bundle to welcome him if he returns. The trapper's presence is noted as a bridge between groups, with potential for cross-cultural exchange.",
+  "status_updated_turn": "turn-216",
+  "stable_attributes": {
+    "role": {
+      "value": "explorer, pathfinder, scout, and observer of environmental patterns",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-270"
+    },
+    "appearance": {
+      "value": "lean, quiet presence, eyes that seem to see beyond the surface",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-259"
+    },
+    "aliases": {
+      "value": [
+        "the tracker",
+        "the Trapper",
+        "the lone trapper"
+      ],
+      "inference": false,
+      "source_turn": "turn-274"
+    },
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-255"
+    },
+    "race": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-255"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and focused",
+    "equipment": [
+      "bindings"
+    ],
+    "location": "thawing landscape, near the river bend and the glowing stones",
+    "current_activity": "Engaged in a discussion with the player about his movements and observations, and preparing a trade bundle to welcome him if he returns. The trapper's presence is noted as a bridge between groups, with potential for cross-cultural exchange.",
+    "last_updated_turn": "turn-216"
+  },
+  "first_seen_turn": "turn-212",
+  "last_updated_turn": "turn-212",
+  "notes": "No explicit details about species, race, or class provided. Role inferred based on environmental monitoring tasks and cross-group interactions.",
+  "relationships": []
+}

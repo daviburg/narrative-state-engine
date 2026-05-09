@@ -1,0 +1,72 @@
+{
+  "id": "loc-settlement",
+  "name": "The Quiet Weave",
+  "type": "location",
+  "identity": "A mystical, unseen force that weaves through the land, symbolizing the hidden patterns of life, strength, and balance. It acts as a stabilizing anchor within the environment, adapting to disruptions while maintaining resilience and interconnectedness with the tribes and their traditions.",
+  "current_status": "The settlement is now in a state of active deliberation and planning. The leader is assigning specific roles to Maelis and Gorok to create a new force, discussing boundaries with Kael, and receiving guidance from the Healer and Tala regarding resource usage and social dynamics.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "role": {
+      "value": "central hub for the tribe's life, governance, and integration trials",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-326"
+    },
+    "appearance": {
+      "value": "Invisible sound traps, disruption fields, and subtle environmental shifts that guide and redirect movement without being seen.",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-334"
+    },
+    "aliases": {
+      "value": [
+        "The Weave",
+        "the place of clarity",
+        "the settlement"
+      ],
+      "inference": false,
+      "source_turn": "turn-344"
+    },
+    "name": {
+      "value": "The Quiet Weave",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-291"
+    },
+    "type": {
+      "value": "location",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-291"
+    },
+    "description": {
+      "value": "A mystical, unseen force that weaves through the land, symbolizing the hidden patterns of life, strength, and balance.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-328"
+    },
+    "location": {
+      "value": "Throughout the land, subtly present in the environment and influencing the tribes' survival and patterns.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-332"
+    },
+    "spiritual_connection": {
+      "value": "A source of deep, ancient knowledge that connects the land to its spirits and the unseen forces that shape existence.",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-340"
+    }
+  },
+  "volatile_state": {
+    "condition": "Active and engaged in strategic planning and role assignment.",
+    "equipment": [],
+    "location": "Central gathering space within the settlement",
+    "current_activity": "Assigning responsibilities to Maelis and Gorok, discussing boundaries with Kael, and receiving counsel from the Healer and Tala.",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-289",
+  "last_updated_turn": "turn-344",
+  "notes": "The settlement is shifting from a passive winter posture to an active phase of defining new operational dynamics and resource boundaries.",
+  "relationships": []
+}

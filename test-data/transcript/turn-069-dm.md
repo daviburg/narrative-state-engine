@@ -1,0 +1,3 @@
+# turn-069 — DM
+
+You settle down beside the hunter, the warmth of the fire a welcome embrace against the lingering chill of dawn. He continues his work, the rhythmic rasp of stone against metal the only sound between you. He uses a smooth, grey river stone, expertly drawing it along the spear's edge, his movements precise and economical. You notice the keenness of the blade already, honed by countless repetitions. While your own arcane knowledge encompasses many things, the practical craft of weapon maintenance in this raw, elemental way is not among them. You simply watch, fascinated by the quiet efficiency of his hands, the way he tests the edge with his thumb, a small, almost imperceptible nod of satisfaction. He does not speak, but his focus is absolute.

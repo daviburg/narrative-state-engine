@@ -1,0 +1,57 @@
+{
+  "id": "loc-boundary-fields",
+  "name": "the boundary fields",
+  "type": "location",
+  "identity": "A secluded area where the tribe's knowledge is safeguarded, serving as a protective barrier against the sickness. It is the heart of the tribe's survival strategy, where the boundary between the tribe and the outside world is strictly maintained.",
+  "current_status": "The player and Maelis are walking together in the fields, discussing the future of the tribe and the integration of women into the hunt and war. The testing phase has paused as the two walk beyond the perimeter.",
+  "status_updated_turn": "turn-336",
+  "stable_attributes": {
+    "description": {
+      "value": "a secluded area where the tribe's knowledge is safeguarded, serving as a protective barrier against the sickness",
+      "inference": true,
+      "confidence": 1.0,
+      "source_turn": "turn-252"
+    },
+    "role": {
+      "value": "Symbolic and physical boundary between the tribe and the outside world; a testing ground for integration",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-333"
+    },
+    "appearance": {
+      "value": "Secluded, surrounded by natural terrain, with a quiet and solemn atmosphere",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-252"
+    },
+    "aliases": {
+      "value": [
+        "sacred boundary"
+      ],
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-252"
+    },
+    "location": {
+      "value": "Surrounding the tribe's longhouse",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-252"
+    }
+  },
+  "volatile_state": {
+    "condition": "crisp edge of winter light, snow compresses underfoot",
+    "equipment": [
+      "preserved food",
+      "simple carved diagrams of the pattern and its interruption",
+      "the message for the southern tribes"
+    ],
+    "location": "the boundary fields",
+    "current_activity": "The player and Maelis are walking together, having stepped beyond the perimeter to discuss the future of the tribe and the integration of women.",
+    "last_updated_turn": "turn-336"
+  },
+  "first_seen_turn": "turn-252",
+  "last_updated_turn": "turn-336",
+  "notes": "The testing phase involving Maelis has paused as the player and Maelis walk together in this area.",
+  "relationships": []
+}

@@ -1,0 +1,45 @@
+{
+  "id": "loc-stones",
+  "name": "The river stones",
+  "type": "location",
+  "identity": "A symbolic location representing an ancient, ordered system now struggling with disruptions that challenge its perfection. The river stones pulse with a rhythmic energy, once flawless but now showing signs of strain and imperfection.",
+  "current_status": "The river stones are being observed from a distance without physical contact, as part of a study to understand their influence and how they interact with the surrounding environment. The group is mapping the system's influence, looking for patterns and changes without disturbing the stones themselves.",
+  "status_updated_turn": "turn-269",
+  "stable_attributes": {
+    "description": {
+      "value": "A mysterious natural formation marked by hexagonal melt patterns and crystalline growths, associated with an unseen force that subtly structures the landscape. It is a site of hidden knowledge and significance, with a structured energy flow that intersects the environment in complex, geometric patterns.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-270"
+    },
+    "appearance": {
+      "value": "pulsing blue light, crystalline growths, hexagonal melt patterns",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-276"
+    },
+    "role": {
+      "value": "symbol of order and perfection",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-276"
+    },
+    "aliases": {
+      "value": [
+        "the stones"
+      ],
+      "inference": false,
+      "source_turn": "turn-300"
+    }
+  },
+  "volatile_state": {
+    "location": "river stones",
+    "current_activity": "Being studied from a distance without physical contact. The group is mapping the system's influence, looking for patterns and changes without disturbing the stones themselves. The system is under observation for how it responds to disruptions without correction.",
+    "condition": "under sustained observation, with no physical interference",
+    "last_updated_turn": "turn-269",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-267",
+  "last_updated_turn": "turn-269",
+  "relationships": []
+}

@@ -1,0 +1,53 @@
+{
+  "id": "item-rare-flower",
+  "name": "The bloom",
+  "type": "item",
+  "identity": "A plant with dual effects, both healing and potentially dangerous when misused. It is central to the land's transformation and is used in the context of the Quiet Weave, serving as a symbol of balance and function rather than a central figure.",
+  "current_status": "The Healer has decided to stop using it for any internal applications due to its singular energy and potential for subtle distortion. It will continue to be used only for soil enrichment and poultices with strict intent and monitoring.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "species": {
+      "value": "plant",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-302"
+    },
+    "aliases": {
+      "value": [
+        "The bloom",
+        "sudden, potent bloom of a rare flower"
+      ],
+      "inference": false,
+      "source_turn": "turn-324"
+    },
+    "appearance": {
+      "value": "glowing with internal light, geometric petal patterns, pulses with structured life and harmonic resonance",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-300"
+    },
+    "description": {
+      "value": "A plant with dual effects, both healing and potentially dangerous when misused. It is central to the land's transformation and is used in the context of the Quiet Weave, serving as a symbol of balance and function rather than a central figure.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-307"
+    },
+    "usage_restrictions": {
+      "value": "No internal applications; used only for soil enrichment and poultices with intent and monitoring.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-344"
+    }
+  },
+  "volatile_state": {
+    "condition": "Restricted usage; internal applications ceased.",
+    "location": "Throughout the land, particularly near the longhouse and healing boundary",
+    "current_activity": "Being managed with new strictures by the Healer; internal use is prohibited, while external uses are now monitored.",
+    "last_updated_turn": "turn-344",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-296",
+  "last_updated_turn": "turn-344",
+  "notes": "Healer has explicitly banned internal use due to distortion risks.",
+  "relationships": []
+}

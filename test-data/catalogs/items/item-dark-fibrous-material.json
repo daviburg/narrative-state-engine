@@ -1,0 +1,34 @@
+{
+  "id": "item-dark-fibrous-material",
+  "name": "a handful of some dark, fibrous material",
+  "type": "item",
+  "identity": "A mysterious substance with an earthy scent and medicinal undertones, examined by the elder and the player to determine its purpose as food, body paint, or ritual item.",
+  "current_status": "Being examined by the elder and the player to determine its nature, with the elder's faint nod indicating partial approval of the captive's condition.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "description": {
+      "value": "A handful of dark, fibrous material with an earthy scent and medicinal undertones, retrieved from a steaming wooden bowl.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-025"
+    },
+    "properties": {
+      "value": "Earthy scent with medicinal undertones, coarse texture, and faintly pungent aroma",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-025"
+    }
+  },
+  "volatile_state": {
+    "location": "At the council fire, in the presence of the elder, the captive, and the player",
+    "current_activity": "Being examined by the elder and the player to determine its nature and purpose",
+    "last_updated_turn": "turn-025",
+    "condition": "Stable, with no visible changes from prior examination",
+    "equipment": [
+      "dark, fibrous material"
+    ]
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-025",
+  "relationships": []
+}

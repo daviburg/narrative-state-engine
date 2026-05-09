@@ -1,0 +1,31 @@
+{
+  "id": "loc-rocky-outcrop",
+  "name": "rocky outcrop",
+  "type": "location",
+  "identity": "A rocky outcrop sheltered from the harshest winds, providing a safe spot for shelter and foraging in the arctic environment.",
+  "current_status": "Continuing to serve as a shelter for the player while foraging for arctic plants in the snow-dusted terrain, with no significant changes to its role or condition.",
+  "status_updated_turn": "turn-173",
+  "stable_attributes": {
+    "description": {
+      "value": "Rocky outcrop sheltered from the harshest winds",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-151"
+    },
+    "features": {
+      "value": "Provides shelter, stable ground, and protection from wind",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-151"
+    }
+  },
+  "volatile_state": {
+    "condition": "Sheltered and stable",
+    "location": "Snow-dusted arctic terrain",
+    "current_activity": "Serving as a shelter during foraging",
+    "last_updated_turn": "turn-173"
+  },
+  "first_seen_turn": "turn-151",
+  "last_updated_turn": "turn-173",
+  "relationships": []
+}

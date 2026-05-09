@@ -1,0 +1,30 @@
+{
+  "id": "item-metals",
+  "name": "metals",
+  "type": "item",
+  "identity": "A valuable resource sought by the tribe for crafting tools and weapons.",
+  "current_status": "Being inquired about by the player character for potential crafting with metals.",
+  "status_updated_turn": "turn-174",
+  "stable_attributes": {
+    "type": {
+      "value": "item",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-174"
+    },
+    "name": {
+      "value": "metals",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-174"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Being inquired about for crafting",
+    "location": "Tribe settlement",
+    "last_updated_turn": "turn-174"
+  },
+  "first_seen_turn": "turn-174",
+  "last_updated_turn": "turn-174",
+  "relationships": []
+}

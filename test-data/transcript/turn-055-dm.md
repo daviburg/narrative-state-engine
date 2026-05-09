@@ -1,0 +1,3 @@
+# turn-055 — DM
+
+You lean gently against the hunter's side, feeling the solid warmth of his body through his furs. He tenses for a brief moment, a subtle shift in his posture, before relaxing against your weight. The shared warmth is immediate and comforting against the biting arctic chill. Neither of you speaks; the silence between you is no longer tense, but filled with the crackling of the fire and the vast, cold stillness of the night. His presence is a quiet anchor in this unfamiliar place, a silent truce between stranger and local. You both watch the flames, waiting for the first grey hint of dawn to break the horizon.

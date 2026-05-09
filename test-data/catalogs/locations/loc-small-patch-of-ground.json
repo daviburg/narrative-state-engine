@@ -1,0 +1,26 @@
+{
+  "id": "loc-small-patch-of-ground",
+  "name": "small patch of ground",
+  "type": "location",
+  "identity": "A small, sheltered area near the longhouse that has been prepared for cultivation, symbolizing the tribe's shift towards sustainable food sources.",
+  "current_status": "Used for fermentation and mead-making experiments, with the character planning to teach the process to an apprentice once the process is perfected.",
+  "status_updated_turn": "turn-147",
+  "stable_attributes": {
+    "description": {
+      "value": "A small, sheltered area near the longhouse that has been prepared for cultivation, symbolizing the tribe's shift towards sustainable food sources.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-137"
+    }
+  },
+  "volatile_state": {
+    "condition": "Active and in use for fermentation experiments",
+    "equipment": [],
+    "location": "Near the longhouse",
+    "current_activity": "Fermentation and mead-making experiments, with plans to train an apprentice",
+    "last_updated_turn": "turn-147"
+  },
+  "first_seen_turn": "turn-137",
+  "last_updated_turn": "turn-147",
+  "relationships": []
+}

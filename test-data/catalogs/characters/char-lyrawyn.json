@@ -1,0 +1,101 @@
+{
+  "id": "char-lyrawyn",
+  "name": "Lyrawyn",
+  "type": "character",
+  "identity": "Lyrawyn is a child of powerful lineages with dormant arcane power connected to the Feywild. She serves as a bridge between the player's magic and the hidden energies of the world. She is currently undergoing a profound transformation, unlocking ancient knowledge through her intuitive grasp of the land's patterns and synthesizing it with Elder Lyra's structured understanding.",
+  "current_status": "Sitting with the player, Lyra, and Anya during the council, organizing samples into a diagram of observed effects and whispering that the geometric lichen tea responds to a 'hunger' that seeks to consume all other patterns.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-336"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-336"
+    },
+    "class": {
+      "value": "Builder",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-336"
+    },
+    "aliases": {
+      "value": [
+        "Lyrawyn"
+      ],
+      "inference": false,
+      "source_turn": "turn-171"
+    },
+    "type": {
+      "value": "character",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-305"
+    },
+    "appearance": {
+      "value": "Not explicitly described, but associated with geometric patterns, vibrant plant life, and calm, structured behavior in its vicinity",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-310"
+    },
+    "role": {
+      "value": "A focal point of the Quiet Weave, influencing the land's patterns and the spiritual growth of the children and community",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-318"
+    },
+    "child": {
+      "value": "child",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-171"
+    }
+  },
+  "volatile_state": {
+    "condition": "Deeply engaged in council discussion, whispering gravely about the nature of the lichen tea",
+    "equipment": [],
+    "location": "Inside the longhouse, sitting with the player, Lyra, and Anya",
+    "current_activity": "Organizing samples into a diagram of observed effects and warning against the geometric lichen tea due to its 'hunger'",
+    "last_updated_turn": "turn-342"
+  },
+  "first_seen_turn": "turn-141",
+  "last_updated_turn": "turn-342",
+  "notes": "Lyrawyn perceives the entities not as threats or gifts, but as seeking 'full pattern' and 'place in the song'. She specifically identifies the geometric lichen tea as having a 'hunger' that seeks to consume all other patterns.",
+  "relationships": [
+    {
+      "target_id": "char-rune",
+      "current_relationship": "observes",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-312",
+      "last_updated_turn": "turn-312"
+    },
+    {
+      "target_id": "char-elder-lyra",
+      "current_relationship": "collaborates_with",
+      "type": "partnership",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-anya",
+      "current_relationship": "collaborates_with",
+      "type": "partnership",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    }
+  ]
+}

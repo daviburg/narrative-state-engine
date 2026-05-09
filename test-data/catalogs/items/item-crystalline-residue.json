@@ -1,0 +1,32 @@
+{
+  "id": "item-crystalline-residue",
+  "name": "The crystalline residue",
+  "type": "item",
+  "identity": "A rare substance formed from the melting of a geometrically perfect snowflake, left on the player's hand after a profound connection with the celestial pact. It is a symbol of the player's integration with the Quiet Weave and the new patterns that have emerged.",
+  "current_status": "Still present on the player's hand, though its crystalline form has partially melted. It lingers as a residue, symbolizing the ongoing connection between the player and the Quiet Weave, and is now considered a part of the broader Quiet Weave structure.",
+  "status_updated_turn": "turn-341",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Crystalline, geometrically perfect, melts slowly, leaves a residue that lingers longer than natural water",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-304"
+    },
+    "origin": {
+      "value": "Formed from a geometrically perfect snowflake that responded to the player's celestial pact",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-304"
+    }
+  },
+  "volatile_state": {
+    "location": "On the player's hand",
+    "condition": "Lingers after melting, with a crystalline residue",
+    "current_activity": "Remaining on the player's hand as a symbol of integration with the celestial pact and the Quiet Weave, and now considered part of the broader Quiet Weave structure",
+    "last_updated_turn": "turn-341"
+  },
+  "first_seen_turn": "turn-304",
+  "last_updated_turn": "turn-341",
+  "notes": "",
+  "relationships": []
+}

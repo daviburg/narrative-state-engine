@@ -1,0 +1,25 @@
+{
+  "id": "item-meal",
+  "name": "the meal I brought",
+  "type": "item",
+  "identity": "A meal prepared and brought by the player character, intended for consumption by the entity in question.",
+  "current_status": "Being consumed by the entity while the player character watches with affection, with the entity displaying signs of emotional connection and subtle awareness of the player's presence.",
+  "status_updated_turn": "turn-073",
+  "stable_attributes": {
+    "species": {
+      "value": "food",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-072"
+    }
+  },
+  "volatile_state": {
+    "condition": "being consumed",
+    "location": "near the player character",
+    "current_activity": "being enjoyed by the entity",
+    "last_updated_turn": "turn-073"
+  },
+  "first_seen_turn": "turn-072",
+  "last_updated_turn": "turn-073",
+  "relationships": []
+}

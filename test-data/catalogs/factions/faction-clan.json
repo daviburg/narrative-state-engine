@@ -1,0 +1,42 @@
+{
+  "id": "faction-clan",
+  "name": "the clan",
+  "type": "faction",
+  "identity": "A resource-conscious faction prioritizing sustainability and careful management of supplies, with a structured approach to communal needs and responsibilities.",
+  "current_status": "A member of the clan experiences physical relief and emotional comfort through the player's ministrations, indicating a close and supportive relationship within the community.",
+  "status_updated_turn": "turn-097",
+  "stable_attributes": {
+    "role": {
+      "value": "resource manager and communal caretaker",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-086"
+    },
+    "appearance": {
+      "value": "not explicitly described",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-086"
+    },
+    "aliases": {
+      "value": [
+        "the clan"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-086"
+    }
+  },
+  "volatile_state": {
+    "condition": "focused and methodical",
+    "equipment": [
+      "brewing supplies"
+    ],
+    "location": "communal preparation area",
+    "current_activity": "providing physical relief to a clan member through ministrations",
+    "last_updated_turn": "turn-097"
+  },
+  "first_seen_turn": "turn-086",
+  "last_updated_turn": "turn-097",
+  "relationships": []
+}

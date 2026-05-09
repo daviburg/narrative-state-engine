@@ -1,0 +1,2162 @@
+[
+  {
+    "source_turn": "turn-001",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-001"
+  },
+  {
+    "source_turn": "turn-003",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-002"
+  },
+  {
+    "source_turn": "turn-007",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-003"
+  },
+  {
+    "source_turn": "turn-035",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-004"
+  },
+  {
+    "source_turn": "turn-043",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-005"
+  },
+  {
+    "source_turn": "turn-049",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-14"
+    ],
+    "description": "The women placed spare furs near the edge of the central fire, creating a resting area for the player.",
+    "confidence": 0.7,
+    "id": "time-006"
+  },
+  {
+    "source_turn": "turn-053",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-007"
+  },
+  {
+    "source_turn": "turn-061",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-008"
+  },
+  {
+    "source_turn": "turn-063",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-009"
+  },
+  {
+    "source_turn": "turn-063",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-010"
+  },
+  {
+    "source_turn": "turn-065",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-011"
+  },
+  {
+    "source_turn": "turn-075",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-012"
+  },
+  {
+    "source_turn": "turn-077",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-013"
+  },
+  {
+    "source_turn": "turn-079",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-014"
+  },
+  {
+    "source_turn": "turn-081",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-015"
+  },
+  {
+    "source_turn": "turn-083",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-016"
+  },
+  {
+    "source_turn": "turn-089",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-017"
+  },
+  {
+    "source_turn": "turn-110",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-018"
+  },
+  {
+    "source_turn": "turn-113",
+    "type": "time_skip",
+    "signals": [
+      "days_pass: days bleed"
+    ],
+    "confidence": 0.6,
+    "raw_text": "days bleed",
+    "id": "time-019"
+  },
+  {
+    "source_turn": "turn-113",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-020"
+  },
+  {
+    "source_turn": "turn-115",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-021"
+  },
+  {
+    "source_turn": "turn-115",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-022"
+  },
+  {
+    "source_turn": "turn-119",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-005"
+    ],
+    "description": "The player weaves strands of light into the tribe's daily routine, using a spell of light to illuminate hidden roots and",
+    "confidence": 0.7,
+    "id": "time-023"
+  },
+  {
+    "source_turn": "turn-121",
+    "type": "time_skip",
+    "signals": [
+      "weeks_pass: weeks continue"
+    ],
+    "confidence": 0.6,
+    "raw_text": "weeks continue",
+    "id": "time-024"
+  },
+  {
+    "source_turn": "turn-121",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-007"
+    ],
+    "description": "The player experiences a physical and emotional shift, realizing they are carrying a new life within them, a secret hear",
+    "confidence": 0.9,
+    "id": "time-025"
+  },
+  {
+    "source_turn": "turn-123",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-026"
+  },
+  {
+    "source_turn": "turn-124",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-009"
+    ],
+    "description": "The player plans to build a communial home for the tribe, including laying the foundation, creating a floor, and gatheri",
+    "confidence": 0.7,
+    "id": "time-027"
+  },
+  {
+    "source_turn": "turn-125",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-028"
+  },
+  {
+    "source_turn": "turn-125",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-010"
+    ],
+    "description": "The player envisions a sturdier, warmer home for their child and the tribe, planning improvements to existing structures",
+    "confidence": 0.7,
+    "id": "time-029"
+  },
+  {
+    "source_turn": "turn-126",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-001"
+    ],
+    "description": "The player outlines the construction plan for a durable, insulated communal longhouse, including clearing land, marking ",
+    "confidence": 0.7,
+    "id": "time-030"
+  },
+  {
+    "source_turn": "turn-127",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-031"
+  },
+  {
+    "source_turn": "turn-127",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-032"
+  },
+  {
+    "source_turn": "turn-127",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-002"
+    ],
+    "description": "The player, Kael, and the tribe collaborate to construct a longhouse, clearing the site, dry-stacking stones, and creati",
+    "confidence": 0.7,
+    "id": "time-033"
+  },
+  {
+    "source_turn": "turn-128",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-003"
+    ],
+    "description": "The player laid a split log floor as part of constructing the post-and-beam longhouse.",
+    "confidence": 0.7,
+    "id": "time-034"
+  },
+  {
+    "source_turn": "turn-129",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy_progression: belly has begun to swell"
+    ],
+    "confidence": 0.7,
+    "raw_text": "belly has begun to swell",
+    "id": "time-035"
+  },
+  {
+    "source_turn": "turn-129",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-004"
+    ],
+    "description": "The tribe constructs a longhouse with the player's guidance, using strong timbers and the shaman's ritual to imbue the s",
+    "confidence": 0.7,
+    "id": "time-036"
+  },
+  {
+    "source_turn": "turn-129",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-005"
+    ],
+    "description": "The player's pregnancy progresses, with a noticeable roundness and a rhythmic flutter indicating the growth of the unbor",
+    "confidence": 0.9,
+    "id": "time-037"
+  },
+  {
+    "source_turn": "turn-130",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-006"
+    ],
+    "description": "The player plans to construct a steep pitch roof of wood shingles, a loft underneath for storage and private use, and in",
+    "confidence": 0.7,
+    "id": "time-038"
+  },
+  {
+    "source_turn": "turn-131",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-039"
+  },
+  {
+    "source_turn": "turn-131",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-007"
+    ],
+    "description": "The tribe constructs a steep-pitched roof of wood shingles to protect against snow and wind, with the player teaching te",
+    "confidence": 0.7,
+    "id": "time-040"
+  },
+  {
+    "source_turn": "turn-132",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-10"
+    ],
+    "description": "The player outlines plans to improve the interior of the longhouse, including a fire pit, smoke hole, birthing place, an",
+    "confidence": 0.7,
+    "id": "time-041"
+  },
+  {
+    "source_turn": "turn-133",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-11"
+    ],
+    "description": "The tribe completes the longhouse structure, including a central fire pit and smoke hole for ventilation.",
+    "confidence": 0.7,
+    "id": "time-042"
+  },
+  {
+    "source_turn": "turn-136",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-043"
+  },
+  {
+    "source_turn": "turn-137",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-044"
+  },
+  {
+    "source_turn": "turn-137",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-016"
+    ],
+    "description": "The tribe prepares a small, sheltered patch of ground for cultivation, anticipating the spring thaw.",
+    "confidence": 0.7,
+    "id": "time-045"
+  },
+  {
+    "source_turn": "turn-139",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-046"
+  },
+  {
+    "source_turn": "turn-139",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-22"
+    ],
+    "description": "The player experiences the birth of their child, sharing the names 'Faelan' and 'Lyrawyn' with the midwife and Kael pres",
+    "confidence": 0.9,
+    "id": "time-047"
+  },
+  {
+    "source_turn": "turn-140",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-048"
+  },
+  {
+    "source_turn": "turn-141",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-049"
+  },
+  {
+    "source_turn": "turn-141",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-23"
+    ],
+    "description": "The player gives birth to a child named Lyrawyn, who is described as a child of two worlds with ancient knowledge and a ",
+    "confidence": 0.9,
+    "id": "time-050"
+  },
+  {
+    "source_turn": "turn-142",
+    "type": "biological_marker",
+    "signals": [
+      "birth: newborn"
+    ],
+    "confidence": 0.7,
+    "raw_text": "newborn",
+    "id": "time-051"
+  },
+  {
+    "source_turn": "turn-142",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-24"
+    ],
+    "description": "The player feeds their newborn child Lyrawyn for the first time and requests the shaman's blessing for the infant.",
+    "confidence": 0.9,
+    "id": "time-052"
+  },
+  {
+    "source_turn": "turn-143",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-053"
+  },
+  {
+    "source_turn": "turn-143",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-25"
+    ],
+    "description": "The player gives birth to their child, Lyrawyn, with the presence of the shaman, Kael, and the midwife of the tribe.",
+    "confidence": 0.9,
+    "id": "time-054"
+  },
+  {
+    "source_turn": "turn-145",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-26"
+    ],
+    "description": "The player creates a batch of mead using wild honey, purified snowmelt, and wild yeasts.",
+    "confidence": 0.7,
+    "id": "time-055"
+  },
+  {
+    "source_turn": "turn-146",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-056"
+  },
+  {
+    "source_turn": "turn-146",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-027"
+    ],
+    "description": "The player is dedicated to perfecting the mead-making process, ensuring its success and sustainability, and plans to tra",
+    "confidence": 0.7,
+    "id": "time-057"
+  },
+  {
+    "source_turn": "turn-149",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-058"
+  },
+  {
+    "source_turn": "turn-151",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-059"
+  },
+  {
+    "source_turn": "turn-153",
+    "type": "time_skip",
+    "signals": [
+      "weeks_pass: weeks pass"
+    ],
+    "confidence": 0.6,
+    "raw_text": "weeks pass",
+    "id": "time-060"
+  },
+  {
+    "source_turn": "turn-153",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-061"
+  },
+  {
+    "source_turn": "turn-153",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-002"
+    ],
+    "description": "The player successfully creates sauerkraut using wild greens, resulting in a vital new source of nutrients for the tribe",
+    "confidence": 0.7,
+    "id": "time-062"
+  },
+  {
+    "source_turn": "turn-163",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-063"
+  },
+  {
+    "source_turn": "turn-166",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-064"
+  },
+  {
+    "source_turn": "turn-166",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-007"
+    ],
+    "description": "The player outlines plans to clear vegetation, place sound traps, and construct a ditch or palisade to defend the longho",
+    "confidence": 0.7,
+    "id": "time-065"
+  },
+  {
+    "source_turn": "turn-167",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-066"
+  },
+  {
+    "source_turn": "turn-167",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-008"
+    ],
+    "description": "The player and Kael design and begin constructing sound traps using hollowed bones, dried gourds, and animal hides to de",
+    "confidence": 0.7,
+    "id": "time-067"
+  },
+  {
+    "source_turn": "turn-169",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-009"
+    ],
+    "description": "The player envisions and plans to construct a large, sturdy water barrel for fire safety and a hidden safe haven for non",
+    "confidence": 0.7,
+    "id": "time-068"
+  },
+  {
+    "source_turn": "turn-171",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnant"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnant",
+    "id": "time-069"
+  },
+  {
+    "source_turn": "turn-172",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-070"
+  },
+  {
+    "source_turn": "turn-173",
+    "type": "season_transition",
+    "season": "mid_summer",
+    "signals": [
+      "base season: summer"
+    ],
+    "confidence": 0.5,
+    "id": "time-071"
+  },
+  {
+    "source_turn": "turn-173",
+    "type": "time_skip",
+    "signals": [
+      "months_pass: months pass"
+    ],
+    "confidence": 0.6,
+    "raw_text": "months pass",
+    "id": "time-072"
+  },
+  {
+    "source_turn": "turn-173",
+    "type": "time_skip",
+    "signals": [
+      "months_pass: following months"
+    ],
+    "confidence": 0.6,
+    "raw_text": "following months",
+    "id": "time-073"
+  },
+  {
+    "source_turn": "turn-175",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy_progression: belly swells"
+    ],
+    "confidence": 0.7,
+    "raw_text": "belly swells",
+    "id": "time-074"
+  },
+  {
+    "source_turn": "turn-177",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-075"
+  },
+  {
+    "source_turn": "turn-177",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-001"
+    ],
+    "description": "The player constructs a small experimental kiln using clay and rocks, and creates basic ceramic vessels that demonstrate",
+    "confidence": 0.7,
+    "id": "time-076"
+  },
+  {
+    "source_turn": "turn-178",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-077"
+  },
+  {
+    "source_turn": "turn-178",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-002"
+    ],
+    "description": "The player supervises the construction of a larger kiln while taking an apprentice to learn the skill.",
+    "confidence": 0.7,
+    "id": "time-078"
+  },
+  {
+    "source_turn": "turn-179",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-079"
+  },
+  {
+    "source_turn": "turn-179",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-003"
+    ],
+    "description": "The player selects Borin as an apprentice and guides him in the construction of a larger kiln, teaching him about temper",
+    "confidence": 0.7,
+    "id": "time-080"
+  },
+  {
+    "source_turn": "turn-180",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-081"
+  },
+  {
+    "source_turn": "turn-181",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-082"
+  },
+  {
+    "source_turn": "turn-181",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-083"
+  },
+  {
+    "source_turn": "turn-183",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-084"
+  },
+  {
+    "source_turn": "turn-183",
+    "type": "biological_marker",
+    "signals": [
+      "birth: newborn"
+    ],
+    "confidence": 0.7,
+    "raw_text": "newborn",
+    "id": "time-085"
+  },
+  {
+    "source_turn": "turn-183",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-005"
+    ],
+    "description": "Fenouille Moonwind gives birth to her son Faelan, marking a significant moment of personal growth and a deeper connectio",
+    "confidence": 0.9,
+    "id": "time-086"
+  },
+  {
+    "source_turn": "turn-185",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-087"
+  },
+  {
+    "source_turn": "turn-189",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-088"
+  },
+  {
+    "source_turn": "turn-193",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-089"
+  },
+  {
+    "source_turn": "turn-193",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-090"
+  },
+  {
+    "source_turn": "turn-196",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-091"
+  },
+  {
+    "source_turn": "turn-197",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-092"
+  },
+  {
+    "source_turn": "turn-199",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-093"
+  },
+  {
+    "source_turn": "turn-200",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-094"
+  },
+  {
+    "source_turn": "turn-201",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-095"
+  },
+  {
+    "source_turn": "turn-203",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-096"
+  },
+  {
+    "source_turn": "turn-205",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-097"
+  },
+  {
+    "source_turn": "turn-208",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-098"
+  },
+  {
+    "source_turn": "turn-210",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-099"
+  },
+  {
+    "source_turn": "turn-211",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-100"
+  },
+  {
+    "source_turn": "turn-212",
+    "type": "season_transition",
+    "season": "late_autumn",
+    "signals": [
+      "fine season: late_autumn"
+    ],
+    "confidence": 0.8,
+    "id": "time-101"
+  },
+  {
+    "source_turn": "turn-212",
+    "type": "time_skip",
+    "signals": [
+      "weeks_pass: weeks pass"
+    ],
+    "confidence": 0.6,
+    "raw_text": "weeks pass",
+    "id": "time-102"
+  },
+  {
+    "source_turn": "turn-212",
+    "type": "time_skip",
+    "signals": [
+      "weeks_pass: three weeks"
+    ],
+    "confidence": 0.6,
+    "raw_text": "three weeks",
+    "id": "time-103"
+  },
+  {
+    "source_turn": "turn-212",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-104"
+  },
+  {
+    "source_turn": "turn-213",
+    "type": "season_transition",
+    "season": "late_autumn",
+    "signals": [
+      "fine season: late_autumn"
+    ],
+    "confidence": 0.8,
+    "id": "time-105"
+  },
+  {
+    "source_turn": "turn-213",
+    "type": "time_skip",
+    "signals": [
+      "weeks_pass: three weeks"
+    ],
+    "confidence": 0.6,
+    "raw_text": "three weeks",
+    "id": "time-106"
+  },
+  {
+    "source_turn": "turn-213",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-107"
+  },
+  {
+    "source_turn": "turn-214",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-108"
+  },
+  {
+    "source_turn": "turn-215",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-109"
+  },
+  {
+    "source_turn": "turn-215",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-027"
+    ],
+    "description": "A second reinforced covered patch and a smaller test plot were created near the longhouse for cultivating arctic dock.",
+    "confidence": 0.7,
+    "id": "time-110"
+  },
+  {
+    "source_turn": "turn-216",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-111"
+  },
+  {
+    "source_turn": "turn-216",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy_discovery: life has taken root"
+    ],
+    "confidence": 0.7,
+    "raw_text": "life has taken root",
+    "id": "time-112"
+  },
+  {
+    "source_turn": "turn-217",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-113"
+  },
+  {
+    "source_turn": "turn-217",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy_discovery: life snuffed out by the relentless cold. the second, more robustly covered patch, showed a few withered remnants, a s..."
+    ],
+    "confidence": 0.7,
+    "raw_text": "life snuffed out by the relentless cold. the second, more robustly covered patch, showed a few withered remnants, a s...",
+    "id": "time-114"
+  },
+  {
+    "source_turn": "turn-218",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-115"
+  },
+  {
+    "source_turn": "turn-219",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-116"
+  },
+  {
+    "source_turn": "turn-220",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-117"
+  },
+  {
+    "source_turn": "turn-221",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-118"
+  },
+  {
+    "source_turn": "turn-222",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-119"
+  },
+  {
+    "source_turn": "turn-223",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-120"
+  },
+  {
+    "source_turn": "turn-223",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-37"
+    ],
+    "description": "The player directed the construction of a shelter near the longhouse, sealing seams in hide and layering furs for insula",
+    "confidence": 0.7,
+    "id": "time-121"
+  },
+  {
+    "source_turn": "turn-224",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-122"
+  },
+  {
+    "source_turn": "turn-224",
+    "type": "time_skip",
+    "signals": [
+      "days_pass: days pass"
+    ],
+    "confidence": 0.6,
+    "raw_text": "days pass",
+    "id": "time-123"
+  },
+  {
+    "source_turn": "turn-225",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-124"
+  },
+  {
+    "source_turn": "turn-226",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-125"
+  },
+  {
+    "source_turn": "turn-229",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-126"
+  },
+  {
+    "source_turn": "turn-229",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-006"
+    ],
+    "description": "A temporary shelter of hides and furs is erected downwind from the longhouse to protect the tribe while observing the st",
+    "confidence": 0.7,
+    "id": "time-127"
+  },
+  {
+    "source_turn": "turn-231",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-128"
+  },
+  {
+    "source_turn": "turn-241",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-129"
+  },
+  {
+    "source_turn": "turn-243",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-130"
+  },
+  {
+    "source_turn": "turn-251",
+    "type": "time_skip",
+    "signals": [
+      "days_pass: days pass"
+    ],
+    "confidence": 0.6,
+    "raw_text": "days pass",
+    "id": "time-131"
+  },
+  {
+    "source_turn": "turn-254",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-132"
+  },
+  {
+    "source_turn": "turn-255",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-133"
+  },
+  {
+    "source_turn": "turn-255",
+    "type": "time_skip",
+    "signals": [
+      "days_pass: days unfold"
+    ],
+    "confidence": 0.6,
+    "raw_text": "days unfold",
+    "id": "time-134"
+  },
+  {
+    "source_turn": "turn-256",
+    "type": "season_transition",
+    "season": "mid_autumn",
+    "signals": [
+      "base season: autumn"
+    ],
+    "confidence": 0.5,
+    "id": "time-135"
+  },
+  {
+    "source_turn": "turn-257",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-16"
+    ],
+    "description": "The boundary around the southern delegation is solidified to prevent unsanctioned contact.",
+    "confidence": 0.7,
+    "id": "time-136"
+  },
+  {
+    "source_turn": "turn-258",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-137"
+  },
+  {
+    "source_turn": "turn-259",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-138"
+  },
+  {
+    "source_turn": "turn-260",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-024"
+    ],
+    "description": "The player's equipment was updated with a reinforced head covering, a hammer-axe, a sling, and talismans/fetishes, impro",
+    "confidence": 0.7,
+    "id": "time-139"
+  },
+  {
+    "source_turn": "turn-266",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-29"
+    ],
+    "description": "The 'Pattern Disruption Method' has been added to the player's inventory as a usable ability.",
+    "confidence": 0.7,
+    "id": "time-140"
+  },
+  {
+    "source_turn": "turn-272",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-141"
+  },
+  {
+    "source_turn": "turn-274",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-142"
+  },
+  {
+    "source_turn": "turn-275",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-39"
+    ],
+    "description": "The player creates a second faint disruption at a distinct location, maintaining separation from the first to test the s",
+    "confidence": 0.7,
+    "id": "time-143"
+  },
+  {
+    "source_turn": "turn-280",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-006"
+    ],
+    "description": "The player and Anya create a second triangular disruption, causing the system's melt patterns to fragment and crystallin",
+    "confidence": 0.7,
+    "id": "time-144"
+  },
+  {
+    "source_turn": "turn-282",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-008"
+    ],
+    "description": "The player has added the 'Triangular Pattern Disruption Field' to their inventory as a usable magical gadget.",
+    "confidence": 0.7,
+    "id": "time-145"
+  },
+  {
+    "source_turn": "turn-286",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-11"
+    ],
+    "description": "The player establishes two protective fields: one beyond the longhouse perimeter and another near the healing boundary. ",
+    "confidence": 0.7,
+    "id": "time-146"
+  },
+  {
+    "source_turn": "turn-287",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-147"
+  },
+  {
+    "source_turn": "turn-288",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-148"
+  },
+  {
+    "source_turn": "turn-289",
+    "type": "season_transition",
+    "season": "mid_summer",
+    "signals": [
+      "base season: summer"
+    ],
+    "confidence": 0.5,
+    "id": "time-149"
+  },
+  {
+    "source_turn": "turn-290",
+    "type": "season_transition",
+    "season": "mid_summer",
+    "signals": [
+      "base season: summer"
+    ],
+    "confidence": 0.5,
+    "id": "time-150"
+  },
+  {
+    "source_turn": "turn-295",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-151"
+  },
+  {
+    "source_turn": "turn-301",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-152"
+  },
+  {
+    "source_turn": "turn-301",
+    "type": "time_skip",
+    "signals": [
+      "days_pass: days pass"
+    ],
+    "confidence": 0.6,
+    "raw_text": "days pass",
+    "id": "time-153"
+  },
+  {
+    "source_turn": "turn-302",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-154"
+  },
+  {
+    "source_turn": "turn-302",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-003"
+    ],
+    "description": "Children construct enduring shelters and tools, including the basic wedge design with innovations for specific tasks.",
+    "confidence": 0.7,
+    "id": "time-155"
+  },
+  {
+    "source_turn": "turn-305",
+    "type": "season_transition",
+    "season": "late_spring",
+    "signals": [
+      "fine season: late_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-156"
+  },
+  {
+    "source_turn": "turn-305",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-157"
+  },
+  {
+    "source_turn": "turn-305",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-007"
+    ],
+    "description": "The player initiates a birth process, withdrawing to a prepared place within the longhouse with the healer, Lena, and th",
+    "confidence": 0.9,
+    "id": "time-158"
+  },
+  {
+    "source_turn": "turn-306",
+    "type": "season_transition",
+    "season": "late_spring",
+    "signals": [
+      "fine season: late_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-159"
+  },
+  {
+    "source_turn": "turn-306",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-160"
+  },
+  {
+    "source_turn": "turn-306",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-008"
+    ],
+    "description": "A new child named Rune is born within the longhouse during a controlled ritual, with the healer, Lena, the Shaman, and K",
+    "confidence": 0.9,
+    "id": "time-161"
+  },
+  {
+    "source_turn": "turn-309",
+    "type": "season_transition",
+    "season": "early_summer",
+    "signals": [
+      "fine season: early_summer"
+    ],
+    "confidence": 0.8,
+    "id": "time-162"
+  },
+  {
+    "source_turn": "turn-310",
+    "type": "season_transition",
+    "season": "mid_summer",
+    "signals": [
+      "fine season: mid_summer"
+    ],
+    "confidence": 0.8,
+    "id": "time-163"
+  },
+  {
+    "source_turn": "turn-311",
+    "type": "season_transition",
+    "season": "late_summer",
+    "signals": [
+      "fine season: late_summer"
+    ],
+    "confidence": 0.8,
+    "id": "time-164"
+  },
+  {
+    "source_turn": "turn-311",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-165"
+  },
+  {
+    "source_turn": "turn-311",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-166"
+  },
+  {
+    "source_turn": "turn-311",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-17"
+    ],
+    "description": "A new child is conceived as part of the group's natural continuity, with no urgency or strategic emphasis placed on its ",
+    "confidence": 0.9,
+    "id": "time-167"
+  },
+  {
+    "source_turn": "turn-311",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-18"
+    ],
+    "description": "Borin initiates planning for a second habitation cluster, designed to differ from the first while maintaining the same p",
+    "confidence": 0.7,
+    "id": "time-168"
+  },
+  {
+    "source_turn": "turn-312",
+    "type": "season_transition",
+    "season": "late_summer",
+    "signals": [
+      "fine season: late_summer"
+    ],
+    "confidence": 0.8,
+    "id": "time-169"
+  },
+  {
+    "source_turn": "turn-312",
+    "type": "biological_marker",
+    "signals": [
+      "labor: labor"
+    ],
+    "confidence": 0.7,
+    "raw_text": "labor",
+    "id": "time-170"
+  },
+  {
+    "source_turn": "turn-312",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-171"
+  },
+  {
+    "source_turn": "turn-315",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-172"
+  },
+  {
+    "source_turn": "turn-316",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-173"
+  },
+  {
+    "source_turn": "turn-319",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-41"
+    ],
+    "description": "The player sets up three structured trials for Gorok, involving boundary testing, simulated raids, and a war game focuse",
+    "confidence": 0.7,
+    "id": "time-174"
+  },
+  {
+    "source_turn": "turn-321",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-175"
+  },
+  {
+    "source_turn": "turn-321",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-176"
+  },
+  {
+    "source_turn": "turn-322",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-177"
+  },
+  {
+    "source_turn": "turn-322",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-178"
+  },
+  {
+    "source_turn": "turn-322",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-179"
+  },
+  {
+    "source_turn": "turn-322",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-045"
+    ],
+    "description": "Lyrawyn, Lyra, and Anya develop a formalized system of 'pattern reading' for the land, creating a shared lexicon to desc",
+    "confidence": 0.7,
+    "id": "time-180"
+  },
+  {
+    "source_turn": "turn-322",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-048"
+    ],
+    "description": "The player's pregnancy progresses steadily, ensuring the continuity of the next generation within the Quiet Weave.",
+    "confidence": 0.9,
+    "id": "time-181"
+  },
+  {
+    "source_turn": "turn-323",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-182"
+  },
+  {
+    "source_turn": "turn-324",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-183"
+  },
+  {
+    "source_turn": "turn-324",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-184"
+  },
+  {
+    "source_turn": "turn-325",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-185"
+  },
+  {
+    "source_turn": "turn-325",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-186"
+  },
+  {
+    "source_turn": "turn-325",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-56"
+    ],
+    "description": "The player announces the birth of a fourth child, discussing the legacy and future of the tribe.",
+    "confidence": 0.9,
+    "id": "time-187"
+  },
+  {
+    "source_turn": "turn-326",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-188"
+  },
+  {
+    "source_turn": "turn-326",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-189"
+  },
+  {
+    "source_turn": "turn-327",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-190"
+  },
+  {
+    "source_turn": "turn-328",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-191"
+  },
+  {
+    "source_turn": "turn-328",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-192"
+  },
+  {
+    "source_turn": "turn-329",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-193"
+  },
+  {
+    "source_turn": "turn-330",
+    "type": "biological_marker",
+    "signals": [
+      "birth: birth"
+    ],
+    "confidence": 0.7,
+    "raw_text": "birth",
+    "id": "time-194"
+  },
+  {
+    "source_turn": "turn-331",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "fine season: mid_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-195"
+  },
+  {
+    "source_turn": "turn-331",
+    "type": "time_skip",
+    "signals": [
+      "time_passes: time advances"
+    ],
+    "confidence": 0.6,
+    "raw_text": "time advances",
+    "id": "time-196"
+  },
+  {
+    "source_turn": "turn-331",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-197"
+  },
+  {
+    "source_turn": "turn-332",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "fine season: mid_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-198"
+  },
+  {
+    "source_turn": "turn-332",
+    "type": "biological_marker",
+    "signals": [
+      "pregnancy: pregnancy"
+    ],
+    "confidence": 0.7,
+    "raw_text": "pregnancy",
+    "id": "time-199"
+  },
+  {
+    "source_turn": "turn-334",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-200"
+  },
+  {
+    "source_turn": "turn-334",
+    "type": "biological_marker",
+    "signals": [
+      "birth: born"
+    ],
+    "confidence": 0.7,
+    "raw_text": "born",
+    "id": "time-201"
+  },
+  {
+    "source_turn": "turn-335",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-202"
+  },
+  {
+    "source_turn": "turn-336",
+    "type": "season_transition",
+    "season": "early_winter",
+    "signals": [
+      "fine season: early_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-203"
+  },
+  {
+    "source_turn": "turn-337",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-204"
+  },
+  {
+    "source_turn": "turn-338",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-205"
+  },
+  {
+    "source_turn": "turn-339",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "fine season: mid_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-206"
+  },
+  {
+    "source_turn": "turn-340",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "fine season: mid_winter"
+    ],
+    "confidence": 0.8,
+    "id": "time-207"
+  },
+  {
+    "source_turn": "turn-341",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-208"
+  },
+  {
+    "source_turn": "turn-342",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-209"
+  },
+  {
+    "source_turn": "turn-343",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-210"
+  },
+  {
+    "source_turn": "turn-344",
+    "type": "season_transition",
+    "season": "early_spring",
+    "signals": [
+      "fine season: early_spring"
+    ],
+    "confidence": 0.8,
+    "id": "time-211"
+  },
+  {
+    "source_turn": "turn-211",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-063"
+    ],
+    "description": "Borin is tasked with expanding the drying racks and constructing a second, smaller kiln closer to the fields.",
+    "confidence": 0.7,
+    "id": "time-212"
+  },
+  {
+    "source_turn": "turn-217",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-78"
+    ],
+    "description": "Anya successfully traces a simple symbol in frost, demonstrating her growing control over frost patterns.",
+    "confidence": 0.7,
+    "id": "time-213"
+  },
+  {
+    "source_turn": "turn-312",
+    "type": "biological_marker",
+    "signals": [
+      "birth event: evt-112"
+    ],
+    "description": "The next child is conceived as a reaffirmation of continuity within the Quiet Weave.",
+    "confidence": 0.9,
+    "id": "time-214"
+  },
+  {
+    "source_turn": "turn-324",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-144"
+    ],
+    "description": "Lyra, Lyrawyn, and Anya formalize their combined winter work into a 'Pattern Language of the Land,' a system of symbols ",
+    "confidence": 0.7,
+    "id": "time-215"
+  },
+  {
+    "source_turn": "turn-210",
+    "type": "construction_milestone",
+    "signals": [
+      "construction event: evt-186"
+    ],
+    "description": "The player establishes a dedicated observation area for the fragment near the longhouse entrance, using stone to display",
+    "confidence": 0.7,
+    "id": "time-216"
+  }
+]

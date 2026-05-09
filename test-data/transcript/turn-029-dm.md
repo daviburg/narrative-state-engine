@@ -1,0 +1,3 @@
+# turn-029 — DM
+
+You dab the dark, fibrous material onto your forehead, spreading it in a rough smudge where the elder had tapped. It feels cool and somewhat gritty against your skin, the earthy, medicinal scent now more pronounced. As you do so, a collective sigh seems to ripple through the gathered villagers. The elder offers a slow, approving nod, a hint of something unreadable in his deep-set eyes. He then gestures to the fire, and one of your former captors steps forward, quickly and efficiently working to untangle the remaining icy vines of the net from around you, finally freeing you completely. The younger woman returns with another bowl, this one filled with a clear, steaming broth, which she offers to you with a slight dip of her head.

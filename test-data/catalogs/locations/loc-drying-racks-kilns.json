@@ -1,0 +1,26 @@
+{
+  "id": "loc-drying-racks-kilns",
+  "name": "drying racks and kilns",
+  "type": "location",
+  "identity": "A critical part of the settlement's infrastructure used for food preservation, material storage, and crafting. Integral to the new storage and construction initiatives, supporting both survival and growth.",
+  "current_status": "Continuing to support food preservation, material storage, and crafting initiatives, including the new storage structure and construction projects. Present during the council's discussion on the new knowledge and its restricted dissemination.",
+  "status_updated_turn": "turn-300",
+  "stable_attributes": {
+    "function": {
+      "value": "food preservation, material storage, and crafting",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-290"
+    }
+  },
+  "volatile_state": {
+    "condition": "functional",
+    "equipment": [],
+    "location": "settlement",
+    "current_activity": "Supporting food preservation, material storage, and crafting initiatives, including the new storage structure and construction projects. Present during the council's discussion on the new knowledge and its restricted dissemination.",
+    "last_updated_turn": "turn-300"
+  },
+  "first_seen_turn": "turn-289",
+  "last_updated_turn": "turn-300",
+  "relationships": []
+}

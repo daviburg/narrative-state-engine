@@ -1,0 +1,50 @@
+{
+  "id": "item-geometric-lichen",
+  "name": "the geometric lichen tea",
+  "type": "item",
+  "identity": "A specific, strangely geometric lichen growing on rocks near the largest disruption field. When brewed into a tea, it enhances focus and clarity of thought, though its long-term effects remain unknown. Lyrawyn warns that the tea possesses a 'hunger' and whispers of things that seek to consume all other patterns, suggesting it should not be used yet.",
+  "current_status": "The Healer has decided to watch the lichen tea but not touch it, pending a full understanding of its demands. It remains in its natural location near the disruption field.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "appearance": {
+      "value": "strangely geometric",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "location": {
+      "value": "rocks near the largest disruption field",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "properties": {
+      "value": "brewed into tea enhances focus and clarity of thought",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "risk_profile": {
+      "value": "long-term effects unknown; possesses a 'hunger' that seeks to consume all other patterns; should not be touched yet",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-342"
+    },
+    "aliases": {
+      "value": [
+        "the geometric lichen"
+      ],
+      "inference": false,
+      "source_turn": "turn-342"
+    }
+  },
+  "volatile_state": {
+    "condition": "monitored but not touched",
+    "location": "rocks near the largest disruption field",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-332",
+  "last_updated_turn": "turn-344",
+  "notes": "The Healer has explicitly decided to observe this item without touching it until its full demands are understood.",
+  "relationships": []
+}

@@ -1,0 +1,35 @@
+{
+  "id": "loc-smaller-cooking-fires",
+  "name": "the smaller cooking fires",
+  "type": "location",
+  "identity": "A secondary cooking area within the camp, used by the women to prepare meals. It is smaller and more intimate than the main fire pit.",
+  "current_status": "Being used to prepare the morning meal, with the women actively stirring a thickened stew and baking flatbread on hot stones.",
+  "status_updated_turn": "turn-071",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Smaller than the main fire pit, with a rustic and functional setup for cooking.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-071"
+    },
+    "purpose": {
+      "value": "Primary site for meal preparation by the women in the camp.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-071"
+    }
+  },
+  "volatile_state": {
+    "condition": "Active and busy with cooking preparations.",
+    "equipment": [
+      "rough wooden ladle",
+      "hot stones for flatbread"
+    ],
+    "location": "Within the camp, near the main fire pit.",
+    "current_activity": "Preparing a thickened stew and flatbread for the group.",
+    "last_updated_turn": "turn-071"
+  },
+  "first_seen_turn": "turn-071",
+  "last_updated_turn": "turn-071",
+  "relationships": []
+}

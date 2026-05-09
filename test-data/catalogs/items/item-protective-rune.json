@@ -1,0 +1,37 @@
+{
+  "id": "item-protective-rune",
+  "name": "protective rune",
+  "type": "item",
+  "identity": "A protective rune intended for installation in the longhouse to provide spiritual protection, possibly blessed by the shaman.",
+  "current_status": "Active and in place above the longhouse entrance, serving as a spiritual safeguard during the birth and beyond.",
+  "status_updated_turn": "turn-139",
+  "stable_attributes": {
+    "type": {
+      "value": "item",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-132"
+    },
+    "name": {
+      "value": "protective rune",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-132"
+    },
+    "description": {
+      "value": "A magical symbol used for protection, often associated with spiritual or ritualistic purposes.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-132"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Active and in place above the longhouse entrance, serving as a spiritual safeguard during the birth and beyond.",
+    "location": "longhouse",
+    "condition": "active and in place",
+    "last_updated_turn": "turn-139"
+  },
+  "first_seen_turn": "turn-132",
+  "last_updated_turn": "turn-139",
+  "relationships": []
+}

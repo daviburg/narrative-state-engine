@@ -1,0 +1,39 @@
+{
+  "id": "loc-snow-laden-terrain",
+  "name": "the snow-laden terrain",
+  "type": "location",
+  "identity": "A harsh, cold environment where winter has settled in layers, shaping the characters' survival and adaptation. The terrain is marked by shifting snow patterns, freezing conditions, and the subtle ebb and flow of the arctic wilderness, serving as both a physical and symbolic backdrop for the tribe's rituals and survival strategies. It is central to a complex ritual addressing a sickness, symbolizing the tribe's relationship with death, the natural world, and the balance between structure and fluidity.",
+  "current_status": "Serving as the central setting for the execution of a complex ritual to address a sickness within the tribe. The terrain's cold and shifting nature continues to influence all activities, from shelter construction to frost pattern observation, while also symbolizing the tribe's relationship with death and the natural world. The ritual involves teaching and learning through action, with the land itself acting as a teacher and a symbol of the tribe's connection to the natural world. Characters interact with the terrain and each other to establish roles, responsibilities, and symbolic anchors for the tribe's future.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "appearance": {
+      "value": "snow-covered, icy, with shifting drifts and crystalline ice formations",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-223"
+    },
+    "climate": {
+      "value": "extremely cold, with persistent winter conditions",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-223"
+    },
+    "terrain_features": {
+      "value": "longhouse proximity, sheltered plots, arctic fox sightings, snow hare activity",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-223"
+    }
+  },
+  "volatile_state": {
+    "condition": "extremely cold, with persistent snowfall and freezing temperatures",
+    "equipment": [],
+    "location": "snow-laden terrain",
+    "current_activity": "Characters execute a ritual to address a sickness, with the terrain serving as both a physical and symbolic setting for the tribe's survival and spiritual practices. The ritual involves teaching and learning through action, with the land itself acting as a teacher and a symbol of the tribe's connection to the natural world. The terrain is central to interactions with Maelis, Gorok, Kael, the healer, Tala, Renn, and Thorne, establishing roles and responsibilities for the tribe's future.",
+    "last_updated_turn": "turn-210"
+  },
+  "first_seen_turn": "turn-223",
+  "last_updated_turn": "turn-223",
+  "notes": "",
+  "relationships": []
+}

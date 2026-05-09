@@ -1,0 +1,109 @@
+{
+  "id": "char-borin",
+  "name": "Borin",
+  "type": "character",
+  "identity": "A respected leader and craftsman of the tribe, known for his strategic mind and deep connection to the tribe's well-being. He is known by the title 'The Unforeseen'. He has accepted the formal responsibility of mentoring Faelan, guiding the boy's innate understanding of structure and form without imposing his own shape upon him.",
+  "current_status": "Discussing winter patrol tactics with the player, criticizing the hunters' tendency to commit too early, and proposing a 'patterned perimeter' design concept that slows and reveals threats rather than just blocking them.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-324"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-324"
+    },
+    "class": {
+      "value": "Craftsman/Mentor",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-324"
+    },
+    "aliases": {
+      "value": [
+        "Borin",
+        "Borin -- The Unforeseen"
+      ],
+      "inference": false,
+      "source_turn": "turn-338"
+    },
+    "role": {
+      "value": "council leader",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-289"
+    },
+    "responsibility": {
+      "value": "Mentor to Faelan",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-323"
+    },
+    "title": {
+      "value": "The Unforeseen",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-337"
+    },
+    "expertise": {
+      "value": "Structural analysis, pattern recognition, perimeter design",
+      "inference": false,
+      "confidence": 0.95,
+      "source_turn": "turn-342"
+    }
+  },
+  "volatile_state": {
+    "condition": "Reflective and engaged in tactical discussion",
+    "equipment": [
+      "Weapons",
+      "Bows",
+      "Arrows",
+      "Spears",
+      "Fur-lined cloaks",
+      "Charms and wards"
+    ],
+    "location": "Council gathering",
+    "current_activity": "Discussing winter patrol tactics and proposing a 'patterned perimeter' design concept",
+    "last_updated_turn": "turn-342"
+  },
+  "first_seen_turn": "turn-179",
+  "last_updated_turn": "turn-342",
+  "notes": "Borin's expertise in structural analysis and pattern recognition is now explicitly confirmed through his dialogue about frost lines and perimeter design.",
+  "relationships": [
+    {
+      "target_id": "loc-storage",
+      "current_relationship": "constructs",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-290",
+      "last_updated_turn": "turn-298"
+    },
+    {
+      "target_id": "loc-drying-racks-kilns",
+      "current_relationship": "uses",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-290",
+      "last_updated_turn": "turn-298"
+    },
+    {
+      "target_id": "char-faelan",
+      "current_relationship": "tutors",
+      "type": "mentorship",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    }
+  ]
+}

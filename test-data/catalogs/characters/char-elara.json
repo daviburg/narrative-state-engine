@@ -1,0 +1,67 @@
+{
+  "id": "char-elara",
+  "name": "Elara",
+  "type": "character",
+  "identity": "A member of the tribe and an apprentice who learns quickly but prioritizes observation over action. She is building connections within the community and finding her place among the people.",
+  "current_status": "Expressing her desire to learn to read patterns in the snow like Anya, to predict animal movements, and to tell powerful stories that help the community understand how they built their place.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "role": {
+      "value": "apprentice and knowledge-bearer",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-155"
+    },
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-337"
+    },
+    "aliases": {
+      "value": [
+        "Elara",
+        "new apprentice"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-155"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-337"
+    },
+    "class": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-337"
+    }
+  },
+  "volatile_state": {
+    "condition": "hopeful and inspired",
+    "equipment": [
+      "fermented greens tools"
+    ],
+    "location": "gathering with Lyra, Anya, and Lyrawyn",
+    "current_activity": "Sharing her aspirations to read snow patterns and tell stories",
+    "last_updated_turn": "turn-342"
+  },
+  "first_seen_turn": "turn-155",
+  "last_updated_turn": "turn-342",
+  "notes": "Elara is characterized by her observational nature and desire to belong. The player explicitly advises her to 'Belong' rather than just work.",
+  "relationships": [
+    {
+      "target_id": "item-sauerkraut",
+      "current_relationship": "creates",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-163",
+      "last_updated_turn": "turn-163"
+    }
+  ]
+}

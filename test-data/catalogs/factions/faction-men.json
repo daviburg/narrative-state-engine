@@ -1,0 +1,129 @@
+{
+  "id": "faction-men",
+  "name": "the men",
+  "type": "faction",
+  "identity": "A faction of men returning from a hunting expedition, focused on practical tasks and maintaining a pragmatic, group-oriented demeanor.",
+  "current_status": "Discussing defensive strategies, emphasizing the need for a water reserve, hiding places for non-combatants, and a defensive posture against potential raids.",
+  "status_updated_turn": "turn-097",
+  "stable_attributes": {
+    "role": {
+      "value": "combat and defensive force",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-168"
+    },
+    "race": {
+      "value": "human",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-077"
+    },
+    "appearance": {
+      "value": "physically strong, with a focus on manual labor",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-127"
+    },
+    "allegiance": {
+      "value": "group survival and protection",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-168"
+    }
+  },
+  "volatile_state": {
+    "condition": "physically exerted, with visible signs of fatigue and muscle tension",
+    "equipment": [
+      "knives",
+      "bows",
+      "quivers",
+      "spear tips",
+      "snowshoes",
+      "furs"
+    ],
+    "location": "camp",
+    "current_activity": "butchering a deer, working with companions, and silently acknowledging the player through physical gestures of gratitude",
+    "last_updated_turn": "turn-097"
+  },
+  "first_seen_turn": "turn-077",
+  "last_updated_turn": "turn-168",
+  "notes": "Entity's current activity updated to reflect butchering and silent acknowledgment of the player through physical gestures. No new stable attributes added.",
+  "relationships": [
+    {
+      "target_id": "loc-snow-laden-juniper-bush",
+      "current_relationship": "preparing to hunt in",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-077",
+      "last_updated_turn": "turn-077"
+    },
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "laboring on",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-127",
+      "last_updated_turn": "turn-133",
+      "history": []
+    },
+    {
+      "target_id": "loc-loft",
+      "current_relationship": "laboring on",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-131",
+      "last_updated_turn": "turn-133",
+      "history": []
+    },
+    {
+      "target_id": "loc-walls-and-roof-insulation",
+      "current_relationship": "laboring on",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-131",
+      "last_updated_turn": "turn-133",
+      "history": []
+    },
+    {
+      "target_id": "loc-steep-pitch-roof-of-wood-shingles",
+      "current_relationship": "laboring on",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-131",
+      "last_updated_turn": "turn-133",
+      "history": []
+    },
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "laboring on",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-131",
+      "last_updated_turn": "turn-133",
+      "history": []
+    },
+    {
+      "target_id": "loc-house",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-168",
+      "last_updated_turn": "turn-168",
+      "history": []
+    }
+  ]
+}

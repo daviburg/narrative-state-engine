@@ -1,0 +1,49 @@
+{
+  "id": "item-bone-charm-pouch",
+  "name": "the bone charm pouch",
+  "type": "item",
+  "identity": "A pouch used to contain dark fragments collected from a mysterious crystalline growth, exhibiting a cold presence and subtle energy properties.",
+  "current_status": "Displayed openly at the longhouse entrance, the pouch remains a focal point of the tribe's study and reflection on the alien presence it holds. It is not moved, yet its presence is integral to the tribe's evolving understanding of their environment and future.",
+  "status_updated_turn": "turn-214",
+  "stable_attributes": {
+    "species": {
+      "value": "pouch",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-203"
+    },
+    "race": {
+      "value": "n/a",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-203"
+    },
+    "class": {
+      "value": "container",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-203"
+    },
+    "aliases": {
+      "value": [
+        "bone charm pouch"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-203"
+    }
+  },
+  "volatile_state": {
+    "condition": "cold and contained",
+    "equipment": [
+      "bone charm pouch"
+    ],
+    "location": "longhouse entrance",
+    "current_activity": "displayed for the tribe's study and consideration",
+    "last_updated_turn": "turn-214"
+  },
+  "first_seen_turn": "turn-203",
+  "last_updated_turn": "turn-214",
+  "notes": "",
+  "relationships": []
+}

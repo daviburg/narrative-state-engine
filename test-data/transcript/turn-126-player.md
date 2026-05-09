@@ -1,0 +1,3 @@
+# turn-126 — PLAYER
+
+My objective is not a monumental hall, but a durable, insulated communal longhouse that can protect mother and infant through our first winter. In the first week, Clear and Level Remove underbrush and roots Preserve select large trees for windbreak Use salvaged stones to level foundation perimeter. Then I Mark the Structure Footprint, with Central hearth Sleeping alcoves Food storage Craft area Cradle space near warmth. Starting week two, I need to work on the Raised Stone Perimeter Lay large flat stones as perimeter wall a foot high. Dry-stack construction, unless the tribe knows mortar making. Fill interior with compacted ugravel and sand. Do any other tribe member join me?

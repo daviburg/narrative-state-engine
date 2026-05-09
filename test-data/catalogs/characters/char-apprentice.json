@@ -1,0 +1,35 @@
+{
+  "id": "char-apprentice",
+  "name": "the apprentice",
+  "type": "character",
+  "identity": "A new character introduced by the player as an apprentice who will eventually learn the secrets of mead-making.",
+  "current_status": "Awaiting the player's guidance in the mead-making process, with the player planning to teach them once the process is perfected.",
+  "status_updated_turn": "turn-146",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "the apprentice"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-146"
+    },
+    "appearance": {
+      "value": "young woman, observant and quick",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-147"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "awaiting instruction in mead-making",
+    "location": "unknown",
+    "condition": "inactive",
+    "last_updated_turn": "turn-146",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-147",
+  "last_updated_turn": "turn-147",
+  "relationships": [],
+  "notes": "No explicit name provided for the apprentice. Identity and role are inferred from the player's statement."
+}

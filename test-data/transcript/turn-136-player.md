@@ -1,0 +1,3 @@
+# turn-136 — PLAYER
+
+With the home finished early, I spend the remaining weeks before the birth to start the tribe on a transformation to sedentarization. We need to plant seeds of edible vegetation, herbs and plants close to the longhouse. We need to select nut and berry trees in the closeby forest and clear them of competing brush so they will yield more food for the seasons to come. With a much stronger home, the hunters need to think of new techniques to hunt bigger game. The children can lay traps for small game around watering holes. Maybe the tribe can catch fish when they drill a hole on the surface of the frozen lake.

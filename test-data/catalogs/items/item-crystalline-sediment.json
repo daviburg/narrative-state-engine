@@ -1,0 +1,75 @@
+{
+  "id": "item-crystalline-sediment",
+  "name": "the crystalline sediment",
+  "type": "item",
+  "identity": "A regenerative substance derived from poultices, known for its ability to interact with mineral deposits to form patterned veins. It has proven effective as a salve for frostbite when ground and mixed with fat, and as a mild analgesic and regenerative poultice for minor cuts and abrasions when powdered.",
+  "current_status": "The Healer has decided to stop using the crystalline sediment for any internal applications due to its singular energy and potential for subtle distortion, though it remains available for other uses.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "value": {
+      "value": "crystalline sediment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "inference": {
+      "value": "False",
+      "inference": true,
+      "confidence": 0.5,
+      "source_turn": "turn-312"
+    },
+    "confidence": {
+      "value": "1.0",
+      "inference": true,
+      "confidence": 0.5,
+      "source_turn": "turn-312"
+    },
+    "source_turn": {
+      "value": "turn-312",
+      "inference": true,
+      "confidence": 0.5,
+      "source_turn": "turn-312"
+    },
+    "properties": {
+      "value": "intricate, non-toxic patterns",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "usage": {
+      "value": "salve for frostbite (ground and mixed with fat); topical analgesic (crushed form); mild analgesic and regenerative poultice for minor cuts and abrasions (powdered form)",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-342"
+    },
+    "applications": {
+      "value": "temporary structural reinforcements; insulated containers",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    },
+    "requirements": {
+      "value": "high degree of focus and understanding of underlying energetic patterns",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    },
+    "restrictions": {
+      "value": "no internal applications",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-344"
+    }
+  },
+  "volatile_state": {
+    "condition": "restricted from internal use",
+    "equipment": [],
+    "location": "in the spring",
+    "current_activity": "being evaluated by the Healer for future usage restrictions",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-312",
+  "last_updated_turn": "turn-344",
+  "notes": "Healer explicitly forbids internal application due to energy singularity and distortion risks.",
+  "relationships": []
+}

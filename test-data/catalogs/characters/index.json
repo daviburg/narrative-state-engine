@@ -1,0 +1,461 @@
+[
+  {
+    "id": "char-ailing-stranger",
+    "name": "the ailing stranger",
+    "type": "character",
+    "status_summary": "Being treated by the player and healer through a regimen of controlled warmth, m",
+    "first_seen_turn": "turn-225",
+    "last_updated_turn": "turn-234",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-anya",
+    "name": "Anya",
+    "type": "character",
+    "status_summary": "Working with the player and the Shaman to disrupt a malevolent pattern within a ",
+    "first_seen_turn": "turn-190",
+    "last_updated_turn": "turn-251",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-apprentice",
+    "name": "the apprentice",
+    "type": "character",
+    "status_summary": "Awaiting the player's guidance in the mead-making process, with the player plann",
+    "first_seen_turn": "turn-147",
+    "last_updated_turn": "turn-146",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-borin",
+    "name": "Borin",
+    "type": "character",
+    "status_summary": "Discussing winter patrol tactics with the player, criticizing the hunters' tende",
+    "first_seen_turn": "turn-179",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-boruk",
+    "name": "Boruk",
+    "type": "character",
+    "status_summary": "Remaining alert and focused as the player attempts to communicate with the mount",
+    "first_seen_turn": "turn-195",
+    "last_updated_turn": "turn-200",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-bran",
+    "name": "Bran",
+    "type": "character",
+    "status_summary": "Present in the central gathering space. The player asks him to go to Lyra to hel",
+    "first_seen_turn": "turn-337",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-chief-thorne",
+    "name": "Chief Thorne",
+    "type": "character",
+    "status_summary": "Receiving a directive from the player to prepare for a future visit from a small",
+    "first_seen_turn": "turn-314",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-elara",
+    "name": "Elara",
+    "type": "character",
+    "status_summary": "Expressing her desire to learn to read patterns in the snow like Anya, to predic",
+    "first_seen_turn": "turn-155",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-elder-lyra",
+    "name": "Lyra",
+    "type": "character",
+    "status_summary": "Awaiting departure to meet with Bran to establish boundaries for the spreading p",
+    "first_seen_turn": "turn-314",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-elder",
+    "name": "The Elder",
+    "type": "character",
+    "status_summary": "Rising from his spot by the main bonfire, gesturing for everyone to gather as a ",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-043",
+    "active_relationship_count": 5
+  },
+  {
+    "id": "char-faelan",
+    "name": "Faelan",
+    "type": "character",
+    "status_summary": "Borin reports to the player that Faelan has begun sketching simplified diagrams ",
+    "first_seen_turn": "turn-331",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-finn",
+    "name": "Finn",
+    "type": "character",
+    "status_summary": "Learning Renn's intricate weaving and preservation techniques, showing intrigue ",
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-healer",
+    "name": "the Healer",
+    "type": "character",
+    "status_summary": "Guiding the healing process of a man whose body has been affected by an alien pa",
+    "first_seen_turn": "turn-230",
+    "last_updated_turn": "turn-251",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-joric",
+    "name": "Joric",
+    "type": "character",
+    "status_summary": "Sharing his story of arrival and suspicion turning to understanding with Maelis,",
+    "first_seen_turn": "turn-337",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-kael",
+    "name": "Kael",
+    "type": "character",
+    "status_summary": "Engaged in deep reflection on the implications of the spreading pattern and the ",
+    "first_seen_turn": "turn-215",
+    "last_updated_turn": "turn-246",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-len",
+    "name": "Len",
+    "type": "character",
+    "status_summary": "Engaged in instruction with the player character, demonstrating a keen interest ",
+    "first_seen_turn": "turn-208",
+    "last_updated_turn": "turn-208",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-lone-hunter",
+    "name": "the lone hunter",
+    "type": "character",
+    "status_summary": "Engaged in a quiet, meaningful exchange with the player, showing subtle signs of",
+    "first_seen_turn": "turn-051",
+    "last_updated_turn": "turn-073",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-lyrawyn",
+    "name": "Lyrawyn",
+    "type": "character",
+    "status_summary": "Sitting with the player, Lyra, and Anya during the council, organizing samples i",
+    "first_seen_turn": "turn-141",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-maelis-of-the-swift-arrows",
+    "name": "Maelis of the Swift Arrows",
+    "type": "character",
+    "status_summary": "Present in the central gathering space with the player and Gorok. The player has",
+    "first_seen_turn": "turn-332",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 17
+  },
+  {
+    "id": "char-midwife-of-tribe",
+    "name": "the midwife of the tribe",
+    "type": "character",
+    "status_summary": "Dedicated to ensuring the success and safety of the mead, a project of great imp",
+    "first_seen_turn": "turn-132",
+    "last_updated_turn": "turn-146",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-moss",
+    "name": "Moss",
+    "type": "character",
+    "status_summary": "Part of the Quiet Weave, being observed for its stability, expansion, and potent",
+    "first_seen_turn": "turn-311",
+    "last_updated_turn": "turn-311",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-mother",
+    "name": "another mother",
+    "type": "character",
+    "status_summary": "Observing the growth of cultivated patches near the longhouse, showing maternal ",
+    "first_seen_turn": "turn-160",
+    "last_updated_turn": "turn-173",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-player",
+    "name": "Player Character",
+    "type": "character",
+    "status_summary": "Conducting a ritual to dismantle a harmful pattern within a patient, shifting fr",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-251",
+    "active_relationship_count": 192
+  },
+  {
+    "id": "char-renn",
+    "name": "Renn",
+    "type": "character",
+    "status_summary": "The player instructs Renn to demonstrate to the young hunter Finn the intricate ",
+    "first_seen_turn": "turn-339",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-rune",
+    "name": "Rune",
+    "type": "character",
+    "status_summary": "The healer reports on her, describing the distinct stillness around her that cau",
+    "first_seen_turn": "turn-306",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-rurik",
+    "name": "Rurik",
+    "type": "character",
+    "status_summary": "Following the player's instructions to remain behind and search for signs of the",
+    "first_seen_turn": "turn-194",
+    "last_updated_turn": "turn-269",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-scout",
+    "name": "the scout",
+    "type": "character",
+    "status_summary": "Maintaining a fixed observation of the river's energy patterns and the impact of",
+    "first_seen_turn": "turn-259",
+    "last_updated_turn": "turn-274",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-shaman",
+    "name": "Lena",
+    "type": "character",
+    "status_summary": "Guiding Anya in the controlled use of power, establishing new practices for frag",
+    "first_seen_turn": "turn-080",
+    "last_updated_turn": "turn-251",
+    "active_relationship_count": 1
+  },
+  {
+    "id": "char-special-someone",
+    "name": "my special someone",
+    "type": "character",
+    "status_summary": "The player has physically comforted them through touch, leading to emotional rel",
+    "first_seen_turn": "turn-088",
+    "last_updated_turn": "turn-097",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-survivor",
+    "name": "Survivor",
+    "type": "character",
+    "status_summary": "Maintaining fixed observation of an environmental disruption caused by Anya's fr",
+    "first_seen_turn": "turn-259",
+    "last_updated_turn": "turn-274",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-tala",
+    "name": "Tala",
+    "type": "character",
+    "status_summary": "The player asks Tala to record her observations of subtle hierarchies, unspoken ",
+    "first_seen_turn": "turn-162",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 3
+  },
+  {
+    "id": "char-the-man",
+    "name": "Sick Man",
+    "type": "character",
+    "status_summary": "Undergoing a structured, non-invasive treatment where the tribe observes his con",
+    "first_seen_turn": "turn-231",
+    "last_updated_turn": "turn-251",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-trapper",
+    "name": "the tracker",
+    "type": "character",
+    "status_summary": "Engaged in a discussion with the player about his movements and observations, an",
+    "first_seen_turn": "turn-212",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-tribe-elder",
+    "name": "the tribe elder",
+    "type": "character",
+    "status_summary": "Enduring the deep winter by the central fire with waning physical strength, thou",
+    "first_seen_turn": "turn-332",
+    "last_updated_turn": "turn-332",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-warrior-chief-gorok",
+    "name": "Gorok",
+    "type": "character",
+    "status_summary": "Standing in a designated space with Maelis and the player, responding to the pla",
+    "first_seen_turn": "turn-314",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 7
+  },
+  {
+    "id": "char-watchman",
+    "name": "the watchman",
+    "type": "character",
+    "status_summary": "Observing the camp from the edge as the communal meal begins, having completed h",
+    "first_seen_turn": "turn-037",
+    "last_updated_turn": "turn-043",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-woman-with-broth",
+    "name": "the same one who offered you broth last night",
+    "type": "character",
+    "status_summary": "Preparing the morning meal and offering assistance to the player by requesting h",
+    "first_seen_turn": "turn-071",
+    "last_updated_turn": "turn-071",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-young-boy",
+    "name": "the young boy",
+    "type": "character",
+    "status_summary": "Being instructed by a woman in the delicate art of carving a fishhook from bone,",
+    "first_seen_turn": "turn-061",
+    "last_updated_turn": "turn-061",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-young-hunter",
+    "name": "Kael",
+    "type": "character",
+    "status_summary": "Standing near the perimeter with Tala, silently acknowledging the player's retur",
+    "first_seen_turn": "turn-077",
+    "last_updated_turn": "turn-343",
+    "active_relationship_count": 14
+  },
+  {
+    "id": "char-young-warrior",
+    "name": "the young warrior",
+    "type": "character",
+    "status_summary": "Engaged in a meal with the player, then assisting the women with cleanup after t",
+    "first_seen_turn": "turn-052",
+    "last_updated_turn": "turn-074",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-younger-woman",
+    "name": "the younger woman",
+    "type": "character",
+    "status_summary": "Working alongside the player character to sort herbs, then participating in the ",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-043",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-burrowing-beetles",
+    "name": "burrowing beetles",
+    "type": "creature",
+    "status_summary": "Observed by the player character during a ritual, where their presence and activ",
+    "first_seen_turn": "turn-233",
+    "last_updated_turn": "turn-247",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-earthworms",
+    "name": "earthworms",
+    "type": "creature",
+    "status_summary": "Not directly involved in the action but present in the environment as part of th",
+    "first_seen_turn": "turn-231",
+    "last_updated_turn": "turn-247",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-his-beast",
+    "name": "his beast",
+    "type": "creature",
+    "status_summary": "Still being cleared of the area by the player and their companion.",
+    "first_seen_turn": "turn-104",
+    "last_updated_turn": "turn-123",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-insects",
+    "name": "insects",
+    "type": "creature",
+    "status_summary": "The sickness, manifesting as glowing lines and lesions, has been temporarily sub",
+    "first_seen_turn": "turn-231",
+    "last_updated_turn": "turn-247",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-nitrogen-fixing-insect",
+    "name": "nitrogen-fixing insect",
+    "type": "creature",
+    "status_summary": "Actively enhancing the soil around the geometric moss patches near the disruptio",
+    "first_seen_turn": "turn-332",
+    "last_updated_turn": "turn-332",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-ravens",
+    "name": "ravens",
+    "type": "creature",
+    "status_summary": "Confirming the movement of caribou herds and the return of smaller prey to the t",
+    "first_seen_turn": "turn-189",
+    "last_updated_turn": "turn-191",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-silent-worms",
+    "name": "the silent worms",
+    "type": "creature",
+    "status_summary": "Remaining hidden beneath the earth, consuming the dead and observing the sick ma",
+    "first_seen_turn": "turn-233",
+    "last_updated_turn": "turn-237",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-thorny-bush",
+    "name": "The hardy bush",
+    "type": "creature",
+    "status_summary": "The bush has expanded its territory, forming dense, protective thickets near the",
+    "first_seen_turn": "turn-302",
+    "last_updated_turn": "turn-332",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-unborn-child",
+    "name": "the unborn child",
+    "type": "creature",
+    "status_summary": "Growing strong and steady within the player character during the deep winter. Th",
+    "first_seen_turn": "turn-321",
+    "last_updated_turn": "turn-332",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "creature-wolf-dog",
+    "name": "wolf-dog",
+    "type": "creature",
+    "status_summary": "Maintains vigilance over the settlement, detecting and alerting the tribe to pot",
+    "first_seen_turn": "turn-189",
+    "last_updated_turn": "turn-212",
+    "active_relationship_count": 0
+  }
+]

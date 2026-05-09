@@ -1,0 +1,176 @@
+{
+  "id": "char-shaman",
+  "name": "Lena",
+  "type": "character",
+  "identity": "A spiritual leader and healer who serves as a bridge between the physical and unseen realms, guiding the community through spiritual insight and ritual. Her role as a shaman is central to interpreting the shifting patterns of the land and the community's evolving relationship with it. She now emphasizes precision and control in the use of power, establishing new practices to ensure stability and prevent surges.",
+  "current_status": "Guiding Anya in the controlled use of power, establishing new practices for fragment usage, and discussing the implications of power changes on the broader world. She also supports the healing of the man by ensuring his body clears the remnants of the alien pattern.",
+  "status_updated_turn": "turn-251",
+  "stable_attributes": {
+    "name": {
+      "value": "Lena",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-318"
+    },
+    "type": {
+      "value": "character",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-080"
+    },
+    "identity": {
+      "value": "A spiritual leader and healer who serves as a bridge between the physical and unseen realms, guiding the community through spiritual insight and ritual. Her role as a shaman is central to interpreting the shifting patterns of the land and the community's evolving relationship with it. She now emphasizes precision and control in the use of power, establishing new practices to ensure stability and prevent surges.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-287"
+    },
+    "species": {
+      "value": "Human",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-212"
+    },
+    "class": {
+      "value": "Shaman",
+      "inference": true,
+      "confidence": 1.0,
+      "source_turn": "turn-212"
+    },
+    "appearance": {
+      "value": "Unnamed, but implied to be a learner actively engaged in the community's educational processes",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-301"
+    },
+    "aliases": {
+      "value": [
+        "the shaman",
+        "Lena, the Shaman"
+      ],
+      "inference": false,
+      "source_turn": "turn-318"
+    },
+    "role": {
+      "value": "Tribal leader and spiritual guide",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-212"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-208"
+    }
+  },
+  "volatile_state": {
+    "condition": "Engaged and focused",
+    "location": "Training area near the fragment",
+    "current_activity": "Guiding Anya in the controlled use of power, establishing new practices for fragment usage, and discussing the implications of power changes on the broader world. She also supports the healing of the man by ensuring his body clears the remnants of the alien pattern.",
+    "last_updated_turn": "turn-251",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-080",
+  "last_updated_turn": "turn-251",
+  "notes": "The shaman's role in training Anya and establishing new practices for fragment usage is emphasized. The text highlights her focus on precision and control, as well as the broader implications of power changes on the community and the land.",
+  "relationships": [
+    {
+      "target_id": "loc-largest-ornate-shelter",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-081",
+      "last_updated_turn": "turn-081"
+    },
+    {
+      "target_id": "char-player",
+      "current_relationship": "teaches",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-081",
+      "last_updated_turn": "turn-161",
+      "history": [
+        {
+          "turn": "turn-159",
+          "description": "observes"
+        }
+      ]
+    },
+    {
+      "target_id": "faction-women",
+      "current_relationship": "guides",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-081",
+      "last_updated_turn": "turn-081"
+    },
+    {
+      "target_id": "item-obsidian-staff",
+      "current_relationship": "carries",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-081",
+      "last_updated_turn": "turn-081"
+    },
+    {
+      "target_id": "loc-snow-laden-juniper-bush",
+      "current_relationship": "connected_to",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-081",
+      "last_updated_turn": "turn-081"
+    },
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "imbuing",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-129",
+      "last_updated_turn": "turn-133",
+      "history": []
+    },
+    {
+      "target_id": "faction-children",
+      "current_relationship": "guides",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-163",
+      "last_updated_turn": "turn-298",
+      "history": []
+    },
+    {
+      "target_id": "loc-fragment",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-218",
+      "last_updated_turn": "turn-294"
+    },
+    {
+      "target_id": "item-frost-pattern",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-218",
+      "last_updated_turn": "turn-218"
+    }
+  ]
+}

@@ -306,33 +306,47 @@ def _normalize_entity_location(entity_data: dict, catalogs: dict) -> None:
     loc_value = vol.get("location")
     if not loc_value or not isinstance(loc_value, str):
         return
-    # Already a loc-* ID
-    if loc_value.startswith("loc-"):
+
+    # Strip whitespace and check for existing loc-* ID (case-insensitive)
+    trimmed = loc_value.strip()
+    if trimmed.lower().startswith("loc-"):
+        # Canonicalize to lowercase loc-* ID if needed
+        if trimmed != trimmed.lower():
+            vol["location"] = trimmed.lower()
+            print(f"  NORMALIZE_LOC: {loc_value!r} -> {trimmed.lower()} (case fix)", file=sys.stderr)
+        elif trimmed != loc_value:
+            vol["location"] = trimmed
         return
 
-    loc_lower = loc_value.lower().strip()
+    loc_lower = trimmed.lower()
     if not loc_lower:
         return
 
-    # Build name→ID lookup from location catalog
+    # Build name→ID lookup from location catalog, detecting ambiguous matches
     locations = catalogs.get("locations.json", [])
+    matches: list[str] = []
     for loc_entity in locations:
         loc_id = loc_entity.get("id", "")
         # Check name
         if loc_entity.get("name", "").lower().strip() == loc_lower:
-            vol["location"] = loc_id
-            print(f"  NORMALIZE_LOC: {loc_value!r} -> {loc_id}", file=sys.stderr)
-            return
+            matches.append(loc_id)
+            continue
         # Check aliases
         sa = loc_entity.get("stable_attributes", {}).get("aliases")
         if sa:
             alias_val = sa.get("value", "") if isinstance(sa, dict) else sa
-            aliases = alias_val if isinstance(alias_val, list) else [alias_val] if alias_val else []
-            for alias in aliases:
+            alias_list = alias_val if isinstance(alias_val, list) else [alias_val] if alias_val else []
+            for alias in alias_list:
                 if isinstance(alias, str) and alias.lower().strip() == loc_lower:
-                    vol["location"] = loc_id
-                    print(f"  NORMALIZE_LOC: {loc_value!r} -> {loc_id} (alias match)", file=sys.stderr)
-                    return
+                    matches.append(loc_id)
+                    break
+
+    if len(matches) == 1:
+        vol["location"] = matches[0]
+        print(f"  NORMALIZE_LOC: {loc_value!r} -> {matches[0]}", file=sys.stderr)
+    elif len(matches) > 1:
+        print(f"  NORMALIZE_LOC: {loc_value!r} matches multiple locations "
+              f"{matches} — skipping normalization", file=sys.stderr)
 
 
 def _coerce_entity_fields(entity_data) -> dict | None:

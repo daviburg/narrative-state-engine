@@ -1,0 +1,50 @@
+{
+  "id": "item-corner-stones",
+  "name": "corner stones",
+  "type": "item",
+  "identity": "A key material used in the construction of the new communial home, essential for establishing the foundation.",
+  "current_status": "Being gathered by the player as part of their plan to build the first communial home for the tribe.",
+  "status_updated_turn": "turn-124",
+  "stable_attributes": {
+    "species": {
+      "value": "inanimate",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-124"
+    },
+    "race": {
+      "value": "inanimate",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-124"
+    },
+    "class": {
+      "value": "construction material",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-124"
+    },
+    "aliases": {
+      "value": [
+        "corner stones",
+        "foundation stones"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-124"
+    }
+  },
+  "volatile_state": {
+    "condition": "being gathered",
+    "equipment": [
+      "corner stones"
+    ],
+    "location": "player's collection",
+    "current_activity": "being gathered as part of the communial home construction plan",
+    "last_updated_turn": "turn-124"
+  },
+  "first_seen_turn": "turn-124",
+  "last_updated_turn": "turn-124",
+  "notes": "",
+  "relationships": []
+}

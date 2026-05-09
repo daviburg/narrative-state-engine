@@ -1,0 +1,33 @@
+{
+  "id": "item-structured-bird-nest",
+  "name": "structured bird's nest",
+  "type": "item",
+  "identity": "A geometrically precise bird's nest with internal resonance to the environment's pattern fields, serving as a focal point for studying environmental transformation and the interplay between natural and arcane influences.",
+  "current_status": "Being studied as part of the group's environmental transformation research, with its resonance to pattern fields and connection to arcane influence emphasized in the council's discussion.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "appearance": {
+      "value": "geometrically precise, with internal resonance to pattern fields",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-298"
+    },
+    "location": {
+      "value": "near the longhouse",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-296"
+    }
+  },
+  "volatile_state": {
+    "location": "near the longhouse",
+    "current_activity": "Being studied as part of the environmental transformation research, with its resonance and connection to arcane influence emphasized",
+    "last_updated_turn": "turn-211",
+    "condition": "intact and resonant",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-296",
+  "last_updated_turn": "turn-296",
+  "notes": "",
+  "relationships": []
+}

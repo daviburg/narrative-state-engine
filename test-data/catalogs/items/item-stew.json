@@ -1,0 +1,33 @@
+{
+  "id": "item-stew",
+  "name": "the stew",
+  "type": "item",
+  "identity": "A communal dish made from wild game and root vegetables, central to the villagers' gathering and a symbol of their shared sustenance and resilience.",
+  "current_status": "Being consumed by the villagers during the gathering, with bowls passed around the bonfire.",
+  "status_updated_turn": "turn-045",
+  "stable_attributes": {
+    "composition": {
+      "value": "wild game and root vegetables",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-045"
+    },
+    "role": {
+      "value": "communal staple of the village",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-045"
+    }
+  },
+  "volatile_state": {
+    "condition": "being consumed",
+    "equipment": [],
+    "location": "bonfire gathering",
+    "current_activity": "being eaten by villagers",
+    "last_updated_turn": "turn-045"
+  },
+  "first_seen_turn": "turn-045",
+  "last_updated_turn": "turn-045",
+  "notes": "The communal role and ingredients are explicitly described, while the inferred role as a staple is based on context.",
+  "relationships": []
+}

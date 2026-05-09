@@ -1,0 +1,42 @@
+{
+  "id": "item-dense-nourishing-tuber",
+  "name": "the dense, nourishing tuber",
+  "type": "item",
+  "identity": "A new food source discovered in the shade of the largest disruption field, known for its nourishing properties and resistance to rot. It represents an unintended but beneficial growth within the patterned environments of the Quiet Weave.",
+  "current_status": "Serving as a stable and abundant food source, with potential for long-term preservation and use. It is noted for its regenerative properties and its role in enhancing the existing agricultural and ecological balance. It is also referenced in the context of the settlement's discussions about sustainability and the balance between growth and preservation.",
+  "status_updated_turn": "turn-341",
+  "stable_attributes": {
+    "species": {
+      "value": "plant",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    },
+    "appearance": {
+      "value": "dense, nourishing tuber",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    },
+    "aliases": {
+      "value": [
+        "the tuber from the disruption field",
+        "new food source"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    }
+  },
+  "volatile_state": {
+    "condition": "stable and abundant",
+    "equipment": [],
+    "location": "disruption field",
+    "current_activity": "serving as a stable and nourishing food source, referenced in discussions about sustainability and the balance between growth and preservation",
+    "last_updated_turn": "turn-341"
+  },
+  "first_seen_turn": "turn-312",
+  "last_updated_turn": "turn-341",
+  "notes": "",
+  "relationships": []
+}

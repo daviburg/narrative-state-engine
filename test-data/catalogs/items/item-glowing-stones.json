@@ -1,0 +1,38 @@
+{
+  "id": "item-glowing-stones",
+  "name": "glowing stones",
+  "type": "item",
+  "identity": "Strange stones found along thawing rivers and in tundra regions, marked by faint geometric etchings that absorb light. They are associated with the mysterious 'plague' and are believed to resonate with subterranean rhythms and crystalline growths. Their presence is tied to unseen forces and patterns in the landscape, and their structured energy patterns suggest a complex interplay with the environment's hidden structures.",
+  "current_status": "Located along thawing rivers and in tundra regions, these stones exhibit faint geometric etchings and absorb light. They are pulsating with a sterile blue glow, matching descriptions of the 'plague' and subterranean rhythms. The player and southern tribes are observing and studying them closely, noting their intricate energy patterns and influence over the surrounding environment. A persistent disruption at a specific boundary point has caused subtle instability in the system, preventing full coherence and forcing the stones to allocate attention to this minor flaw.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "appearance": {
+      "value": "smooth, river-worn stones with faint geometric etchings that absorb light, often found in areas with hexagonal melt patterns and crystalline growths emitting a sterile blue glow",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-268"
+    },
+    "associated_concepts": {
+      "value": "plague, subterranean rhythms, crystalline growths, mysterious forces, systemic instability",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-274"
+    },
+    "energy_patterns": {
+      "value": "structured energy flow, rhythmic pulses, and intricate, branching networks",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-270"
+    }
+  },
+  "volatile_state": {
+    "location": "thawing rivers and tundra regions, near ancient forest transitions",
+    "current_activity": "being observed and studied by the player and southern tribes, with noted energy patterns and influence over the surrounding environment. A persistent disruption at a specific boundary point has caused subtle instability in the system, preventing full coherence and forcing the stones to allocate attention to this minor flaw.",
+    "condition": "pulsating with faint blue light, resonating with subterranean rhythms and structured energy flow, exhibiting subtle instability due to a persistent disruption",
+    "last_updated_turn": "turn-211"
+  },
+  "first_seen_turn": "turn-255",
+  "last_updated_turn": "turn-255",
+  "notes": "The stones' connection to the 'plague' and crystalline growths is reinforced. Their pulsating blue light and geometric patterns suggest a deeper link to the landscape's hidden structures. The energy patterns observed are intricate and structured, indicating a complex influence over the environment. The persistent disruption at a boundary point has caused subtle instability in the system, preventing full coherence and forcing the stones to allocate attention to this minor flaw.",
+  "relationships": []
+}

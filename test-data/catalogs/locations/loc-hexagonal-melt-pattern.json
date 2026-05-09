@@ -1,0 +1,59 @@
+{
+  "id": "loc-hexagonal-melt-pattern",
+  "name": "the hexagonal melt pattern",
+  "type": "location",
+  "identity": "An unnatural, geometric anomaly in the frozen landscape, marked by a perfect hexagonal melt pattern and crystalline growths. Its presence suggests a subtle magical influence that distorts the environment, causing vegetation to wither and air to feel thinner.",
+  "current_status": "Being meticulously mapped by the player using non-invasive observation techniques, with a focus on documenting the site's reactive properties and influence patterns.",
+  "status_updated_turn": "turn-269",
+  "stable_attributes": {
+    "appearance": {
+      "value": "hexagonal melt pattern, crystalline growths, dark fragments embedded in snow",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-201"
+    },
+    "type": {
+      "value": "Location",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-203"
+    },
+    "role": {
+      "value": "Part of an interconnected natural system with observable, reactive properties",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-272"
+    },
+    "aliases": {
+      "value": [
+        "the hexagonal melt pattern",
+        "the hexagonal melt patterns"
+      ],
+      "inference": false,
+      "source_turn": "turn-201"
+    },
+    "environmental_effects": {
+      "value": "thin air, withered vegetation, unnatural cold",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-201"
+    },
+    "origin": {
+      "value": "magical or extraterrestrial energy",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-201"
+    }
+  },
+  "volatile_state": {
+    "condition": "unchanging but mysterious",
+    "equipment": [],
+    "location": "frozen landscape near the distant glowing peaks",
+    "current_activity": "being mapped by the player using non-contact observation techniques to study its reactive properties and influence patterns",
+    "last_updated_turn": "turn-269"
+  },
+  "first_seen_turn": "turn-203",
+  "last_updated_turn": "turn-269",
+  "notes": "No open questions or ambiguities identified.",
+  "relationships": []
+}

@@ -1,0 +1,23 @@
+{
+  "id": "item-pine-wreaths",
+  "name": "Pine wreaths",
+  "type": "item",
+  "identity": "Decorative items used in the Midwinter celebration, mentioned as part of the village's traditions.",
+  "current_status": "Referenced as part of the village's lost traditions and the reason for the player's mission.",
+  "status_updated_turn": "turn-001",
+  "stable_attributes": {
+    "description": {
+      "value": "Decorative items used in the Midwinter celebration, mentioned as part of the village's traditions.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-001"
+    }
+  },
+  "volatile_state": {
+    "location": "Village hall (mentioned in memory)",
+    "last_updated_turn": "turn-001"
+  },
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-001",
+  "relationships": []
+}

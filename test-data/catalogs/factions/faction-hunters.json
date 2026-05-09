@@ -1,0 +1,68 @@
+{
+  "id": "faction-hunters",
+  "name": "the hunters",
+  "type": "faction",
+  "identity": "A disciplined group of younger villagers responsible for protecting the camp and maintaining the fire. They have adapted sustainable practices and communal planning for survival, showing a strong sense of duty. Their role has evolved to include learning and observing the art of hunting as it is lived, integrating this knowledge into their existing duties.",
+  "current_status": "Engaged in new responsibilities: changing hunting patterns, mapping migration paths, preparing gifts for the southern tribes, and participating in the study of the fragment. They are also tasked with mentoring a young unbound hunter, emphasizing learning over mere performance.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "role": {
+      "value": "protectors of the camp",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-049"
+    },
+    "appearance": {
+      "value": "serious demeanor, younger villagers",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-049"
+    },
+    "altered_methods": {
+      "value": "communal planning, efficiency, sustainability, and knowledge integration",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-210"
+    },
+    "aliases": {
+      "value": [
+        "younger hunters",
+        "the hunters"
+      ],
+      "inference": false,
+      "source_turn": "turn-341"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Engaged in new responsibilities: changing hunting patterns, mapping migration paths, preparing gifts for the southern tribes, and participating in the study of the fragment. Mentoring a young unbound hunter.",
+    "location": "settlement",
+    "condition": "attentive and focused on new instructions",
+    "last_updated_turn": "turn-210",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-037",
+  "last_updated_turn": "turn-210",
+  "relationships": [
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-163",
+      "last_updated_turn": "turn-210"
+    },
+    {
+      "target_id": "loc-main-bonfire",
+      "current_relationship": "near",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-049",
+      "last_updated_turn": "turn-210"
+    }
+  ],
+  "notes": "Hunters are now involved in learning, knowledge integration, and community engagement beyond traditional hunting and protection duties."
+}

@@ -1,0 +1,206 @@
+[
+  {
+    "turn": 221,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 10.8,
+    "entity_count": 7,
+    "active": 0,
+    "passive": 7,
+    "spurious": 0,
+    "input_tokens_est": 12021,
+    "output_tokens_est": 391,
+    "error": null,
+    "entities": [
+      {
+        "name": "the fragment",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-fragment",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment's pulse",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment-pulse",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the pattern",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-frost-pattern",
+        "proposed_id": null,
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the boundary",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-boundary",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-distant-light-flashing-mountains",
+        "proposed_id": null,
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the tribe",
+        "type": "faction",
+        "is_new": false,
+        "existing_id": "faction-tribe",
+        "proposed_id": null,
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the fragment",
+        "the fragment",
+        "the fragment's pulse",
+        "the pattern",
+        "the boundary",
+        "the mountains",
+        "the tribe"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 221,
+    "run": 2,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 0.1,
+    "entity_count": 0,
+    "active": 0,
+    "passive": 0,
+    "spurious": 0,
+    "input_tokens_est": 12021,
+    "output_tokens_est": 5,
+    "error": null,
+    "entities": [],
+    "categories": {
+      "active": [],
+      "passive": [],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 221,
+    "run": 3,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 5.8,
+    "entity_count": 7,
+    "active": 0,
+    "passive": 7,
+    "spurious": 0,
+    "input_tokens_est": 12021,
+    "output_tokens_est": 392,
+    "error": null,
+    "entities": [
+      {
+        "name": "the fragment",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-fragment",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment's pulse",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment-pulse",
+        "proposed_id": null,
+        "confidence": 1.0,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the pattern",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-frost-pattern",
+        "proposed_id": null,
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the boundary",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-boundary",
+        "proposed_id": null,
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-distant-light-flashing-mountains",
+        "proposed_id": null,
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the mountain",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-mountain",
+        "proposed_id": null,
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the fragment",
+        "the fragment",
+        "the fragment's pulse",
+        "the pattern",
+        "the boundary",
+        "the mountains",
+        "the mountain"
+      ],
+      "spurious": []
+    }
+  }
+]

@@ -1,0 +1,37 @@
+{
+  "id": "item-disruption-fields",
+  "name": "Disruption Fields",
+  "type": "item",
+  "identity": "Two controlled magical fields maintained by the Quiet Weave to create a constant hum against the encroaching cold. They serve as a defensive measure and a marker of the settlement's active state, remaining operational even as the community prepares for winter.",
+  "first_seen_turn": "turn-296",
+  "last_updated_turn": "turn-340",
+  "notes": "Entity confirmed as a permanent magical feature of the Quiet Weave rather than a temporary item.",
+  "current_status": "Remaining active as a constant hum against the encroaching cold while the Quiet Weave enters winter mode.",
+  "status_updated_turn": "turn-340",
+  "stable_attributes": {
+    "function": {
+      "value": "create a constant hum against the encroaching cold",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-324"
+    },
+    "state": {
+      "value": "active",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-324"
+    },
+    "quantity": {
+      "value": "two",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-324"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "location": "Quiet Weave settlement",
+    "last_updated_turn": "turn-340"
+  },
+  "relationships": []
+}
