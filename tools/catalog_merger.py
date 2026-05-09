@@ -393,11 +393,19 @@ def _format_entity_brief(entity: dict) -> str:
     return f"{entity['id']} | {entity['name']} | {entity['type']}"
 
 
+def _format_entity_id_only(entity: dict) -> str:
+    """Format a single entity with ID and name only (no type)."""
+    return f"{entity['id']} | {entity['name']}"
+
+
 # Default number of recent turns for which entities get full detail
 _DEFAULT_RECENCY_WINDOW = 10
 
 # Default fraction of context_length allocated to the entity list
 _DEFAULT_ENTITY_BUDGET_FRACTION = 0.25
+
+# Non-priority entities older than this get id-only format instead of brief
+_DEFAULT_BRIEF_STALENESS_THRESHOLD = 20
 
 # Backfill entities older than this many turns are excluded from the prompt
 # (priority entities — mentioned, co-located, one-hop — are always kept)
@@ -721,23 +729,44 @@ def format_known_entities_bounded(
         if is_recent or is_priority:
             lines.append(_format_entity_full(entity))
         else:
-            lines.append(_format_entity_brief(entity))
+            age = (
+                (current_turn - turn_num)
+                if current_turn is not None and turn_num is not None
+                else 0
+            )
+            if age <= _DEFAULT_BRIEF_STALENESS_THRESHOLD:
+                lines.append(_format_entity_brief(entity))
+            else:
+                lines.append(_format_entity_id_only(entity))
 
     used = _estimate_tokens("\n".join(lines)) if lines else 0
 
     # If output exceeds budget, degrade lowest-priority entities from the
     # end of the list (backfill tier first, then one-hop, etc.).
     if budget is not None and used > budget and len(lines) > 1:
-        # Degrade from the end (lowest priority) to brief first
+        # Pass 1: degrade full → brief from the tail (skip already-brief
+        # and id-only lines to avoid accidentally upgrading them)
         for i in range(len(ordered) - 1, -1, -1):
-            current_line = _format_entity_brief(ordered[i])
-            if lines[i] != current_line:
-                lines[i] = current_line
+            brief_line = _format_entity_brief(ordered[i])
+            id_only_line = _format_entity_id_only(ordered[i])
+            # Only degrade if current line is longer than brief
+            if lines[i] != brief_line and lines[i] != id_only_line:
+                lines[i] = brief_line
                 used = _estimate_tokens("\n".join(lines))
                 if used <= budget:
                     break
 
-    # If still over budget after degrading to brief, omit from the end
+    # Pass 2: degrade brief → id-only from the tail
+    if budget is not None and used > budget and len(lines) > 1:
+        for i in range(len(ordered) - 1, -1, -1):
+            id_only_line = _format_entity_id_only(ordered[i])
+            if lines[i] != id_only_line:
+                lines[i] = id_only_line
+                used = _estimate_tokens("\n".join(lines))
+                if used <= budget:
+                    break
+
+    # Pass 3: if still over budget, omit from the end
     omitted = 0
     if budget is not None and used > budget and len(lines) > 1:
         while lines and used > budget:

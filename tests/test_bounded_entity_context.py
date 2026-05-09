@@ -10,6 +10,7 @@ from catalog_merger import (
     _estimate_tokens,
     _format_entity_full,
     _format_entity_brief,
+    _format_entity_id_only,
 )
 
 
@@ -323,3 +324,92 @@ class TestRecentTierOverflow:
             entity_context_budget=10,
             recency_window=5)
         assert "char-solo" in result
+
+
+class TestFormatEntityIdOnly:
+    def test_id_and_name_only(self):
+        e = _make_entity("char-a", "Alice", identity="A warrior",
+                         aliases=["Ali", "Al"])
+        line = _format_entity_id_only(e)
+        assert line == "char-a | Alice"
+        assert "warrior" not in line
+        assert "character" not in line
+
+    def test_minimal(self):
+        e = _make_entity("loc-x", "The Dungeon", etype="location")
+        line = _format_entity_id_only(e)
+        assert line == "loc-x | The Dungeon"
+
+
+class TestThreeTierFormatting:
+    """Entities get full/brief/id-only based on age relative to current turn."""
+
+    def test_recent_full_mid_brief_old_id_only(self):
+        """Recent (<= 10 turns) → full, mid-age (11-20) → brief, old (21-50) → id-only."""
+        recent = _make_entity("char-r", "Recent", identity="Active hero",
+                              aliases=["R"], last_updated_turn="turn-095")
+        mid = _make_entity("char-m", "MidAge", identity="Semi-active",
+                           aliases=["M"], last_updated_turn="turn-082")
+        old = _make_entity("char-o", "OldEntity", identity="Ancient NPC",
+                           aliases=["O"], last_updated_turn="turn-055")
+        catalogs = _make_catalogs([recent, mid, old])
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100, context_length=100000,
+            turn_text="Some scene text", recency_window=10)
+        lines = result.strip().split("\n")
+        line_map = {l.split(" | ")[0]: l for l in lines if " | " in l}
+        # Recent entity should have full detail (identity + aliases)
+        assert "Active hero" in line_map.get("char-r", "")
+        assert "aliases:" in line_map.get("char-r", "")
+        # Mid-age entity should have brief format (type but no identity)
+        mid_line = line_map.get("char-m", "")
+        assert "character" in mid_line
+        assert "Semi-active" not in mid_line
+        # Old entity should have id-only format (no type, no identity)
+        old_line = line_map.get("char-o", "")
+        assert old_line == "char-o | OldEntity"
+
+    def test_priority_entity_always_full_regardless_of_age(self):
+        """Mentioned entities get full format even if old."""
+        old_mentioned = _make_entity("char-old", "Gandalf",
+                                     identity="An ancient wizard",
+                                     aliases=["G"],
+                                     last_updated_turn="turn-010")
+        catalogs = _make_catalogs([old_mentioned])
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100, context_length=100000,
+            turn_text="Gandalf appears at the gate", recency_window=10)
+        assert "An ancient wizard" in result
+        assert "aliases:" in result
+
+
+class TestDegradationWithIdOnly:
+    """Budget pressure should degrade full→brief→id-only→omit."""
+
+    def test_degrade_to_id_only_before_omitting(self):
+        """Under budget pressure, entities should degrade to id-only before omission."""
+        # 15 entities, all older than the recency window (ages 11-25).
+        # Without budget pressure they'd be brief (age 11-20) or id-only (21+).
+        # Tight budget forces degradation: full→brief→id-only→omit.
+        entities = [
+            _make_entity(f"char-{i}", f"Entity{i}",
+                         identity="Long description " * 10,
+                         aliases=[f"Alias{i}"],
+                         last_updated_turn=f"turn-{75+i:03d}")
+            for i in range(15)
+        ]
+        catalogs = _make_catalogs(entities)
+        # Very tight budget — not enough for all full, should degrade
+        result = format_known_entities_bounded(
+            catalogs, current_turn=100, context_length=32768,
+            entity_context_budget=300,
+            turn_text="Entity0 does something", recency_window=10)
+        lines = [l for l in result.strip().split("\n") if l.startswith("char-")]
+        # At least some entities should be in id-only format (exactly 1 pipe)
+        id_only = [l for l in lines if l.count(" | ") == 1]
+        assert len(id_only) > 0, "Budget pressure should produce id-only lines before omitting"
+        # No entity should be omitted before all are degraded to id-only
+        # (Entity0 is mentioned → priority → kept as full)
+        e0_line = [l for l in lines if l.startswith("char-0")]
+        if e0_line:
+            assert "Long description" in e0_line[0]
