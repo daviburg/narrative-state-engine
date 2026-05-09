@@ -82,6 +82,15 @@ class RetryStats:
             "max_consecutive_rate_limits": self._max_consecutive_rate_limits,
         }
 
+    def record_terminal_error(self, key: str) -> None:
+        """Record a terminal error (e.g. truncation, quota_exhausted) in errors_by_status.
+
+        Unlike record_error(), this does not increment total_requests or
+        reset consecutive_rate_limits — the request was already counted.
+        """
+        with self._lock:
+            self.errors_by_status[key] = self.errors_by_status.get(key, 0) + 1
+
     def has_errors(self) -> bool:
         return bool(self.errors_by_status)
 
@@ -373,6 +382,7 @@ class LLMClient:
             print(f"  Rate limited (429), {ra_msg}{context}", file=sys.stderr)
 
             if self.stats.consecutive_rate_limits >= self.consecutive_rate_limit_threshold:
+                self.stats.record_terminal_error("quota_exhausted")
                 raise QuotaExhaustedError(
                     f"Quota appears exhausted: {self.stats.consecutive_rate_limits} "
                     f"consecutive 429 errors. Stopping to avoid wasting requests."
@@ -527,24 +537,13 @@ class LLMClient:
                 return parsed
 
             except LLMTruncationError:
-                self.stats.record_error("truncation")
+                self.stats.record_terminal_error("truncation")
                 raise
             except QuotaExhaustedError:
-                with self.stats._lock:
-                    self.stats.errors_by_status["quota_exhausted"] = (
-                        self.stats.errors_by_status.get("quota_exhausted", 0) + 1
-                    )
                 raise
             except Exception as e:
                 last_error = e
-                try:
-                    self._handle_retry(attempt, e)
-                except QuotaExhaustedError:
-                    with self.stats._lock:
-                        self.stats.errors_by_status["quota_exhausted"] = (
-                            self.stats.errors_by_status.get("quota_exhausted", 0) + 1
-                        )
-                    raise
+                self._handle_retry(attempt, e)
 
         # Primary provider exhausted — try fallback if configured.
         if self._fallback_client is not None:
@@ -565,13 +564,9 @@ class LLMClient:
                 self.stats.record_success()
                 return result
             except LLMTruncationError:
-                self.stats.record_error("truncation")
+                self.stats.record_terminal_error("truncation")
                 raise
             except QuotaExhaustedError:
-                with self.stats._lock:
-                    self.stats.errors_by_status["quota_exhausted"] = (
-                        self.stats.errors_by_status.get("quota_exhausted", 0) + 1
-                    )
                 raise
             except Exception as fb_err:
                 raise LLMExtractionError(

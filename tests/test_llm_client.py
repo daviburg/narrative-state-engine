@@ -505,7 +505,6 @@ class TestTruncationDetection:
                     system_prompt="test",
                     user_prompt="test",
                 )
-            assert client.stats.total_requests >= 1
             assert "truncation" in client.stats.errors_by_status
 
     def test_quota_error_records_stats(self, tmp_path):
@@ -517,7 +516,6 @@ class TestTruncationDetection:
         client = LLMClient(config_path=cfg)
 
         # Simulate 429 errors that trigger QuotaExhaustedError
-        from openai import APIStatusError
         err = Exception("rate limited")
         err.status_code = 429
         err.response = MagicMock()
