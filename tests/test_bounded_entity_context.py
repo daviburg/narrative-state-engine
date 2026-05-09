@@ -388,11 +388,14 @@ class TestDegradationWithIdOnly:
 
     def test_degrade_to_id_only_before_omitting(self):
         """Under budget pressure, entities should degrade to id-only before omission."""
+        # 15 entities, all older than the recency window (ages 11-25).
+        # Without budget pressure they'd be brief (age 11-20) or id-only (21+).
+        # Tight budget forces degradation: full→brief→id-only→omit.
         entities = [
             _make_entity(f"char-{i}", f"Entity{i}",
                          identity="Long description " * 10,
                          aliases=[f"Alias{i}"],
-                         last_updated_turn=f"turn-{90+i:03d}")
+                         last_updated_turn=f"turn-{75+i:03d}")
             for i in range(15)
         ]
         catalogs = _make_catalogs(entities)
@@ -402,10 +405,11 @@ class TestDegradationWithIdOnly:
             entity_context_budget=300,
             turn_text="Entity0 does something", recency_window=10)
         lines = [l for l in result.strip().split("\n") if l.startswith("char-")]
-        # At least some entities should be in id-only format (no type field)
-        id_only = [l for l in lines if l.count("|") == 1]
-        assert len(id_only) >= 0  # May or may not have id-only depending on budget
-        # Entity0 mentioned — should be full
+        # At least some entities should be in id-only format (exactly 1 pipe)
+        id_only = [l for l in lines if l.count(" | ") == 1]
+        assert len(id_only) > 0, "Budget pressure should produce id-only lines before omitting"
+        # No entity should be omitted before all are degraded to id-only
+        # (Entity0 is mentioned → priority → kept as full)
         e0_line = [l for l in lines if l.startswith("char-0")]
         if e0_line:
             assert "Long description" in e0_line[0]
