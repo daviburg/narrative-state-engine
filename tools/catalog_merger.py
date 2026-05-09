@@ -414,6 +414,30 @@ _DEFAULT_STALENESS_THRESHOLD = 50
 # Minimum entity name length to avoid false-positive keyword matches
 _MIN_NAME_LENGTH_FOR_MATCH = 3
 
+# Common English words that appear as entity names due to extraction artifacts.
+# Single-word names matching these are skipped during mention detection to avoid
+# false positives. Multi-word names containing these words are NOT filtered.
+_COMMON_WORD_BLOCKLIST: set[str] = {
+    # Generic nouns/adjectives observed as extraction artifacts
+    "any", "echo", "field", "fire", "head", "land", "new",
+    "quiet", "snow", "song", "two", "weave",
+    # Combat/game terms
+    "attack", "defense", "move", "action", "skill", "ability",
+    # Elements/concepts
+    "water", "earth", "wind", "light", "dark", "shadow",
+    "death", "life", "blood", "spirit", "soul", "magic",
+    # Role descriptors
+    "disruption", "reinforced", "geometric", "southern", "triangular",
+}
+
+# Maximum fraction of catalog that priority + one-hop can occupy before
+# one-hop expansion is skipped entirely (prevents false-positive cascade).
+_ONE_HOP_PRIORITY_CAP = 0.5
+
+# Minimum catalog size for the one-hop cap to apply; small catalogs don't
+# suffer from false-positive cascade so the cap would break valid one-hop.
+_ONE_HOP_CAP_MIN_ENTITIES = 20
+
 
 def _entity_names(entity: dict) -> list[str]:
     """Return the entity's name and aliases as a list of strings."""
@@ -448,6 +472,9 @@ def _find_mentioned_entities(
     for entity in all_entities:
         for name in _entity_names(entity):
             if len(name) < _MIN_NAME_LENGTH_FOR_MATCH:
+                continue
+            # Skip single common-word names that cause false positives
+            if " " not in name and name.lower() in _COMMON_WORD_BLOCKLIST:
                 continue
             escaped = re.escape(name.lower())
             if " " in name:
@@ -600,6 +627,14 @@ def _select_context_aware_entities(
     if mentioned_ids:
         one_hop_ids = _find_one_hop_targets(
             mentioned_ids, mentioned_ids | colocated_ids, by_id)
+
+    # Cap one-hop expansion: if priority + one-hop > 50% of catalog,
+    # skip one-hop entirely to prevent false-positive cascade (#297).
+    # Only applies to large catalogs where cascade is a real problem.
+    if (len(all_entities) >= _ONE_HOP_CAP_MIN_ENTITIES
+            and len(mentioned_ids | colocated_ids | one_hop_ids)
+            > len(all_entities) * _ONE_HOP_PRIORITY_CAP):
+        one_hop_ids = set()
 
     # --- Tier 4: Recency backfill (staleness-filtered) ---
     priority_ids = mentioned_ids | colocated_ids | one_hop_ids
