@@ -1,0 +1,30 @@
+{
+  "id": "item-slate",
+  "name": "slate",
+  "type": "item",
+  "identity": "A tool used in ritual workings, employed by the healer to mark time, breath, and other observations during magical procedures.",
+  "current_status": "Used by the healer (Anya) to inscribe markings as part of a ritual to disrupt the sickness's progression.",
+  "status_updated_turn": "turn-247",
+  "stable_attributes": {
+    "description": {
+      "value": "A slate used for inscribing ritual markings, paired with a stylus for precise markings during magical workings.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-247"
+    },
+    "purpose": {
+      "value": "Facilitates the ritualistic marking of time, breath, and other observations during magical procedures.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-247"
+    }
+  },
+  "volatile_state": {
+    "location": "Working space around the afflicted man, within the ritual circle.",
+    "current_activity": "Being used by the healer to mark ritual elements during the magical working.",
+    "last_updated_turn": "turn-247"
+  },
+  "first_seen_turn": "turn-247",
+  "last_updated_turn": "turn-247",
+  "relationships": []
+}

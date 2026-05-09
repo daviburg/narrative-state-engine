@@ -1,0 +1,36 @@
+{
+  "id": "loc-observation-post",
+  "name": "the observation post",
+  "type": "location",
+  "identity": "A dedicated site near the longhouse entrance for monitoring the mountain fragment. It serves as both a scientific and spiritual observatory, tracking the mountain's subtle changes and the effects of the mountain fragment on the surrounding environment.",
+  "current_status": "Actively used to record the mountain fragment's pulse, temperature fluctuations, animal behavior, and dream reports. Anya observes the site with guidance, learning to interpret these signs through rhythmic exercises and drawing.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "description": {
+      "value": "A stone platform housing the mountain fragment, never touched directly. Surrounded by tools for recording observations, including sticks and stones for mapping. Located near the longhouse entrance.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-211"
+    },
+    "purpose": {
+      "value": "Scientific and ritual monitoring of the mountain fragment's influence on the environment and the tribe's connection to it.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-211"
+    }
+  },
+  "volatile_state": {
+    "condition": "Active and under constant observation, with careful documentation of the mountain fragment's behavior.",
+    "equipment": [
+      "sticks",
+      "stones",
+      "recording tools"
+    ],
+    "location": "Near the longhouse entrance, on a prepared stone platform",
+    "current_activity": "Monitoring the mountain fragment's pulse, temperature changes, and animal reactions; Anya practices rhythmic observation and dream interpretation.",
+    "last_updated_turn": "turn-211"
+  },
+  "notes": "",
+  "last_updated_turn": "turn-211",
+  "first_seen_turn": "turn-211"
+}

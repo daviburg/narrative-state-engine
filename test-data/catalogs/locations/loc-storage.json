@@ -1,0 +1,31 @@
+{
+  "id": "loc-storage",
+  "name": "storage",
+  "type": "location",
+  "identity": "A secondary structure within the settlement, designed for storing food, tools, and other essential supplies. It is separated from the main living area and is a key part of the settlement's expansion and organization.",
+  "current_status": "Serving as a designated storage area for cultivated food, tools, and preserved items. It is part of the settlement's planned expansion and is considered essential for the tribe's sustainability. It is also a central hub for the tribe's knowledge and resource management during the new growth cycle outlined by the leader. It plays a role in the tribe's careful experimentation and observation of new growth patterns.",
+  "status_updated_turn": "turn-294",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Functional, reinforced structure with designated areas for storage and preservation",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-289"
+    },
+    "role": {
+      "value": "Storage and preservation of food, tools, and knowledge",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-289"
+    }
+  },
+  "volatile_state": {
+    "condition": "Stable and in use",
+    "location": "Within the settlement, near the longhouse",
+    "current_activity": "Used for storing cultivated food, tools, and preserved items, and as a central hub for knowledge and resource management during the new growth cycle. It is also involved in the tribe's careful experimentation and observation of new growth patterns. It serves as a location for the tribe's collaborative efforts and knowledge-sharing processes.",
+    "last_updated_turn": "turn-294"
+  },
+  "first_seen_turn": "turn-289",
+  "last_updated_turn": "turn-294",
+  "relationships": []
+}

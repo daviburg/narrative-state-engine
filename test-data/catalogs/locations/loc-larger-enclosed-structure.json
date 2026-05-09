@@ -1,0 +1,36 @@
+{
+  "id": "loc-larger-enclosed-structure",
+  "name": "larger enclosed structure",
+  "type": "location",
+  "identity": "A larger, more enclosed structure in the camp, likely serving as a communal or significant dwelling space, referenced as the destination for the elder after the meal.",
+  "current_status": "The elder is moving toward this structure after the communal gathering.",
+  "status_updated_turn": "turn-047",
+  "stable_attributes": {
+    "type": {
+      "value": "location",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-047"
+    },
+    "name": {
+      "value": "larger enclosed structure",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-047"
+    },
+    "identity": {
+      "value": "A larger, more enclosed structure in the camp, likely serving as a communal or significant dwelling space, referenced as the destination for the elder after the meal.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-047"
+    }
+  },
+  "volatile_state": {
+    "location": "larger enclosed structure",
+    "current_activity": "The elder is moving toward this structure after the communal gathering.",
+    "last_updated_turn": "turn-047"
+  },
+  "first_seen_turn": "turn-047",
+  "last_updated_turn": "turn-047",
+  "relationships": []
+}

@@ -1,0 +1,42 @@
+{
+  "id": "creature-earthworms",
+  "name": "earthworms",
+  "type": "creature",
+  "identity": "A type of subterranean creature, often associated with the earth and decay. They are not directly mentioned in the text but are implied to be part of the natural world that the characters interact with during their ritual.",
+  "current_status": "Not directly involved in the action but present in the environment as part of the natural world that the characters are working within.",
+  "status_updated_turn": "turn-247",
+  "stable_attributes": {
+    "species": {
+      "value": "subterranean invertebrates",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-231"
+    },
+    "appearance": {
+      "value": "elongated, segmented bodies, adapted for burrowing through soil",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-231"
+    },
+    "aliases": {
+      "value": [
+        "earthworms",
+        "subterranean dwellers",
+        "the earthworms"
+      ],
+      "inference": false,
+      "source_turn": "turn-247"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and responsive to environmental changes",
+    "location": "Subterranean or near the earth's surface, as implied by the ritual's context.",
+    "current_activity": "responding to the sickness through seismic vibrations as part of a monitored observation process",
+    "last_updated_turn": "turn-247",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-231",
+  "last_updated_turn": "turn-247",
+  "notes": "The entity is not directly referenced in the text but is implied to be part of the natural world. Further clarification on their role or presence would be needed for more detailed extraction.",
+  "relationships": []
+}

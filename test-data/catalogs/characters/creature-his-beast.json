@@ -1,0 +1,24 @@
+{
+  "id": "creature-his-beast",
+  "name": "his beast",
+  "type": "creature",
+  "identity": "A creature that needs to be cleared of the area before the group can proceed to the feast.",
+  "current_status": "Still being cleared of the area by the player and their companion.",
+  "status_updated_turn": "turn-123",
+  "stable_attributes": {
+    "aliases": {
+      "value": [],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-104"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Being cleared of the area",
+    "location": "Near the feast location",
+    "last_updated_turn": "turn-123"
+  },
+  "first_seen_turn": "turn-104",
+  "last_updated_turn": "turn-123",
+  "relationships": []
+}

@@ -1,0 +1,30 @@
+{
+  "id": "loc-moss-borders",
+  "name": "the moss borders",
+  "type": "location",
+  "identity": "A cultivated area within the settlement, characterized by moss borders and used for growing crops. It serves as a demonstration site where the player character explains their philosophy of restoring the land's ability to respond rather than forcing it.",
+  "current_status": "The player character leads Elder Lyra here to demonstrate the restored balance of the land and offer her the settlement's full records on their healing methods.",
+  "status_updated_turn": "turn-316",
+  "stable_attributes": {
+    "description": {
+      "value": "cultivated ground with moss borders",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-315"
+    },
+    "purpose": {
+      "value": "demonstration of land restoration and cultivation",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-315"
+    }
+  },
+  "volatile_state": {
+    "condition": "cultivated and restored",
+    "location": "cultivated ground within the settlement",
+    "last_updated_turn": "turn-316"
+  },
+  "first_seen_turn": "turn-315",
+  "last_updated_turn": "turn-316",
+  "relationships": []
+}

@@ -1,0 +1,26 @@
+{
+  "id": "item-stylus",
+  "name": "stylus",
+  "type": "item",
+  "identity": "A tool used by the healer to make precise markings during ritual procedures, specifically for marking time, breath, and lesion color during the treatment of the afflicted man.",
+  "current_status": "Being used by Anya to make a single, precise mark across the visible path of the illness as part of the ritual.",
+  "status_updated_turn": "turn-247",
+  "stable_attributes": {
+    "equipment": {
+      "value": "stylus and slate",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-247"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Marking the time, breath, and color of lesions as part of the ritual",
+    "location": "Working space around the afflicted man",
+    "condition": "Functional and in active use",
+    "last_updated_turn": "turn-247"
+  },
+  "first_seen_turn": "turn-247",
+  "last_updated_turn": "turn-247",
+  "notes": "The stylus is explicitly identified as part of the healer's tools for ritual marking.",
+  "relationships": []
+}

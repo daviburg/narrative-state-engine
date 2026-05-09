@@ -1,0 +1,3 @@
+# turn-057 — DM
+
+Curling against the hunter's steady presence, the warmth of the fire and the subtle scent of woodsmoke and furs lull you into a deep sleep. The long night passes in an almost dreamless state, the cold held at bay by the shared warmth and the banked fire. You feel safe, secure in the quiet companionship. When you stir, it's to the soft grey light of dawn painting the arctic sky. The hunter is still beside you, his breathing deep and even, though he seems to be waking as well. The camp is slowly coming to life around you, the faint sounds of activity beginning to replace the nocturnal silence. A new day begins in the stark, beautiful wilderness.

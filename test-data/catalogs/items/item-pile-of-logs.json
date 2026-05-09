@@ -1,0 +1,31 @@
+{
+  "id": "item-pile-of-logs",
+  "name": "a pile of logs",
+  "type": "item",
+  "identity": "A large pile of logs used as fuel for the bonfire, encrusted with ice and difficult to move.",
+  "current_status": "Being carried by the player character to the bonfire as part of a communal effort.",
+  "status_updated_turn": "turn-035",
+  "stable_attributes": {
+    "appearance": {
+      "value": "encrusted with ice, heavy",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-035"
+    },
+    "function": {
+      "value": "fuel for the bonfire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-035"
+    }
+  },
+  "volatile_state": {
+    "location": "near the bonfire",
+    "current_activity": "being carried to the bonfire",
+    "condition": "stationary",
+    "last_updated_turn": "turn-035"
+  },
+  "first_seen_turn": "turn-035",
+  "last_updated_turn": "turn-035",
+  "relationships": []
+}

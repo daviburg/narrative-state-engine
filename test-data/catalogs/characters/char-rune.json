@@ -1,0 +1,64 @@
+{
+  "id": "char-rune",
+  "name": "Rune",
+  "type": "character",
+  "identity": "A child exhibiting a unique, supernatural ability to impose order on her surroundings. Her presence creates a palpable stillness where air and particles slow and arrange themselves into intricate, temporary patterns, suggesting a deep connection to the Quiet Weave's underlying order.",
+  "first_seen_turn": "turn-306",
+  "last_updated_turn": "turn-342",
+  "notes": "Healer confirms the phenomenon around her: cessation of movement and arrangement of particles into patterns. This reinforces her unique nature.",
+  "current_status": "The healer reports on her, describing the distinct stillness around her that causes dust and snow to slow and arrange into patterns when she sleeps.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-306"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-306"
+    },
+    "class": {
+      "value": "Child",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-306"
+    },
+    "aliases": {
+      "value": [
+        "Rune"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-306"
+    },
+    "abilities": {
+      "value": "Stillness induction, pattern formation",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    }
+  },
+  "volatile_state": {
+    "condition": "Sleeping; radiating a distinct, palpable stillness that slows air and causes dust/snow to arrange into intricate, temporary patterns.",
+    "equipment": [],
+    "location": "Settlement (interior)",
+    "current_activity": "Being discussed by the healer regarding her unique stillness phenomenon.",
+    "last_updated_turn": "turn-342"
+  },
+  "relationships": [
+    {
+      "target_id": "loc-settlement",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-312",
+      "last_updated_turn": "turn-312"
+    }
+  ]
+}

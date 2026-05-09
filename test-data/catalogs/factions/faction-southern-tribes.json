@@ -1,0 +1,40 @@
+{
+  "id": "faction-southern-tribes",
+  "name": "the southern tribes",
+  "type": "faction",
+  "identity": "A cautious and selective faction that observes developments without seeking to spread or claim knowledge beyond their boundaries. They maintain a collaborative but guarded stance, prioritizing careful study and controlled integration of new ideas into their community without external influence.",
+  "current_status": "Engaged in diplomatic discussions with the player about the responsibilities and boundaries of new knowledge. They have established a neutral meeting place to foster dialogue, implemented new hunting and preservation practices, and are considering how to integrate certain discoveries without external influence.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "southern tribes"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-210"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Engaged in diplomatic discussions with the player about the responsibilities and boundaries of new knowledge. They have established a neutral meeting place to foster dialogue, implemented new hunting and preservation practices, and are considering how to integrate certain discoveries without external influence.",
+    "location": "Near the longhouse and neutral meeting place beyond the traps",
+    "last_updated_turn": "turn-211",
+    "condition": "Cautious but increasingly collaborative, with a focus on selective integration of new knowledge without external influence",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-210",
+  "last_updated_turn": "turn-211",
+  "notes": "The southern tribes have adopted a more deliberate approach to knowledge integration, emphasizing observation and selective sharing. Their cautious stance remains central to their decision-making process.",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "ally of",
+      "type": "political",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-213",
+      "last_updated_turn": "turn-215"
+    }
+  ]
+}

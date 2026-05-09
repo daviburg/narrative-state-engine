@@ -1,0 +1,35 @@
+{
+  "id": "item-edible-vegetation",
+  "name": "edible vegetation",
+  "type": "item",
+  "identity": "A type of plant cultivated by the tribe to provide sustenance, grown near the longhouse for easy access.",
+  "current_status": "Being cultivated as a personal project by the player, who ensures its success and sustainability. The player plans to seek an apprentice to teach the cultivation techniques once the process is perfected.",
+  "status_updated_turn": "turn-146",
+  "stable_attributes": {
+    "species": {
+      "value": "plant",
+      "inference": true,
+      "confidence": 1.0,
+      "source_turn": "turn-136"
+    },
+    "aliases": {
+      "value": [
+        "edible plants",
+        "crops",
+        "vegetation"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-136"
+    }
+  },
+  "volatile_state": {
+    "location": "near the longhouse",
+    "current_activity": "Being cultivated as a personal project by the player, with the goal of perfecting the process and eventually teaching it to an apprentice.",
+    "last_updated_turn": "turn-146",
+    "condition": "Being cultivated with care and purpose, with the player's full attention and effort"
+  },
+  "first_seen_turn": "turn-136",
+  "last_updated_turn": "turn-146",
+  "relationships": []
+}

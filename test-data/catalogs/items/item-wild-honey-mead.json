@@ -1,0 +1,83 @@
+{
+  "id": "item-wild-honey-mead",
+  "name": "wild honey mead",
+  "type": "item",
+  "identity": "A precious resource gathered in the warmer months and stored by the tribe, used as a key ingredient in fermentation processes like mead-making. Sourced from wild hives and valued for its role in crafting beverages with complex flavors.",
+  "current_status": "Being used by the player character to create their first batch of mead, combining it with purified snowmelt and wild yeasts, with the player character planning to teach the process to an apprentice once the method is perfected.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "category": {
+      "value": "fermented beverage",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-144"
+    },
+    "composition": {
+      "value": "wild honey",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-144"
+    },
+    "species": {
+      "value": "fermented beverage",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-145"
+    },
+    "race": {
+      "value": "none",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-145"
+    },
+    "class": {
+      "value": "alcoholic beverage",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-145"
+    },
+    "aliases": {
+      "value": [
+        "fermented honey drink",
+        "wild mead",
+        "wild honey mead",
+        "mead",
+        "wild honey"
+      ],
+      "inference": false,
+      "source_turn": "turn-146"
+    },
+    "source": {
+      "value": "wild hives in warmer months",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-145"
+    },
+    "storage": {
+      "value": "stored for later use",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-145"
+    },
+    "usage": {
+      "value": "fermentation ingredient (mead-making)",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-145"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "being used to create mead and plan for apprentice training",
+    "location": "longhouse",
+    "last_updated_turn": "turn-211",
+    "condition": "stored and available for use",
+    "equipment": [
+      "wild honey",
+      "snowmelt",
+      "wild yeasts"
+    ]
+  },
+  "first_seen_turn": "turn-144",
+  "last_updated_turn": "turn-211",
+  "relationships": []
+}

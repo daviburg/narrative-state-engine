@@ -1,0 +1,60 @@
+{
+  "id": "item-frost-pattern",
+  "name": "the patterned frost",
+  "type": "item",
+  "identity": "A structured, ephemeral tool created by guiding atmospheric frost to form precise geometric patterns. It serves as a medium for temporary insulation, reinforcement, and structural precision, requiring focused energy to maintain before dissipating.",
+  "current_status": "Analyzed by Anya during a discussion on resource usage. Anya notes its formation can be guided for temporary structural needs but requires precise, focused energy to maintain, limiting its use to situations demanding localized precision.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "appearance": {
+      "value": "delicate line of rime, sharp and unwavering",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-217"
+    },
+    "origin": {
+      "value": "linked to the Quiet Weave and the birth of Rune",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-314"
+    },
+    "role": {
+      "value": "function within the Quiet Weave for structured practice",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-220"
+    },
+    "function": {
+      "value": "tool for frost pattern creation and structured ritual demonstration",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-220"
+    },
+    "properties": {
+      "value": "ephemeral, requires precise focused energy to maintain, dissipates quickly if not maintained",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-342"
+    },
+    "aliases": {
+      "value": [
+        "the frost pattern"
+      ],
+      "inference": false,
+      "source_turn": "turn-342"
+    }
+  },
+  "volatile_state": {
+    "location": "longhouse",
+    "condition": "discussed as a resource requiring control",
+    "current_activity": "being evaluated for utility and limitations by Anya in a group discussion",
+    "last_updated_turn": "turn-342",
+    "equipment": [
+      "frost pattern"
+    ]
+  },
+  "first_seen_turn": "turn-306",
+  "last_updated_turn": "turn-342",
+  "notes": "Anya identified the specific limitations of this frost type: it is ephemeral and requires precise energy maintenance, distinguishing it from other frost types like the geometric moss or crystalline sediment.",
+  "relationships": []
+}

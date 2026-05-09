@@ -1,0 +1,32 @@
+{
+  "id": "item-waterskin",
+  "name": "the waterskin",
+  "type": "item",
+  "identity": "A simple leather container used to carry and provide water to the dying man in the scene.",
+  "current_status": "Used to quench the man's thirst during a critical moment in the narrative, with its function and condition remaining consistent with prior observations.",
+  "status_updated_turn": "turn-237",
+  "stable_attributes": {
+    "function": {
+      "value": "Carries and provides water",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-231"
+    },
+    "appearance": {
+      "value": "Leather container, likely worn and practical",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-231"
+    }
+  },
+  "volatile_state": {
+    "location": "Ground near the dying man",
+    "current_activity": "Used by the man to drink water",
+    "condition": "Functional, though likely worn from use",
+    "last_updated_turn": "turn-237"
+  },
+  "first_seen_turn": "turn-231",
+  "last_updated_turn": "turn-237",
+  "notes": "No explicit physical description beyond function and context of use.",
+  "relationships": []
+}

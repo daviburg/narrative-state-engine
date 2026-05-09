@@ -1,0 +1,28 @@
+{
+  "id": "item-split-log-floor",
+  "name": "split log floor",
+  "type": "item",
+  "identity": "A structural component used to form the base of the longhouse, crafted from split logs.",
+  "current_status": "Laid as the foundation for the longhouse, with plans to reinforce key joints using available magic.",
+  "status_updated_turn": "turn-145",
+  "stable_attributes": {
+    "description": {
+      "value": "A structural component used to form the base of the longhouse, crafted from split logs.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-128"
+    }
+  },
+  "volatile_state": {
+    "condition": "Stable and in place",
+    "equipment": [
+      "split logs"
+    ],
+    "location": "Longhouse foundation",
+    "current_activity": "Serving as the base for the longhouse construction",
+    "last_updated_turn": "turn-145"
+  },
+  "first_seen_turn": "turn-128",
+  "last_updated_turn": "turn-145",
+  "relationships": []
+}

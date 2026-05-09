@@ -1,0 +1,76 @@
+{
+  "id": "loc-crisp-growth",
+  "name": "the crystalline growths",
+  "type": "location",
+  "identity": "A mysterious, unnatural formation in the frozen landscape, characterized by dark, metallic crystalline structures that radiate sterile, alien energy. These formations appear to be part of a larger, enigmatic power source linked to the distant mountains, and are being studied through non-invasive observation and mapping.",
+  "current_status": "The player is observing and mapping the crystalline growths, noting their unnatural geometric patterns, cold energy, and the way they distort the surrounding environment without direct contact.",
+  "status_updated_turn": "turn-269",
+  "stable_attributes": {
+    "appearance": {
+      "value": "crystalline structures with faint blue luminescence",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-272"
+    },
+    "environmental_effect": {
+      "value": "alters air density, creates invisible boundaries, leaches life from surrounding ecosystem",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-201"
+    },
+    "type": {
+      "value": "location",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-203"
+    },
+    "origin": {
+      "value": "unknown, possibly extraterrestrial or non-natural",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-203"
+    },
+    "location": {
+      "value": "near the river stones and hexagonal melt patterns",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-272"
+    },
+    "role": {
+      "value": "part of a larger, reactive system",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-272"
+    },
+    "description": {
+      "value": "Small, dark crystalline growths embedded in snow, with irregular, metallic sheen and sterile energy. Found in a barren strip near the mountains, with hexagonal melt patterns and thin, cold air pockets.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-201"
+    }
+  },
+  "volatile_state": {
+    "condition": "Otherworldly and unnaturally cold",
+    "equipment": [
+      "arcane sight"
+    ],
+    "location": "Frozen landscape near the mountains",
+    "current_activity": "Observing and mapping crystalline anomalies through non-invasive methods",
+    "last_updated_turn": "turn-269"
+  },
+  "first_seen_turn": "turn-201",
+  "last_updated_turn": "turn-269",
+  "relationships": [
+    {
+      "target_id": "loc-frozen-landscape",
+      "current_relationship": "located within",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-201",
+      "last_updated_turn": "turn-201"
+    }
+  ],
+  "notes": "The crystalline growths remain an enigmatic anomaly, with their alien nature and energy source still unclear. The player's return and sharing of findings highlight their growing role as a bridge between the tribe and the crystalline growths. The narrative suggests a shift toward intentional collaboration rather than mere survival."
+}

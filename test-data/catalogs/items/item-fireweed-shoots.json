@@ -1,0 +1,56 @@
+{
+  "id": "item-fireweed-shoots",
+  "name": "fireweed shoots",
+  "type": "item",
+  "identity": "A resilient plant species found in arctic environments, characterized by its reddish stems that push through ice. It is a valuable resource for crafting and sustains life in harsh conditions.",
+  "current_status": "Emerging as a sustainable resource for the community, with the first tentative harvest of arctic dock and fireweed shoots marking a significant milestone in the tribe's adaptation to their new environment.",
+  "status_updated_turn": "turn-150",
+  "stable_attributes": {
+    "species": {
+      "value": "plant",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-150"
+    },
+    "aliases": {
+      "value": [
+        "fireweed shoots",
+        "artic plant"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-150"
+    },
+    "appearance": {
+      "value": "reddish stems, growing through ice",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-151"
+    },
+    "value": {
+      "value": "valuable resource for crafting",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-151"
+    }
+  },
+  "volatile_state": {
+    "location": "artic region",
+    "current_activity": "identified as suitable for fermentation",
+    "last_updated_turn": "turn-150"
+  },
+  "first_seen_turn": "turn-150",
+  "last_updated_turn": "turn-173",
+  "relationships": [
+    {
+      "target_id": "loc-frozen-stream",
+      "current_relationship": "located_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-151",
+      "last_updated_turn": "turn-151"
+    }
+  ]
+}

@@ -1,0 +1,55 @@
+{
+  "id": "item-artic-dock",
+  "name": "arctic dock",
+  "type": "item",
+  "identity": "A resilient plant with dark green, broad leaves adapted to arctic conditions, found growing in snow-dusted terrain. It is a valuable resource for fermentation and sustains life in harsh environments.",
+  "current_status": "Harvested by the player as part of the tribe's efforts to cultivate sheltered plots, contributing to their survival and adaptability in the harsh winter environment.",
+  "status_updated_turn": "turn-217",
+  "stable_attributes": {
+    "species": {
+      "value": "Arctic plant",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-150"
+    },
+    "aliases": {
+      "value": [
+        "artic dock"
+      ],
+      "inference": false,
+      "source_turn": "turn-173"
+    },
+    "appearance": {
+      "value": "dark green, broad, resilient leaves",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-151"
+    },
+    "resilience": {
+      "value": "thrives in arctic conditions",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-151"
+    }
+  },
+  "volatile_state": {
+    "location": "sheltered plot near the longhouse",
+    "current_activity": "being harvested by the player as part of the tribe's cultivation efforts",
+    "last_updated_turn": "turn-217",
+    "condition": "resilient, thriving in harsh arctic environment"
+  },
+  "first_seen_turn": "turn-150",
+  "last_updated_turn": "turn-217",
+  "relationships": [
+    {
+      "target_id": "loc-snow-dusted-landscape",
+      "current_relationship": "located_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-151",
+      "last_updated_turn": "turn-151"
+    }
+  ]
+}

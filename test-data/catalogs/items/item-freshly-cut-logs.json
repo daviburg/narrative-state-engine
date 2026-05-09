@@ -1,0 +1,27 @@
+{
+  "id": "item-freshly-cut-logs",
+  "name": "stack of freshly cut logs",
+  "type": "item",
+  "identity": "A pile of recently cut wood used as fuel for the campfire.",
+  "current_status": "Being replenished by the player character as part of a communal task.",
+  "status_updated_turn": "turn-033",
+  "stable_attributes": {
+    "description": {
+      "value": "A pile of recently cut wood used as fuel for the campfire.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-033"
+    }
+  },
+  "volatile_state": {
+    "condition": "Available for use",
+    "equipment": [],
+    "location": "Near the edge of the firelight",
+    "current_activity": "Being replenished by the player character",
+    "last_updated_turn": "turn-033"
+  },
+  "first_seen_turn": "turn-033",
+  "last_updated_turn": "turn-033",
+  "notes": "",
+  "relationships": []
+}

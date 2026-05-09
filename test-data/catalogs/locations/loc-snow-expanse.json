@@ -1,0 +1,31 @@
+{
+  "id": "loc-snow-expanse",
+  "name": "the snow expanse",
+  "type": "location",
+  "identity": "A vast, frozen wilderness where the player awakens after a fall. It is a desolate and quiet place, with dark trees and a setting sun casting long shadows.",
+  "current_status": "The player is disoriented and recovering from a fall, with a throbbing temple and shallow breaths. They are in the middle of a snowy expanse, trying to orient themselves.",
+  "status_updated_turn": "turn-001",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Vast, frozen wilderness with dark trees and a setting sun. Snow-covered ground with fresh, untouched snow.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-001"
+    },
+    "condition": {
+      "value": "Desolate and quiet",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-001"
+    }
+  },
+  "volatile_state": {
+    "condition": "Player is disoriented and recovering from a fall, with a throbbing temple and shallow breaths.",
+    "location": "The snow expanse",
+    "current_activity": "Trying to orient oneself and determine the next course of action.",
+    "last_updated_turn": "turn-001"
+  },
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-001",
+  "relationships": []
+}

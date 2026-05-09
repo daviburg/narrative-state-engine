@@ -1,0 +1,49 @@
+{
+  "id": "item-spontaneous-frost-forms",
+  "name": "the spontaneous frost forms",
+  "type": "item",
+  "identity": "Seasonal, hexagonal frost formations that emerge in the coldest hours of autumn, stable and persistent longer than natural ice. They exist as part of the unintended patterns within the Quiet Weave, enhancing the environment without causing harm.",
+  "current_status": "Stable and persistent within the autumnal environment, forming as part of the larger patterned systems described in the Quiet Weave. Their presence is noted as a natural extension of the existing ecological and environmental systems.",
+  "status_updated_turn": "turn-341",
+  "stable_attributes": {
+    "appearance": {
+      "value": "seasonal, hexagonal, stable, persistent longer than natural ice",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-312"
+    },
+    "behavior": {
+      "value": "appear only in coldest hours of autumn, persist longer than natural ice",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    },
+    "environmental_interaction": {
+      "value": "enhance surroundings without negative impact",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    },
+    "environmental_effect": {
+      "value": "enhance environment without causing harm",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-312"
+    },
+    "origin": {
+      "value": "unintended patterns within the Quiet Weave",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-312"
+    }
+  },
+  "volatile_state": {
+    "condition": "stable and persistent",
+    "location": "autumnal environment, particularly in cold hours",
+    "current_activity": "forming as part of the Quiet Weave's unintended patterns",
+    "last_updated_turn": "turn-341"
+  },
+  "first_seen_turn": "turn-312",
+  "last_updated_turn": "turn-341",
+  "relationships": []
+}

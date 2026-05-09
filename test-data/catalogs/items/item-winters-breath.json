@@ -1,0 +1,39 @@
+{
+  "id": "item-winters-breath",
+  "name": "winter's breath",
+  "type": "item",
+  "identity": "A rare herb with calming properties, used in soothing teas and recognized for its distinct scent and texture. It plays a role in communal herb preparation tasks, contributing to the group's satisfaction and approval.",
+  "current_status": "Identified and used by the player during a task with a group of women, leading to their recognition and approval as part of a communal herb preparation and storage process.",
+  "status_updated_turn": "turn-043",
+  "stable_attributes": {
+    "description": {
+      "value": "A rare herb with calming properties, used in soothing teas and recognized for its distinct scent and texture.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-039"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Sorting and storing dried herbs, including winter's breath, during a shared task with a group of women.",
+    "equipment": [
+      "carving tool (bone)"
+    ],
+    "location": "With a group of women engaged in herb preparation and storage",
+    "condition": "Focused and engaged in the task",
+    "last_updated_turn": "turn-043"
+  },
+  "first_seen_turn": "turn-039",
+  "last_updated_turn": "turn-043",
+  "relationships": [
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "stored_in",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-043",
+      "last_updated_turn": "turn-043"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "id": "char-mother",
+  "name": "another mother",
+  "type": "character",
+  "identity": "A maternal figure in the tribe, likely responsible for raising and teaching the children, and now also involved in the community's agricultural and cultural development.",
+  "current_status": "Observing the growth of cultivated patches near the longhouse, showing maternal concern for the new life and the tribe's evolving way of life.",
+  "status_updated_turn": "turn-173",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "another mother"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-160"
+    },
+    "role": {
+      "value": "parent and teacher",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-160"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Observing the growth of cultivated patches and showing maternal concern for the new life",
+    "location": "near the longhouse",
+    "condition": "attentive and protective",
+    "last_updated_turn": "turn-173"
+  },
+  "first_seen_turn": "turn-160",
+  "last_updated_turn": "turn-173",
+  "relationships": []
+}

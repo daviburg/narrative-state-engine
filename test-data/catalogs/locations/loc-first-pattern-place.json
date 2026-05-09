@@ -1,0 +1,29 @@
+{
+  "id": "loc-first-pattern-place",
+  "name": "the first place where the pattern touched the world",
+  "type": "location",
+  "identity": "A significant location where the pattern first manifested in the world, marked by its structured nature, the presence of a river bend, glowing stones, and an intricate web of influence that subtly shapes the environment.",
+  "current_status": "The player character and group are observing the pattern's influence and maintaining a fixed observation of the persistent disruption at the boundary point, with no further escalation.",
+  "status_updated_turn": "turn-274",
+  "stable_attributes": {
+    "description": {
+      "value": "A remote location where the pattern first appeared, characterized by structured land formations, a river bend, glowing stones, and an intricate web of influence that subtly shapes the environment.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-270"
+    }
+  },
+  "volatile_state": {
+    "location": "Above the riverbank, at the edge of the pattern's influence",
+    "current_activity": "Observing the pattern's influence and maintaining a fixed observation of the persistent disruption at the boundary point, with no further escalation",
+    "condition": "Alert and focused",
+    "last_updated_turn": "turn-274",
+    "equipment": [
+      "cairns",
+      "scored earth"
+    ]
+  },
+  "first_seen_turn": "turn-267",
+  "last_updated_turn": "turn-274",
+  "relationships": []
+}

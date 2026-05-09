@@ -1,0 +1,31 @@
+{
+  "id": "loc-crude-lean-tos",
+  "name": "crude lean-tos",
+  "type": "location",
+  "identity": "Simple shelters constructed from hide and branches, positioned along the camp's perimeter. They serve as temporary dwellings for families, providing basic protection from the elements.",
+  "current_status": "Families have retreated into these shelters, with children being carried or guided by their parents. The lean-tos are used as sleeping quarters for the village children.",
+  "status_updated_turn": "turn-047",
+  "stable_attributes": {
+    "construction_material": {
+      "value": "hide and branches",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-047"
+    },
+    "location": {
+      "value": "perimeter beyond the immediate firelight",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-047"
+    }
+  },
+  "volatile_state": {
+    "condition": "stable",
+    "location": "perimeter beyond the immediate firelight",
+    "current_activity": "being used as temporary dwellings by families",
+    "last_updated_turn": "turn-047"
+  },
+  "first_seen_turn": "turn-047",
+  "last_updated_turn": "turn-047",
+  "relationships": []
+}

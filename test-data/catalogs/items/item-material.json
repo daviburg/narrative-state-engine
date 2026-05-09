@@ -1,0 +1,41 @@
+{
+  "id": "item-material",
+  "name": "Material",
+  "type": "item",
+  "identity": "A substance used by the player character to mark their forehead, likely as a ritual or symbolic gesture.",
+  "current_status": "Applied to the player's forehead as part of a ritual gesture, possibly indicating a status or transformation.",
+  "status_updated_turn": "turn-024",
+  "stable_attributes": {
+    "species": {
+      "value": "unknown",
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": "turn-028"
+    },
+    "race": {
+      "value": "unknown",
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": "turn-028"
+    },
+    "class": {
+      "value": "unknown",
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": "turn-028"
+    },
+    "aliases": {
+      "value": [],
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": "turn-028"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "being taken to the elder for approval",
+    "last_updated_turn": "turn-024"
+  },
+  "first_seen_turn": "turn-024",
+  "last_updated_turn": "turn-028",
+  "relationships": []
+}

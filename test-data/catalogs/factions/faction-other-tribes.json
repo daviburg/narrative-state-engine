@@ -1,0 +1,58 @@
+{
+  "id": "faction-other-tribes",
+  "name": "the migrating tribes",
+  "type": "faction",
+  "identity": "A nomadic faction known for their movement between regions, often seeking new lands and resources. They are being evaluated for potential integration into the Quiet Weave through a series of trials designed to assess their values and compatibility. Their adaptability and strength in movement are noted, though their lack of rigid structures remains a point of consideration.",
+  "current_status": "The player is at a decision point regarding how to integrate Maelis of the Swift Arrows (a representative of the Riverfolk) and potentially other women like her into the Quiet Weave. The goal is to satisfy their need for purpose and strength while maintaining the delicate balance of the settlement's patterns.",
+  "status_updated_turn": "turn-332",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "migrating tribes",
+        "nomadic tribes",
+        "Outside Tribes"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-344"
+    },
+    "role": {
+      "value": "Recipients of the main tribe's knowledge about a deadly sickness",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-253"
+    },
+    "location": {
+      "value": "Southern regions",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-253"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Awaiting integration into the Quiet Weave; Maelis of the Swift Arrows stands at the edge of the Quiet Weave, open to joining but committed to nothing more.",
+    "location": "Southern regions (represented by Maelis at the edge of the Quiet Weave)",
+    "condition": "Awaiting player decision on integration methods",
+    "last_updated_turn": "turn-332",
+    "equipment": [
+      "Preserved food",
+      "Diagrams of the pattern",
+      "Precise words"
+    ]
+  },
+  "first_seen_turn": "turn-164",
+  "last_updated_turn": "turn-332",
+  "notes": "Integration of Maelis and the Riverfolk is the immediate priority. The faction's specific needs (purpose, strength) must be met without disrupting the Quiet Weave's balance.",
+  "relationships": [
+    {
+      "target_id": "faction-riverfolk",
+      "current_relationship": "affiliated with",
+      "type": "political",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "id": "item-ice-shard",
+  "name": "the shard of ice",
+  "type": "item",
+  "identity": "A crystalline shard of ice, impossibly clear and glinting like a fallen star, used in ritualistic practices to communicate with the silent star. It holds significance as a tool for seeking understanding in the mountains.",
+  "current_status": "Being used by the player to release a stronger pulse of pact energy and observe the construct's response to their presence.",
+  "status_updated_turn": "turn-198",
+  "stable_attributes": {
+    "appearance": {
+      "value": "impossibly clear, glinting like a fallen star",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-197"
+    },
+    "purpose": {
+      "value": "used in ritualistic communication with the silent star",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-197"
+    }
+  },
+  "volatile_state": {
+    "location": "frost-covered ground in the mountains",
+    "current_activity": "Pressing palm against the shard and releasing a stronger pulse of pact energy to observe the construct's response.",
+    "last_updated_turn": "turn-198",
+    "condition": "focused and engaged",
+    "equipment": [
+      "obsidian shard"
+    ]
+  },
+  "first_seen_turn": "turn-197",
+  "last_updated_turn": "turn-198",
+  "relationships": []
+}

@@ -1,0 +1,48 @@
+{
+  "id": "creature-unborn-child",
+  "name": "the unborn child",
+  "type": "creature",
+  "identity": "The fourth child growing within the player character, representing the continuity of life and the harmony of the tribe. It acts as an internal compass, subtly aligning with the broader patterns of the Quiet Weave.",
+  "current_status": "Growing strong and steady within the player character during the deep winter. The life within acts as an internal compass, aligning the player's insights with the energetic flows of the world.",
+  "status_updated_turn": "turn-332",
+  "stable_attributes": {
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-321"
+    },
+    "race": {
+      "value": "tribal",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-321"
+    },
+    "aliases": {
+      "value": [
+        "the unborn child",
+        "next generation",
+        "Lyrawyn"
+      ],
+      "inference": false,
+      "source_turn": "turn-332"
+    },
+    "role": {
+      "value": "internal compass",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    }
+  },
+  "volatile_state": {
+    "condition": "growing strong and steady",
+    "location": "Within the player character",
+    "current_activity": "Developing during the deep winter, enhancing the player's perception of subtle energetic flows",
+    "last_updated_turn": "turn-332",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-321",
+  "last_updated_turn": "turn-332",
+  "notes": "Previously conflated with Lyrawyn in the catalog; this turn clarifies the entity is the player's fourth child.",
+  "relationships": []
+}

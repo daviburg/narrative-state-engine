@@ -1,0 +1,31 @@
+{
+  "id": "faction-refugees",
+  "name": "refugees",
+  "type": "faction",
+  "identity": "A group of displaced individuals seeking shelter and protection from external threats, likely from rival tribes or raiders. Their integration into the player's tribe is complicated by the tribe's self-sufficiency and the harsh, resource-scarce environment.",
+  "current_status": "Continuing to seek refuge and potential alliance with the player's tribe, while the tribe cautiously evaluates the risks and benefits of accepting them into their community.",
+  "status_updated_turn": "turn-173",
+  "stable_attributes": {
+    "role": {
+      "value": "displaced group",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-164"
+    },
+    "allegiance": {
+      "value": "neutral",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-164"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "seeking shelter and trade opportunities while navigating the tribe's cautious stance",
+    "location": "near the player's tribe",
+    "condition": "in need of protection and facing challenges in securing resources",
+    "last_updated_turn": "turn-173"
+  },
+  "first_seen_turn": "turn-164",
+  "last_updated_turn": "turn-173",
+  "relationships": []
+}

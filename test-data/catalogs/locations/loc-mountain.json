@@ -1,0 +1,25 @@
+{
+  "id": "loc-mountain",
+  "name": "the mountain",
+  "type": "location",
+  "identity": "A towering and ancient presence that has long shaped the lives of the tribes. It is both a source of mystery and a symbol of the natural world's power, with its pulse and changes influencing the rhythms of the land and the people who dwell near it.",
+  "current_status": "Its pulse and temperature are being monitored daily, with subtle changes noted. It is regarded as a living entity, and its presence is both respected and studied by the tribe as they adapt to its influence.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "description": {
+      "value": "A towering and ancient presence that has long shaped the lives of the tribes. It is both a source of mystery and a symbol of the natural world's power.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-211"
+    }
+  },
+  "volatile_state": {
+    "condition": "Its pulse and temperature are being monitored daily, with subtle changes noted.",
+    "location": "Beyond the longhouse, at a dedicated observation post.",
+    "current_activity": "Being studied and recorded by the tribe as a living entity that influences the land and the people.",
+    "last_updated_turn": "turn-211"
+  },
+  "notes": "The mountain is treated as a living entity with a pulse, though its exact nature and origins remain unexplained. Its influence is seen as both a challenge and an opportunity for the tribe.",
+  "last_updated_turn": "turn-211",
+  "first_seen_turn": "turn-211"
+}

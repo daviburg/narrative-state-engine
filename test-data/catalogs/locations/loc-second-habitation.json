@@ -1,0 +1,31 @@
+{
+  "id": "loc-second-habitation",
+  "name": "the second habitation",
+  "type": "location",
+  "identity": "A planned secondary settlement built on the same principles as the first, designed to demonstrate variation while maintaining stability. It incorporates natural windbreaks and sun exposure, with a communal kitchen and larger drying areas, while upholding core principles of airflow and separation.",
+  "current_status": "In the planning and construction phase, this habitation is being developed with intentional positioning to avoid mirroring the first settlement. It must prove that variation can still hold while maintaining structural and functional stability.",
+  "status_updated_turn": "turn-312",
+  "stable_attributes": {
+    "purpose": {
+      "value": "planned secondary settlement",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-311"
+    },
+    "design_principles": {
+      "value": "natural windbreaks, sun exposure, airflow, separation, communal kitchen, drying areas",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-312"
+    }
+  },
+  "volatile_state": {
+    "condition": "planning and construction phase",
+    "location": "planning phase",
+    "current_activity": "Being planned and constructed with intentional positioning to demonstrate variation while maintaining stability",
+    "last_updated_turn": "turn-312"
+  },
+  "first_seen_turn": "turn-311",
+  "last_updated_turn": "turn-312",
+  "relationships": []
+}

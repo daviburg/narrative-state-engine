@@ -1,0 +1,33 @@
+{
+  "id": "loc-southern-water-sources",
+  "name": "The southern water sources",
+  "type": "location",
+  "identity": "A region where the land's patterns have shifted, showing signs of adaptation and new growth. The water sources here are central to the community's efforts to test and refine their fields.",
+  "current_status": "The southern water sources remain a focal point for testing the new fields and observing the effects of the Quiet Weave. They serve as a symbol of the balance between the land and the community, with subtle environmental changes continuing to reflect this dynamic during the gathering with the visiting leaders and the trials with the warriors.",
+  "status_updated_turn": "turn-115",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Natural water sources with signs of subtle environmental changes, including clearer water and the growth of hardy moss at field edges.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-302"
+    },
+    "role": {
+      "value": "A key location for testing the new fields and observing the effects of the Quiet Weave on the land.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-302"
+    }
+  },
+  "volatile_state": {
+    "condition": "Stable, with ongoing experimentation and adaptation, and subtle resonance with the Quiet Weave.",
+    "location": "Southern regions of the settlement",
+    "current_activity": "Testing of new fields, observation of environmental changes, and resonance with the Quiet Weave during the gathering with the visiting leaders and the trials with the warriors. The location remains central to winter preparations and the Quiet Weave's ongoing integration into the land's patterns.",
+    "last_updated_turn": "turn-115",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-302",
+  "last_updated_turn": "turn-302",
+  "notes": "",
+  "relationships": []
+}

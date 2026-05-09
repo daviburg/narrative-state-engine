@@ -1,0 +1,3 @@
+# turn-033 — DM
+
+You finish the last of the warming broth, feeling some of your strength return. Looking around the camp, you see villagers tending to various tasks: some are sharpening crude tools, others mending furs, and a few are sorting through piles of firewood. You rise and offer a polite, questioning gesture towards the elder, indicating your willingness to assist. He watches you for a moment, his gaze still shrewd, then points a gnarled finger towards a stack of freshly cut logs near the edge of the firelight. It's a clear, unspoken invitation to help replenish the dwindling fuel supply.

@@ -1,0 +1,33 @@
+{
+  "id": "item-dried-meat",
+  "name": "the dried meat",
+  "type": "item",
+  "identity": "A basic sustenance item used to feed the young trackers during their training, providing them with necessary nourishment while they learn the ways of the Quiet Weave.",
+  "first_seen_turn": "turn-316",
+  "last_updated_turn": "turn-316",
+  "notes": "",
+  "current_status": "Being presented by the player character to Chief Thorne as part of a diplomatic gift bundle, alongside preserved tubers and fermented stores, intended to ensure the tribe survives the winter without starvation.",
+  "status_updated_turn": "turn-316",
+  "volatile_state": {
+    "location": "held by two of the player character's people, placed before Chief Thorne",
+    "last_updated_turn": "turn-316",
+    "condition": "sealed in bundles",
+    "equipment": [
+      "sealed bundles of dried meat",
+      "preserved tubers",
+      "fermented stores"
+    ],
+    "current_activity": "being offered as a diplomatic gift to secure the tribe's survival through winter"
+  },
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "Dried Meat"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-320"
+    }
+  },
+  "relationships": []
+}

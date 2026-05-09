@@ -1,0 +1,32 @@
+{
+  "id": "loc-planting",
+  "name": "the planting",
+  "type": "location",
+  "identity": "A vital agricultural site central to the tribe's survival, where food is cultivated to sustain the starving population. It also serves as a strategic hub for decision-making and the convergence of various trials and negotiations.",
+  "current_status": "The location is the site of final decisions regarding resource allocation and future alliances. Chief Thorne has accepted food provisions and assigned trackers to learn paths. Elder Lyra has agreed to share shamanic knowledge with the player's records. Warrior-Chief Gorok has challenged the player to a three-day test of their defenses.",
+  "status_updated_turn": "turn-318",
+  "stable_attributes": {
+    "associated_with": {
+      "value": "farming and sustenance",
+      "inference": true,
+      "confidence": 0.7,
+      "source_turn": "turn-318"
+    },
+    "location_type": {
+      "value": "agricultural and strategic hub",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-320"
+    }
+  },
+  "volatile_state": {
+    "location": "the planting",
+    "current_activity": "Finalizing agreements between the player party and the tribe leaders regarding food, knowledge exchange, and a challenge to test defenses.",
+    "condition": "Active site of negotiation and decision-making.",
+    "last_updated_turn": "turn-318",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-318",
+  "last_updated_turn": "turn-318",
+  "relationships": []
+}

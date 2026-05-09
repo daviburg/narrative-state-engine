@@ -1,0 +1,64 @@
+{
+  "id": "loc-snow-patch",
+  "name": "the snow patch",
+  "type": "location",
+  "identity": "A patch of land severely impacted by the relentless cold, with varying degrees of survival among three distinct sections. The outermost patch was completely destroyed, the second patch showed partial survival, and the sheltered plot near the longhouse endured with minimal damage.",
+  "first_seen_turn": "turn-201",
+  "last_updated_turn": "turn-210",
+  "notes": "Entity is a testing ground for magical boundaries and containment. No open questions.",
+  "current_status": "The snow patch remains a critical location for the tribe's survival efforts, with the sheltered plot serving as a vital source of sustenance. The tribe has committed to refining the sheltered plot's protection methods, and the area continues to be a focal point for winter adaptation and survival planning. It also serves as a symbolic and practical space for the tribe's collective decision-making and adaptation to the changing environment.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Covered in snow, with varying degrees of damage and survival across three distinct sections",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-217"
+    },
+    "location": {
+      "value": "Near the mountain and crystalline growths",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-202"
+    },
+    "environmental_effect": {
+      "value": "alters air density, causes vegetation to recoil, creates invisible boundary",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-201"
+    },
+    "energy_signature": {
+      "value": "sterile, alien energy radiating from fragments and melt pattern",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-201"
+    },
+    "aliases": {
+      "value": [
+        "Snow Patch"
+      ],
+      "inference": false,
+      "source_turn": "turn-201"
+    },
+    "description": {
+      "value": "A critical location for the tribe's winter survival, with three distinct patches showing different levels of resilience to the cold",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-217"
+    },
+    "significance": {
+      "value": "Sacred site for final rites; no living beings are permitted to tread its surface after use",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-235"
+    }
+  },
+  "volatile_state": {
+    "condition": "Severely impacted by winter, with some sections showing signs of recovery and the sheltered plot demonstrating resilience to cold. It has become a site of symbolic and practical importance for the tribe's adaptation and survival planning.",
+    "equipment": [],
+    "location": "Near the longhouse and across the settlement",
+    "current_activity": "Serving as a focal point for the tribe's agricultural efforts, survival planning, and collective decision-making, with ongoing refinement of the sheltered plot's protection methods and symbolic significance in the tribe's adaptation to the cold.",
+    "last_updated_turn": "turn-210"
+  },
+  "relationships": []
+}

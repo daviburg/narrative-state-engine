@@ -1,0 +1,28 @@
+{
+  "id": "item-plague-treatment-protocol",
+  "name": "Plague Treatment Protocol",
+  "type": "item",
+  "identity": "A reference item used to guide the treatment of infected individuals, encompassing detection, isolation, interruption, and recovery phases.",
+  "current_status": "Still present in the player's inventory alongside the Pattern Disruption Method, with no direct use mentioned in this turn.",
+  "status_updated_turn": "turn-274",
+  "stable_attributes": {
+    "description": {
+      "value": "A reference item used to guide the treatment of infected individuals, encompassing detection, isolation, interruption, and recovery phases.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-265"
+    }
+  },
+  "volatile_state": {
+    "equipment": [
+      "Pattern Disruption Method",
+      "Plague Treatment Protocol"
+    ],
+    "location": "Player inventory",
+    "current_activity": "Remains in inventory with no specific use mentioned in this turn.",
+    "last_updated_turn": "turn-274"
+  },
+  "first_seen_turn": "turn-265",
+  "last_updated_turn": "turn-274",
+  "relationships": []
+}

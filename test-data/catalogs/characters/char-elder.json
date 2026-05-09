@@ -1,0 +1,292 @@
+{
+  "id": "char-elder",
+  "name": "The Elder",
+  "type": "character",
+  "identity": "A respected leader from the Riverfolk, known for her wisdom and connection to the natural world. She perceives the patterns of what was and what forgets, warning against becoming deaf to the 'song of chaos' that Maelis carries in her bones.",
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-043",
+  "notes": "The Elder perceives the 'patterns of what was' and warns against becoming 'deaf to the song of chaos.' She specifically identifies Maelis as carrying this wildness in her bones.",
+  "relationships": [
+    {
+      "target_id": "item-dark-fibrous-material",
+      "current_relationship": "extracted_from",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-019"
+    },
+    {
+      "target_id": "char-player",
+      "current_relationship": "negotiates_with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-324",
+      "history": [
+        {
+          "turn": "turn-033",
+          "description": "evaluating"
+        }
+      ]
+    },
+    {
+      "target_id": "item-stolen-item",
+      "current_relationship": "observed",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-019"
+    },
+    {
+      "target_id": "loc-frozen-stream",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-061",
+      "last_updated_turn": "turn-061",
+      "history": []
+    },
+    {
+      "target_id": "loc-largest-ornate-shelter",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-081",
+      "last_updated_turn": "turn-081",
+      "history": []
+    },
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-157",
+      "last_updated_turn": "turn-324",
+      "history": [
+        {
+          "turn": "turn-157",
+          "description": "resides_at"
+        }
+      ]
+    },
+    {
+      "target_id": "faction-elders",
+      "current_relationship": "hopeful_interest",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "loc-eastern-boundary",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "loc-southern-water-sources",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-young-hunter",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "char-elder",
+      "current_relationship": "pregnant_with",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "creature-unborn-child",
+      "current_relationship": "pregnant_with",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "faction-four-from-thorne",
+      "current_relationship": "guides",
+      "type": "political",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-lyrawyn",
+      "current_relationship": "observes",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-warrior-chief-gorok",
+      "current_relationship": "negotiates_with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-chief-thorne",
+      "current_relationship": "negotiates_with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-borin",
+      "current_relationship": "observes",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "loc-planting",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "loc-paths",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "loc-main-bonfire",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-043",
+      "last_updated_turn": "turn-043"
+    },
+    {
+      "target_id": "event-communal-meal",
+      "current_relationship": "initiates",
+      "type": "social",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-043",
+      "last_updated_turn": "turn-043"
+    }
+  ],
+  "current_status": "Rising from his spot by the main bonfire, gesturing for everyone to gather as a communal meal is about to begin.",
+  "status_updated_turn": "turn-043",
+  "stable_attributes": {
+    "appearance": {
+      "value": "flinty eyes, sharp gaze",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-157"
+    },
+    "role": {
+      "value": "tribal authority figure",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-157"
+    },
+    "aliases": {
+      "value": [
+        "Riverfolk Elder",
+        "Elder"
+      ],
+      "inference": false,
+      "source_turn": "turn-337"
+    },
+    "physical_condition": {
+      "value": "showing signs of fatigue and strain, with stiff shoulders and a taut posture",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-097"
+    },
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-314"
+    },
+    "race": {
+      "value": "Riverfolk",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-314"
+    },
+    "class": {
+      "value": "Elder",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-314"
+    }
+  },
+  "volatile_state": {
+    "condition": "ancient and deep, gaze unnervingly clear",
+    "equipment": [
+      "carved staff intertwined with river reeds"
+    ],
+    "location": "council gathering",
+    "current_activity": "Gesturing for everyone to gather as a communal meal is about to begin.",
+    "last_updated_turn": "turn-043"
+  }
+}

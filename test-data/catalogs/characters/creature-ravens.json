@@ -1,0 +1,32 @@
+{
+  "id": "creature-ravens",
+  "name": "ravens",
+  "type": "creature",
+  "identity": "A pair of ravens perched in the skeletal branches, serving as silent sentinels and observers of the natural world. They are attuned to the subtle energies of the land and are capable of sensing distant movements and changes in the environment.",
+  "current_status": "Confirming the movement of caribou herds and the return of smaller prey to the thawing lands. They also report the presence of unusual, bright flickers in the distant eastern mountains and a collective avoidance of that direction by local wildlife.",
+  "status_updated_turn": "turn-191",
+  "stable_attributes": {
+    "appearance": {
+      "value": "obsidian sentinels",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-189"
+    },
+    "role": {
+      "value": "scouts and observers of the natural world",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-189"
+    }
+  },
+  "volatile_state": {
+    "location": "skeletal branches overhead",
+    "current_activity": "reporting on wildlife movements and environmental changes",
+    "condition": "alert and observant",
+    "last_updated_turn": "turn-191"
+  },
+  "first_seen_turn": "turn-189",
+  "last_updated_turn": "turn-191",
+  "notes": "",
+  "relationships": []
+}

@@ -1,0 +1,25 @@
+{
+  "id": "item-lanterns",
+  "name": "Lanterns",
+  "type": "item",
+  "identity": "Ceremonial items central to the Midwinter celebration, their name was taken and their absence would disrupt the festival's traditions and songs.",
+  "current_status": "Located in the village hall, part of the celebration setup that the player must retrieve to save the festival.",
+  "status_updated_turn": "turn-001",
+  "stable_attributes": {
+    "role": {
+      "value": "ceremonial item for Midwinter celebration",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-001"
+    }
+  },
+  "volatile_state": {
+    "condition": "preserved and intact",
+    "location": "village hall",
+    "current_activity": "part of celebration setup",
+    "last_updated_turn": "turn-001"
+  },
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-001",
+  "relationships": []
+}

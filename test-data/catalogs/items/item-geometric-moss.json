@@ -1,0 +1,43 @@
+{
+  "id": "item-geometric-moss",
+  "name": "the geometric moss",
+  "type": "item",
+  "identity": "A natural resource found in the Quiet Weave that serves as a soil enricher and natural binder, stabilizing ground and improving yield.",
+  "current_status": "The Healer has decided to continue using it for soil enrichment and poultices, but only with specific intent and under monitored conditions to ensure its spread is controlled.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "function": {
+      "value": "soil enricher, natural binder for ground stabilization",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    },
+    "safety": {
+      "value": "safe to use with intent and monitoring",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-344"
+    },
+    "nature": {
+      "value": "geometric",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    },
+    "usage_protocol": {
+      "value": "must be used with intent; spread must be monitored",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-344"
+    }
+  },
+  "volatile_state": {
+    "condition": "being used with intent and monitored spread",
+    "location": "Quiet Weave",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-340",
+  "last_updated_turn": "turn-344",
+  "notes": "The Healer explicitly stated he will continue using the geometric moss for soil enrichment and poultices, but only with intent and ensuring its spread is monitored. This clarifies the usage protocol compared to the previous ambiguity regarding 'hunger'.",
+  "relationships": []
+}

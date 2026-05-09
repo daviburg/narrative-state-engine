@@ -1,0 +1,68 @@
+{
+  "id": "item-bigger-kiln",
+  "name": "kiln work",
+  "type": "item",
+  "identity": "A functional tool used for drying and preserving food and materials, central to the tribe's survival and growth strategies.",
+  "current_status": "Integral to the tribe's construction of a new storage structure, supporting sustainable development through advanced material processing and heat control techniques.",
+  "status_updated_turn": "turn-293",
+  "stable_attributes": {
+    "purpose": {
+      "value": "Pottery production",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-176"
+    },
+    "function": {
+      "value": "drying and preserving food and materials",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-289"
+    },
+    "type": {
+      "value": "kiln",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-176"
+    },
+    "species": {
+      "value": "ceramic",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-176"
+    },
+    "aliases": {
+      "value": [
+        "small kiln",
+        "demonstration kiln",
+        "Bigger kiln",
+        "Small kiln"
+      ],
+      "inference": false,
+      "source_turn": "turn-293"
+    },
+    "category": {
+      "value": "tool",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-289"
+    },
+    "usage": {
+      "value": "essential in food preservation and material processing, including construction of storage structures",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-290"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "supporting construction of new storage structure with heat control and ventilation design",
+    "condition": "functional and in regular use",
+    "equipment": [
+      "kiln work"
+    ],
+    "location": "central gathering area",
+    "last_updated_turn": "turn-293"
+  },
+  "first_seen_turn": "turn-176",
+  "last_updated_turn": "turn-293",
+  "relationships": []
+}

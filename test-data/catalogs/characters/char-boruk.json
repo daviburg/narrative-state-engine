@@ -1,0 +1,63 @@
+{
+  "id": "char-boruk",
+  "name": "Boruk",
+  "type": "character",
+  "identity": "A vigilant and serious companion of the player character, part of a small group exploring a mysterious and dangerous arctic environment. Boruk is described as having a serious expression and is attentive to the group's safety.",
+  "current_status": "Remaining alert and focused as the player attempts to communicate with the mountain, participating in the search for signs of the ancient construct's influence.",
+  "status_updated_turn": "turn-200",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-195"
+    },
+    "race": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-195"
+    },
+    "class": {
+      "value": "Hunter",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-195"
+    },
+    "aliases": {
+      "value": [
+        "Boruk"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-201"
+    }
+  },
+  "volatile_state": {
+    "condition": "Alert and focused",
+    "equipment": [
+      "sturdy spear",
+      "dried rations",
+      "fur-lined cloak",
+      "charms against cold and unnatural influences"
+    ],
+    "location": "In the mountains, establishing a camp and preparing for the ritual to announce the party's presence to the ancient construct",
+    "current_activity": "Standing watch with the player and Rurik while the group searches for signs of the ancient construct's influence",
+    "last_updated_turn": "turn-200"
+  },
+  "first_seen_turn": "turn-195",
+  "last_updated_turn": "turn-200",
+  "notes": "",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "positioned behind",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-201",
+      "last_updated_turn": "turn-212"
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "id": "char-chief-thorne",
+  "name": "Chief Thorne",
+  "type": "character",
+  "identity": "A seasoned leader from the Ironwood Clan and Warrior-Chief, known for his weathered appearance and cautious demeanor. He represents patience and endurance, embodying the role of a guardian who ensures stability through careful observation and measured action. His presence is a testament to the value of holding and maintaining balance rather than seeking immediate expansion.",
+  "current_status": "Receiving a directive from the player to prepare for a future visit from a small group of builders/teachers after the thaw, emphasizing that he will not receive many visitors soon and that the new group will teach rather than build.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-341"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-341"
+    },
+    "class": {
+      "value": "Guardian",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-341"
+    },
+    "aliases": {
+      "value": [
+        "Thorne",
+        "Chief Thorne"
+      ],
+      "inference": false,
+      "source_turn": "turn-314"
+    },
+    "role": {
+      "value": "Warrior-Chief",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-324"
+    }
+  },
+  "volatile_state": {
+    "condition": "Awaiting future visitors",
+    "equipment": [],
+    "location": "Boundary area / Patrol route",
+    "current_activity": "Processing the player's message about limiting future groups and prioritizing teaching over building",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-314",
+  "last_updated_turn": "turn-344",
+  "notes": "Player has established a new interaction protocol: small groups will be sent to teach rather than build, limited by land capacity. Thorne is now in a state of receiving these new instructions.",
+  "relationships": [
+    {
+      "target_id": "faction-elders",
+      "current_relationship": "cautious_interest",
+      "type": "political",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "loc-eastern-boundary",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "loc-southern-water-sources",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "char-young-hunter",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "faction-trackers",
+      "current_relationship": "initiates",
+      "type": "political",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-318",
+      "last_updated_turn": "turn-320",
+      "history": [
+        {
+          "turn": "turn-318",
+          "description": "assigns_role"
+        }
+      ]
+    },
+    {
+      "target_id": "loc-planting",
+      "current_relationship": "assigns_role",
+      "type": "political",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-318",
+      "last_updated_turn": "turn-318"
+    }
+  ]
+}

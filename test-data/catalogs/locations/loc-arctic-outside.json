@@ -1,0 +1,31 @@
+{
+  "id": "loc-arctic-outside",
+  "name": "the harsh realities of the arctic outside",
+  "type": "location",
+  "identity": "A desolate and unforgiving environment characterized by extreme cold, perpetual twilight, and treacherous terrain. It serves as a backdrop for the tribe's survival and the protagonist's arcane interventions.",
+  "current_status": "Serves as the setting for the tribe's daily struggles and the protagonist's secret actions, with the harsh environment contrasting with the warmth of the shared refuge. The protagonist envisions transforming the shelters using arcane arts to create a safer environment for their unborn child.",
+  "status_updated_turn": "turn-123",
+  "stable_attributes": {
+    "appearance": {
+      "value": "extreme cold, perpetual twilight, treacherous terrain",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-119"
+    },
+    "role": {
+      "value": "setting for the tribe's survival and the protagonist's arcane interventions",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-119"
+    }
+  },
+  "volatile_state": {
+    "condition": "unchanging, harsh and unforgiving",
+    "location": "the arctic outside",
+    "current_activity": "serves as the backdrop for the tribe's survival and the protagonist's arcane interventions. The protagonist envisions transforming the shelters using arcane arts to create a safer environment for their unborn child.",
+    "last_updated_turn": "turn-123"
+  },
+  "first_seen_turn": "turn-119",
+  "last_updated_turn": "turn-123",
+  "relationships": []
+}

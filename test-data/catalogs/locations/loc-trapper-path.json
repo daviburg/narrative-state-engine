@@ -1,0 +1,36 @@
+{
+  "id": "loc-trapper-path",
+  "name": "the trapper's path",
+  "type": "location",
+  "identity": "A secluded route near the longhouse used for observation of the mountain fragment and as a neutral ground for trade with the trapper. It symbolizes the tribe's growing awareness of external connections and strategic planning for movement and diplomacy.",
+  "current_status": "Serving as a critical site for observation, trade preparation, mapping migration routes, and monitoring environmental changes. The tribe uses this location to plan movements for the thaw, reassess southern tribes, and evaluate whether to approach the mountain again.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "description": {
+      "value": "A secluded route near the longhouse, used for observation of the mountain fragment and as a neutral ground for trade with the trapper.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-210"
+    },
+    "role": {
+      "value": "Site for observation, trade, diplomacy, and strategic planning with the trapper and external tribes.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-210"
+    }
+  },
+  "volatile_state": {
+    "location": "near the longhouse entrance",
+    "current_activity": "Observing the mountain fragment, preparing trade goods, mapping migration routes, planning movements for the thaw, and monitoring signs of the trapper's path and environmental changes.",
+    "condition": "Active and under constant use for observation and trade preparations.",
+    "last_updated_turn": "turn-210",
+    "equipment": [
+      "trade bundle",
+      "mapping tools",
+      "observation post"
+    ]
+  },
+  "first_seen_turn": "turn-267",
+  "last_updated_turn": "turn-267",
+  "relationships": []
+}

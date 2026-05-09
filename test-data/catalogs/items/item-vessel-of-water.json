@@ -1,0 +1,10 @@
+{
+  "id": "item-vessel-of-water",
+  "name": "Vessel Of Water",
+  "type": "item",
+  "identity": "Entity referenced in events (stub — auto-created from event data).",
+  "first_seen_turn": "turn-223",
+  "last_updated_turn": "turn-223",
+  "notes": "Auto-created by event-stub.",
+  "relationships": []
+}

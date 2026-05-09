@@ -1,0 +1,44 @@
+{
+  "id": "char-scout",
+  "name": "the scout",
+  "type": "character",
+  "identity": "A stealthy and observant character tasked with monitoring the riverbank and its surrounding areas. Demonstrates expertise in tracking and environmental awareness.",
+  "current_status": "Maintaining a fixed observation of the river's energy patterns and the impact of a persistent disruption. No further action is taken, and the focus remains on analyzing the system's response to the imperfection.",
+  "status_updated_turn": "turn-274",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "the scout"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-270"
+    },
+    "role": {
+      "value": "scout and observer",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-270"
+    },
+    "appearance": {
+      "value": "stealthy, observant",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-270"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and focused",
+    "location": "above the riverbank",
+    "current_activity": "observing the energy patterns and analyzing the disruption's effect",
+    "last_updated_turn": "turn-274",
+    "equipment": [
+      "markers",
+      "tools for tracking"
+    ]
+  },
+  "first_seen_turn": "turn-259",
+  "last_updated_turn": "turn-274",
+  "notes": "",
+  "relationships": []
+}

@@ -1,0 +1,3 @@
+# turn-059 — DM
+
+You point to yourself, enunciating "Fenouille Moonwind" clearly, though the words feel foreign and sharp in the crisp morning air. Then, you gesture towards the young hunter, an expectant look on your face. He watches you intently, a furrow appearing between his brows. He understands the gesture of pointing, but your words seem to wash over him, leaving no discernible impression. He simply blinks slowly, then shakes his head slightly, a small, puzzled grunt escaping his lips. He gestures vaguely around the waking camp, perhaps indicating that there's work to be done, or that talking is not their custom. The sound of footsteps and distant voices indicate the other villagers are beginning to emerge from their shelters, the camp slowly stirring to life.

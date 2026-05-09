@@ -1,0 +1,40 @@
+{
+  "id": "loc-largest-ornate-shelter",
+  "name": "the largest, most ornate of the shelters",
+  "type": "location",
+  "identity": "A significant shelter within the camp, associated with the elder and later used by the shaman. It is a place of spiritual importance and ritual activity.",
+  "current_status": "The shaman is seen entering and exiting the shelter, performing symbolic gestures and offering quiet words to the women of the camp, while the elder is observed in the vicinity.",
+  "status_updated_turn": "turn-097",
+  "stable_attributes": {
+    "appearance": {
+      "value": "ornate, with intricate carvings and a central structure that stands out from the other shelters",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-081"
+    },
+    "associated_entities": {
+      "value": [
+        "elder",
+        "shaman"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-081"
+    },
+    "purpose": {
+      "value": "a place of spiritual significance and ritual activity",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-081"
+    }
+  },
+  "volatile_state": {
+    "location": "within the camp",
+    "current_activity": "shaman performing symbolic gestures and offering words to the women, with the elder present",
+    "condition": "quiet and solemn",
+    "last_updated_turn": "turn-097"
+  },
+  "first_seen_turn": "turn-081",
+  "last_updated_turn": "turn-097",
+  "relationships": []
+}

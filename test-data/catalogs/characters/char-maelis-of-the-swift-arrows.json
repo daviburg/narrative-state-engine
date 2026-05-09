@@ -1,0 +1,273 @@
+{
+  "id": "char-maelis-of-the-swift-arrows",
+  "name": "Maelis of the Swift Arrows",
+  "type": "character",
+  "identity": "A formidable hunter-scout from the Riverfolk, known for her unmatched precision with a bow and her sharp, strategic mind. She leads a small band of women who provide for their tribe, operating with a discipline that rivals Gorok's warriors, yet her gaze carries a deep, discerning wisdom. She is recognized as one of two primary shapers of the settlement's future, standing alongside the player. She possesses an innate connection to chaos and the 'song of chaos,' viewing the tribe's reliance on patterns as a potential weakness that must be balanced with the ability to strike before a pattern forms.",
+  "current_status": "Present in the central gathering space with the player and Gorok. The player has explicitly assigned her the role of the 'right hand' and 'force that adapts,' instructing her to build something new that does not follow the tribe's pattern unless it chooses to, acting alongside the player rather than against them. She has just defined her specific domain of command: taking charge when the enemy breaks formation and scatters into the wild, requiring adaptation and tracking to end the flight.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "race": {
+      "value": "Riverfolk",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "class": {
+      "value": "Hunter-scout",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "aliases": {
+      "value": [
+        "The Swift Arrows",
+        "Maelis of the Riverfolk"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "role": {
+      "value": "Peer leader / Shaper of the settlement / Right hand to the player / Force that adapts",
+      "inference": false,
+      "confidence": 0.98,
+      "source_turn": "turn-343"
+    },
+    "philosophy": {
+      "value": "Values endurance and yielding over absolute control; seeks to embrace the unpatterned and strike before patterns form.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    }
+  },
+  "volatile_state": {
+    "condition": "Focused and engaged, having just articulated her specific tactical domain (chase, adaptation, striking fleeing enemies).",
+    "equipment": [
+      "Bow"
+    ],
+    "location": "Central gathering space (with the player and Gorok)",
+    "current_activity": "Defining her command authority alongside Gorok; she has agreed to take command when the enemy breaks formation and scatters, requiring adaptation and tracking.",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-332",
+  "last_updated_turn": "turn-344",
+  "notes": "Maelis and Gorok have established a clear division of labor: Gorok handles immediate, brutal commitment to unknown threats, while Maelis handles the chase and adaptation against scattering enemies. They are now acting as the player's 'right and left hand' without merging their approaches.",
+  "relationships": [
+    {
+      "target_id": "loc-settlement",
+      "current_relationship": "standing_at",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332",
+      "history": [
+        {
+          "turn": "turn-344",
+          "description": "resides_at"
+        },
+        {
+          "turn": "turn-344",
+          "description": "observing"
+        }
+      ]
+    },
+    {
+      "target_id": "char-player",
+      "current_relationship": "agreed_to_visit",
+      "type": "political",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332",
+      "history": [
+        {
+          "turn": "turn-332",
+          "description": "observing"
+        },
+        {
+          "turn": "turn-340",
+          "description": "observed by"
+        },
+        {
+          "turn": "turn-344",
+          "description": "ally of"
+        },
+        {
+          "turn": "turn-332",
+          "description": "open_to_integration_with"
+        }
+      ]
+    },
+    {
+      "target_id": "faction-tribe",
+      "current_relationship": "affiliated with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-342"
+    },
+    {
+      "target_id": "loc-empty-snow-expanse",
+      "current_relationship": "traveling_to",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-344"
+    },
+    {
+      "target_id": "loc-eastern-boundary",
+      "current_relationship": "standing_at",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-344"
+    },
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-344"
+    },
+    {
+      "target_id": "char-lyrawyn",
+      "current_relationship": "carrying",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-342",
+      "history": [
+        {
+          "turn": "turn-342",
+          "description": "consulted by"
+        }
+      ]
+    },
+    {
+      "target_id": "char-shaman",
+      "current_relationship": "passing_to",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-342"
+    },
+    {
+      "target_id": "char-warrior-chief-gorok",
+      "current_relationship": "allies with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-341",
+      "history": [
+        {
+          "turn": "turn-340",
+          "description": "consulted by"
+        }
+      ]
+    },
+    {
+      "target_id": "char-borin",
+      "current_relationship": "consulted by",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-342"
+    },
+    {
+      "target_id": "char-anya",
+      "current_relationship": "consulted by",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-342"
+    },
+    {
+      "target_id": "char-joric",
+      "current_relationship": "consulted by",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-340",
+      "last_updated_turn": "turn-342"
+    },
+    {
+      "target_id": "char-young-hunter",
+      "current_relationship": "allies with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-341",
+      "last_updated_turn": "turn-341"
+    },
+    {
+      "target_id": "faction-riverfolk",
+      "current_relationship": "originates_from",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332"
+    },
+    {
+      "target_id": "char-kael",
+      "current_relationship": "observed_by",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332"
+    },
+    {
+      "target_id": "char-tala",
+      "current_relationship": "observed_by",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332"
+    },
+    {
+      "target_id": "faction-other-tribes",
+      "current_relationship": "encountered",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-332",
+      "last_updated_turn": "turn-332"
+    }
+  ]
+}

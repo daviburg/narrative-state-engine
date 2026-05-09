@@ -1,0 +1,32 @@
+{
+  "id": "item-hardier-grass",
+  "name": "new, hardier grass",
+  "type": "item",
+  "identity": "A resilient plant that has adapted to the disruption fields, showing unexpected growth and resilience in the new environment, with subtle harmonic properties that respond to magical energy.",
+  "current_status": "Continuing to thrive and adapt in the disruption fields, with signs of resilience and unexpected growth observed by the group, and displaying harmonic properties in response to magical energy.",
+  "status_updated_turn": "turn-298",
+  "stable_attributes": {
+    "description": {
+      "value": "a hardier grass that thrives in the disruption fields, showing resilience and unexpected growth",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-296"
+    },
+    "harmonic_property": {
+      "value": "responds to magical energy with a subtle intensification of light",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-298"
+    }
+  },
+  "volatile_state": {
+    "condition": "thriving and adapting in the disruption fields",
+    "location": "Fenouille",
+    "current_activity": "showing resilience and unexpected growth, with harmonic properties observed",
+    "last_updated_turn": "turn-298"
+  },
+  "first_seen_turn": "turn-296",
+  "last_updated_turn": "turn-298",
+  "notes": "",
+  "relationships": []
+}

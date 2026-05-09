@@ -1,0 +1,25 @@
+{
+  "id": "item-carving-tool",
+  "name": "the carving tool",
+  "type": "item",
+  "identity": "A small, intricate carving tool used for delicate tasks such as shaping wood or engraving. It is positioned near the woman sorting herbs, suggesting it is a specialized tool for precise work.",
+  "current_status": "Located near the woman sorting herbs, used for delicate carving tasks. It is subtly indicated as a task-related item for the player character.",
+  "status_updated_turn": "turn-037",
+  "stable_attributes": {
+    "description": {
+      "value": "A small, intricate carving tool used for delicate tasks such as shaping wood or engraving.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-037"
+    }
+  },
+  "volatile_state": {
+    "location": "Near the woman sorting herbs, at the edge of the camp",
+    "current_activity": "Used for delicate carving tasks as part of a subtle invitation for the player character",
+    "last_updated_turn": "turn-037"
+  },
+  "first_seen_turn": "turn-037",
+  "last_updated_turn": "turn-037",
+  "notes": "",
+  "relationships": []
+}

@@ -1,0 +1,32 @@
+{
+  "id": "item-crystalline-moss",
+  "name": "the crystalline moss",
+  "type": "item",
+  "identity": "A naturally occurring plant that forms stable, patterned borders around active disruption fields. It enriches the soil it covers and persists in the spring, interacting with mineral deposits to create subtle, patterned veins.",
+  "current_status": "Present in the spring and disruption fields, forming stable structures that interact with mineral deposits. It supports plant growth and soil enrichment, and is referenced in the context of ecological balance and boundary maintenance.",
+  "status_updated_turn": "turn-341",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Stable, patterned structures; interacts with mineral deposits to form subtle veins",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    },
+    "function": {
+      "value": "Enriches soil, supports plant growth, and stabilizes disruption fields",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-312"
+    }
+  },
+  "volatile_state": {
+    "location": "Spring and disruption fields",
+    "condition": "Stable and persistent",
+    "current_activity": "Interacting with mineral deposits and supporting plant growth, referenced in ecological discussions",
+    "last_updated_turn": "turn-341"
+  },
+  "first_seen_turn": "turn-312",
+  "last_updated_turn": "turn-341",
+  "notes": "",
+  "relationships": []
+}

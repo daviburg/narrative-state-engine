@@ -1,0 +1,29 @@
+{
+  "id": "item-stolen-item",
+  "name": "the stolen item",
+  "type": "item",
+  "identity": "An object of personal significance to the player character, representing a connection to the world beyond the tribe. Its theft and subsequent presence in the narrative serve as a reminder of the player's past and motivations.",
+  "current_status": "Symbolically present as a lingering tie to the player's past, influencing their contemplation of using arcane powers to strengthen the tribe. Not physically carried in this scene but referenced as a motivator for their vision of the future.",
+  "status_updated_turn": "turn-020",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "the stolen item"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-113"
+    }
+  },
+  "volatile_state": {
+    "condition": "unknown",
+    "equipment": [],
+    "location": "snowy forest",
+    "current_activity": "being pursued by the player, whose memory of its name is unclear",
+    "last_updated_turn": "turn-020"
+  },
+  "first_seen_turn": "turn-003",
+  "last_updated_turn": "turn-123",
+  "notes": "The name of the item is not explicitly stated, only implied to be a blur in the player's memory.",
+  "relationships": []
+}

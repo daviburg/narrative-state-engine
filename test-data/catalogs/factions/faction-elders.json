@@ -1,0 +1,62 @@
+{
+  "id": "faction-elders",
+  "name": "Southern Elders",
+  "type": "faction",
+  "identity": "A faction of tribes that have aligned with the main tribe, learning from their knowledge and practices. They are not followers but rather independent entities that choose to learn and integrate aspects of the main tribe's teachings. Their leaders demonstrate a deep understanding of the interconnectedness of knowledge, survival, and growth. They have accepted the new name 'The Quiet Weave' and are now recognized as part of this evolving structure.",
+  "current_status": "Observing the main tribe's methods and evaluating their effectiveness. They are engaged in a council with the main tribe, discussing changes in the land, the movement of herds, and the implications of recent events. They are actively involved in shaping the future of their people and the broader community, emphasizing cooperation, shared knowledge, and collective decision-making. They are also involved in evaluating the impact of the new structures and the natural changes occurring in the environment. They are also observing and not spreading certain knowledge to the southern tribes until it is properly understood and named.",
+  "status_updated_turn": "turn-314",
+  "stable_attributes": {
+    "role": {
+      "value": "Aligned but separate faction",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-289"
+    },
+    "appearance": {
+      "value": "Not explicitly described, but implied to be tribal and possibly nomadic",
+      "inference": true,
+      "confidence": 0.7,
+      "source_turn": "turn-289"
+    },
+    "aliases": {
+      "value": [
+        "southern elders",
+        "the elders"
+      ],
+      "inference": false,
+      "source_turn": "turn-324"
+    }
+  },
+  "volatile_state": {
+    "condition": "Engaged and cooperative",
+    "location": "Neutral ground outside the longhouse",
+    "current_activity": "Participating in a council with the main tribe, discussing changes in the land, the movement of herds, and the implications of recent events. Emphasizing cooperation, shared knowledge, and collective decision-making. Evaluating the impact of the new structures and natural changes. Observing and not spreading certain knowledge to the southern tribes until it is properly understood and named.",
+    "last_updated_turn": "turn-314",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-127",
+  "last_updated_turn": "turn-314",
+  "notes": "Entity remains a faction representing the Southern Elders, with a focus on trade, knowledge exchange, and cooperation. No new names or identities revealed.",
+  "relationships": [
+    {
+      "target_id": "loc-communal-longhouse",
+      "current_relationship": "laboring on",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-127",
+      "last_updated_turn": "turn-133"
+    },
+    {
+      "target_id": "loc-fragment",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-294",
+      "last_updated_turn": "turn-294"
+    }
+  ]
+}

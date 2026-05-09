@@ -1,0 +1,226 @@
+[
+  {
+    "turn": 201,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 20.7,
+    "entity_count": 10,
+    "active": 0,
+    "passive": 8,
+    "spurious": 2,
+    "input_tokens_est": 12033,
+    "output_tokens_est": 501,
+    "error": null,
+    "entities": [
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-distant-light-flashing-mountains",
+        "confidence": 0.95,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the camp",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-camp",
+        "confidence": 0.95,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "Rurik",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-rurik",
+        "confidence": 0.95,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "Boruk",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-boruk",
+        "confidence": 0.95,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the obsidian",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-obsidian-staff",
+        "confidence": 0.95,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the hexagonal melt pattern",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "loc-hexagonal-melt-pattern",
+        "confidence": 0.9,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the crystalline growths",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-crisp-growth",
+        "confidence": 0.9,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the small, dark fragments",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-dark-fragments",
+        "confidence": 0.9,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the barren strip",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-barren-strip",
+        "confidence": 0.9,
+        "source_turn": "turn-201"
+      },
+      {
+        "name": "the thin, cold air pockets",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-thin-cold-air",
+        "confidence": 0.9,
+        "source_turn": "turn-201"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the mountains",
+        "the camp",
+        "Rurik",
+        "Boruk",
+        "the obsidian",
+        "the hexagonal melt pattern",
+        "the small, dark fragments",
+        "the barren strip"
+      ],
+      "spurious": [
+        "the crystalline growths",
+        "the thin, cold air pockets"
+      ]
+    }
+  },
+  {
+    "turn": 221,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 16.2,
+    "entity_count": 2,
+    "active": 0,
+    "passive": 2,
+    "spurious": 0,
+    "input_tokens_est": 12292,
+    "output_tokens_est": 94,
+    "error": null,
+    "entities": [
+      {
+        "name": "the Shaman",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-shaman",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "Kael",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-kael",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the Shaman",
+        "Kael"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 251,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 19.3,
+    "entity_count": 5,
+    "active": 3,
+    "passive": 2,
+    "spurious": 0,
+    "input_tokens_est": 12359,
+    "output_tokens_est": 378,
+    "error": null,
+    "entities": [
+      {
+        "name": "the man",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-the-man",
+        "confidence": 0.95,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the pattern",
+        "type": "concept",
+        "is_new": false,
+        "existing_id": "item-fragment-rhythm",
+        "confidence": 0.85,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the green luminescence",
+        "type": "concept",
+        "is_new": true,
+        "proposed_id": "concept-green-luminescence",
+        "description": "The alien pattern's visual manifestation within the man, which has ceased to pulse and is fading into his healing flesh.",
+        "confidence": 0.9,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the thawing landscape",
+        "type": "location",
+        "is_new": true,
+        "proposed_id": "loc-thawing-landscape",
+        "description": "The environment outside the man, currently thawing as the battle with the pattern concludes.",
+        "confidence": 0.8,
+        "source_turn": "turn-251"
+      },
+      {
+        "name": "the clearing",
+        "type": "location",
+        "is_new": true,
+        "proposed_id": "loc-clearing",
+        "description": "A metaphorical and literal space where the battle has ended, now allowing for true healing and understanding.",
+        "confidence": 0.85,
+        "source_turn": "turn-251"
+      }
+    ],
+    "categories": {
+      "active": [
+        "the green luminescence",
+        "the thawing landscape",
+        "the clearing"
+      ],
+      "passive": [
+        "the man",
+        "the pattern"
+      ],
+      "spurious": []
+    }
+  }
+]

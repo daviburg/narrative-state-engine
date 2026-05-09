@@ -1,0 +1,33 @@
+{
+  "id": "item-tripwire",
+  "name": "tripwire",
+  "type": "item",
+  "identity": "A hidden trap mechanism disguised as a snow-covered trail, designed to ensnare intruders.",
+  "current_status": "Triggered, ensnaring the player in a net of icy vines and causing them to be pinned and immobilized.",
+  "status_updated_turn": "turn-005",
+  "stable_attributes": {
+    "appearance": {
+      "value": "disguised as a snow-covered trail, made of a hidden tripwire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "function": {
+      "value": "trap mechanism to ensnare intruders",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    }
+  },
+  "volatile_state": {
+    "condition": "triggered, ensnaring the player",
+    "equipment": [],
+    "location": "snow-laden woods",
+    "current_activity": "activating and ensnaring the player",
+    "last_updated_turn": "turn-005"
+  },
+  "first_seen_turn": "turn-005",
+  "last_updated_turn": "turn-005",
+  "notes": "",
+  "relationships": []
+}

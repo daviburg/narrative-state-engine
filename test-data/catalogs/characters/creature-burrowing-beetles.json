@@ -1,0 +1,40 @@
+{
+  "id": "creature-burrowing-beetles",
+  "name": "burrowing beetles",
+  "type": "creature",
+  "identity": "A type of insect known for its ability to burrow through soil, often associated with subterranean habitats and movements.",
+  "current_status": "Observed by the player character during a ritual, where their presence and activity are noted as part of the sickness's progression.",
+  "status_updated_turn": "turn-247",
+  "stable_attributes": {
+    "species": {
+      "value": "insect",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-247"
+    },
+    "appearance": {
+      "value": "small, unseen, subterranean",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-233"
+    },
+    "aliases": {
+      "value": [
+        "burrowing beetles",
+        "the burrowing beetles"
+      ],
+      "inference": false,
+      "source_turn": "turn-247"
+    }
+  },
+  "volatile_state": {
+    "condition": "Observed during a ritual, with no direct physical interaction",
+    "location": "Working space around the player character's ritual",
+    "current_activity": "Part of the sickness's manifestation, noted as a target for the ritual",
+    "last_updated_turn": "turn-247"
+  },
+  "first_seen_turn": "turn-233",
+  "last_updated_turn": "turn-247",
+  "notes": "The burrowing beetles are part of a larger unseen ecosystem that consumes the dead and the sick, playing a critical role in the natural cycle of decay. Their activity is closely monitored alongside the sick individual's condition.",
+  "relationships": []
+}
