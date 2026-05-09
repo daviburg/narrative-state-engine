@@ -641,3 +641,121 @@ class TestBoundedWithTurnText:
         # Without turn_text, fast-path fires (or staleness not applied)
         assert "char-r" in result
         assert "char-s" in result
+
+
+# ---------------------------------------------------------------------------
+# Common-word blocklist (#297)
+# ---------------------------------------------------------------------------
+
+class TestCommonWordBlocklist:
+    def test_common_word_name_skipped(self):
+        """Entities with common English word names should not produce false matches."""
+        entities = [
+            _make_entity("char-echo", "Echo"),
+            _make_entity("char-field", "Field"),
+            _make_entity("char-anya", "Anya"),
+        ]
+        text = "The echo of her voice carried across the field where Anya stood."
+        mentioned = _find_mentioned_entities(entities, text)
+        # "Echo" and "Field" are common words — should be skipped
+        # "Anya" is a proper name — should match
+        assert mentioned == {"char-anya"}
+
+    def test_multiword_name_with_common_word_matches(self):
+        """Multi-word names should match even if they contain a blocklisted word."""
+        entities = [
+            _make_entity("loc-fire-temple", "Fire Temple", etype="location"),
+            _make_entity("loc-fire", "fire", etype="location"),
+        ]
+        text = "They approached the Fire Temple cautiously, noting the fire damage."
+        mentioned = _find_mentioned_entities(entities, text)
+        # "Fire Temple" (multi-word) should match; "fire" (single common word) should not
+        assert "loc-fire-temple" in mentioned
+        assert "loc-fire" not in mentioned
+
+    def test_blocklisted_alias_skipped(self):
+        """A blocklisted word as an alias should be skipped but entity can match on name."""
+        entities = [
+            _make_entity("loc-snow-pines", "Snow-Laden Pines",
+                         etype="location", aliases=["snow"]),
+        ]
+        text = "The snow fell gently on the Snow-Laden Pines."
+        mentioned = _find_mentioned_entities(entities, text)
+        # "snow" alias is blocklisted (single word), but "Snow-Laden Pines" matches
+        assert "loc-snow-pines" in mentioned
+
+    def test_non_blocklisted_single_word_matches(self):
+        """Single-word names NOT in the blocklist should still match."""
+        entities = [
+            _make_entity("char-anya", "Anya"),
+            _make_entity("char-borin", "Borin"),
+        ]
+        text = "Anya and Borin walked together."
+        mentioned = _find_mentioned_entities(entities, text)
+        assert mentioned == {"char-anya", "char-borin"}
+
+    def test_article_prefix_blocklisted_word_skipped(self):
+        """Names like 'the land' should be blocked after stripping articles."""
+        entities = [
+            _make_entity("loc-land", "the land", etype="location"),
+            _make_entity("loc-field", "The Field", etype="location"),
+            _make_entity("loc-haven", "The Thornhaven", etype="location"),
+        ]
+        text = "They crossed the land and the field to reach The Thornhaven."
+        mentioned = _find_mentioned_entities(entities, text)
+        # "the land" -> "land" (blocklisted), "The Field" -> "field" (blocklisted)
+        assert "loc-land" not in mentioned
+        assert "loc-field" not in mentioned
+        # "The Thornhaven" -> "thornhaven" (not blocklisted, single word) — matches
+        assert "loc-haven" in mentioned
+
+
+# ---------------------------------------------------------------------------
+# One-hop expansion cap (#297)
+# ---------------------------------------------------------------------------
+
+class TestOneHopCap:
+    def test_one_hop_cap_prevents_cascade(self):
+        """When too many entities are priority, one-hop should be capped."""
+        # Create 20+ entities. 11 are "mentioned" via names in text.
+        # Each mentioned entity has a relationship to a unique target.
+        # Without cap: 11 mentioned + 9 one-hop = 20/20 = 100% > 50%.
+        # With cap (>= 20 entities): one-hop should be dropped entirely.
+        entities = []
+        for i in range(11):
+            entities.append(_make_entity(
+                f"char-m{i}", f"Xenthar{i}",
+                last_updated_turn="turn-100",
+                relationships=[{"target_id": f"char-t{i}", "status": "active"}],
+            ))
+        for i in range(9):
+            entities.append(_make_entity(
+                f"char-t{i}", f"Target{i}",
+                last_updated_turn="turn-090",
+            ))
+
+        text = " and ".join(f"Xenthar{i}" for i in range(11))
+        _, priority_ids = _select_context_aware_entities(
+            entities, text, current_turn=100, recency_window=10)
+
+        # 11 mentioned + 9 one-hop = 20 > 10 (50% of 20), so one-hop is dropped
+        # Priority should only contain the 11 mentioned entities
+        assert all(f"char-m{i}" in priority_ids for i in range(11))
+        assert not any(f"char-t{i}" in priority_ids for i in range(9))
+
+    def test_one_hop_kept_when_under_cap(self):
+        """One-hop expansion works normally when under the 50% cap."""
+        entities = [
+            _make_entity("char-a", "Anya", last_updated_turn="turn-100",
+                         relationships=[{"target_id": "char-b", "status": "active"}]),
+            _make_entity("char-b", "Borin", last_updated_turn="turn-090"),
+            _make_entity("char-c", "Celia", last_updated_turn="turn-080"),
+            _make_entity("char-d", "Derek", last_updated_turn="turn-070"),
+            _make_entity("char-e", "Elena", last_updated_turn="turn-060"),
+        ]
+        text = "Anya spoke softly."
+        _, priority_ids = _select_context_aware_entities(
+            entities, text, current_turn=100, recency_window=10)
+        # 1 mentioned + 1 one-hop = 2/5 = 40% < 50%, so one-hop kept
+        assert "char-a" in priority_ids
+        assert "char-b" in priority_ids
