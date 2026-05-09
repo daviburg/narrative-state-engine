@@ -6,10 +6,9 @@ Covers:
 - Compact entries with unknown existing_id get safe defaults
 - _repair_truncated_discovery works with mixed full/compact JSON
 """
-import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -37,18 +36,19 @@ class TestCompactDiscoveryExpansion:
 
     def _expand(self, discovered, catalogs):
         """Simulate the expansion loop from extract_and_merge."""
-        from catalog_merger import find_entity_by_id
+        from catalog_merger import find_entity_by_id, _infer_type_from_prefix
 
         for entity in discovered:
             if entity.get("existing_id") and not entity.get("name"):
-                result = find_entity_by_id(catalogs, entity["existing_id"])
+                eid = entity["existing_id"]
+                result = find_entity_by_id(catalogs, eid)
                 if result:
                     _, cat_entry = result
-                    entity.setdefault("name", cat_entry.get("name", entity["existing_id"]))
-                    entity.setdefault("type", cat_entry.get("type", "concept"))
+                    entity.setdefault("name", cat_entry.get("name", eid))
+                    entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
                 else:
-                    entity.setdefault("name", entity["existing_id"])
-                    entity.setdefault("type", "concept")
+                    entity.setdefault("name", eid)
+                    entity.setdefault("type", _infer_type_from_prefix(eid))
                 entity.setdefault("is_new", False)
                 entity.setdefault("proposed_id", None)
         return discovered
@@ -118,7 +118,7 @@ class TestCompactDiscoveryExpansion:
         discovered = [{"existing_id": "char-unknown", "confidence": 0.7}]
         result = self._expand(discovered, catalogs)
         assert result[0]["name"] == "char-unknown"
-        assert result[0]["type"] == "concept"
+        assert result[0]["type"] == "character"  # inferred from char- prefix
         assert result[0]["is_new"] is False
 
     def test_compact_entry_preserves_extra_fields(self):
@@ -171,18 +171,19 @@ class TestCompactExpansionDownstreamCompat:
 
     def _expand(self, discovered, catalogs):
         """Simulate the expansion loop from extract_and_merge."""
-        from catalog_merger import find_entity_by_id
+        from catalog_merger import find_entity_by_id, _infer_type_from_prefix
 
         for entity in discovered:
             if entity.get("existing_id") and not entity.get("name"):
-                result = find_entity_by_id(catalogs, entity["existing_id"])
+                eid = entity["existing_id"]
+                result = find_entity_by_id(catalogs, eid)
                 if result:
                     _, cat_entry = result
-                    entity.setdefault("name", cat_entry.get("name", entity["existing_id"]))
-                    entity.setdefault("type", cat_entry.get("type", "concept"))
+                    entity.setdefault("name", cat_entry.get("name", eid))
+                    entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
                 else:
-                    entity.setdefault("name", entity["existing_id"])
-                    entity.setdefault("type", "concept")
+                    entity.setdefault("name", eid)
+                    entity.setdefault("type", _infer_type_from_prefix(eid))
                 entity.setdefault("is_new", False)
                 entity.setdefault("proposed_id", None)
         return discovered

@@ -13,7 +13,6 @@ Usage:
 import argparse
 import json
 import os
-import re
 import sys
 import time
 
@@ -24,8 +23,9 @@ sys.path.insert(0, PROJECT_ROOT)
 from tools.catalog_merger import (
     load_catalogs,
     format_known_entities_bounded,
+    find_entity_by_id,
     _estimate_tokens,
-    _parse_turn_number,
+    _infer_type_from_prefix,
 )
 from tools.semantic_extraction import format_discovery_prompt, load_template
 from tools.llm_client import LLMClient
@@ -289,20 +289,14 @@ def main():
             for entity in result["entities"]:
                 if entity.get("existing_id") and not entity.get("name"):
                     eid = entity["existing_id"]
-                    cat_entry = None
-                    for _fn, ents in catalogs.items():
-                        for e in ents:
-                            if e.get("id") == eid:
-                                cat_entry = e
-                                break
-                        if cat_entry:
-                            break
-                    if cat_entry:
+                    result = find_entity_by_id(catalogs, eid)
+                    if result:
+                        _, cat_entry = result
                         entity.setdefault("name", cat_entry.get("name", eid))
-                        entity.setdefault("type", cat_entry.get("type", "concept"))
+                        entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
                     else:
                         entity.setdefault("name", eid)
-                        entity.setdefault("type", "concept")
+                        entity.setdefault("type", _infer_type_from_prefix(eid))
                     entity.setdefault("is_new", False)
 
             categories = categorize_entities(result["entities"], turn_text)

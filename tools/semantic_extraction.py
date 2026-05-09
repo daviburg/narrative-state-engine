@@ -2195,14 +2195,15 @@ def extract_and_merge(
     for entity in discovered:
         if entity.get("existing_id") and not entity.get("name"):
             _compact_count += 1
-            result = find_entity_by_id(catalogs, entity["existing_id"])
+            eid = entity["existing_id"]
+            result = find_entity_by_id(catalogs, eid)
             if result:
                 _, cat_entry = result
-                entity.setdefault("name", cat_entry.get("name", entity["existing_id"]))
-                entity.setdefault("type", cat_entry.get("type", "concept"))
+                entity.setdefault("name", cat_entry.get("name", eid))
+                entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
             else:
-                entity.setdefault("name", entity["existing_id"])
-                entity.setdefault("type", "concept")
+                entity.setdefault("name", eid)
+                entity.setdefault("type", _infer_type_from_prefix(eid))
             entity.setdefault("is_new", False)
             entity.setdefault("proposed_id", None)
     if _compact_count:
