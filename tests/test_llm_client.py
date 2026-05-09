@@ -15,7 +15,7 @@ if "openai" not in sys.modules:
     _mock_openai.OpenAI = MagicMock
     sys.modules["openai"] = _mock_openai
 
-from llm_client import LLMClient, LLMTruncationError, LLMExtractionError
+from llm_client import LLMClient, LLMTruncationError, LLMExtractionError, QuotaExhaustedError
 
 
 def _write_config(tmp_dir, overrides=None):
@@ -486,6 +486,52 @@ class TestTruncationDetection:
                 )
             # Should only be called once — no retries
             assert call_count == 1
+
+    def test_truncation_error_records_stats(self, tmp_path):
+        """LLMTruncationError should be recorded in RetryStats before re-raising."""
+        cfg = _write_config(tmp_path, {"retry_attempts": 3})
+        client = LLMClient(config_path=cfg)
+
+        mock_choice = MagicMock()
+        mock_choice.message.content = '{"partial": true'
+        mock_choice.finish_reason = "length"
+        mock_response = MagicMock()
+        mock_response.choices = [mock_choice]
+
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=mock_response):
+            with pytest.raises(LLMTruncationError):
+                client.extract_json(
+                    system_prompt="test",
+                    user_prompt="test",
+                )
+            assert client.stats.total_requests >= 1
+            assert "truncation" in client.stats.errors_by_status
+
+    def test_quota_error_records_stats(self, tmp_path):
+        """QuotaExhaustedError should be recorded in RetryStats before re-raising."""
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 3,
+            "consecutive_rate_limit_threshold": 2,
+        })
+        client = LLMClient(config_path=cfg)
+
+        # Simulate 429 errors that trigger QuotaExhaustedError
+        from openai import APIStatusError
+        err = Exception("rate limited")
+        err.status_code = 429
+        err.response = MagicMock()
+        err.response.status_code = 429
+        err.response.headers = {}
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=err):
+            with pytest.raises(QuotaExhaustedError):
+                client.extract_json(
+                    system_prompt="test",
+                    user_prompt="test",
+                )
+            assert "quota_exhausted" in client.stats.errors_by_status
 
 
 # ---------------------------------------------------------------------------

@@ -526,11 +526,25 @@ class LLMClient:
                 self.stats.record_success()
                 return parsed
 
-            except (LLMTruncationError, QuotaExhaustedError):
+            except LLMTruncationError:
+                self.stats.record_error("truncation")
+                raise
+            except QuotaExhaustedError:
+                with self.stats._lock:
+                    self.stats.errors_by_status["quota_exhausted"] = (
+                        self.stats.errors_by_status.get("quota_exhausted", 0) + 1
+                    )
                 raise
             except Exception as e:
                 last_error = e
-                self._handle_retry(attempt, e)
+                try:
+                    self._handle_retry(attempt, e)
+                except QuotaExhaustedError:
+                    with self.stats._lock:
+                        self.stats.errors_by_status["quota_exhausted"] = (
+                            self.stats.errors_by_status.get("quota_exhausted", 0) + 1
+                        )
+                    raise
 
         # Primary provider exhausted — try fallback if configured.
         if self._fallback_client is not None:
@@ -550,7 +564,14 @@ class LLMClient:
                 )
                 self.stats.record_success()
                 return result
-            except (LLMTruncationError, QuotaExhaustedError):
+            except LLMTruncationError:
+                self.stats.record_error("truncation")
+                raise
+            except QuotaExhaustedError:
+                with self.stats._lock:
+                    self.stats.errors_by_status["quota_exhausted"] = (
+                        self.stats.errors_by_status.get("quota_exhausted", 0) + 1
+                    )
                 raise
             except Exception as fb_err:
                 raise LLMExtractionError(
