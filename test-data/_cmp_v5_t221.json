@@ -1,0 +1,130 @@
+[
+  {
+    "turn": 221,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 4.8,
+    "entity_count": 0,
+    "active": 0,
+    "passive": 0,
+    "spurious": 0,
+    "input_tokens_est": 9853,
+    "output_tokens_est": 5,
+    "error": null,
+    "entities": [],
+    "categories": {
+      "active": [],
+      "passive": [],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 221,
+    "run": 2,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 2.8,
+    "entity_count": 5,
+    "active": 0,
+    "passive": 5,
+    "spurious": 0,
+    "input_tokens_est": 9853,
+    "output_tokens_est": 193,
+    "error": null,
+    "entities": [
+      {
+        "name": "the Shaman",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-shaman",
+        "confidence": 0.9
+      },
+      {
+        "name": "Anya",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-anya",
+        "confidence": 0.9
+      },
+      {
+        "name": "Kael",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-kael",
+        "confidence": 0.9
+      },
+      {
+        "name": "the fragment",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment",
+        "confidence": 0.9
+      },
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-distant-light-flashing-mountains",
+        "confidence": 0.9
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the Shaman",
+        "Anya",
+        "Kael",
+        "the fragment",
+        "the mountains"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 221,
+    "run": 3,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 1.7,
+    "entity_count": 3,
+    "active": 0,
+    "passive": 3,
+    "spurious": 0,
+    "input_tokens_est": 9853,
+    "output_tokens_est": 111,
+    "error": null,
+    "entities": [
+      {
+        "name": "the Shaman",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-shaman",
+        "confidence": 0.95
+      },
+      {
+        "name": "Anya",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-anya",
+        "confidence": 0.95
+      },
+      {
+        "name": "Kael",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-kael",
+        "confidence": 0.95
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the Shaman",
+        "Anya",
+        "Kael"
+      ],
+      "spurious": []
+    }
+  }
+]

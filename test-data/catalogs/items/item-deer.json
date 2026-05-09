@@ -1,0 +1,36 @@
+{
+  "id": "item-deer",
+  "name": "deer",
+  "type": "item",
+  "identity": "A large animal hunted by the camp's hunters, providing sustenance and warmth.",
+  "current_status": "Being carried by a hunter, its weight causing physical strain as the hunter rests under the player's ministrations.",
+  "status_updated_turn": "turn-097",
+  "stable_attributes": {
+    "species": {
+      "value": "deer",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-089"
+    },
+    "aliases": {
+      "value": [
+        "game",
+        "hunted animal"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-089"
+    }
+  },
+  "volatile_state": {
+    "condition": "carried and causing physical strain",
+    "equipment": [],
+    "location": "on the hunter's back",
+    "current_activity": "being carried by a hunter, with the hunter resting under the player's ministrations",
+    "last_updated_turn": "turn-097"
+  },
+  "first_seen_turn": "turn-089",
+  "last_updated_turn": "turn-097",
+  "notes": "",
+  "relationships": []
+}

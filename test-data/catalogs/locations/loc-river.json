@@ -1,0 +1,39 @@
+{
+  "id": "loc-river",
+  "name": "the river",
+  "type": "location",
+  "identity": "A natural waterway that has become a focal point for observing environmental changes and the effects of winter. It is central to the tribe's survival and understanding of the natural world.",
+  "current_status": "Being observed for its structured patterns, crystalline growths, and influence mapping without physical contact, with a focus on how environmental changes and arcane phenomena interact with the river's natural rhythms.",
+  "status_updated_turn": "turn-269",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Frozen during winter, with potential for strange stones to appear in the ice",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-216"
+    },
+    "location": {
+      "value": "Flowing through the tribal lands, connecting the longhouse and the outer patch",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-216"
+    },
+    "role": {
+      "value": "A key element in the tribe's survival strategy and a source of information about environmental changes",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-216"
+    }
+  },
+  "volatile_state": {
+    "condition": "Frozen with potential for ice formation and stone visibility",
+    "equipment": [],
+    "location": "Flowing through the tribal lands",
+    "current_activity": "Being observed for its structured patterns, crystalline growths, and influence mapping without physical contact",
+    "last_updated_turn": "turn-269"
+  },
+  "first_seen_turn": "turn-216",
+  "last_updated_turn": "turn-269",
+  "notes": "",
+  "relationships": []
+}

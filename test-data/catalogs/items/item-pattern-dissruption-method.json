@@ -1,0 +1,53 @@
+{
+  "id": "item-pattern-dissruption-method",
+  "name": "the pattern disruption method",
+  "type": "item",
+  "identity": "A method established by the tribe to combat a sickness that follows patterns and consumes with rhythm. It involves precise recognition, isolation, and structured intervention to prevent reformation and ensure the survival of the community.",
+  "current_status": "The method is being prepared for dissemination to southern tribes as a message of truth, not fear. It includes preserved food, diagrams of the pattern, and the player's words carried by a disciplined delegation.",
+  "status_updated_turn": "turn-252",
+  "stable_attributes": {
+    "species": {
+      "value": "tribal knowledge",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-252"
+    },
+    "race": {
+      "value": "cultural",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-252"
+    },
+    "class": {
+      "value": "knowledge-keeper",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-252"
+    },
+    "aliases": {
+      "value": [
+        "pattern disruption method",
+        "sickness protocol",
+        "tribal knowledge"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-252"
+    }
+  },
+  "volatile_state": {
+    "condition": "calm and disciplined",
+    "equipment": [
+      "preserved food",
+      "carved diagrams",
+      "player's words"
+    ],
+    "location": "longhouse",
+    "current_activity": "preparing message for southern tribes",
+    "last_updated_turn": "turn-252"
+  },
+  "first_seen_turn": "turn-252",
+  "last_updated_turn": "turn-252",
+  "notes": "The method is a critical cultural artifact, and its dissemination is framed as a shared responsibility with strict boundaries.",
+  "relationships": []
+}

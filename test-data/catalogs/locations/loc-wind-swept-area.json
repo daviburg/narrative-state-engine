@@ -1,0 +1,34 @@
+{
+  "id": "loc-wind-swept-area",
+  "name": "wind-swept area",
+  "type": "location",
+  "identity": "A harsh, exposed location where wild mustard grows tenaciously, characterized by strong winds and a thin layer of snow.",
+  "current_status": "The player character is monitoring the growth of cultivated sprouts and preparing for the arrival of a new child, with the community observing the progress.",
+  "status_updated_turn": "turn-173",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Exposed, wind-swept area with thin snow cover and a harsh climate",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-151"
+    },
+    "location": {
+      "value": "Arctic terrain",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-151"
+    }
+  },
+  "volatile_state": {
+    "condition": "Exposed and harsh, but suitable for foraging and cultivation",
+    "equipment": [
+      "digging stick"
+    ],
+    "location": "wind-swept area",
+    "current_activity": "Monitoring plant growth and preparing for the arrival of a new child",
+    "last_updated_turn": "turn-173"
+  },
+  "first_seen_turn": "turn-151",
+  "last_updated_turn": "turn-173",
+  "relationships": []
+}

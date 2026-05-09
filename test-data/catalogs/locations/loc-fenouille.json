@@ -1,0 +1,39 @@
+{
+  "id": "loc-fenouille",
+  "name": "Fenouille",
+  "type": "location",
+  "identity": "A transformed landscape where the inhabitants have successfully implemented disruption fields, leading to ecological and structural changes. The land shows resilience and adaptation, with new growth patterns and structures that reflect the collective efforts of the community.",
+  "current_status": "The group is observing and assessing the transformed landscape, with reports of successful implementation of disruption fields, new plant growth, and structural developments. The group is now studying the interconnectedness of the grass, nests, and blooms as part of a broader ecological and philosophical inquiry.",
+  "status_updated_turn": "turn-300",
+  "stable_attributes": {
+    "type": {
+      "value": "location",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-296"
+    },
+    "name": {
+      "value": "Fenouille",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-296"
+    },
+    "description": {
+      "value": "A transformed landscape with disruption fields, new plant growth, and structural developments, reflecting ecological and philosophical inquiry into interconnectedness.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-296"
+    }
+  },
+  "volatile_state": {
+    "condition": "Stable and evolving",
+    "equipment": [],
+    "location": "Fenouille",
+    "current_activity": "The group is observing and assessing the transformed landscape, with reports from Kael, Lena, Borin, the healer, the Shaman, and Anya. The group is also studying the interconnectedness of the grass, nests, and blooms as part of a broader ecological and philosophical inquiry.",
+    "last_updated_turn": "turn-300"
+  },
+  "first_seen_turn": "turn-296",
+  "last_updated_turn": "turn-300",
+  "notes": "",
+  "relationships": []
+}

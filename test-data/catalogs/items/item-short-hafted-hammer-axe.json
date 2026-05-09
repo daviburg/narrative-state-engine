@@ -1,0 +1,29 @@
+{
+  "id": "item-short-hafted-hammer-axe",
+  "name": "short-hafted hammer-axe",
+  "type": "item",
+  "identity": "A versatile utility tool used for blocking, prying, and splitting wood, designed for silent and sturdy operation.",
+  "current_status": "Present in the expedition's equipment, used during the journey and observed in the context of the landscape's subtle patterns.",
+  "status_updated_turn": "turn-274",
+  "stable_attributes": {
+    "description": {
+      "value": "A short-hafted hammer-axe, balanced for utility and durability, capable of blocking blows, prying, and splitting wood with precision.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-259"
+    }
+  },
+  "volatile_state": {
+    "equipment": [
+      "short-hafted hammer-axe"
+    ],
+    "location": "Expedition path, near the river bend with pulsating stones.",
+    "current_activity": "Present during the journey, observed in the context of the landscape's subtle patterns.",
+    "condition": "Functional and well-maintained.",
+    "last_updated_turn": "turn-274"
+  },
+  "first_seen_turn": "turn-259",
+  "last_updated_turn": "turn-274",
+  "notes": "",
+  "relationships": []
+}

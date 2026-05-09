@@ -1,0 +1,36 @@
+{
+  "id": "item-bowstrings",
+  "name": "the bowstrings",
+  "type": "item",
+  "identity": "A critical component of the tribe's weaponry, reinforced and prepared for the expedition eastward. Part of the equipment being meticulously readied for the journey.",
+  "current_status": "Reinforced and fletched as part of the tribe's prepared gear for the expedition. Part of the equipment assessed and secured before departure, and later used in the tribe's agricultural and survival efforts as the season transitions into meticulous work and planning.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "role": {
+      "value": "weaponry component",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-195"
+    },
+    "appearance": {
+      "value": "reinforced, functional",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-195"
+    }
+  },
+  "volatile_state": {
+    "condition": "functional and ready for use",
+    "equipment": [
+      "bowstrings",
+      "arrows",
+      "spears"
+    ],
+    "location": "longhouse",
+    "current_activity": "reinforced as part of the tribe's weaponry for the expedition and later used in agricultural and survival efforts",
+    "last_updated_turn": "turn-211"
+  },
+  "first_seen_turn": "turn-195",
+  "last_updated_turn": "turn-211",
+  "relationships": []
+}

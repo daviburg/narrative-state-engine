@@ -1,0 +1,57 @@
+{
+  "id": "char-ailing-stranger",
+  "name": "the ailing stranger",
+  "type": "character",
+  "identity": "A patient in severe physical decline, whose body is described as 'burning' and whose condition is being managed through strict, observational care rather than aggressive intervention.",
+  "current_status": "Being treated by the player and healer through a regimen of controlled warmth, measured hydration, and restricted access to unknown substances, with the goal of stabilizing the patient's condition.",
+  "status_updated_turn": "turn-234",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-225"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-225"
+    },
+    "class": {
+      "value": "Traveler",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-225"
+    },
+    "aliases": {
+      "value": "the ailing stranger",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-234"
+    },
+    "role": {
+      "value": "patient",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-234"
+    },
+    "appearance": {
+      "value": "described as 'burning' with fever, but physical description otherwise unspecified",
+      "inference": true,
+      "confidence": 0.7,
+      "source_turn": "turn-234"
+    }
+  },
+  "volatile_state": {
+    "condition": "Severe fever and physical decline, with no recovery observed",
+    "equipment": [],
+    "location": "At the healer's location, undergoing care",
+    "current_activity": "Receiving restricted care regimen under observation",
+    "last_updated_turn": "turn-234"
+  },
+  "first_seen_turn": "turn-225",
+  "last_updated_turn": "turn-234",
+  "notes": "No explicit species, race, or class information provided. Physical description is limited to fever and decline.",
+  "relationships": []
+}

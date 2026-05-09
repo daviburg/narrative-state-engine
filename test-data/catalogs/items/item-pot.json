@@ -1,0 +1,34 @@
+{
+  "id": "item-pot",
+  "name": "the pot",
+  "type": "item",
+  "identity": "A large cooking vessel used to simmer a rich, gamey stew, central to the communal meal preparation.",
+  "current_status": "Simmering over a smaller fire, releasing a rich, gamey scent that draws the attention of the entire camp.",
+  "status_updated_turn": "turn-043",
+  "stable_attributes": {
+    "appearance": {
+      "value": "large, presumably made of metal or clay, with a capacity to hold a substantial amount of liquid",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-043"
+    },
+    "purpose": {
+      "value": "cooking and simmering food, particularly for communal meals",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-043"
+    }
+  },
+  "volatile_state": {
+    "condition": "in active use",
+    "equipment": [
+      "the pot"
+    ],
+    "location": "by a smaller fire, within the camp",
+    "current_activity": "simmering a rich, gamey stew",
+    "last_updated_turn": "turn-043"
+  },
+  "first_seen_turn": "turn-043",
+  "last_updated_turn": "turn-043",
+  "relationships": []
+}

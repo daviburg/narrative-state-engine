@@ -1,0 +1,49 @@
+{
+  "id": "item-fragment-pulse",
+  "name": "the fragment's pulse",
+  "type": "item",
+  "identity": "A mysterious stone fragment with unnatural properties used for ritualistic care, training, and the observation of natural and unnatural phenomena. It serves as a tool for mapping patterns, testing the effects of controlled placements, and guiding decisions about the tribe's future through structured analysis of growth, stability, and change.",
+  "current_status": "Central to the tribe's discussions about the changing land and new patterns, it is used to observe and test the effects of the hardened grass, bird's nest, and rare bloom. It symbolizes the balance between known and unknown forces and is integral to shaping the tribe's next steps through structured analysis of growth, stability, and change.",
+  "status_updated_turn": "turn-220",
+  "stable_attributes": {
+    "species": {
+      "value": "stone fragment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-222"
+    },
+    "race": {
+      "value": "unnatural",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-222"
+    },
+    "class": {
+      "value": "training artifact",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-222"
+    },
+    "aliases": {
+      "value": [
+        "the pulse"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-222"
+    }
+  },
+  "volatile_state": {
+    "condition": "Cold, steady, and humming with subtle fluctuations during thaw observations and council deliberations",
+    "equipment": [
+      "the fragment's pulse"
+    ],
+    "location": "At the heart of the tribe's training area and central to the gathering discussions during the council's seasonal evaluations",
+    "current_activity": "Being used to observe and test the effects of the hardened grass, bird's nest, and rare bloom, and to guide decisions about the tribe's future through structured analysis of growth, stability, and change during the council's seasonal evaluations",
+    "last_updated_turn": "turn-220"
+  },
+  "first_seen_turn": "turn-221",
+  "last_updated_turn": "turn-221",
+  "notes": "The entity 'item-fragment-pulse' is referenced in the context of thaw observations, Anya's training, and the tribe's discussions about the changing land and new patterns. It is used to observe natural and unnatural phenomena and guide decisions about the future through structured analysis of growth, stability, and change.",
+  "relationships": []
+}

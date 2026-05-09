@@ -1,0 +1,33 @@
+{
+  "id": "loc-main-bonfire",
+  "name": "the main bonfire",
+  "type": "location",
+  "identity": "The central fire of the village, serving as a gathering point and source of warmth. It is tended by a young hunter and surrounded by villagers who have gathered nearby.",
+  "current_status": "Serving as the focal point for the communal gathering and meal preparation, with the elder leading the assembly and the player character present among the villagers.",
+  "status_updated_turn": "turn-043",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Large, central fire pit surrounded by seating and activity, with embers and flames visible in the morning light.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-067"
+    },
+    "role": {
+      "value": "Social and functional hub for the encampment, used for gatherings, cooking, and communal activities.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-067"
+    }
+  },
+  "volatile_state": {
+    "condition": "Steadily burning with smoldering logs",
+    "equipment": [],
+    "location": "Central village area",
+    "current_activity": "Hosting a communal gathering and meal preparation, with the elder and villagers assembled around it",
+    "last_updated_turn": "turn-043"
+  },
+  "first_seen_turn": "turn-049",
+  "last_updated_turn": "turn-049",
+  "notes": "",
+  "relationships": []
+}

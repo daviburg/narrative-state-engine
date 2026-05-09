@@ -1,0 +1,38 @@
+{
+  "id": "item-spell-of-light",
+  "name": "spell of light",
+  "type": "item",
+  "identity": "A versatile arcane spell used for illumination and protection during foraging and travel, especially at night.",
+  "current_status": "Being used more boldly to assist in foraging and safe travel, with increasing confidence in its application during nighttime activities. It is also used to guide travelers through dim, perpetual twilight and to illuminate hidden roots beneath the snow. Additionally, it is being considered for transforming shelters and reinforcing the tribe's dwellings with enchantments.",
+  "status_updated_turn": "turn-123",
+  "stable_attributes": {
+    "species": {
+      "value": "arcane spell",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-118"
+    },
+    "name": {
+      "value": "spell of light",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-118"
+    },
+    "description": {
+      "value": "Provides light and protection for nighttime travel and foraging",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-118"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Using spell of light for illumination and protection during nighttime foraging and travel, guiding travelers through dim, perpetual twilight, and illuminating hidden roots beneath the snow. Being considered for transforming shelters and reinforcing the tribe's dwellings with enchantments.",
+    "location": "Nighttime wilderness areas, foraging expeditions, and arctic travel routes",
+    "condition": "Effective and reliable in its intended applications, with growing trust from the tribe",
+    "last_updated_turn": "turn-123"
+  },
+  "first_seen_turn": "turn-118",
+  "last_updated_turn": "turn-123",
+  "notes": "Spell's effects on illumination and protection inferred from context; no explicit description provided.",
+  "relationships": []
+}

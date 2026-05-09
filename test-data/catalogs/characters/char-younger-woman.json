@@ -1,0 +1,62 @@
+{
+  "id": "char-younger-woman",
+  "name": "the younger woman",
+  "type": "character",
+  "identity": "A subordinate or servant of the elder, likely of lower status within the tribe. She appears to be a practical and efficient individual, as evidenced by her prompt action in bringing a steaming wooden bowl to the elder.",
+  "current_status": "Working alongside the player character to sort herbs, then participating in the communal meal preparation and gathering with the village.",
+  "status_updated_turn": "turn-021",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "the younger woman"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-029"
+    },
+    "appearance": {
+      "value": "Unnamed, but likely of a practical and efficient demeanor, as she acts quickly to serve the elder.",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-019"
+    },
+    "role": {
+      "value": "villager healer or caretaker",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-029"
+    }
+  },
+  "volatile_state": {
+    "condition": "Uncertain and questioning, though she does not express it overtly. Her expression shows curiosity and caution but no indication of shared predicament with the captive.",
+    "equipment": [],
+    "location": "At the council fire, within the tribal encampment.",
+    "current_activity": "Observing the player's situation without offering explanations or engaging in dialogue about her own status.",
+    "last_updated_turn": "turn-021"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-043",
+  "notes": "No explicit name provided for the younger woman. Further clarification on her role or identity would be helpful.",
+  "relationships": [
+    {
+      "target_id": "item-dark-fibrous-material",
+      "current_relationship": "placed_before",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-019"
+    },
+    {
+      "target_id": "char-elder",
+      "current_relationship": "served",
+      "type": "social",
+      "status": "dormant",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-021"
+    }
+  ]
+}

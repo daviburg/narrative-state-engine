@@ -1,0 +1,39 @@
+{
+  "id": "loc-snow-laden-forest",
+  "name": "the snow-laden forest",
+  "type": "location",
+  "identity": "A vast, cold expanse of forest blanketed in snow, where the rhythm of winter is felt in the shifting patterns of the land and the subtle movements of wildlife. It is a place of quiet endurance and adaptation, serving as a backdrop for communal rituals and teachings about land adaptation, tool-making, and knowledge-sharing.",
+  "current_status": "Hosting a ritual involving the player, Maelis, Gorok, Kael, the healer, Tala, Renn, and Thorne, focusing on teachings about land adaptation, tool-making, knowledge-sharing, and the balance between structure and fluidity in the community. The forest also serves as a site for observing the fragment and practicing patience through rhythmic exercises.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Snow-laden, with dense coverage of snow and ice, and a landscape shaped by the persistent cold.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-223"
+    },
+    "location": {
+      "value": "Northern wilderness, near the longhouse and tribal territories.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-223"
+    },
+    "type": {
+      "value": "Forest",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-223"
+    }
+  },
+  "volatile_state": {
+    "condition": "Cold and stable, with gradual changes in snow patterns and wildlife behavior.",
+    "equipment": [],
+    "location": "Snow-laden forest",
+    "current_activity": "Hosting a ritual involving the player, Maelis, Gorok, Kael, the healer, Tala, Renn, and Thorne, focusing on teachings about land adaptation, tool-making, knowledge-sharing, and the balance between structure and fluidity in the community. The forest also serves as a site for observing the fragment and practicing patience through rhythmic exercises.",
+    "last_updated_turn": "turn-210"
+  },
+  "first_seen_turn": "turn-223",
+  "last_updated_turn": "turn-223",
+  "notes": "",
+  "relationships": []
+}

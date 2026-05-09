@@ -1,0 +1,36 @@
+{
+  "id": "loc-broken-circle",
+  "name": "the Broken Circle",
+  "type": "location",
+  "identity": "A ritual space prepared by the Shaman for a precise healing process. It is a neutral, non-contact zone where the player's instructions are enacted using ash, herbs, and structured actions to disrupt a sickness pattern within the afflicted individual.",
+  "current_status": "The ritual is being executed as per the player's instructions. The Shaman prepares the space, Anya performs a controlled cut, the healer marks time and symptoms, and the man's responses are closely observed for signs of change.",
+  "status_updated_turn": "turn-246",
+  "stable_attributes": {
+    "purpose": {
+      "value": "ritual space for structured healing",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-246"
+    },
+    "description": {
+      "value": "a non-contact zone with ash and herbs, no direct physical interaction",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-246"
+    }
+  },
+  "volatile_state": {
+    "condition": "active ritual in progress",
+    "equipment": [
+      "ash",
+      "herbs",
+      "ritual tools"
+    ],
+    "location": "the Broken Circle",
+    "current_activity": "executing a precise, non-contact healing ritual with structured monitoring of the afflicted individual",
+    "last_updated_turn": "turn-246"
+  },
+  "notes": "No open questions. The location's role as a ritual space is clearly established through the player's instructions and the Shaman's preparation.",
+  "last_updated_turn": "turn-246",
+  "first_seen_turn": "turn-246"
+}

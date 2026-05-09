@@ -1,0 +1,26 @@
+{
+  "id": "item-records",
+  "name": "the records",
+  "type": "item",
+  "identity": "A collection of records held by the player character, representing significant knowledge or history that Lyra has the option to take and use for healing.",
+  "current_status": "Being considered by Elder Lyra, who has chosen to take them to walk the healing path with the player, comparing her shamanic knowledge with the records.",
+  "status_updated_turn": "turn-318",
+  "stable_attributes": {
+    "role": {
+      "value": "records",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-317"
+    }
+  },
+  "volatile_state": {
+    "condition": "selected by Elder Lyra",
+    "equipment": [],
+    "location": "with the player character",
+    "current_activity": "being taken by Elder Lyra to compare with shamanic knowledge",
+    "last_updated_turn": "turn-318"
+  },
+  "first_seen_turn": "turn-317",
+  "last_updated_turn": "turn-318",
+  "relationships": []
+}

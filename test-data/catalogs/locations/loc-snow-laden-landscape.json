@@ -1,0 +1,43 @@
+{
+  "id": "loc-snow-laden-landscape",
+  "name": "the snow-laden landscape",
+  "type": "location",
+  "identity": "A vast, quiet expanse of snow-covered terrain surrounding the longhouse, where the tribe's activities and observations take place. The landscape is both a physical and symbolic space, reflecting the tribe's connection to the land and its changing seasons.",
+  "current_status": "Serves as the backdrop for the tribe's agricultural, hunting, and spiritual practices. The tribe is actively modifying the landscape to adapt to environmental changes and prepare for the future.",
+  "status_updated_turn": "turn-210",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Snow-laden, with cold and quiet atmosphere",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-210"
+    },
+    "role": {
+      "value": "Setting for agricultural, survival, and social activities",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-210"
+    },
+    "description": {
+      "value": "A snow-laden landscape surrounding the longhouse, where the tribe's activities and observations take place.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-210"
+    },
+    "characteristics": {
+      "value": "Cold, expansive, and reflective of the tribe's relationship with the environment.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-210"
+    }
+  },
+  "volatile_state": {
+    "condition": "Still and silent, with subtle changes occurring as the tribe adapts to the landscape.",
+    "location": "Surrounding the longhouse and agricultural plots",
+    "current_activity": "Being modified for agricultural, hunting, and spiritual purposes",
+    "last_updated_turn": "turn-210"
+  },
+  "notes": "",
+  "last_updated_turn": "turn-210",
+  "first_seen_turn": "turn-210"
+}

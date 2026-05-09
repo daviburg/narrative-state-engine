@@ -1,0 +1,33 @@
+{
+  "id": "loc-empty-snow-expanse",
+  "name": "the empty expanse of snow",
+  "type": "location",
+  "identity": "A vast, snow-covered forest clearing at dusk, with dark trees and a setting sun. The landscape is pristine and treacherous, with fresh snow obscuring the terrain.",
+  "current_status": "The player and others engage in agricultural planning, construction, and strategic discussions, with the location serving as a central hub for planning and observation.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "appearance": {
+      "value": "vast snow-covered forest clearing at dusk, dark trees, setting sun, pristine snow, treacherous terrain",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-001"
+    },
+    "location": {
+      "value": "Beyond the settlement, a symbolic and physical space for reflection and strategic planning",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-334"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and engaged in planning and observation",
+    "equipment": [],
+    "location": "the empty expanse of snow",
+    "current_activity": "coordinating agricultural efforts, construction, and diplomacy with the southern tribes",
+    "last_updated_turn": "turn-211"
+  },
+  "first_seen_turn": "turn-326",
+  "last_updated_turn": "turn-326",
+  "notes": "",
+  "relationships": []
+}

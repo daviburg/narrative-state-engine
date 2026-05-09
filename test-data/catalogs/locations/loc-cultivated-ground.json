@@ -1,0 +1,36 @@
+{
+  "id": "loc-cultivated-ground",
+  "name": "the cultivated ground",
+  "type": "location",
+  "identity": "A section of land within the settlement where the player character has successfully integrated agriculture with the local ecosystem. It features cultivated fields bordered by moss and serves as a demonstration of the tribe's philosophy of listening to and restoring the land rather than forcing it.",
+  "current_status": "Serving as the focal point for Elder Lyra's tour, where the player character kneels to demonstrate the restoration of the land's balance and the healing of the previous sickness.",
+  "status_updated_turn": "turn-316",
+  "stable_attributes": {
+    "description": {
+      "value": "cultivated ground with moss borders and children learning",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-315"
+    },
+    "philosophy": {
+      "value": "restored land, not forced; land listened to and able to respond",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-315"
+    },
+    "state": {
+      "value": "healed from previous sickness, balance restored",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-315"
+    }
+  },
+  "volatile_state": {
+    "condition": "restored and balanced",
+    "location": "within the settlement",
+    "last_updated_turn": "turn-316"
+  },
+  "first_seen_turn": "turn-315",
+  "last_updated_turn": "turn-316",
+  "relationships": []
+}

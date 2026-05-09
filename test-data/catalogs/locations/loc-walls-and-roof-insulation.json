@@ -1,0 +1,45 @@
+{
+  "id": "loc-walls-and-roof-insulation",
+  "name": "walls and roof insulation",
+  "type": "location",
+  "identity": "A structural component of the long house being constructed, designed to provide insulation against cold weather and protect the interior from the elements. It serves as both a functional and symbolic space, representing the tribe's collective effort and the duality of communal and private use.",
+  "current_status": "Under construction with the tribe working on insulation and roofing, incorporating a loft for storage and private use. The structure is being reinforced with moss, clay, and wood shingles, and the community is actively involved in its completion. It provides a safe, warm environment for the infant Lyrawyn and the mother, who is experimenting with fermentation and mead-making. The mother is currently focused on ensuring the mead is successful and safe, and plans to seek an apprentice once the process is mastered.",
+  "status_updated_turn": "turn-147",
+  "stable_attributes": {
+    "role": {
+      "value": "structural insulation component of long house",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-130"
+    },
+    "appearance": {
+      "value": "under construction, wooden shingles and clay/moss insulation",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-130"
+    },
+    "aliases": {
+      "value": [
+        "long house insulation",
+        "roof and wall structure"
+      ],
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-131"
+    }
+  },
+  "volatile_state": {
+    "condition": "under construction with active community involvement",
+    "equipment": [
+      "wood shingles",
+      "moss",
+      "clay"
+    ],
+    "location": "long house construction site",
+    "current_activity": "being built with insulation and roofing materials, including the addition of a loft for storage and private use. Provides a safe, warm environment for the infant Lyrawyn and the mother, who is experimenting with fermentation and mead-making. The mother is currently focused on ensuring the mead is successful and safe, and plans to seek an apprentice once the process is mastered.",
+    "last_updated_turn": "turn-147"
+  },
+  "first_seen_turn": "turn-130",
+  "last_updated_turn": "turn-147",
+  "relationships": []
+}

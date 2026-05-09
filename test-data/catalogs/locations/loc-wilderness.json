@@ -1,0 +1,27 @@
+{
+  "id": "loc-wilderness",
+  "name": "the wilderness",
+  "type": "location",
+  "identity": "A vast, untamed expanse characterized by cold, silence, and the subtle sounds of nature. It serves as a backdrop for quiet moments of reflection and subtle interaction between characters.",
+  "current_status": "A sense of fragile peace is established between the player and the hunter, with the shared warmth of the fire and the quiet companionship creating a temporary respite from the harsh environment.",
+  "status_updated_turn": "turn-051",
+  "stable_attributes": {
+    "description": {
+      "value": "A vast, untamed expanse characterized by cold, silence, and the subtle sounds of nature.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-051"
+    }
+  },
+  "volatile_state": {
+    "condition": "Cold but with a sense of calm and shared warmth from the fire",
+    "equipment": [],
+    "location": "The wilderness",
+    "current_activity": "A quiet moment of companionship between the player and the hunter, with the fire as a central element.",
+    "last_updated_turn": "turn-051"
+  },
+  "first_seen_turn": "turn-051",
+  "last_updated_turn": "turn-051",
+  "notes": "",
+  "relationships": []
+}

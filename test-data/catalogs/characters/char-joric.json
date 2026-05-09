@@ -1,0 +1,47 @@
+{
+  "id": "char-joric",
+  "name": "Joric",
+  "type": "character",
+  "identity": "A steady and grounded character who has seen both sides of a conflict, now questioned about mutual misunderstandings between Maelis and the group.",
+  "first_seen_turn": "turn-337",
+  "last_updated_turn": "turn-342",
+  "notes": "Entity's role as an interpreter of both sides is inferred from the player's questioning.",
+  "current_status": "Sharing his story of arrival and suspicion turning to understanding with Maelis, answering questions about what she might misunderstand about the place and what the group misunderstands about her.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-339"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-339"
+    },
+    "class": {
+      "value": "Observer/Interpreter",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-339"
+    },
+    "aliases": {
+      "value": [
+        "Joric"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-339"
+    }
+  },
+  "volatile_state": {
+    "condition": "Reflective and engaged in dialogue",
+    "equipment": [],
+    "location": "With Maelis",
+    "current_activity": "Sharing his story of arrival and answering questions about mutual misunderstandings between Maelis and the group",
+    "last_updated_turn": "turn-342"
+  },
+  "relationships": []
+}

@@ -1,0 +1,38 @@
+{
+  "id": "item-meteoric-shard",
+  "name": "meteoric shard",
+  "type": "item",
+  "identity": "A rare, celestial fragment of metal formed from meteoric iron, revered by the tribe for its ceremonial and symbolic value. It is a scarce resource, used to craft ceremonial objects but not commonly available for general crafting.",
+  "current_status": "Revered as a ceremonial material by the tribe, though its scarcity limits its use beyond special rituals.",
+  "status_updated_turn": "turn-175",
+  "stable_attributes": {
+    "type": {
+      "value": "item",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-175"
+    },
+    "description": {
+      "value": "A rare, celestial fragment of metal formed from meteoric iron, used in ceremonial contexts by the tribe.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-175"
+    },
+    "origin": {
+      "value": "Meteorite impact",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-175"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Used in ceremonial rituals by the tribe",
+    "location": "Tribal storage or ceremonial areas",
+    "condition": "Preserved as a rare and sacred material",
+    "last_updated_turn": "turn-175"
+  },
+  "first_seen_turn": "turn-175",
+  "last_updated_turn": "turn-175",
+  "notes": "Exact location and usage context not explicitly stated, inferred from tribal reliance on natural materials and the shard's ceremonial role.",
+  "relationships": []
+}

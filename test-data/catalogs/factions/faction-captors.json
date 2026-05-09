@@ -1,0 +1,45 @@
+{
+  "id": "faction-captors",
+  "name": "the two figures",
+  "type": "faction",
+  "identity": "A hostile faction of human-like captors, stealthy and equipped with crude, wood-hafted spears. They speak in a guttural language and have captured the player character in a frozen forest setting.",
+  "current_status": "Have partially loosened the player character's restraints after a demonstration of a fibrous material, showing a slight shift in demeanor but still maintaining a cautious and dominant presence. The player character remains entangled in the net but is now free to move their hands and feet.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Human-sized, stealthy figures with crude, wood-hafted spears, obscured faces, and guttural speech",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "role": {
+      "value": "Hostile captors",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "Hostile and active, with a slight shift in demeanor after the player's demonstration",
+    "equipment": [
+      "crude, wood-hafted spears"
+    ],
+    "location": "Frozen forest",
+    "current_activity": "Partially loosening the player character's restraints after a demonstration of a fibrous material, showing a slight shift in demeanor but still maintaining a cautious and dominant presence. The player character remains entangled in the net but is now free to move their hands and feet.",
+    "last_updated_turn": "turn-025"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-025",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "captured",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-007",
+      "last_updated_turn": "turn-025"
+    }
+  ]
+}

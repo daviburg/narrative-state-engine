@@ -1,0 +1,34 @@
+{
+  "id": "item-the-item",
+  "name": "the item",
+  "type": "item",
+  "identity": "A mysterious magical artifact tied to the player's arcane abilities, capable of providing warmth, aiding in foraging, and offering protection against the harsh environment. Its power is linked to the player's celestial pact and can evolve with the tribe's needs.",
+  "current_status": "Being used by the player to support the tribe's survival through spells of light, warmth, and protection, reflecting the player's growing connection to the community.",
+  "status_updated_turn": "turn-115",
+  "stable_attributes": {
+    "type": {
+      "value": "magical artifact",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-115"
+    },
+    "description": {
+      "value": "Linked to the player's celestial pact, capable of providing warmth, light, protection, and utility in survival tasks.",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-115"
+    }
+  },
+  "volatile_state": {
+    "condition": "Functional and actively used",
+    "equipment": [
+      "the item"
+    ],
+    "location": "With the player",
+    "current_activity": "Supporting the tribe through magical assistance",
+    "last_updated_turn": "turn-115"
+  },
+  "first_seen_turn": "turn-115",
+  "last_updated_turn": "turn-115",
+  "relationships": []
+}

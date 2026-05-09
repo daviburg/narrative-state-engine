@@ -1,0 +1,170 @@
+{
+  "id": "char-warrior-chief-gorok",
+  "name": "Gorok",
+  "type": "character",
+  "identity": "A formidable Warrior-Chief from the Northern Peaks known for his immense strength and solitary nature. He is currently being asked by the player to bind himself to the settlement, potentially leaving his tribe behind to extend his legacy through the settlement rather than his own bloodline.",
+  "current_status": "Standing in a designated space with Maelis and the player, responding to the player's proposal for a dual-force dynamic. He points to the outer perimeter, defining his role as taking command in the first moment of an unknown threat when instinct demands immediate, brutal commitment.",
+  "status_updated_turn": "turn-344",
+  "stable_attributes": {
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-326"
+    },
+    "race": {
+      "value": "Northern Peaks",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-314"
+    },
+    "class": {
+      "value": "Warrior-Chief",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-314"
+    },
+    "appearance": {
+      "value": "physically imposing, massive frame, radiating suppressed energy",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-326"
+    },
+    "aliases": {
+      "value": [
+        "Gorok",
+        "Warrior-Chief Gorok"
+      ],
+      "inference": false,
+      "source_turn": "turn-323"
+    },
+    "role": {
+      "value": "powerful, solitary warrior",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-326"
+    },
+    "tactical_style": {
+      "value": "aggressive, prone to committing too early and revealing position to win fights but lose control of the field",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-342"
+    },
+    "alliance_role": {
+      "value": "force that commits",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-343"
+    },
+    "assigned_duty": {
+      "value": "command in the first moment of an unknown threat; immediate, brutal commitment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-344"
+    }
+  },
+  "volatile_state": {
+    "condition": "jaw tightens, flicker of challenge in eyes, but holds it",
+    "equipment": [
+      "none explicitly mentioned"
+    ],
+    "location": "designated space with Maelis and the player",
+    "current_activity": "Defining his command role by pointing to the outer perimeter for immediate threats",
+    "last_updated_turn": "turn-344"
+  },
+  "first_seen_turn": "turn-314",
+  "last_updated_turn": "turn-344",
+  "notes": "Gorok has defined his specific tactical domain within the new dual-force structure: immediate, brutal commitment in the first moment of an unknown threat. He is currently in a state of grudging understanding with Maelis regarding their non-merging roles.",
+  "relationships": [
+    {
+      "target_id": "faction-elders",
+      "current_relationship": "skeptical_interest",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "loc-eastern-boundary",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "loc-southern-water-sources",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314"
+    },
+    {
+      "target_id": "char-young-hunter",
+      "current_relationship": "allies with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-314",
+      "last_updated_turn": "turn-314",
+      "history": [
+        {
+          "turn": "turn-314",
+          "description": "observes"
+        }
+      ]
+    },
+    {
+      "target_id": "char-maelis-of-the-swift-arrows",
+      "current_relationship": "allies with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-333",
+      "last_updated_turn": "turn-341"
+    },
+    {
+      "target_id": "char-player",
+      "current_relationship": "considers_bonding_with",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-341",
+      "last_updated_turn": "turn-324",
+      "history": [
+        {
+          "turn": "turn-344",
+          "description": "consulted by"
+        },
+        {
+          "turn": "turn-318",
+          "description": "challenges"
+        },
+        {
+          "turn": "turn-320",
+          "description": "submits_to"
+        }
+      ]
+    },
+    {
+      "target_id": "faction-five-warriors",
+      "current_relationship": "commands",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-318",
+      "last_updated_turn": "turn-318"
+    }
+  ]
+}

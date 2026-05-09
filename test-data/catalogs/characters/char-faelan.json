@@ -1,0 +1,62 @@
+{
+  "id": "char-faelan",
+  "name": "Faelan",
+  "type": "character",
+  "identity": "A young apprentice under Borin's tutelage who has developed the unique ability to intuitively 'read' the grain of wood and stone, identifying structural weaknesses and stress points before they manifest. He is transitioning from pure instinct to translating these insights into repeatable, diagrammatic knowledge for others.",
+  "current_status": "Borin reports to the player that Faelan has begun sketching simplified diagrams of stress points, successfully translating his instinct into repeatable knowledge that others can learn from.",
+  "status_updated_turn": "turn-342",
+  "stable_attributes": {
+    "species": {
+      "value": "Unknown",
+      "inference": true,
+      "confidence": 0.5,
+      "source_turn": "turn-331"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": true,
+      "confidence": 0.5,
+      "source_turn": "turn-331"
+    },
+    "class": {
+      "value": "Craft apprentice",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-331"
+    },
+    "aliases": {
+      "value": [],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-331"
+    },
+    "special_ability": {
+      "value": "Can read grain and stress points in wood/stone; translating instinct into diagrams",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-340"
+    }
+  },
+  "volatile_state": {
+    "condition": "Proud, recognized by mentor",
+    "equipment": [],
+    "location": "Near the varied structures",
+    "current_activity": "Being praised by Borin for his ability to identify unseen stresses in materials and teach them via diagrams",
+    "last_updated_turn": "turn-342"
+  },
+  "first_seen_turn": "turn-331",
+  "last_updated_turn": "turn-342",
+  "notes": "Faelan is evolving from an intuitive practitioner to one who can codify his insights.",
+  "relationships": [
+    {
+      "target_id": "char-borin",
+      "current_relationship": "tutored_by",
+      "type": "mentorship",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    }
+  ]
+}

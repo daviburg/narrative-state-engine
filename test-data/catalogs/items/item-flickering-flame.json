@@ -1,0 +1,32 @@
+{
+  "id": "item-flickering-flame",
+  "name": "a small, flickering flame",
+  "type": "item",
+  "identity": "A small, flickering flame in the shaman's ornate dwelling, used for ritual or contemplation.",
+  "current_status": "Being tended by the shaman, flickering as it burns in the quiet of the dwelling. It is later referenced as a symbol of potential transformation and new life.",
+  "status_updated_turn": "turn-123",
+  "stable_attributes": {
+    "appearance": {
+      "value": "small, flickering",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-117"
+    },
+    "location": {
+      "value": "shaman's ornate dwelling",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-117"
+    }
+  },
+  "volatile_state": {
+    "condition": "flickering and being tended",
+    "location": "shaman's ornate dwelling",
+    "current_activity": "being tended by the shaman, referenced as a symbol of new life and transformation",
+    "last_updated_turn": "turn-123"
+  },
+  "first_seen_turn": "turn-117",
+  "last_updated_turn": "turn-123",
+  "notes": "The flame's exact purpose or magical properties are not explicitly stated, but its presence in the shaman's dwelling suggests ritual or symbolic significance. It is later associated with new life and the potential for transformation.",
+  "relationships": []
+}

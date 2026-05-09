@@ -1,0 +1,33 @@
+{
+  "id": "loc-stone-perimeter",
+  "name": "the stone perimeter",
+  "type": "location",
+  "identity": "A sturdy stone structure that forms the boundary of the communal longhouse, symbolizing the tribe's investment and the beginning of a new settlement.",
+  "current_status": "Continuing to serve as the foundation for the longhouse while the tribe works to complete the construction, with the stone perimeter providing a protective boundary against the arctic winds.",
+  "status_updated_turn": "turn-147",
+  "stable_attributes": {
+    "appearance": {
+      "value": "stone structure, sturdy and protective",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-129"
+    },
+    "role": {
+      "value": "foundation of the communal longhouse",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-129"
+    }
+  },
+  "volatile_state": {
+    "condition": "stable and secure",
+    "equipment": [],
+    "location": "communal longhouse construction site",
+    "current_activity": "Supporting the construction of the longhouse and providing a protective boundary",
+    "last_updated_turn": "turn-147"
+  },
+  "first_seen_turn": "turn-129",
+  "last_updated_turn": "turn-147",
+  "notes": "",
+  "relationships": []
+}

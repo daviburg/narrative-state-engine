@@ -1,0 +1,46 @@
+{
+  "id": "faction-non-combatant",
+  "name": "non combatant",
+  "type": "faction",
+  "identity": "A group of individuals who are not involved in combat and require protection during conflicts or raids. They are central to the tribe's evolving culture and are now more integrated into the longhouse as a stable community. Their role has expanded to include shaping the tribe's future and adapting to environmental changes.",
+  "current_status": "Actively participating in the player's discussions about shaping the tribe's future, adapting to environmental changes, and maintaining balance with the Southern Tribes. They are also involved in cultural and educational activities, and their role in community planning has become more prominent. They are also engaged in listening to the animals and what news they bring from beyond what the player's eyes can see.",
+  "status_updated_turn": "turn-341",
+  "stable_attributes": {
+    "role": {
+      "value": "non-combatants",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-168"
+    },
+    "aliases": {
+      "value": [
+        "non-combatants",
+        "children",
+        "non-fighters"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-168"
+    }
+  },
+  "volatile_state": {
+    "current_activity": "Observing and participating in the player's discussions about shaping the tribe's future, adapting to environmental changes, and maintaining balance with the Southern Tribes. Engaged in cultural and educational activities, and involved in community planning. Listening to the animals and what news they bring from beyond what the player's eyes can see.",
+    "location": "Longhouse and surrounding areas",
+    "condition": "Safe and engaged in communal activities, with anticipation for the arrival of the player's second child and the ongoing transformation of the tribe's role in shaping the future.",
+    "last_updated_turn": "turn-341"
+  },
+  "first_seen_turn": "turn-168",
+  "last_updated_turn": "turn-341",
+  "relationships": [
+    {
+      "target_id": "loc-house",
+      "current_relationship": "resides_at",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-168",
+      "last_updated_turn": "turn-222"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "item-grass",
+  "name": "the grass",
+  "type": "item",
+  "identity": "A plant with unique properties, selected for its isolation and potential as a source of knowledge and influence.",
+  "current_status": "Being studied for its growth patterns, isolation, and potential applications in healing and knowledge acquisition.",
+  "status_updated_turn": "turn-299",
+  "stable_attributes": {
+    "appearance": {
+      "value": "small plot, isolated, not mixed with others",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-299"
+    },
+    "usage": {
+      "value": "treated as potent, used in small quantities for testing and recovery",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-299"
+    }
+  },
+  "volatile_state": {
+    "condition": "being observed and studied",
+    "location": "the study site",
+    "current_activity": "being analyzed for growth, isolation, and potential applications",
+    "last_updated_turn": "turn-299"
+  },
+  "first_seen_turn": "turn-299",
+  "last_updated_turn": "turn-299",
+  "notes": "",
+  "relationships": []
+}

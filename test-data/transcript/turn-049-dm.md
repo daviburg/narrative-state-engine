@@ -1,0 +1,3 @@
+# turn-049 — DM
+
+As the last of the villagers vanish into their shelters, a lone figure, one of the younger hunters with a serious demeanor, takes up a position near the main bonfire. He carefully banks the coals, adding a few thick logs that smolder rather than blaze, ensuring a steady, enduring warmth through the night. The fire will be kept alive, but with less intensity. No one explicitly points you to a specific spot. However, the women you assisted earlier gather a few spare furs and lay them near the edge of the central fire, a clear, unspoken invitation for you to rest there. It's not a private shelter, but it's warm and close to the heart of the camp, under the watchful, if distant, gaze of the banked fire and the lone sentinel.

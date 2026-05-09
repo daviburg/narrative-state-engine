@@ -1,0 +1,830 @@
+[
+  {
+    "id": "loc-arcane-trail",
+    "name": "the arcane trail",
+    "type": "location",
+    "status_summary": "The player character has completed a ritual at the trail's edge, glimpsed a towe",
+    "first_seen_turn": "turn-190",
+    "last_updated_turn": "turn-193",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-arctic-days",
+    "name": "the arctic days",
+    "type": "location",
+    "status_summary": "The tribe contemplates the future of their settlement, envisioning transformed s",
+    "first_seen_turn": "turn-119",
+    "last_updated_turn": "turn-123",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-arctic-night",
+    "name": "the arctic night",
+    "type": "location",
+    "status_summary": "Serves as the backdrop for a tender, intimate moment between the player characte",
+    "first_seen_turn": "turn-103",
+    "last_updated_turn": "turn-123",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-arctic-outside",
+    "name": "the harsh realities of the arctic outside",
+    "type": "location",
+    "status_summary": "Serves as the setting for the tribe's daily struggles and the protagonist's secr",
+    "first_seen_turn": "turn-119",
+    "last_updated_turn": "turn-123",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-arctic-wild",
+    "name": "the arctic wild",
+    "type": "location",
+    "status_summary": "A child is born within its boundaries, with the player character nurturing a new",
+    "first_seen_turn": "turn-141",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-barren-strip",
+    "name": "the barren strip",
+    "type": "location",
+    "status_summary": "Being mapped by the player as part of the investigation into the mountain's infl",
+    "first_seen_turn": "turn-201",
+    "last_updated_turn": "turn-201",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-birthing-area",
+    "name": "the birthing area",
+    "type": "location",
+    "status_summary": "The player is monitoring the fermentation of mead as a ritualistic task, ensurin",
+    "first_seen_turn": "turn-142",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-boundary-fields",
+    "name": "the boundary fields",
+    "type": "location",
+    "status_summary": "The player and Maelis are walking together in the fields, discussing the future ",
+    "first_seen_turn": "turn-252",
+    "last_updated_turn": "turn-336",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-boundary",
+    "name": "the boundary",
+    "type": "location",
+    "status_summary": "The boundary remains intact as the player returns from it without haste. The pla",
+    "first_seen_turn": "turn-221",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-broken-circle",
+    "name": "the Broken Circle",
+    "type": "location",
+    "status_summary": "The ritual is being executed as per the player's instructions. The Shaman prepar",
+    "first_seen_turn": "turn-246",
+    "last_updated_turn": "turn-246",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-camouflaged-entrance",
+    "name": "camouflaged entrance",
+    "type": "location",
+    "status_summary": "Under construction as a safe haven for the tribe's vulnerable members, with the ",
+    "first_seen_turn": "turn-169",
+    "last_updated_turn": "turn-125",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-camp",
+    "name": "the camp",
+    "type": "location",
+    "status_summary": "The camp is active as the player moves through the settlement to address various",
+    "first_seen_turn": "turn-103",
+    "last_updated_turn": "turn-341",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-campsite",
+    "name": "campsite",
+    "type": "location",
+    "status_summary": "The group continues to be escorted through the forest toward this location, with",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-021",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-clearing",
+    "name": "the clearing",
+    "type": "location",
+    "status_summary": "The clearing is the site of a delicate and introspective process where the group",
+    "first_seen_turn": "turn-250",
+    "last_updated_turn": "turn-250",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-communal-longhouse",
+    "name": "the longhouse",
+    "type": "location",
+    "status_summary": "The player is reflecting on the changes in the community and the land, engaging ",
+    "first_seen_turn": "turn-126",
+    "last_updated_turn": "turn-211",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-crisp-growth",
+    "name": "the crystalline growths",
+    "type": "location",
+    "status_summary": "The player is observing and mapping the crystalline growths, noting their unnatu",
+    "first_seen_turn": "turn-201",
+    "last_updated_turn": "turn-269",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-crude-lean-tos",
+    "name": "crude lean-tos",
+    "type": "location",
+    "status_summary": "Families have retreated into these shelters, with children being carried or guid",
+    "first_seen_turn": "turn-047",
+    "last_updated_turn": "turn-047",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-cultivated-ground",
+    "name": "the cultivated ground",
+    "type": "location",
+    "status_summary": "Serving as the focal point for Elder Lyra's tour, where the player character kne",
+    "first_seen_turn": "turn-315",
+    "last_updated_turn": "turn-316",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-cultivated-plots",
+    "name": "cultivated plots",
+    "type": "location",
+    "status_summary": "The player character has transformed the cultivated plots into a central hub for",
+    "first_seen_turn": "turn-289",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-distant-light-flashing-mountains",
+    "name": "the mountains",
+    "type": "location",
+    "status_summary": "Responding to the player's ritual, the mountains have acknowledged the player's ",
+    "first_seen_turn": "turn-189",
+    "last_updated_turn": "turn-220",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-ditch",
+    "name": "ditch",
+    "type": "location",
+    "status_summary": "Under construction as part of the player's defensive strategy against Raiders, c",
+    "first_seen_turn": "turn-166",
+    "last_updated_turn": "turn-173",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-drying-racks-kilns",
+    "name": "drying racks and kilns",
+    "type": "location",
+    "status_summary": "Continuing to support food preservation, material storage, and crafting initiati",
+    "first_seen_turn": "turn-289",
+    "last_updated_turn": "turn-300",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-eastern-boundary",
+    "name": "the eastern boundary",
+    "type": "location",
+    "status_summary": "The boundary is currently being used as a testing ground and filter for the four",
+    "first_seen_turn": "turn-190",
+    "last_updated_turn": "turn-323",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-empty-snow-expanse",
+    "name": "the empty expanse of snow",
+    "type": "location",
+    "status_summary": "The player and others engage in agricultural planning, construction, and strateg",
+    "first_seen_turn": "turn-326",
+    "last_updated_turn": "turn-211",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-feast",
+    "name": "the feast",
+    "type": "location",
+    "status_summary": "The player is waiting for it to end so they can leave and rejoin their hunter al",
+    "first_seen_turn": "turn-106",
+    "last_updated_turn": "turn-123",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-fenouille",
+    "name": "Fenouille",
+    "type": "location",
+    "status_summary": "The group is observing and assessing the transformed landscape, with reports of ",
+    "first_seen_turn": "turn-296",
+    "last_updated_turn": "turn-300",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-fire",
+    "name": "the edge of the settlement",
+    "type": "location",
+    "status_summary": "Serving as the active testing ground for Gorok's warriors, who are attempting to",
+    "first_seen_turn": "turn-031",
+    "last_updated_turn": "turn-319",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-first-pattern-place",
+    "name": "the first place where the pattern touched the world",
+    "type": "location",
+    "status_summary": "The player character and group are observing the pattern's influence and maintai",
+    "first_seen_turn": "turn-267",
+    "last_updated_turn": "turn-274",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-first-real-sign-of-thaw",
+    "name": "the first real sign of thaw",
+    "type": "location",
+    "status_summary": "The first true shift in the environment has occurred, signaling the start of tha",
+    "first_seen_turn": "turn-224",
+    "last_updated_turn": "turn-224",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-fragment",
+    "name": "the fragment",
+    "type": "location",
+    "status_summary": "Under multifaceted observation and experimentation. The fragment's internal puls",
+    "first_seen_turn": "turn-255",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-frozen-lake",
+    "name": "frozen lake",
+    "type": "location",
+    "status_summary": "The tribe is actively preparing to drill holes in the ice to catch fish, focusin",
+    "first_seen_turn": "turn-136",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-frozen-landscape",
+    "name": "the frozen landscape",
+    "type": "location",
+    "status_summary": "Being explored by the player character, who is mapping anomalies such as hexagon",
+    "first_seen_turn": "turn-201",
+    "last_updated_turn": "turn-201",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-frozen-soil",
+    "name": "frozen soil",
+    "type": "location",
+    "status_summary": "Serving as the setting for a planned fertilization ritual, where the player inte",
+    "first_seen_turn": "turn-175",
+    "last_updated_turn": "turn-175",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-frozen-stream",
+    "name": "frozen stream bed",
+    "type": "location",
+    "status_summary": "Serves as a foraging site where the player harvests fireweed and arctic dock, sy",
+    "first_seen_turn": "turn-061",
+    "last_updated_turn": "turn-173",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-hexagon",
+    "name": "the hexagon",
+    "type": "location",
+    "status_summary": "The hexagon has been erased and replaced with a prepared stone at the longhouse ",
+    "first_seen_turn": "turn-206",
+    "last_updated_turn": "turn-214",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-hexagonal-melt-pattern",
+    "name": "the hexagonal melt pattern",
+    "type": "location",
+    "status_summary": "Being meticulously mapped by the player using non-invasive observation technique",
+    "first_seen_turn": "turn-203",
+    "last_updated_turn": "turn-269",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-house",
+    "name": "our house",
+    "type": "location",
+    "status_summary": "Being discussed for safety improvements, with plans to add a water reserve and a",
+    "first_seen_turn": "turn-168",
+    "last_updated_turn": "turn-168",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-larger-enclosed-structure",
+    "name": "larger enclosed structure",
+    "type": "location",
+    "status_summary": "The elder is moving toward this structure after the communal gathering.",
+    "first_seen_turn": "turn-047",
+    "last_updated_turn": "turn-047",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-largest-ornate-shelter",
+    "name": "the largest, most ornate of the shelters",
+    "type": "location",
+    "status_summary": "The shaman is seen entering and exiting the shelter, performing symbolic gesture",
+    "first_seen_turn": "turn-081",
+    "last_updated_turn": "turn-097",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-loft",
+    "name": "loft",
+    "type": "location",
+    "status_summary": "The protagonist uses the loft to maintain heightened awareness of the tribe's gr",
+    "first_seen_turn": "turn-130",
+    "last_updated_turn": "turn-195",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-main-bonfire",
+    "name": "the main bonfire",
+    "type": "location",
+    "status_summary": "Serving as the focal point for the communal gathering and meal preparation, with",
+    "first_seen_turn": "turn-049",
+    "last_updated_turn": "turn-043",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-moss-borders",
+    "name": "the moss borders",
+    "type": "location",
+    "status_summary": "The player character leads Elder Lyra here to demonstrate the restored balance o",
+    "first_seen_turn": "turn-315",
+    "last_updated_turn": "turn-316",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-mountain",
+    "name": "the mountain",
+    "type": "location",
+    "status_summary": "Its pulse and temperature are being monitored daily, with subtle changes noted. ",
+    "first_seen_turn": "turn-211",
+    "last_updated_turn": "turn-211",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-natural-recess",
+    "name": "natural recess",
+    "type": "location",
+    "status_summary": "Serving as a strategic refuge for the tribe's vulnerable members during an attac",
+    "first_seen_turn": "turn-169",
+    "last_updated_turn": "turn-173",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-nearby-forest",
+    "name": "nearby forest",
+    "type": "location",
+    "status_summary": "The forest remains a key location for the tribe, with the focus now on personal ",
+    "first_seen_turn": "turn-137",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-observation-post",
+    "name": "the observation post",
+    "type": "location",
+    "status_summary": "Actively used to record the mountain fragment's pulse, temperature fluctuations,",
+    "first_seen_turn": "turn-211",
+    "last_updated_turn": "turn-211",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-outer-defensive-lines",
+    "name": "the outer defensive lines",
+    "type": "location",
+    "status_summary": "Under active construction and redesign. The player and Borin are discussing a ne",
+    "first_seen_turn": "turn-319",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-paths",
+    "name": "the paths",
+    "type": "location",
+    "status_summary": "The location is the site of a final decision-making ceremony where three leaders",
+    "first_seen_turn": "turn-318",
+    "last_updated_turn": "turn-318",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-patrol-routes",
+    "name": "the patrol routes",
+    "type": "location",
+    "status_summary": "Being analyzed by Bran for their predictability; identified as a vulnerability w",
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-plagued-watering-hole",
+    "name": "the plagued watering hole",
+    "type": "location",
+    "status_summary": "Successfully treated with the early disruption method; small-scale cultivation p",
+    "first_seen_turn": "turn-340",
+    "last_updated_turn": "turn-340",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-planting",
+    "name": "the planting",
+    "type": "location",
+    "status_summary": "The location is the site of final decisions regarding resource allocation and fu",
+    "first_seen_turn": "turn-318",
+    "last_updated_turn": "turn-318",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-ravine",
+    "name": "the ravine",
+    "type": "location",
+    "status_summary": "Described as a volatile magnet for unwanted creatures due to the snow patterns c",
+    "first_seen_turn": "turn-340",
+    "last_updated_turn": "turn-340",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-river-bend",
+    "name": "the river bend",
+    "type": "location",
+    "status_summary": "Being actively observed by the player character as a focal point for studying th",
+    "first_seen_turn": "turn-267",
+    "last_updated_turn": "turn-269",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-river",
+    "name": "the river",
+    "type": "location",
+    "status_summary": "Being observed for its structured patterns, crystalline growths, and influence m",
+    "first_seen_turn": "turn-216",
+    "last_updated_turn": "turn-269",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-rocky-outcrop",
+    "name": "rocky outcrop",
+    "type": "location",
+    "status_summary": "Continuing to serve as a shelter for the player while foraging for arctic plants",
+    "first_seen_turn": "turn-151",
+    "last_updated_turn": "turn-173",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-safe-haven",
+    "name": "safe haven",
+    "type": "location",
+    "status_summary": "The safe haven is being planned as a larger, more permanent dwelling with a rais",
+    "first_seen_turn": "turn-169",
+    "last_updated_turn": "turn-125",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-second-habitation",
+    "name": "the second habitation",
+    "type": "location",
+    "status_summary": "In the planning and construction phase, this habitation is being developed with ",
+    "first_seen_turn": "turn-311",
+    "last_updated_turn": "turn-312",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-settlement",
+    "name": "The Quiet Weave",
+    "type": "location",
+    "status_summary": "The settlement is now in a state of active deliberation and planning. The leader",
+    "first_seen_turn": "turn-289",
+    "last_updated_turn": "turn-344",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-shamans-dwelling",
+    "name": "the shaman's dwelling",
+    "type": "location",
+    "status_summary": "The player and Kael are in the dwelling, focusing on refining their methods to a",
+    "first_seen_turn": "turn-117",
+    "last_updated_turn": "turn-223",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-shared-refuge",
+    "name": "the shared refuge",
+    "type": "location",
+    "status_summary": "Serving as a private meeting ground for the player and the hunter, where they en",
+    "first_seen_turn": "turn-119",
+    "last_updated_turn": "turn-123",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-shelter",
+    "name": "Shelter",
+    "type": "location",
+    "status_summary": "Serving as the location for an ongoing series of controlled experiments on a cri",
+    "first_seen_turn": "turn-229",
+    "last_updated_turn": "turn-239",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-simple-tents",
+    "name": "simple tents",
+    "type": "location",
+    "status_summary": "Being used by families as sleeping quarters, with children being carried or guid",
+    "first_seen_turn": "turn-047",
+    "last_updated_turn": "turn-047",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-small-patch-of-ground",
+    "name": "small patch of ground",
+    "type": "location",
+    "status_summary": "Used for fermentation and mead-making experiments, with the character planning t",
+    "first_seen_turn": "turn-137",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-smaller-cooking-fires",
+    "name": "the smaller cooking fires",
+    "type": "location",
+    "status_summary": "Being used to prepare the morning meal, with the women actively stirring a thick",
+    "first_seen_turn": "turn-071",
+    "last_updated_turn": "turn-071",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-dusted-forest",
+    "name": "the snow-dusted forest",
+    "type": "location",
+    "status_summary": "Serving as a dynamic space for shelter construction, frost pattern observation, ",
+    "first_seen_turn": "turn-223",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-dusted-landscape",
+    "name": "snow-dusted landscape",
+    "type": "location",
+    "status_summary": "The player is demonstrating lessons about the land's purpose, guiding Kael, Lena",
+    "first_seen_turn": "turn-149",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-dusted-original",
+    "name": "the snow-dusted terrain",
+    "type": "location",
+    "status_summary": "A man is being tended to by the player and healer, with strict protocols in plac",
+    "first_seen_turn": "turn-235",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-dusted-terrain",
+    "name": "the snow-dusted terrain",
+    "type": "location",
+    "status_summary": "The terrain remains under the grip of a severe winter, hosting critical rituals ",
+    "first_seen_turn": "turn-217",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-expanse",
+    "name": "the snow expanse",
+    "type": "location",
+    "status_summary": "The player is disoriented and recovering from a fall, with a throbbing temple an",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-001",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-laden-forest",
+    "name": "the snow-laden forest",
+    "type": "location",
+    "status_summary": "Hosting a ritual involving the player, Maelis, Gorok, Kael, the healer, Tala, Re",
+    "first_seen_turn": "turn-223",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-laden-juniper-bush",
+    "name": "the snow-laden forest",
+    "type": "location",
+    "status_summary": "The forest remains under the grip of relentless cold, with snow-laden branches a",
+    "first_seen_turn": "turn-065",
+    "last_updated_turn": "turn-235",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-laden-landscape",
+    "name": "the snow-laden landscape",
+    "type": "location",
+    "status_summary": "Serves as the backdrop for the tribe's agricultural, hunting, and spiritual prac",
+    "first_seen_turn": "turn-210",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-laden-original",
+    "name": "the snow-laden forest",
+    "type": "location",
+    "status_summary": "A non-contact healing ritual is being conducted with the Shaman, Anya, the heale",
+    "first_seen_turn": "turn-246",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-laden-terrain",
+    "name": "the snow-laden terrain",
+    "type": "location",
+    "status_summary": "Serving as the central setting for the execution of a complex ritual to address ",
+    "first_seen_turn": "turn-223",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-patch",
+    "name": "the snow patch",
+    "type": "location",
+    "status_summary": "The snow patch remains a critical location for the tribe's survival efforts, wit",
+    "first_seen_turn": "turn-201",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snowy-forest",
+    "name": "Snowy forest",
+    "type": "location",
+    "status_summary": "The player is disoriented and recovering from a head injury, struggling to piece",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-021",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-southern-water-sources",
+    "name": "The southern water sources",
+    "type": "location",
+    "status_summary": "The southern water sources remain a focal point for testing the new fields and o",
+    "first_seen_turn": "turn-302",
+    "last_updated_turn": "turn-115",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-steep-pitch-roof-of-wood-shingles",
+    "name": "steep pitch roof of wood shingles",
+    "type": "location",
+    "status_summary": "Under construction with the tribe, featuring a loft beneath for storage and priv",
+    "first_seen_turn": "turn-130",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-stone-perimeter",
+    "name": "the stone perimeter",
+    "type": "location",
+    "status_summary": "Continuing to serve as the foundation for the longhouse while the tribe works to",
+    "first_seen_turn": "turn-129",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-stones",
+    "name": "The river stones",
+    "type": "location",
+    "status_summary": "The river stones are being observed from a distance without physical contact, as",
+    "first_seen_turn": "turn-267",
+    "last_updated_turn": "turn-269",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-storage",
+    "name": "storage",
+    "type": "location",
+    "status_summary": "Serving as a designated storage area for cultivated food, tools, and preserved i",
+    "first_seen_turn": "turn-289",
+    "last_updated_turn": "turn-294",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-structure-wall",
+    "name": "the structure wall",
+    "type": "location",
+    "status_summary": "Being inspected by Borin for frost lines and pattern misalignments; the player c",
+    "first_seen_turn": "turn-342",
+    "last_updated_turn": "turn-342",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-structure",
+    "name": "the structure",
+    "type": "location",
+    "status_summary": "Being explored by the player character through a methodical process of observati",
+    "first_seen_turn": "turn-193",
+    "last_updated_turn": "turn-297",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-temporary-structures",
+    "name": "temporary structures",
+    "type": "location",
+    "status_summary": "Serving as a space for knowledge sharing, experimentation, and demonstration of ",
+    "first_seen_turn": "turn-289",
+    "last_updated_turn": "turn-300",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-thawing-earth",
+    "name": "thawing earth",
+    "type": "location",
+    "status_summary": "Serving as the central hub for teaching and demonstrating principles of sustaina",
+    "first_seen_turn": "turn-247",
+    "last_updated_turn": "turn-294",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-thin-cold-air",
+    "name": "the thin, cold air pockets",
+    "type": "location",
+    "status_summary": "The player traces its influence across the frozen terrain, noting its effects on",
+    "first_seen_turn": "turn-201",
+    "last_updated_turn": "turn-201",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-trapper-path",
+    "name": "the trapper's path",
+    "type": "location",
+    "status_summary": "Serving as a critical site for observation, trade preparation, mapping migration",
+    "first_seen_turn": "turn-267",
+    "last_updated_turn": "turn-210",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-triangular-fields",
+    "name": "triangular fields",
+    "type": "location",
+    "status_summary": "Being established through a ritualized process involving multiple roles: Anya pe",
+    "first_seen_turn": "turn-285",
+    "last_updated_turn": "turn-300",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-village-hall",
+    "name": "Village hall",
+    "type": "location",
+    "status_summary": "The player is in the snow outside, recovering from a fall and reflecting on the ",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-001",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-walls-and-roof-insulation",
+    "name": "walls and roof insulation",
+    "type": "location",
+    "status_summary": "Under construction with the tribe working on insulation and roofing, incorporati",
+    "first_seen_turn": "turn-130",
+    "last_updated_turn": "turn-147",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-wilderness",
+    "name": "the wilderness",
+    "type": "location",
+    "status_summary": "A sense of fragile peace is established between the player and the hunter, with ",
+    "first_seen_turn": "turn-051",
+    "last_updated_turn": "turn-051",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-wind-swept-area",
+    "name": "wind-swept area",
+    "type": "location",
+    "status_summary": "The player character is monitoring the growth of cultivated sprouts and preparin",
+    "first_seen_turn": "turn-151",
+    "last_updated_turn": "turn-173",
+    "active_relationship_count": 0
+  }
+]

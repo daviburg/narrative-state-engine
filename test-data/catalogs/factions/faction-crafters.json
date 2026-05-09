@@ -1,0 +1,10 @@
+{
+  "id": "faction-crafters",
+  "name": "Crafters",
+  "type": "faction",
+  "identity": "Entity referenced in events (stub — auto-created from event data).",
+  "first_seen_turn": "turn-294",
+  "last_updated_turn": "turn-294",
+  "notes": "Auto-created by event-stub.",
+  "relationships": []
+}

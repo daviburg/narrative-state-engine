@@ -1,0 +1,38 @@
+{
+  "id": "creature-wolf-dog",
+  "name": "wolf-dog",
+  "type": "creature",
+  "identity": "A loyal companion to the player character, known for its heightened senses and deep connection to the natural world. It is attuned to the movements of the caribou herds and the subtle changes in the environment.",
+  "current_status": "Maintains vigilance over the settlement, detecting and alerting the tribe to potential threats or changes in the environment.",
+  "status_updated_turn": "turn-191",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Hybrid form of wolf and dog, with sharp senses and a natural predator's instincts",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-208"
+    },
+    "role": {
+      "value": "Guardian and companion to the tribe, serving as an early warning system for approaching travelers",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-208"
+    },
+    "species": {
+      "value": "Hybrid (wolf-dog)",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-208"
+    }
+  },
+  "volatile_state": {
+    "condition": "Alert and watchful, with subtle signs of being affected by the arcane energy",
+    "location": "Near the longhouse and eastern edge of the territory",
+    "current_activity": "Detecting unusual movements and scents in the environment, and reacting to the arcane energy detected by the player",
+    "last_updated_turn": "turn-191"
+  },
+  "first_seen_turn": "turn-189",
+  "last_updated_turn": "turn-212",
+  "notes": "",
+  "relationships": []
+}

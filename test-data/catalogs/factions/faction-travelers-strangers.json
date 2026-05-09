@@ -1,0 +1,28 @@
+{
+  "id": "faction-travelers-strangers",
+  "name": "travelers, strangers",
+  "type": "faction",
+  "identity": "A group of individuals who have arrived at the longhouse during the player's absence, representing external interest in the tribe's discoveries and developments.",
+  "current_status": "Present at the longhouse, having arrived during the player's absence. They are part of the gathering that witnesses the fragment and the player's recounting of the journey, and are engaged in discussions about the tribe's changes and the broader world's dynamics.",
+  "status_updated_turn": "turn-331",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "travelers",
+        "strangers"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-208"
+    }
+  },
+  "volatile_state": {
+    "location": "longhouse",
+    "current_activity": "Present at the gathering, witnessing the fragment and the player's recounting of the journey, and engaged in discussions about the tribe's changes and the broader world's dynamics.",
+    "last_updated_turn": "turn-331"
+  },
+  "first_seen_turn": "turn-208",
+  "last_updated_turn": "turn-331",
+  "notes": "The group's exact composition and purpose remain unspecified, but they are noted as having arrived during the player's absence and are part of the gathering at the longhouse. Their role in the tribe's future is being assessed.",
+  "relationships": []
+}

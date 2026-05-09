@@ -1,0 +1,50 @@
+{
+  "id": "item-charms-against-cold-and-unnatural-influences",
+  "name": "the charms against cold and unnatural influences",
+  "type": "item",
+  "identity": "A collection of magical charms crafted by the Shaman for protection against cold and unnatural influences, used by the tribe during the expedition.",
+  "current_status": "Stored in the Shaman's stores, gathered and prepared for use by the player character before departing eastward.",
+  "status_updated_turn": "turn-195",
+  "stable_attributes": {
+    "species": {
+      "value": "Magical item",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-195"
+    },
+    "race": {
+      "value": "Magical item",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-195"
+    },
+    "class": {
+      "value": "Protection",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-195"
+    },
+    "aliases": {
+      "value": [
+        "charms against cold",
+        "charms against unnatural influences"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-195"
+    }
+  },
+  "volatile_state": {
+    "condition": "Stored and ready for use",
+    "equipment": [
+      "charms against cold and unnatural influences"
+    ],
+    "location": "Shaman's stores",
+    "current_activity": "Gathered and prepared for the expedition",
+    "last_updated_turn": "turn-195"
+  },
+  "first_seen_turn": "turn-195",
+  "last_updated_turn": "turn-195",
+  "notes": "",
+  "relationships": []
+}

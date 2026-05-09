@@ -1,0 +1,39 @@
+{
+  "id": "item-wild-yeasts",
+  "name": "wild yeasts",
+  "type": "item",
+  "identity": "A natural fermentation agent used by the player character to create mead, cultivated with wild honey and purified snowmelt. Its success is tied to the player's careful attention and magical influence.",
+  "current_status": "Being refined and safeguarded by the player character to ensure successful mead production, with plans to train an apprentice once the process is stable.",
+  "status_updated_turn": "turn-211",
+  "stable_attributes": {
+    "species": {
+      "value": "natural fermentation agent",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-145"
+    },
+    "aliases": {
+      "value": [
+        "fermentation agent",
+        "yeast from air"
+      ],
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-145"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and being refined",
+    "equipment": [
+      "wild honey",
+      "purified snowmelt"
+    ],
+    "location": "longhouse",
+    "current_activity": "refining mead process and ensuring safety",
+    "last_updated_turn": "turn-211"
+  },
+  "first_seen_turn": "turn-145",
+  "last_updated_turn": "turn-211",
+  "notes": "The player's role in cultivating the wild yeasts is emphasized, with a transition from personal cultivation to teaching an apprentice.",
+  "relationships": []
+}

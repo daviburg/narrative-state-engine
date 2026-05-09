@@ -1,0 +1,5 @@
+# turn-226 — PLAYER
+
+Before we meet the traveler, I take one night to be still. The longhouse is quiet. The tribe is steady. Winter did not break us--we shaped it. I sit beside the fragment, not to test it, but to listen. Its rhythm is no longer foreign. It is something I have learned to stand beside without yielding. I think on what has changed: We do not hunt as we did before--we choose. We do not grow as we did before--we endure. We do not fear what we found--we study it. Anya no longer reaches blindly--she repeats, precisely. The tribe no longer reacts--we prepare. And within me, something has settled into place. The silent star does not feel distant tonight. It feels... aligned. I allow myself a full rest--body, mind, and whatever thread binds me to that distant presence. If there is a moment when understanding deepens--when power becomes clearer, when something within me sharpens or opens--I accept it now. Not as a gift given suddenly, but as something earned through what we have survived, built, and learned. When I rise, I am not the same as when winter began. Show me what has changed.
+
+--- Long rest ---

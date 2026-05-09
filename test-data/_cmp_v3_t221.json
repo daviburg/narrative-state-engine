@@ -1,0 +1,225 @@
+[
+  {
+    "turn": 221,
+    "run": 1,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 7.2,
+    "entity_count": 2,
+    "active": 1,
+    "passive": 1,
+    "spurious": 0,
+    "input_tokens_est": 11953,
+    "output_tokens_est": 166,
+    "error": null,
+    "entities": [
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-distant-light-flashing-mountains",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": true,
+        "existing_id": null,
+        "proposed_id": "loc-mountain",
+        "description": "A towering and ancient presence that has long shaped the lives of the tribes, possessing a sentient will and a pulse influencing the land.",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      }
+    ],
+    "categories": {
+      "active": [
+        "the mountains"
+      ],
+      "passive": [
+        "the mountains"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 221,
+    "run": 2,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 5.0,
+    "entity_count": 7,
+    "active": 0,
+    "passive": 7,
+    "spurious": 0,
+    "input_tokens_est": 11953,
+    "output_tokens_est": 323,
+    "error": null,
+    "entities": [
+      {
+        "name": "the fragment",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-fragment",
+        "confidence": 0.85,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "Anya",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-anya",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the Shaman",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-shaman",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "Kael",
+        "type": "character",
+        "is_new": false,
+        "existing_id": "char-kael",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the mountain",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-mountain",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the tribe",
+        "type": "faction",
+        "is_new": false,
+        "existing_id": "faction-tribe",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the fragment",
+        "the fragment",
+        "Anya",
+        "the Shaman",
+        "Kael",
+        "the mountain",
+        "the tribe"
+      ],
+      "spurious": []
+    }
+  },
+  {
+    "turn": 221,
+    "run": 3,
+    "success": true,
+    "truncated": false,
+    "elapsed_s": 5.9,
+    "entity_count": 8,
+    "active": 0,
+    "passive": 4,
+    "spurious": 4,
+    "input_tokens_est": 11953,
+    "output_tokens_est": 407,
+    "error": null,
+    "entities": [
+      {
+        "name": "the mountains",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-distant-light-flashing-mountains",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-fragment",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the fragment",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-fragment",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the patterned frost",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-frost-pattern",
+        "confidence": 0.95,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the pattern disruption method",
+        "type": "item",
+        "is_new": false,
+        "existing_id": "item-pattern-dissruption-method",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the boundary",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-boundary",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the Quiet Weave",
+        "type": "location",
+        "is_new": false,
+        "existing_id": "loc-settlement",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      },
+      {
+        "name": "the southern tribes",
+        "type": "faction",
+        "is_new": false,
+        "existing_id": "faction-southern-tribes",
+        "confidence": 0.9,
+        "source_turn": "turn-221"
+      }
+    ],
+    "categories": {
+      "active": [],
+      "passive": [
+        "the mountains",
+        "the fragment",
+        "the fragment",
+        "the boundary"
+      ],
+      "spurious": [
+        "the patterned frost",
+        "the pattern disruption method",
+        "the Quiet Weave",
+        "the southern tribes"
+      ]
+    }
+  }
+]

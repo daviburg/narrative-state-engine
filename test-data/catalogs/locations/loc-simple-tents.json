@@ -1,0 +1,40 @@
+{
+  "id": "loc-simple-tents",
+  "name": "simple tents",
+  "type": "location",
+  "identity": "Basic shelters constructed from hide and branches, used by families for rest and sleep after the communal meal. They are positioned at the village perimeter, blending with the natural environment.",
+  "current_status": "Being used by families as sleeping quarters, with children being carried or guided by their parents. The tents are part of the village's temporary encampment structure.",
+  "status_updated_turn": "turn-047",
+  "stable_attributes": {
+    "material": {
+      "value": "hide and branches",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-047"
+    },
+    "purpose": {
+      "value": "shelter for families",
+      "inference": true,
+      "confidence": 0.85,
+      "source_turn": "turn-047"
+    },
+    "location": {
+      "value": "village perimeter, beyond immediate firelight",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-047"
+    }
+  },
+  "volatile_state": {
+    "condition": "basic and functional",
+    "equipment": [
+      "simple tents"
+    ],
+    "location": "village perimeter",
+    "current_activity": "being used by families for rest and sleep",
+    "last_updated_turn": "turn-047"
+  },
+  "first_seen_turn": "turn-047",
+  "last_updated_turn": "turn-047",
+  "relationships": []
+}

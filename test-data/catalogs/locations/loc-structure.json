@@ -1,0 +1,48 @@
+{
+  "id": "loc-structure",
+  "name": "the structure",
+  "type": "location",
+  "identity": "A mysterious, ancient location marked by unnatural geological formations and a pervasive, cold energy. It appears to be the source of an enigmatic force affecting the surrounding environment, with a complex ecosystem of frozen landscapes, crystalline growths, and arcane phenomena.",
+  "current_status": "Being explored by the player character through a methodical process of observation and mapping, with a focus on understanding the structure's influence on the environment and its implications for the tribes. The player has established a system to preserve knowledge about a sickness and has prepared a message for the southern tribes.",
+  "status_updated_turn": "turn-297",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Frozen landscape with unnatural hexagonal melt patterns, crystalline growths, dark fragments radiating cold energy, hardened grass, bird nests with symmetrical structures, and rare blooms with reactive properties.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-297"
+    },
+    "type": {
+      "value": "Mystical location",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-201"
+    },
+    "origin": {
+      "value": "unknown, possibly non-corporeal or extradimensional",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-193"
+    },
+    "aliases": {
+      "value": [
+        "the structure",
+        "the cold place"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-201"
+    }
+  },
+  "volatile_state": {
+    "condition": "Cold and eerie, with an unnatural energy presence and a complex ecosystem of frozen landscapes, crystalline growths, and arcane phenomena.",
+    "location": "Frozen landscape near the mountains",
+    "current_activity": "Exploring and mapping the source of an alien energy, implementing a method to preserve knowledge about a sickness, and preparing a message for the southern tribes through careful observation and experimentation.",
+    "last_updated_turn": "turn-297",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-193",
+  "last_updated_turn": "turn-297",
+  "notes": "The entity's true nature and origin remain ambiguous, suggesting it may be of non-corporeal or extradimensional origin. The player's detailed exploration indicates a deeper connection to the structure's arcane properties.",
+  "relationships": []
+}

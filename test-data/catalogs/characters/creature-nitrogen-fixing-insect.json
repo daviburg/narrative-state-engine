@@ -1,0 +1,37 @@
+{
+  "id": "creature-nitrogen-fixing-insect",
+  "name": "nitrogen-fixing insect",
+  "type": "creature",
+  "identity": "A specific type of insect attracted to the stabilized borders of the geometric moss, which has begun to enrich the soil around disruption fields.",
+  "current_status": "Actively enhancing the soil around the geometric moss patches near the disruption fields.",
+  "status_updated_turn": "turn-332",
+  "stable_attributes": {
+    "species": {
+      "value": "nitrogen-fixing insect",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "habitat": {
+      "value": "borders of geometric moss patches near disruption fields",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    },
+    "role": {
+      "value": "soil enrichment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-332"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "location": "borders of geometric moss patches near disruption fields",
+    "last_updated_turn": "turn-332"
+  },
+  "first_seen_turn": "turn-332",
+  "last_updated_turn": "turn-332",
+  "notes": "Appeared as an unintended change resulting from the stabilization of the geometric moss.",
+  "relationships": []
+}

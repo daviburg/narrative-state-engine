@@ -1,0 +1,41 @@
+{
+  "id": "item-concentrated-broths",
+  "name": "concentrated broths",
+  "type": "item",
+  "identity": "A medicinal supply used by the healer to maintain health and support the group's journey, containing concentrated broths, purified snowmelt, and immunity-boosting essences.",
+  "current_status": "Stored in the healer's compact pouch, used to sustain the group during the expedition and support the treatment of the afflicted, with no changes noted in its condition or usage.",
+  "status_updated_turn": "turn-274",
+  "stable_attributes": {
+    "role": {
+      "value": "medicinal supply",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-259"
+    },
+    "appearance": {
+      "value": "contained in a compact pouch, described as 'concentrated broths'",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-259"
+    },
+    "location": {
+      "value": "healer's pouch",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-259"
+    }
+  },
+  "volatile_state": {
+    "condition": "intact and functional",
+    "equipment": [
+      "healer's compact pouch"
+    ],
+    "location": "healer's pouch",
+    "current_activity": "supporting the healer's supplies during the expedition",
+    "last_updated_turn": "turn-274"
+  },
+  "first_seen_turn": "turn-259",
+  "last_updated_turn": "turn-274",
+  "notes": "",
+  "relationships": []
+}

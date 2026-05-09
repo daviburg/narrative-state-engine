@@ -1,0 +1,52 @@
+{
+  "id": "item-fermented-stores",
+  "name": "the fermented stores",
+  "type": "item",
+  "identity": "A collection of preserved food supplies (dried meat, tubers, and fermented stores) used to sustain the community during scarcity and as a strategic diplomatic tool.",
+  "first_seen_turn": "turn-316",
+  "last_updated_turn": "turn-316",
+  "notes": "",
+  "current_status": "Being presented by the player character to Chief Thorne as a gift to ensure his people survive the winter without requiring any promises or trade in return.",
+  "status_updated_turn": "turn-316",
+  "stable_attributes": {
+    "species": {
+      "value": "unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-320"
+    },
+    "race": {
+      "value": "unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-320"
+    },
+    "class": {
+      "value": "supply",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-320"
+    },
+    "aliases": {
+      "value": [
+        "fermented stores",
+        "preserved food supplies",
+        "Fermented Stores"
+      ],
+      "inference": false,
+      "source_turn": "turn-320"
+    }
+  },
+  "volatile_state": {
+    "condition": "being presented",
+    "equipment": [
+      "dried meat",
+      "preserved tubers",
+      "fermented stores"
+    ],
+    "location": "before Chief Thorne",
+    "current_activity": "being offered to Chief Thorne as a winter survival gift with no strings attached",
+    "last_updated_turn": "turn-316"
+  },
+  "relationships": []
+}

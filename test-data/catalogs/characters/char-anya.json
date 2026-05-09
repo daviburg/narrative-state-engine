@@ -1,0 +1,113 @@
+{
+  "id": "char-anya",
+  "name": "Anya",
+  "type": "character",
+  "identity": "A trained and reliable arcane practitioner who introduces subtle disruptions into a system of geometric precision, altering its stability through precise, ethereal actions. She is central to the containment and application of arcane methods within the group's structured system, and is now recognized as a key figure in shaping the tribe's future through knowledge and guidance. Her work with the mountain's influence establishes her as a bridge between the tribe's traditions and the arcane forces at play, emphasizing control over power rather than its pursuit.",
+  "current_status": "Working with the player and the Shaman to disrupt a malevolent pattern within a man, using delicate arcane manipulations to prevent the pattern from re-forming. She focuses on subtle, incomplete shapes to destabilize the pattern without defining it, while also aiding in the man's physical healing through controlled nourishment and warmth.",
+  "status_updated_turn": "turn-251",
+  "stable_attributes": {
+    "aliases": {
+      "value": [
+        "Anya"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-339"
+    },
+    "species": {
+      "value": "Human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-339"
+    },
+    "appearance": {
+      "value": "Unspecified, but described as someone who listens deeply to nature and the land",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-190"
+    },
+    "role": {
+      "value": "Tribal mediator and guide, responsible for interpreting natural signs and leading the tribe through change",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-190"
+    },
+    "race": {
+      "value": "Unknown",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-339"
+    },
+    "class": {
+      "value": "Arcane practitioner",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-246"
+    }
+  },
+  "volatile_state": {
+    "condition": "Focused and analytical",
+    "equipment": [
+      "Fragment",
+      "Samples (moss, sediment, frost, tea)"
+    ],
+    "location": "With the player and the man (working on disrupting the pattern and aiding healing)",
+    "current_activity": "Working with the player and the Shaman to disrupt a malevolent pattern within a man, using delicate arcane manipulations to prevent the pattern from re-forming. She traces faint, incomplete shapes in the air to destabilize the pattern without defining it, while also aiding in the man's physical healing through controlled nourishment and warmth.",
+    "last_updated_turn": "turn-251"
+  },
+  "first_seen_turn": "turn-190",
+  "last_updated_turn": "turn-251",
+  "notes": "No explicit contradictions or unresolved ambiguities identified.",
+  "relationships": [
+    {
+      "target_id": "loc-stones",
+      "current_relationship": "applies_disturbance",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.8,
+      "first_seen_turn": "turn-280",
+      "last_updated_turn": "turn-280"
+    },
+    {
+      "target_id": "loc-fragment",
+      "current_relationship": "places",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-218",
+      "last_updated_turn": "turn-218"
+    },
+    {
+      "target_id": "item-frost-pattern",
+      "current_relationship": "observes",
+      "type": "spatial",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-218",
+      "last_updated_turn": "turn-218"
+    },
+    {
+      "target_id": "char-elder-lyra",
+      "current_relationship": "collaborates_with",
+      "type": "partnership",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    },
+    {
+      "target_id": "char-lyrawyn",
+      "current_relationship": "collaborates_with",
+      "type": "partnership",
+      "status": "dormant",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-324",
+      "last_updated_turn": "turn-324"
+    }
+  ]
+}

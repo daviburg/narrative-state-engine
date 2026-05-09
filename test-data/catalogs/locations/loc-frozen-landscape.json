@@ -1,0 +1,44 @@
+{
+  "id": "loc-frozen-landscape",
+  "name": "the frozen landscape",
+  "type": "location",
+  "identity": "A desolate, otherworldly expanse marked by unnatural geometric patterns and crystalline growths, suggesting a hidden, arcane influence. The terrain exhibits signs of subtle but pervasive magical interference, affecting both environment and perception.",
+  "current_status": "Being explored by the player character, who is mapping anomalies such as hexagonal melt patterns, crystalline formations, and energy distortions that hint at a deeper, mysterious power source.",
+  "status_updated_turn": "turn-201",
+  "stable_attributes": {
+    "appearance": {
+      "value": "Frozen terrain with hexagonal melt patterns, crystalline growths, and metallic fragments; vegetation recoils from an invisible boundary.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-201"
+    },
+    "atmosphere": {
+      "value": "Cold, sterile, and thinning air in certain pockets, suggesting an otherworldly presence.",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-201"
+    },
+    "environmental_effects": {
+      "value": "Localized thinning of air, colder temperatures, and subtle leaching of life from the ecosystem.",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-201"
+    },
+    "notable_features": {
+      "value": "Hexagonal melt patterns, crystalline formations, and metallic fragments radiating sterile energy.",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-201"
+    }
+  },
+  "volatile_state": {
+    "location": "Frozen landscape near the glowing mountain peaks",
+    "condition": "Unstable and eerie, with perceptual distortions and physical anomalies",
+    "current_activity": "Mapping arcane anomalies and tracing the mountain's influence",
+    "last_updated_turn": "turn-201",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-201",
+  "last_updated_turn": "turn-201",
+  "relationships": []
+}

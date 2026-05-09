@@ -1,0 +1,32 @@
+{
+  "id": "loc-shamans-dwelling",
+  "name": "the shaman's dwelling",
+  "type": "location",
+  "identity": "A secluded, contemplative space where the shaman resides, marked by an ornate dwelling and a small, flickering flame. It is a place of quiet reflection, spiritual practice, and experimentation, where the player and Kael refine their methods to adapt to the shifting environment.",
+  "current_status": "The player and Kael are in the dwelling, focusing on refining their methods to adapt to the shifting environment. The player is testing the fragment's pulse, improving shelter design, and maintaining balance with the Southern Tribes through careful observation and adaptation.",
+  "status_updated_turn": "turn-223",
+  "stable_attributes": {
+    "appearance": {
+      "value": "ornate dwelling, small flickering flame, quiet contemplation",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-117"
+    },
+    "role": {
+      "value": "a place of spiritual practice, experimentation, and strategic adaptation",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-222"
+    }
+  },
+  "volatile_state": {
+    "condition": "focused and adaptive",
+    "location": "the shaman's dwelling",
+    "current_activity": "The player and Kael are refining their methods to adapt to the shifting environment. The player is testing the fragment's pulse, improving shelter design, and maintaining balance with the Southern Tribes through careful observation and adaptation.",
+    "last_updated_turn": "turn-223",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-117",
+  "last_updated_turn": "turn-223",
+  "relationships": []
+}
