@@ -80,6 +80,16 @@ class TestLoadFailedTurns:
         result = load_failed_turns(log_path)
         assert result == ["turn-020"]
 
+    def test_failure_after_success_marks_as_failed(self, tmp_path):
+        """When a turn succeeds first but fails in a later entry, it should be marked failed."""
+        log_path = str(tmp_path / "extraction-log.jsonl")
+        with open(log_path, "w") as f:
+            f.write(json.dumps({"turn_id": "turn-005", "discovery_ok": True}) + "\n")
+            f.write(json.dumps({"turn_id": "turn-005", "discovery_ok": False}) + "\n")
+
+        result = load_failed_turns(log_path)
+        assert result == ["turn-005"]
+
 
 # ---------------------------------------------------------------------------
 # load_turn_dicts tests

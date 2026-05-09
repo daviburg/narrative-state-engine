@@ -82,6 +82,15 @@ class RetryStats:
             "max_consecutive_rate_limits": self._max_consecutive_rate_limits,
         }
 
+    def record_terminal_error(self, key: str) -> None:
+        """Record a terminal error (e.g. truncation, quota_exhausted) in errors_by_status.
+
+        Unlike record_error(), this does not increment total_requests or
+        reset consecutive_rate_limits — the request was already counted.
+        """
+        with self._lock:
+            self.errors_by_status[key] = self.errors_by_status.get(key, 0) + 1
+
     def has_errors(self) -> bool:
         return bool(self.errors_by_status)
 
@@ -373,6 +382,7 @@ class LLMClient:
             print(f"  Rate limited (429), {ra_msg}{context}", file=sys.stderr)
 
             if self.stats.consecutive_rate_limits >= self.consecutive_rate_limit_threshold:
+                self.stats.record_terminal_error("quota_exhausted")
                 raise QuotaExhaustedError(
                     f"Quota appears exhausted: {self.stats.consecutive_rate_limits} "
                     f"consecutive 429 errors. Stopping to avoid wasting requests."
@@ -526,7 +536,10 @@ class LLMClient:
                 self.stats.record_success()
                 return parsed
 
-            except (LLMTruncationError, QuotaExhaustedError):
+            except LLMTruncationError:
+                self.stats.record_terminal_error("truncation")
+                raise
+            except QuotaExhaustedError:
                 raise
             except Exception as e:
                 last_error = e
@@ -550,7 +563,10 @@ class LLMClient:
                 )
                 self.stats.record_success()
                 return result
-            except (LLMTruncationError, QuotaExhaustedError):
+            except LLMTruncationError:
+                self.stats.record_terminal_error("truncation")
+                raise
+            except QuotaExhaustedError:
                 raise
             except Exception as fb_err:
                 raise LLMExtractionError(

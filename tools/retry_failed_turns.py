@@ -68,8 +68,7 @@ def load_failed_turns(extraction_log_path: str) -> list[str]:
     discovery_ok=False. If a turn has both a failure and a later success,
     the success wins (it's already been retried successfully).
     """
-    succeeded: set[str] = set()
-    failed: set[str] = set()
+    last_status: dict[str, bool] = {}
 
     if not os.path.exists(extraction_log_path):
         return []
@@ -87,13 +86,11 @@ def load_failed_turns(extraction_log_path: str) -> list[str]:
             if not turn_id:
                 continue
             if entry.get("discovery_ok") is True:
-                succeeded.add(turn_id)
-                failed.discard(turn_id)
+                last_status[turn_id] = True
             elif entry.get("discovery_ok") is False:
-                if turn_id not in succeeded:
-                    failed.add(turn_id)
+                last_status[turn_id] = False
 
-    return sorted(failed)
+    return sorted(tid for tid, ok in last_status.items() if not ok)
 
 
 def load_turn_dicts(session_dir: str) -> list[dict]:
@@ -164,6 +161,9 @@ def merge_parallel_results(
     Each result contains a full catalog snapshot. We merge new/updated
     entities sequentially.
     """
+    # NOTE: Full snapshot merge can overwrite newer fields when --workers > 1.
+    # Currently low-risk since turns are processed sequentially per worker.
+    # A proper fix would merge only per-turn deltas. See issue #292.
     for turn_id, result_catalogs, result_events, result_timeline, failed, log_record in results:
         if failed:
             # Don't merge data from failed extractions
