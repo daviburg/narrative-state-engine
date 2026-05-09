@@ -293,6 +293,48 @@ def _load_schema(name: str) -> dict | None:
     return _schema_cache.get(name)
 
 
+def _normalize_entity_location(entity_data: dict, catalogs: dict) -> None:
+    """Replace free-text volatile_state.location with loc-* ID when possible.
+
+    If the entity's location string matches a known location entity's name
+    or alias (case-insensitive), replace it with the loc-* ID.  This makes
+    spatial queries (scene graph, co-location filtering) reliable.
+    """
+    vol = entity_data.get("volatile_state")
+    if not isinstance(vol, dict):
+        return
+    loc_value = vol.get("location")
+    if not loc_value or not isinstance(loc_value, str):
+        return
+    # Already a loc-* ID
+    if loc_value.startswith("loc-"):
+        return
+
+    loc_lower = loc_value.lower().strip()
+    if not loc_lower:
+        return
+
+    # Build name→ID lookup from location catalog
+    locations = catalogs.get("locations.json", [])
+    for loc_entity in locations:
+        loc_id = loc_entity.get("id", "")
+        # Check name
+        if loc_entity.get("name", "").lower().strip() == loc_lower:
+            vol["location"] = loc_id
+            print(f"  NORMALIZE_LOC: {loc_value!r} -> {loc_id}", file=sys.stderr)
+            return
+        # Check aliases
+        sa = loc_entity.get("stable_attributes", {}).get("aliases")
+        if sa:
+            alias_val = sa.get("value", "") if isinstance(sa, dict) else sa
+            aliases = alias_val if isinstance(alias_val, list) else [alias_val] if alias_val else []
+            for alias in aliases:
+                if isinstance(alias, str) and alias.lower().strip() == loc_lower:
+                    vol["location"] = loc_id
+                    print(f"  NORMALIZE_LOC: {loc_value!r} -> {loc_id} (alias match)", file=sys.stderr)
+                    return
+
+
 def _coerce_entity_fields(entity_data) -> dict | None:
     """Auto-coerce common LLM output quirks before schema validation.
 
@@ -2401,6 +2443,7 @@ def extract_and_merge(
                 _phase_log["detail_ok"] = False
                 _phase_log["detail_error"] = _detail_err
             elif entity_data:
+                _normalize_entity_location(entity_data, catalogs)
                 merge_entity(catalogs, entity_data)
                 # Stub clearing — only for existing (non-new) entities
                 if not entity_ref.get("is_new", True):
@@ -2432,6 +2475,7 @@ def extract_and_merge(
                     entity_data = _coerce_entity_fields(entity_data)
                 if entity_data and _validate_entity(entity_data):
                     _filter_pc_attributes(entity_data)
+                    _normalize_entity_location(entity_data, catalogs)
                     merge_entity(catalogs, entity_data)
                     _sanitize_pc_catalog_entry(catalogs)
                     pc_updated = True
@@ -2570,6 +2614,7 @@ def extract_and_merge(
                 continue
             if entity_data and _validate_entity(entity_data):
                 _filter_pc_attributes(entity_data)
+                _normalize_entity_location(entity_data, catalogs)
                 merge_entity(catalogs, entity_data)
                 _effective_identity = entity_data.get("identity")
                 if not _effective_identity and current_entry:
@@ -2602,6 +2647,7 @@ def extract_and_merge(
                     entity_data = _coerce_entity_fields(entity_data)
                 if entity_data and _validate_entity(entity_data):
                     _filter_pc_attributes(entity_data)
+                    _normalize_entity_location(entity_data, catalogs)
                     merge_entity(catalogs, entity_data)
                     _sanitize_pc_catalog_entry(catalogs)
                     pc_updated = True
@@ -3401,6 +3447,7 @@ def backfill_stubs(
             if entity_data and _validate_entity(entity_data):
                 # Preserve first_seen_turn from original stub
                 entity_data["first_seen_turn"] = first_seen
+                _normalize_entity_location(entity_data, catalogs)
                 merge_entity(catalogs, entity_data)
                 # Clear stub marker so entity won't be re-flagged (#128)
                 merged = find_entity_by_id(catalogs, entity_id)
@@ -3694,6 +3741,7 @@ def refresh_entities(
                         "last_updated_turn")
                 else:
                     entity_data["last_updated_turn"] = current_turn_id
+                _normalize_entity_location(entity_data, catalogs)
                 merge_entity(catalogs, entity_data)
                 refreshed += 1
                 print(f"  REFRESH: Updated stale entity '{entity_id}' "

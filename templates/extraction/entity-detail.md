@@ -19,7 +19,7 @@ Return a single JSON object conforming to this V2 structure:
 - "volatile_state": object — current state snapshot. Updated every turn the entity appears. Fields:
   - "condition": string — current physical/mental condition
   - "equipment": array of strings — currently carried/worn items
-  - "location": string — current location
+  - "location": string — current location. Use the `loc-*` entity ID (e.g. `loc-longhouse`) when the entity is at a location that exists in the known-entity list. Fall back to a short place name only if no matching location entity exists.
   - "current_activity": string — what the entity is currently doing (prefer updating this key over creating new per-turn keys)
   - "last_updated_turn": string — set to the current turn ID
   - Additional fields allowed as needed.
@@ -54,4 +54,4 @@ Rules:
   Preserve existing stable attributes across turns. Only add or update attributes that represent lasting character state.
 
 Return the result as a JSON object with a single key "entity" containing the entity object.
-Example: {"entity": {"id": "char-elder", "name": "The elder", "type": "character", "identity": "An elderly authority figure in the tribal community, known for gnarled hands and a sharp gaze.", "current_status": "Speaking with the player at the council fire, assigning a new task.", "status_updated_turn": "turn-019", "stable_attributes": {"role": {"value": "tribal leader", "inference": true, "confidence": 0.8, "source_turn": "turn-019"}, "appearance": {"value": "gnarled hands, sharp gaze", "inference": false, "confidence": 1.0, "source_turn": "turn-019"}}, "volatile_state": {"condition": "alert and engaged", "location": "council fire", "last_updated_turn": "turn-019"}, "first_seen_turn": "turn-019", "last_updated_turn": "turn-019"}}
+Example: {"entity": {"id": "char-elder", "name": "The elder", "type": "character", "identity": "An elderly authority figure in the tribal community, known for gnarled hands and a sharp gaze.", "current_status": "Speaking with the player at the council fire, assigning a new task.", "status_updated_turn": "turn-019", "stable_attributes": {"role": {"value": "tribal leader", "inference": true, "confidence": 0.8, "source_turn": "turn-019"}, "appearance": {"value": "gnarled hands, sharp gaze", "inference": false, "confidence": 1.0, "source_turn": "turn-019"}}, "volatile_state": {"condition": "alert and engaged", "location": "loc-council-fire", "last_updated_turn": "turn-019"}, "first_seen_turn": "turn-019", "last_updated_turn": "turn-019"}}
