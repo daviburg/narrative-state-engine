@@ -109,6 +109,14 @@ Run `python tools/validate.py` to check compliance before committing.
 
 ## Development Workflow
 
+### Never Push Directly to Main
+
+- **All changes must go through a pull request.** Do not commit or push directly to `main`.
+- Always create a feature/fix branch first, commit there, push the branch, and open a PR.
+- This applies to all changes — code, docs, config, schemas, templates — no exceptions.
+- If you are on `main`, create a branch before making any commits: `git checkout -b <branch-name>`.
+- After the PR is merged, do not push additional commits to `main` directly.
+
 ### Branch Naming
 
 - Use `fix/` prefix for bug fixes, `feat/` for new features, and `docs/` for documentation-only changes.
