@@ -213,7 +213,7 @@ force-closes the connection, converting the hang into a retriable error.
 - **Ollama streaming path**: A `threading.Timer` force-closes the HTTP
   connection if no data arrives within the deadline.
 - **OpenAI-compat path**: The SDK call is wrapped in a thread with a hard
-  wall-clock deadline via `concurrent.futures`.
+  wall-clock deadline via a daemon thread.
 
 When the watchdog fires, you'll see a log line:
 
