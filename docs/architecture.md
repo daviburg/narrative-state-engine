@@ -248,6 +248,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files; supports `-Framework`/`-PlayerLabel` passthrough and safe argument quoting for values with spaces |
 | `tools/watch_extraction_detached.ps1` | Show status and tail logs for detached extraction runs |
 | `tools/stop_extraction_detached.ps1` | Stop detached extraction runs by PID file |
+| `tools/run_with_heartbeat.py` / `.ps1` / `.sh` | Heartbeat wrapper — keeps terminal alive during long commands for idle-detection-based completion notification |
 
 ---
 

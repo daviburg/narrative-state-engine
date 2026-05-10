@@ -3,8 +3,8 @@
     Heartbeat wrapper for long-running commands.
 
 .DESCRIPTION
-    Executes a command and prints a '.' every 500ms to keep terminal idle
-    detection alive. When the command finishes, heartbeat stops and the
+    Executes a command and prints a '.' to stderr every 500ms to keep terminal
+    idle detection alive. When the command finishes, heartbeat stops and the
     terminal goes idle, triggering automatic completion notification.
 
 .PARAMETER Command
@@ -30,7 +30,7 @@ $job = Start-Job -ScriptBlock {
 # Print heartbeat while job is running
 try {
     while ($job.State -eq 'Running') {
-        Write-Host -NoNewline "."
+        [Console]::Error.Write(".")
         Start-Sleep -Milliseconds 500
     }
 }
@@ -44,7 +44,7 @@ finally {
 # Collect output and display it
 $output = Receive-Job -Job $job
 if ($output) {
-    Write-Host ""
+    [Console]::Error.WriteLine("")
     $output | ForEach-Object { Write-Host $_ }
 }
 
