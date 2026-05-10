@@ -30,7 +30,8 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 5. **Document**: Update architecture.md, roadmap.md, or usage.md as needed (Rule 8).
 6. **Commit**: Use conventional commit prefixes (`fix:`, `feat:`, `docs:`, `chore:`).
 7. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
-8. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). Address each comment with a code fix or explanation. Respond to each comment on the PR. Do not consider the PR complete until all automated review comments are resolved.
+8. **CI gate**: After every push (initial or follow-up), run `gh pr checks <PR#>` and wait for all checks to pass. If CI fails, diagnose and fix immediately before proceeding. Never hand off to @tester or @reviewer with a red CI.
+9. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). Address each comment with a code fix or explanation. Respond to each comment on the PR. Do not consider the PR complete until all automated review comments are resolved.
 
 ## Key Conventions
 
