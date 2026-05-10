@@ -21,46 +21,36 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Start the command as a job
-$job = Start-Job -ScriptBlock {
-    param($cmd)
-    Invoke-Expression $cmd
-} -ArgumentList $Command
+# Parse command and arguments
+$parts = $Command -split ' ', 2
+$exe = $parts[0]
+$arguments = if ($parts.Length -gt 1) { $parts[1] } else { $null }
 
-# Print heartbeat while job is running
+# Start process directly (not via job/Invoke-Expression)
+$procArgs = @{
+    FilePath    = $exe
+    NoNewWindow = $true
+    PassThru    = $true
+}
+if ($arguments) { $procArgs.ArgumentList = $arguments }
+$proc = Start-Process @procArgs
+
+# Heartbeat while process is running
 try {
-    while ($job.State -eq 'Running') {
+    while (-not $proc.HasExited) {
         [Console]::Error.Write(".")
         Start-Sleep -Milliseconds 500
     }
 }
 finally {
-    # Ensure job is cleaned up on Ctrl+C
-    if ($job.State -eq 'Running') {
-        Stop-Job -Job $job
+    if (-not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force
     }
 }
 
-# Collect output and display it
-$output = Receive-Job -Job $job
-if ($output) {
-    [Console]::Error.WriteLine("")
-    $output | ForEach-Object { Write-Host $_ }
-}
+$proc.WaitForExit()
+$exitCode = $proc.ExitCode
 
-# Get exit code from job
-$exitCode = 0
-if ($job.State -eq 'Failed') {
-    $exitCode = 1
-    $jobError = $job.ChildJobs[0].JobStateInfo.Reason
-    if ($jobError) {
-        Write-Host ""
-        Write-Host "Error: $jobError" -ForegroundColor Red
-    }
-}
-
-Remove-Job -Job $job -Force
-
-Write-Host ""
-Write-Host "Command exited with code: $exitCode"
+[Console]::Error.WriteLine("")
+[Console]::Error.WriteLine("Command exited with code: $exitCode")
 exit $exitCode
