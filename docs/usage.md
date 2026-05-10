@@ -203,6 +203,29 @@ inherit from the primary config. `LLMTruncationError` and
 `QuotaExhaustedError` are never retried through the fallback — they
 propagate immediately.
 
+### Timeout Watchdog
+
+The LLM client includes a wall-clock watchdog that prevents indefinite hangs
+when the LLM server stalls (e.g., GPU lockup, network issue mid-stream). The
+watchdog fires after `timeout_seconds × 3` seconds of total elapsed time and
+force-closes the connection, converting the hang into a retriable error.
+
+- **Ollama streaming path**: A `threading.Timer` force-closes the HTTP
+  connection if no data arrives within the deadline.
+- **OpenAI-compat path**: The SDK call is wrapped in a thread with a hard
+  wall-clock deadline via `concurrent.futures`.
+
+When the watchdog fires, you'll see a log line:
+
+```
+WATCHDOG: aborting stalled Ollama stream after 180s
+WATCHDOG: LLM call exceeded 180s wall-clock deadline
+```
+
+The error is caught by the normal retry loop, so stalled connections are
+automatically retried up to `retry_attempts` times. No configuration is
+needed — the watchdog is always active and transparent to callers.
+
 ### Using Ollama
 
 Ollama is an alternative local backend. Configure `config/llm.json`:
