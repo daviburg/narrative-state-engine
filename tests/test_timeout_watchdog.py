@@ -1,5 +1,6 @@
 """Tests for wall-clock watchdog timers in LLM client (#195, #281)."""
 
+import importlib.util
 import json
 import os
 import sys
@@ -94,6 +95,10 @@ class TestCallWithDeadline:
 # ---------------------------------------------------------------------------
 
 
+@pytest.mark.skipif(
+    not importlib.util.find_spec("httpx"),
+    reason="httpx not installed (optional LLM dependency)",
+)
 class TestOllamaStreamingWatchdog:
     """Verify watchdog aborts stalled Ollama streaming connections."""
 
