@@ -34,6 +34,7 @@ $procArgs = @{
 }
 if ($arguments) { $procArgs.ArgumentList = $arguments }
 $proc = Start-Process @procArgs
+$null = $proc.Handle   # Pin native handle so ExitCode is available after exit
 
 # Heartbeat while process is running
 try {
