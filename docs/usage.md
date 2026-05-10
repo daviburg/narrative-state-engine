@@ -1485,3 +1485,53 @@ Both catalogs and events are saved to disk after recovery.
 ## Example Session
 
 See `examples/demo-session/` for a complete worked example with 6 turns, 3 entities, 2 plot threads, and annotated analysis.
+
+---
+
+## Heartbeat Wrapper for Long-Running Extraction
+
+### Problem
+
+When an AI agent session launches a long extraction batch (15–25 minutes) via `run_in_terminal mode=async`, VS Code's idle detection considers the terminal "finished" as soon as output stops for >1 second. The agent then resorts to hundreds of polling calls to detect completion, wasting context window budget.
+
+### Solution
+
+The heartbeat wrapper scripts print a `.` character every 500ms to stderr to keep the terminal "alive" until the wrapped command finishes. Dots go to stderr so they don't corrupt structured stdout output (VS Code idle detection watches all terminal output, not just stdout). When the command exits, the heartbeat stops, the terminal goes idle (>1000ms silence), and the agent receives an automatic completion notification. This turns O(n) polling into exactly 1 async call.
+
+### Usage
+
+**Python (cross-platform, recommended):**
+```bash
+python tools/run_with_heartbeat.py python tools/bootstrap_session.py --session sessions/session-001 --all
+```
+
+**Bash (Linux/macOS/WSL):**
+```bash
+# Ensure executable permission on fresh clones:
+chmod +x tools/run_with_heartbeat.sh
+
+./tools/run_with_heartbeat.sh python tools/bootstrap_session.py --session sessions/session-001 --all
+
+# Or invoke directly with bash (no chmod needed):
+bash tools/run_with_heartbeat.sh python tools/bootstrap_session.py --session sessions/session-001 --all
+```
+
+**PowerShell (Windows):**
+```powershell
+.\tools\run_with_heartbeat.ps1 -Command "python tools/bootstrap_session.py --session sessions/session-001 --all"
+```
+
+### With `run_in_terminal mode=async`
+
+In a Copilot agent session, wrap the extraction command:
+
+```
+run_in_terminal mode=async:
+  python tools/run_with_heartbeat.py python tools/bootstrap_session.py --session sessions/session-001 --all
+```
+
+The agent will receive automatic notification when extraction completes, with no polling required.
+
+### Exit Code Propagation
+
+All wrapper variants propagate the wrapped command's exit code. If the extraction fails with exit code 1, the wrapper also exits with code 1.
