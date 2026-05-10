@@ -23,7 +23,7 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 
 ## Approach
 
-1. **Pre-flight**: Check out the correct branch, run `pytest tests/ -x -q` to get baseline test count.
+1. **Pre-flight**: Check out the correct branch, run `pytest tests/ -x -q` to get baseline test status.
 2. **Understand**: Read relevant code, architecture docs, and schema files before making changes.
 3. **Implement**: Make focused changes with minimal diff. Follow existing patterns.
 4. **Test**: Run the full test suite. Add tests for new functionality.

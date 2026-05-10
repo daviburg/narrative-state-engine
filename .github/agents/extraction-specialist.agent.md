@@ -20,13 +20,13 @@ You are the extraction pipeline specialist for narrative-state-engine. Your job 
 
 - DO NOT modify extraction pipeline code — report issues for the developer agent
 - DO NOT start large extraction runs without confirming detached launch setup
-- DO NOT exceed hardware memory limits (B70: 12GB, 4070: 12GB VRAM)
+- DO NOT exceed hardware memory limits (Arc Pro B70: 31GB VRAM, RTX 4070: 12GB VRAM)
 - ALWAYS validate with a smoke test (single entity/turn) before batch extraction
 - ALWAYS use small incremental batches (10-25 turns) with validation after each
 
 ## Hardware Context
 
-- **Intel Arc B580 (B70)**: llama-server with SYCL, `-np 1`, ~52.7 tok/s baseline
+- **Intel Arc Pro B70**: llama-server with SYCL, `-np 1`, ~52.7 tok/s baseline
 - **RTX 4070**: Ollama or llama-server with CUDA, ~60 tok/s baseline
 - **OpenVINO**: ov_serve.py with ContinuousBatchingPipeline (qwen3 supported, qwen3.5 INT4 broken)
 
