@@ -135,6 +135,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 
 - **Five-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor
 - **Intra-turn parallelism** (#282): When `parallel_workers > 1` in `config/llm.json`, entity detail, PC detail, relationship mapping, and event extraction run concurrently via `ThreadPoolExecutor` after discovery completes. Results are merged sequentially (entities → relationships → events) to maintain catalog consistency. The inter-call delay is applied once per turn instead of between each call. With `parallel_workers: 1` (default), the pipeline uses the original sequential execution path.
+- **Multi-endpoint dispatch**: When `base_urls` (list) is configured in `config/llm.json`, `LLMClient` creates one `OpenAI` client per endpoint and distributes requests via thread-safe round-robin. This enables multi-GPU setups where each `ov_serve.py` instance targets a different GPU (e.g., `--device GPU.0` on port 8000, `--device GPU.1` on port 8001). With `parallel_workers > 1`, concurrent intra-turn requests are spread across all endpoints. Falls back to the single `base_url` when the list is absent.
 - Prompt templates in `templates/extraction/` define each agent's behavior
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`; includes per-pair relationship consolidation, `_dedup_relationships()` safety net (#183), and `cleanup_dangling_relationships()` to remove refs to non-existent entities (#184)
@@ -243,7 +244,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, Google Gemini, etc.) with automatic fallback provider support (#301) |
 | `tools/dedup_audit.py` | LLM-assisted post-extraction dedup: identifies duplicate entities via name similarity heuristics, scores with LLM, auto-merges or flags for review (#306) |
 | `tools/discovery_baseline.py` | Discovery output measurement harness: runs entity discovery against a live LLM, reports token consumption, entity counts, and categorization (active/passive/spurious) (#310) |
-| `server/ov_serve.py` | OpenVINO GenAI REST server — OpenAI-compatible `/v1/chat/completions` endpoint using `ContinuousBatchingPipeline` with prefix caching and dynamic batching (#299) |
+| `server/ov_serve.py` | OpenVINO GenAI REST server — OpenAI-compatible `/v1/chat/completions` endpoint using `ContinuousBatchingPipeline` with prefix caching and dynamic batching. Supports `--device` flag for multi-GPU targeting (e.g., `GPU.0`, `GPU.1`) (#299) |
 | `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files; supports `-Framework`/`-PlayerLabel` passthrough and safe argument quoting for values with spaces |
 | `tools/watch_extraction_detached.ps1` | Show status and tail logs for detached extraction runs |
 | `tools/stop_extraction_detached.ps1` | Stop detached extraction runs by PID file |

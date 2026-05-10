@@ -403,6 +403,45 @@ Key settings for OpenVINO servers:
 - **`temperature: 0.3`** — Avoid 0.0 with qwen3 models (can cause empty
   responses or infinite thinking loops).
 
+#### Multi-GPU Setup
+
+For systems with multiple GPUs, run one `ov_serve.py` instance per GPU on
+different ports, each pinned to a specific device:
+
+```bash
+# GPU 0 on port 8000
+python server/ov_serve.py --model-dir ./models/qwen3-8b-int4-ov \
+    --port 8000 --host 0.0.0.0 --device GPU.0
+
+# GPU 1 on port 8001
+python server/ov_serve.py --model-dir ./models/qwen3-8b-int4-ov \
+    --port 8001 --host 0.0.0.0 --device GPU.1
+```
+
+Configure `config/llm.json` with `base_urls` (list) to enable round-robin
+dispatch across both endpoints:
+
+```json
+{
+  "provider": "openai",
+  "base_url": "http://<server-ip>:8000/v1",
+  "base_urls": [
+    "http://<server-ip>:8000/v1",
+    "http://<server-ip>:8001/v1"
+  ],
+  "parallel_workers": 4
+}
+```
+
+> Other keys (model, temperature, etc.) omitted for brevity — see examples above.
+
+- `base_url` is kept for backward compatibility and used by Ollama paths;
+  `base_urls` takes precedence for the OpenAI client pool.
+- With `parallel_workers: 4` and 2 endpoints, each GPU receives ~2 concurrent
+  requests on average, activating the server-side dynamic batching for higher
+  aggregate throughput.
+- Each GPU maintains its own prefix cache independently.
+
 #### Thinking Suppression
 
 Qwen3 models generate `<think>...</think>` blocks by default, which consume
