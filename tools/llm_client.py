@@ -11,6 +11,7 @@ import os
 import random
 import re
 import sys
+import threading
 import time
 
 
@@ -126,12 +127,26 @@ class LLMClient:
         # Disable SDK-level retries — we handle retries ourselves to avoid
         # the SDK's max_retries (default 2) multiplying with our retry_attempts,
         # which caused up to 9 attempts per call and wasted quota (#215).
-        self.client = OpenAI(
-            base_url=self.config.get("base_url", "https://api.openai.com/v1"),
-            api_key=api_key or "not-needed",
-            timeout=self.config.get("timeout_seconds", 60),
-            max_retries=0,
-        )
+        #
+        # Multi-endpoint support: when "base_urls" (list) is configured,
+        # create one OpenAI client per endpoint and round-robin across them.
+        # Falls back to single "base_url" when the list is absent.
+        base_urls = self.config.get("base_urls")
+        if not base_urls:
+            base_urls = [self.config.get("base_url", "https://api.openai.com/v1")]
+        self._clients = [
+            OpenAI(
+                base_url=url,
+                api_key=api_key or "not-needed",
+                timeout=self.config.get("timeout_seconds", 60),
+                max_retries=0,
+            )
+            for url in base_urls
+        ]
+        self._client_index = 0
+        self._client_lock = threading.Lock()
+        # Keep self.client as primary for backward compatibility (Ollama paths, etc.)
+        self.client = self._clients[0]
         self.model = self.config.get("model", "gpt-4o")
         self.temperature = self.config.get("temperature", 0.0)
         self.max_tokens = self.config.get("max_tokens", 4096)
@@ -172,6 +187,22 @@ class LLMClient:
         # would trip rate limits / quota thresholds (#282 review).
         if self.parallel_workers > 1 and self._is_cloud_provider:
             self.parallel_workers = 1
+
+        if len(self._clients) > 1:
+            print(
+                f"  Multi-endpoint: {len(self._clients)} endpoints configured, "
+                f"round-robin dispatch enabled",
+                file=sys.stderr,
+            )
+
+    def _next_client(self):
+        """Return the next OpenAI client in round-robin order (thread-safe)."""
+        if len(self._clients) == 1:
+            return self._clients[0]
+        with self._client_lock:
+            client = self._clients[self._client_index]
+            self._client_index = (self._client_index + 1) % len(self._clients)
+            return client
 
     @property
     def _is_ollama(self) -> bool:
@@ -503,7 +534,7 @@ class LLMClient:
                         if extra_body:
                             kwargs["extra_body"] = extra_body
 
-                    response = self.client.chat.completions.create(**kwargs)
+                    response = self._next_client().chat.completions.create(**kwargs)
                     raw_text = response.choices[0].message.content
                     finish_reason = getattr(response.choices[0], "finish_reason", None)
 
@@ -712,7 +743,7 @@ class LLMClient:
                         if extra_body_raw:
                             kwargs["extra_body"] = extra_body_raw
 
-                    response = self.client.chat.completions.create(**kwargs)
+                    response = self._next_client().chat.completions.create(**kwargs)
                     raw_text = response.choices[0].message.content
 
                     if not raw_text:

@@ -43,6 +43,7 @@ REQUEST_TIMEOUT_S = 600  # Batch generation timeout (seconds); 0 = no timeout
 _pipeline_degraded = False  # Set True if reload fails; surfaced via /health
 EXTRA_STOP_TOKEN_IDS: set = set()  # Additional stop token IDs beyond EOS
 TIMEOUT_KEEP_ALIVE = 120  # HTTP keep-alive timeout in seconds
+DEVICE = "GPU"  # OpenVINO device target (GPU, GPU.0, GPU.1, CPU, etc.)
 
 # --- Request/Response Models ---
 
@@ -183,7 +184,7 @@ async def _reload_pipeline():
         pipeline = await loop.run_in_executor(
             None,
             lambda: ov_genai.ContinuousBatchingPipeline(
-                MODEL_DIR, sched_cfg, 'GPU', {'CACHE_DIR': CACHE_DIR}
+                MODEL_DIR, sched_cfg, DEVICE, {'CACHE_DIR': CACHE_DIR}
             ),
         )
         tokenizer = pipeline.get_tokenizer()
@@ -206,12 +207,12 @@ async def lifespan(app: FastAPI):
     sched_cfg.enable_prefix_caching = True
 
     pipeline = ov_genai.ContinuousBatchingPipeline(
-        MODEL_DIR, sched_cfg, 'GPU', {'CACHE_DIR': CACHE_DIR}
+        MODEL_DIR, sched_cfg, DEVICE, {'CACHE_DIR': CACHE_DIR}
     )
     tokenizer = pipeline.get_tokenizer()
 
     elapsed = time.perf_counter() - start
-    print(f"Model loaded in {elapsed:.1f}s (prefix caching enabled, batch_wait={BATCH_WAIT_MS}ms, max_batch={MAX_BATCH_SIZE}, request_timeout={REQUEST_TIMEOUT_S}s)")
+    print(f"Model loaded in {elapsed:.1f}s (device={DEVICE}, prefix caching enabled, batch_wait={BATCH_WAIT_MS}ms, max_batch={MAX_BATCH_SIZE}, request_timeout={REQUEST_TIMEOUT_S}s)")
 
     # Start batch worker
     batch_queue = asyncio.Queue()
@@ -364,13 +365,15 @@ def build_parser():
                         help="Comma-separated extra stop token IDs (beyond EOS)")
     parser.add_argument("--timeout-keep-alive", type=int, default=TIMEOUT_KEEP_ALIVE,
                         help="HTTP keep-alive timeout in seconds (default: 120)")
+    parser.add_argument("--device", type=str, default=DEVICE,
+                        help="OpenVINO device target (default: GPU). Use GPU.0, GPU.1 for multi-GPU")
     return parser
 
 
 def main(argv=None):
     """Parse CLI args, configure globals, and start the server."""
     global MODEL_DIR, CACHE_DIR, MODEL_NAME, BATCH_WAIT_MS, MAX_BATCH_SIZE
-    global CACHE_SIZE_GB, REQUEST_TIMEOUT_S, TIMEOUT_KEEP_ALIVE, EXTRA_STOP_TOKEN_IDS
+    global CACHE_SIZE_GB, REQUEST_TIMEOUT_S, TIMEOUT_KEEP_ALIVE, DEVICE, EXTRA_STOP_TOKEN_IDS
 
     parser = build_parser()
     args = parser.parse_args(argv)
@@ -383,6 +386,7 @@ def main(argv=None):
     CACHE_SIZE_GB = args.cache_size_gb
     REQUEST_TIMEOUT_S = args.request_timeout
     TIMEOUT_KEEP_ALIVE = args.timeout_keep_alive
+    DEVICE = args.device
     if args.stop_token_ids:
         EXTRA_STOP_TOKEN_IDS = {int(x.strip()) for x in args.stop_token_ids.split(",")}
 
