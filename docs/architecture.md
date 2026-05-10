@@ -140,6 +140,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - `tools/catalog_merger.py` merges agent outputs into `framework/catalogs/`; includes per-pair relationship consolidation, `_dedup_relationships()` safety net (#183), and `cleanup_dangling_relationships()` to remove refs to non-existent entities (#184)
 - `tools/llm_client.py` provides a provider-agnostic LLM wrapper (OpenAI, Ollama, Google Gemini, etc.)
+- **Wall-clock watchdog** (#195, #281): Both the Ollama streaming path and the OpenAI-compat path enforce a hard wall-clock deadline of `timeout_seconds × 3`. If the LLM server stalls (GPU hang, network issue), the watchdog force-closes the connection and raises a retriable `LLMExtractionError`. This prevents indefinite hangs without affecting normal operation.
 - `config/llm.json` configures the LLM provider, model, and endpoint
 - All extracted entities are validated against `schemas/entity.schema.json` before merging
 - Entities below a confidence threshold are logged but not cataloged

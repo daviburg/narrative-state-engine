@@ -299,39 +299,77 @@ class LLMClient:
         eval_count = 0
         prompt_eval_count = 0
         done_reason = "?"
+        done_received = False
         start = time.time()
         hard_limit = effective_timeout * 3  # total wall-clock limit
+
+        # Mutable state shared with watchdog timer closure
+        _wd_state = {"watchdog_fired": False}
+
+        def _abort_stream(response, state):
+            """Force-close connection to unblock iter_lines()."""
+            state["watchdog_fired"] = True
+            print(
+                f"  WATCHDOG: aborting stalled Ollama stream after "
+                f"{hard_limit:.0f}s",
+                file=sys.stderr,
+            )
+            try:
+                response.close()
+            except Exception:
+                pass  # Best-effort close — connection may already be dead
 
         with httpx.stream(
             "POST", self._ollama_native_url, json=body, timeout=httpx_timeout,
         ) as resp:
-            for line in resp.iter_lines():
-                if time.time() - start > hard_limit:
-                    break
-                if not line.strip():
-                    continue
-                try:
-                    chunk = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                if chunk.get("done"):
-                    eval_count = chunk.get("eval_count", 0)
-                    prompt_eval_count = chunk.get("prompt_eval_count", 0)
-                    done_reason = chunk.get("done_reason", "?")
-                    break
-                msg = chunk.get("message", {})
-                # Ollama streams qwen3.5 thinking-mode output in a
-                # separate "thinking" field while "content" stays empty.
-                # Collect both so we can diagnose failures.
-                part = msg.get("content", "")
-                if part:
-                    content_parts.append(part)
-                thinking = msg.get("thinking", "")
-                if thinking:
-                    thinking_parts.append(thinking)
+            watchdog = threading.Timer(
+                hard_limit, _abort_stream, args=[resp, _wd_state]
+            )
+            watchdog.daemon = True
+            watchdog.start()
+            try:
+                for line in resp.iter_lines():
+                    if time.time() - start > hard_limit:
+                        print(
+                            f"  WATCHDOG: aborting stalled Ollama stream after "
+                            f"{hard_limit:.0f}s",
+                            file=sys.stderr,
+                        )
+                        break
+                    if not line.strip():
+                        continue
+                    try:
+                        chunk = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue
+                    if chunk.get("done"):
+                        done_received = True
+                        eval_count = chunk.get("eval_count", 0)
+                        prompt_eval_count = chunk.get("prompt_eval_count", 0)
+                        done_reason = chunk.get("done_reason", "?")
+                        break
+                    msg = chunk.get("message", {})
+                    # Ollama streams qwen3.5 thinking-mode output in a
+                    # separate "thinking" field while "content" stays empty.
+                    # Collect both so we can diagnose failures.
+                    part = msg.get("content", "")
+                    if part:
+                        content_parts.append(part)
+                    thinking = msg.get("thinking", "")
+                    if thinking:
+                        thinking_parts.append(thinking)
+            finally:
+                watchdog.cancel()
 
         elapsed = time.time() - start
         raw = "".join(content_parts)
+
+        # Guard: if watchdog fired before a done frame, content is truncated
+        if _wd_state["watchdog_fired"] and not done_received:
+            raise LLMExtractionError(
+                "WATCHDOG: Stream aborted before completion"
+            )
+
         if not raw:
             thinking_text = "".join(thinking_parts)
             # Truncate thinking for log — can be very long
@@ -355,6 +393,38 @@ class LLMClient:
                 partial_text=raw,
             )
         return raw
+
+    def _call_with_deadline(self, fn, deadline_seconds: float):
+        """Call fn() with a hard wall-clock deadline.
+
+        Uses a daemon thread to enforce a maximum wall-clock time. If the
+        deadline expires, raises LLMExtractionError so retry logic engages.
+        The stalled thread is abandoned (daemon=True prevents blocking exit).
+        """
+        result_holder: dict = {}
+
+        def _run():
+            try:
+                result_holder["result"] = fn()
+            except Exception as e:
+                result_holder["error"] = e
+
+        worker = threading.Thread(target=_run, daemon=True)
+        worker.start()
+        worker.join(timeout=deadline_seconds)
+        if worker.is_alive():
+            print(
+                f"  WATCHDOG: LLM call exceeded {deadline_seconds:.0f}s "
+                f"wall-clock deadline",
+                file=sys.stderr,
+            )
+            raise LLMExtractionError(
+                f"WATCHDOG: LLM call exceeded {deadline_seconds:.0f}s "
+                f"wall-clock deadline"
+            )
+        if "error" in result_holder:
+            raise result_holder["error"]
+        return result_holder["result"]
 
     @property
     def _skip_response_format(self) -> bool:
@@ -559,7 +629,11 @@ class LLMClient:
                         if extra_body:
                             kwargs["extra_body"] = extra_body
 
-                    response = self._next_client().chat.completions.create(**kwargs)
+                    hard_deadline = (timeout or self.default_timeout) * 3
+                    response = self._call_with_deadline(
+                        lambda: self._next_client().chat.completions.create(**kwargs),
+                        hard_deadline,
+                    )
                     raw_text = response.choices[0].message.content
                     finish_reason = getattr(response.choices[0], "finish_reason", None)
 
@@ -768,7 +842,11 @@ class LLMClient:
                         if extra_body_raw:
                             kwargs["extra_body"] = extra_body_raw
 
-                    response = self._next_client().chat.completions.create(**kwargs)
+                    hard_deadline = (timeout or self.default_timeout) * 3
+                    response = self._call_with_deadline(
+                        lambda: self._next_client().chat.completions.create(**kwargs),
+                        hard_deadline,
+                    )
                     raw_text = response.choices[0].message.content
 
                     if not raw_text:
