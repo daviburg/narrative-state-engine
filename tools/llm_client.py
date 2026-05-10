@@ -132,8 +132,20 @@ class LLMClient:
         # create one OpenAI client per endpoint and round-robin across them.
         # Falls back to single "base_url" when the list is absent.
         base_urls = self.config.get("base_urls")
-        if not base_urls:
+        if base_urls:
+            if not isinstance(base_urls, list) or not all(
+                isinstance(u, str) for u in base_urls
+            ):
+                raise LLMExtractionError(
+                    "'base_urls' in llm.json must be a list of URL strings."
+                )
+            if not base_urls:
+                raise LLMExtractionError(
+                    "'base_urls' in llm.json must not be empty."
+                )
+        else:
             base_urls = [self.config.get("base_url", "https://api.openai.com/v1")]
+        self._base_urls = base_urls
         self._clients = [
             OpenAI(
                 base_url=url,
@@ -173,6 +185,10 @@ class LLMClient:
             # Build a merged config for the fallback client
             fb_config = dict(self.config)
             fb_config.pop("fallback", None)  # prevent recursion
+            # Clear primary base_urls so fallback uses its own base_url
+            # unless the fallback block explicitly provides base_urls.
+            if "base_urls" not in fallback_cfg:
+                fb_config.pop("base_urls", None)
             fb_config.update(fallback_cfg)
             try:
                 self._fallback_client = LLMClient.__new__(LLMClient)
@@ -352,17 +368,26 @@ class LLMClient:
 
     @property
     def _is_cloud_provider(self) -> bool:
-        """True when the configured provider appears to be a cloud API."""
+        """True when the configured provider appears to be a cloud API.
+
+        Checks all endpoints in the client pool (base_urls) when configured,
+        falling back to base_url. Returns True only if ALL endpoints appear
+        to be cloud (non-local) URLs.
+        """
         if self._is_ollama:
             return False
-        base_url = self.config.get("base_url", "")
-        return not any(local in base_url for local in [
+        urls = getattr(self, '_base_urls', None) or [self.config.get("base_url", "")]
+        local_patterns = [
             "localhost", "127.0.0.1", "0.0.0.0", "[::1]",
             "192.168.", "10.", "172.16.", "172.17.", "172.18.",
             "172.19.", "172.20.", "172.21.", "172.22.", "172.23.",
             "172.24.", "172.25.", "172.26.", "172.27.", "172.28.",
             "172.29.", "172.30.", "172.31.",
-        ])
+        ]
+        return not any(
+            any(local in url for local in local_patterns)
+            for url in urls
+        )
 
     @staticmethod
     def _classify_error(e: Exception) -> tuple[int | None, float | None]:

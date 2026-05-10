@@ -429,10 +429,11 @@ dispatch across both endpoints:
     "http://<server-ip>:8000/v1",
     "http://<server-ip>:8001/v1"
   ],
-  "parallel_workers": 4,
-  ...
+  "parallel_workers": 4
 }
 ```
+
+> Other keys (model, temperature, etc.) omitted for brevity — see examples above.
 
 - `base_url` is kept for backward compatibility and used by Ollama paths;
   `base_urls` takes precedence for the OpenAI client pool.
