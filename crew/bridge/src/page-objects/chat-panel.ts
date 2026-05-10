@@ -4,16 +4,21 @@ import { SELECTORS } from '../selectors';
 const DEFAULT_RESPONSE_TIMEOUT = 120_000; // 2 minutes
 const STABILITY_PERIOD = 2_000; // 2 seconds of no DOM changes = streaming done
 
+/** Returns the platform-appropriate modifier key (Meta on macOS, Control elsewhere). */
+function platformModifier(): string {
+  return process.platform === 'darwin' ? 'Meta' : 'Control';
+}
+
 export class ChatPanel {
   constructor(private page: Page) {}
 
   /**
    * Open the Chat panel via keyboard shortcut.
-   * Tries Ctrl+Shift+I first, then falls back to Command Palette.
+   * Tries Control+Alt+i (Meta+Alt+i on macOS) first, then falls back to Command Palette.
    */
   async open(): Promise<void> {
     // Try the keyboard shortcut for opening Chat
-    await this.page.keyboard.press('Control+Alt+i');
+    await this.page.keyboard.press(`${platformModifier()}+Alt+i`);
 
     // Wait for the chat panel or input to appear
     try {
@@ -28,7 +33,7 @@ export class ChatPanel {
   }
 
   private async openViaCommandPalette(): Promise<void> {
-    await this.page.keyboard.press('Control+Shift+p');
+    await this.page.keyboard.press(`${platformModifier()}+Shift+p`);
     await this.page.waitForSelector(SELECTORS.commandPaletteInput, { timeout: 5_000 });
 
     const input = this.page.locator(SELECTORS.commandPaletteInput);
@@ -52,7 +57,7 @@ export class ChatPanel {
 
     // Clear existing content and type the agent mention
     await input.focus();
-    await this.page.keyboard.press('Control+a');
+    await this.page.keyboard.press(`${platformModifier()}+a`);
     await input.pressSequentially(`@${name} `, { delay: 50 });
   }
 
@@ -80,10 +85,16 @@ export class ChatPanel {
   async waitForResponse(timeout: number = DEFAULT_RESPONSE_TIMEOUT): Promise<void> {
     const startTime = Date.now();
 
-    // First, wait for a response container to appear (indicates processing started)
-    await this.page.waitForSelector(SELECTORS.lastResponse, {
-      timeout: Math.min(timeout, 30_000),
-    });
+    // Count existing responses before waiting so we detect a NEW one
+    const countBefore = await this.page.locator(SELECTORS.responseContainer).count();
+
+    // Wait for a new response container to appear (count increases)
+    await this.page.waitForFunction(
+      ([selector, prevCount]: [string, number]) =>
+        document.querySelectorAll(selector).length > prevCount,
+      [SELECTORS.responseContainer, countBefore] as [string, number],
+      { timeout: Math.min(timeout, 30_000) },
+    );
 
     // Wait for the loading indicator to disappear
     try {
@@ -111,9 +122,9 @@ export class ChatPanel {
   }
 
   private async waitForStability(): Promise<void> {
-    await this.page.evaluate((stabilityMs: number) => {
+    await this.page.evaluate(([stabilityMs, selector]: [number, string]) => {
       return new Promise<void>((resolve) => {
-        const target = document.querySelector('.interactive-item-container:last-child');
+        const target = document.querySelector(selector);
         if (!target) {
           resolve();
           return;
@@ -140,7 +151,7 @@ export class ChatPanel {
           resolve();
         }, stabilityMs);
       });
-    }, STABILITY_PERIOD);
+    }, [STABILITY_PERIOD, SELECTORS.lastResponse] as [number, string]);
   }
 
   /**

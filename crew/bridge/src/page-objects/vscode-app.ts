@@ -7,7 +7,7 @@ export interface VSCodeLaunchOptions {
   executablePath?: string;
   /** Workspace folder to open on launch. */
   workspacePath?: string;
-  /** Temporary user data directory for clean state. If not set, uses a temp dir. */
+  /** Temporary user data directory for clean state. If not set, VS Code uses its default profile. */
   userDataDir?: string;
   /** Extensions to keep enabled (all others are disabled). Defaults to ['GitHub.copilot', 'GitHub.copilot-chat']. */
   enabledExtensions?: string[];
@@ -29,7 +29,7 @@ function resolveExecutablePath(provided?: string): string {
     }
   }
 
-  // Fallback: assume 'code' is on PATH and resolve to electron
+  // Fallback: assume 'code' is on PATH
   return 'code';
 }
 

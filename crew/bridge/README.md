@@ -13,7 +13,8 @@ npm run build
 ## Usage
 
 ```typescript
-import { createBridge } from '@nse/vscode-bridge';
+// Local import — this package is not published to npm
+import { createBridge } from '../bridge/src/index';
 
 const bridge = await createBridge({
   workspacePath: '/path/to/project',

@@ -39,7 +39,7 @@ test.describe('VS Code Bridge Smoke Test', () => {
   });
 
   test('launch VS Code, send prompt, read response', async () => {
-    test.skip(!process.env.BRIDGE_SMOKE, SKIP_REASON);
+    test.skip(!['1', 'true'].includes(process.env.BRIDGE_SMOKE ?? ''), SKIP_REASON);
 
     // Use the repo root as the workspace
     const workspacePath = path.resolve(__dirname, '..', '..', '..');
