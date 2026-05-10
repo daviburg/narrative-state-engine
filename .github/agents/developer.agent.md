@@ -31,7 +31,7 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 6. **Commit**: Use conventional commit prefixes (`fix:`, `feat:`, `docs:`, `chore:`).
 7. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
 8. **CI gate**: After every push (initial or follow-up), run `gh pr checks <PR#>` and wait for all checks to pass. If CI fails, diagnose and fix immediately before proceeding. Never hand off to @tester or @reviewer with a red CI.
-9. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). Address each comment with a code fix or explanation. Respond to each comment on the PR. Do not consider the PR complete until all automated review comments are resolved.
+9. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). For each comment: (a) fix the code or determine why no change is needed, (b) **post a reply on the PR comment thread** using `gh api .../comments/<ID>/replies` explaining what was fixed and referencing the commit hash. Both the code fix AND the reply are required — an unreplied comment is an unresolved conversation, even if the code is fixed.
 
 ## Key Conventions
 
