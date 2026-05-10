@@ -1105,6 +1105,50 @@ During extraction (batch, segmented, or single-turn), the pipeline writes a per-
 - `timestamp` — UTC wall-clock time
 - `discovery_ok`, `detail_ok`, `pc_ok`, `relationships_ok`, `events_ok` — per-phase success flags
 - `*_error` — error message when a phase failed (null on success)
+
+---
+
+## Heartbeat Wrapper for Long-Running Extraction
+
+### Problem
+
+When an AI agent session launches a long extraction batch (15–25 minutes) via `run_in_terminal mode=async`, VS Code's idle detection considers the terminal "finished" as soon as output stops for >1 second. The agent then resorts to hundreds of polling calls to detect completion, wasting context window budget.
+
+### Solution
+
+The heartbeat wrapper scripts print a `.` character every 500ms to keep the terminal "alive" until the wrapped command finishes. When the command exits, the heartbeat stops, the terminal goes idle (>1000ms silence), and the agent receives an automatic completion notification. This turns O(n) polling into exactly 1 async call.
+
+### Usage
+
+**Python (cross-platform, recommended):**
+```bash
+python tools/run_with_heartbeat.py "python tools/bootstrap_session.py --session sessions/session-001 --all"
+```
+
+**Bash (Linux/macOS/WSL):**
+```bash
+./tools/run_with_heartbeat.sh python tools/bootstrap_session.py --session sessions/session-001 --all
+```
+
+**PowerShell (Windows):**
+```powershell
+.\tools\run_with_heartbeat.ps1 -Command "python tools/bootstrap_session.py --session sessions/session-001 --all"
+```
+
+### With `run_in_terminal mode=async`
+
+In a Copilot agent session, wrap the extraction command:
+
+```
+run_in_terminal mode=async:
+  python tools/run_with_heartbeat.py "python tools/bootstrap_session.py --session sessions/session-001 --all"
+```
+
+The agent will receive automatic notification when extraction completes, with no polling required.
+
+### Exit Code Propagation
+
+All wrapper variants propagate the wrapped command's exit code. If the extraction fails with exit code 1, the wrapper also exits with code 1.
 - `new_entities`, `new_events` — counts of entities/events added by this turn
 - `discovery_proposals` — array of all entities proposed by the model for this turn, each with `name`, `is_new`, `proposed_id`, `existing_id`, and `confidence`
 - `discovery_filtered` — array of entities rejected during filtering, each with `name`, `id`, and `reason` (`below_confidence_threshold` or `concept_prefix`)
