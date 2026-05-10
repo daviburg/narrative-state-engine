@@ -184,6 +184,51 @@ class TestOllamaStreamingWatchdog:
             )
             assert result == "hello world"
 
+    def test_partial_content_aborted_raises_error(self, tmp_path):
+        """Watchdog abort with partial content must NOT return truncated data."""
+        cfg = _write_config(tmp_path, {
+            "provider": "ollama",
+            "base_url": "http://localhost:11434/v1",
+            "timeout_seconds": 1,  # hard_limit = 3s
+        })
+        client = LLMClient(config_path=cfg)
+
+        block_event = threading.Event()
+
+        class PartialThenStallResponse:
+            """Yields some content chunks then stalls (no done frame)."""
+
+            def __init__(self):
+                self._closed = False
+
+            def iter_lines(self):
+                # Yield partial content
+                yield json.dumps({"message": {"content": "partial"}, "done": False})
+                yield json.dumps({"message": {"content": " data"}, "done": False})
+                # Then stall until watchdog fires
+                block_event.wait(timeout=10)
+
+            def close(self):
+                self._closed = True
+                block_event.set()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                pass
+
+        stall_resp = PartialThenStallResponse()
+
+        with patch("httpx.stream", return_value=stall_resp):
+            with pytest.raises(LLMExtractionError, match="WATCHDOG"):
+                client._ollama_streaming_chat(
+                    [{"role": "user", "content": "test"}],
+                    timeout=1,
+                )
+            # Watchdog should have closed the connection
+            assert stall_resp._closed
+
 
 # ---------------------------------------------------------------------------
 # Integration: watchdog exception is retryable (#195, #281)

@@ -218,8 +218,8 @@ force-closes the connection, converting the hang into a retriable error.
 When the watchdog fires, you'll see a log line:
 
 ```
-WATCHDOG: aborting stalled Ollama stream after 180s
-WATCHDOG: LLM call exceeded 180s wall-clock deadline
+  WATCHDOG: aborting stalled Ollama stream after 180s
+  WATCHDOG: LLM call exceeded 180s wall-clock deadline
 ```
 
 The error is caught by the normal retry loop, so stalled connections are

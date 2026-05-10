@@ -299,20 +299,32 @@ class LLMClient:
         eval_count = 0
         prompt_eval_count = 0
         done_reason = "?"
+        done_received = False
         start = time.time()
         hard_limit = effective_timeout * 3  # total wall-clock limit
 
-        def _abort_stream(response):
+        # Mutable state shared with watchdog timer closure
+        _wd_state = {"watchdog_fired": False}
+
+        def _abort_stream(response, state):
             """Force-close connection to unblock iter_lines()."""
+            state["watchdog_fired"] = True
+            print(
+                f"  WATCHDOG: aborting stalled Ollama stream after "
+                f"{hard_limit:.0f}s",
+                file=sys.stderr,
+            )
             try:
                 response.close()
             except Exception:
-                pass
+                pass  # Best-effort close — connection may already be dead
 
         with httpx.stream(
             "POST", self._ollama_native_url, json=body, timeout=httpx_timeout,
         ) as resp:
-            watchdog = threading.Timer(hard_limit, _abort_stream, args=[resp])
+            watchdog = threading.Timer(
+                hard_limit, _abort_stream, args=[resp, _wd_state]
+            )
             watchdog.daemon = True
             watchdog.start()
             try:
@@ -331,6 +343,7 @@ class LLMClient:
                     except json.JSONDecodeError:
                         continue
                     if chunk.get("done"):
+                        done_received = True
                         eval_count = chunk.get("eval_count", 0)
                         prompt_eval_count = chunk.get("prompt_eval_count", 0)
                         done_reason = chunk.get("done_reason", "?")
@@ -350,6 +363,13 @@ class LLMClient:
 
         elapsed = time.time() - start
         raw = "".join(content_parts)
+
+        # Guard: if watchdog fired before a done frame, content is truncated
+        if _wd_state["watchdog_fired"] and not done_received:
+            raise LLMExtractionError(
+                "WATCHDOG: Stream aborted before completion"
+            )
+
         if not raw:
             thinking_text = "".join(thinking_parts)
             # Truncate thinking for log — can be very long
@@ -377,17 +397,22 @@ class LLMClient:
     def _call_with_deadline(self, fn, deadline_seconds: float):
         """Call fn() with a hard wall-clock deadline.
 
-        Uses a thread pool to enforce a maximum wall-clock time. If the
+        Uses a daemon thread to enforce a maximum wall-clock time. If the
         deadline expires, raises LLMExtractionError so retry logic engages.
-        The stalled thread is abandoned (not joined) to avoid blocking.
+        The stalled thread is abandoned (daemon=True prevents blocking exit).
         """
-        import concurrent.futures
+        result_holder: dict = {}
 
-        executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        future = executor.submit(fn)
-        try:
-            return future.result(timeout=deadline_seconds)
-        except concurrent.futures.TimeoutError:
+        def _run():
+            try:
+                result_holder["result"] = fn()
+            except Exception as e:
+                result_holder["error"] = e
+
+        worker = threading.Thread(target=_run, daemon=True)
+        worker.start()
+        worker.join(timeout=deadline_seconds)
+        if worker.is_alive():
             print(
                 f"  WATCHDOG: LLM call exceeded {deadline_seconds:.0f}s "
                 f"wall-clock deadline",
@@ -397,8 +422,9 @@ class LLMClient:
                 f"WATCHDOG: LLM call exceeded {deadline_seconds:.0f}s "
                 f"wall-clock deadline"
             )
-        finally:
-            executor.shutdown(wait=False)
+        if "error" in result_holder:
+            raise result_holder["error"]
+        return result_holder["result"]
 
     @property
     def _skip_response_format(self) -> bool:
