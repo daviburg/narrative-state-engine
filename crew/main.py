@@ -1,7 +1,6 @@
 """CLI entry point for CrewAI orchestration."""
 
 import argparse
-import sys
 
 
 def cmd_extract(args):
