@@ -1,0 +1,55 @@
+benchmark_inference:
+  description: >
+    Benchmark LLM inference on {target_gpu} with model {model_name}.
+    Run at least 3 iterations, record tok/s, time-to-first-token, and VRAM usage.
+    Compare against baseline and report improvement percentage.
+  expected_output: >
+    A benchmark report table with columns: run, model, quantization, context_size,
+    tok/s, TTFT_ms, VRAM_MB, and a summary comparing to baseline.
+  agent: "{target_gpu}_optimizer"
+
+run_extraction:
+  description: >
+    Run extraction for session {session_name} covering turns {turn_range}.
+    Use the configured LLM endpoint. Validate output against ground truth after completion.
+  expected_output: >
+    Extraction log summary: turns processed, entities discovered, relationships mapped,
+    events extracted, quality score vs ground truth, and any errors encountered.
+  agent: "tester"
+
+validate_quality:
+  description: >
+    Run the full test suite and extraction validation for the current state.
+    Report pass/fail counts, any regressions, and schema compliance status.
+  expected_output: >
+    Test report: total tests, passed, failed, skipped. Schema validation: pass/fail.
+    Extraction quality: entity coverage %, relationship accuracy %, event completeness %.
+  agent: "tester"
+
+review_branch:
+  description: >
+    Review the changes on branch {branch_name} against main.
+    Check all items in the review checklist: correctness, schema compliance,
+    provenance, documentation, tests, conventions, security, raw immutability.
+  expected_output: >
+    Review report organized by severity (blocking, suggestion, nit) with
+    file/line references and a summary verdict (approve/request-changes).
+  agent: "reviewer"
+
+plan_sprint:
+  description: >
+    Review open GitHub issues, current roadmap status, and recent PRs.
+    Propose the next batch of work with priorities, dependencies, and assignments.
+  expected_output: >
+    Sprint plan: prioritized task list with dependencies, assigned specialist,
+    estimated complexity, and suggested branch names.
+  agent: "pm"
+
+optimize_config:
+  description: >
+    Given benchmark results in {results_file}, recommend optimal llm.json
+    configuration for {target_gpu}. Consider throughput, quality, and stability.
+  expected_output: >
+    Recommended llm.json configuration with rationale for each parameter choice.
+    Include server launch command and any Modelfile changes needed.
+  agent: "{target_gpu}_optimizer"
