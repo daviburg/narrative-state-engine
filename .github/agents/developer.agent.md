@@ -44,3 +44,7 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 - Clean, tested code following existing patterns
 - PRs with descriptive body explaining what changed and why
 - Test results showing no regressions
+
+## Self-Improvement
+
+After each session, review whether your instructions are still accurate. If you discover new coding patterns, conventions, or tool behaviors that should be documented, propose an update to this file via a PR.
