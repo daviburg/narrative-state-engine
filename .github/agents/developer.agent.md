@@ -26,12 +26,11 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 1. **Pre-flight**: Check out the correct branch, run `pytest tests/ -x -q` to get baseline test status.
 2. **Understand**: Read relevant code, architecture docs, and schema files before making changes.
 3. **Implement**: Make focused changes with minimal diff. Follow existing patterns.
-4. **Test**: Run the full test suite. Add tests for new functionality. For scripts and CLI tools that can't be unit-tested, run manual smoke tests (success case, failure case, edge cases) and document the commands in the PR body.
-5. **Smoke test**: For new scripts, wrappers, or CLI tools, execute them on the target platform(s) beyond pytest. Verify they launch, produce expected output, handle errors, and exit cleanly.
-6. **Document**: Update architecture.md, roadmap.md, or usage.md as needed (Rule 8).
-7. **Commit**: Use conventional commit prefixes (`fix:`, `feat:`, `docs:`, `chore:`).
-8. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
-9. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). Address each comment with a code fix or explanation. Respond to each comment on the PR. Do not consider the PR complete until all automated review comments are resolved.
+4. **Test**: Run the full test suite. Add tests for new functionality. For scripts and CLI tools that can't be unit-tested, smoke test them manually: verify they launch, produce expected output, handle errors and bad input, propagate exit codes correctly, and exit cleanly on the target platform(s). Document smoke test commands in the PR body.
+5. **Document**: Update architecture.md, roadmap.md, or usage.md as needed (Rule 8).
+6. **Commit**: Use conventional commit prefixes (`fix:`, `feat:`, `docs:`, `chore:`).
+7. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
+8. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). Address each comment with a code fix or explanation. Respond to each comment on the PR. Do not consider the PR complete until all automated review comments are resolved.
 
 ## Key Conventions
 

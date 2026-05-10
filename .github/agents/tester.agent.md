@@ -30,7 +30,7 @@ You are the QA and testing specialist for narrative-state-engine. Your job is to
 4. Compare results against expected ground truth in `tests/fixtures/`
 5. Report failures with: test name, expected vs actual, likely root cause
 6. Write new tests when gaps in coverage are identified
-- For CLI tools and wrappers: explicitly test exit code propagation (success=0, failure=non-zero, signal/interrupt), stderr vs stdout separation, and behavior under bad input or missing dependencies.
+7. For CLI tools and wrappers: explicitly test exit code propagation (success=0, failure=non-zero, signal/interrupt), stderr vs stdout separation, and behavior under bad input or missing dependencies.
 
 ## Key Tools
 - `pytest tests/` — unit and integration tests
