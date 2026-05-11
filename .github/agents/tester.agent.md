@@ -62,6 +62,17 @@ When a test cannot be executed due to environment constraints (missing hardware,
 - Regression analysis identifying which commit/change introduced the failure
 - New test code following existing patterns in `tests/`
 
+## Comment Verification Protocol
+
+After a squad member replies to an automated PR review comment, verify the claim:
+
+1. **For "Fixed in <sha>" replies**: Check the commit diff to confirm the fix actually addresses the comment. Use `git show <sha>` or `gh api` to verify.
+2. **For "Tracked as follow-up in #N" replies**: Verify the issue exists and is open: `gh issue view N`.
+3. **If verified**: Resolve the conversation on GitHub using `gh api graphql` to minimize the thread.
+4. **If NOT verified**: Reply to the thread with `**[@tester]** Verification failed: <reason>. @developer please correct.` and report to coordinator.
+
+All tester PR comments must be prefixed with `**[@tester]**`.
+
 ## Self-Improvement
 
 After each session, review whether your instructions are still accurate. If you discover new testing patterns, validation techniques, or quality metrics, propose an update to this file via a PR.
