@@ -613,11 +613,25 @@ class TestPCNameProtection:
                 _make_v2_entity("char-elder", "The Elder", turn="turn-015")
             ]
         }
-        update = _make_v2_entity("char-elder", "Tribal Authority", turn="turn-100")
+        # Name with word overlap is accepted (#339 guard allows it)
+        update = _make_v2_entity("char-elder", "Elder Lyra", turn="turn-100")
         merge_entity(catalogs, update)
         npc = catalogs["characters.json"][0]
         # Non-PC entities should still have their name updated
-        assert npc["name"] == "Tribal Authority"
+        assert npc["name"] == "Elder Lyra"
+
+    def test_non_pc_name_rejected_no_overlap(self):
+        """Name change with zero word overlap is rejected (#339)."""
+        catalogs = {
+            "characters.json": [
+                _make_v2_entity("char-elder", "The Elder", turn="turn-015")
+            ]
+        }
+        update = _make_v2_entity("char-elder", "Tribal Authority", turn="turn-100")
+        merge_entity(catalogs, update)
+        npc = catalogs["characters.json"][0]
+        # Guard should reject — no word overlap
+        assert npc["name"] == "The Elder"
 
 
 # ---------------------------------------------------------------------------
