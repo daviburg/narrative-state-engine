@@ -1,10 +1,13 @@
 """Tests for same-turn synonym explosion dedup gate (#337)."""
 import os
 import sys
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
+import semantic_extraction as se
 from semantic_extraction import _same_turn_dedup_gate
+from catalog_merger import CATALOG_KEYS
 
 
 def _make_proposal(name, etype="location", turn="turn-169", is_new=True):
@@ -94,3 +97,83 @@ class TestSameTurnDedupGate:
         turn_200 = [e for e in result if e["source_turn"] == "turn-200" and e["is_new"]]
         assert len(turn_100) == 1
         assert len(turn_200) == 2
+
+
+def _fresh_catalogs():
+    return {fn: [] for fn in CATALOG_KEYS}
+
+
+def _make_stub_llm(discovery_entities):
+    """Build a stub LLM that returns given entities from discovery."""
+    llm = MagicMock()
+    llm.default_timeout = 10
+    llm.pc_max_tokens = 4096
+    llm.delay = MagicMock()
+    llm.config = {"checkpoint_interval": 100}
+
+    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None, schema=None, temperature=None):
+        prompt_lower = system_prompt.lower()
+        if "discover" in prompt_lower or "discovery" in prompt_lower:
+            return {"entities": discovery_entities}
+        if "detail" in prompt_lower:
+            return {"entity": {
+                "id": "char-player",
+                "name": "Player Character",
+                "type": "character",
+                "identity": "The player character.",
+                "first_seen_turn": "turn-001",
+                "last_updated_turn": "turn-001",
+            }}
+        if "relationship" in prompt_lower:
+            return {"relationships": []}
+        if "event" in prompt_lower:
+            return {"events": []}
+        return {}
+
+    llm.extract_json = MagicMock(side_effect=_extract_json)
+    return llm
+
+
+class TestSynonymExplosionWarningLog:
+    """synonym_explosion_warning field in extraction log (#337)."""
+
+    def test_warning_set_when_above_threshold(self, monkeypatch):
+        """Log record includes synonym_explosion_warning when >3 new entities of a type."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+        entities = [
+            {"name": f"location-{i}", "type": "location", "is_new": True,
+             "source_turn": "turn-001", "proposed_id": f"loc-{i}", "confidence": 0.8}
+            for i in range(5)
+        ]
+        llm = _make_stub_llm(entities)
+        catalogs = _fresh_catalogs()
+        events = []
+        turn = {"turn_id": "turn-001", "speaker": "dm", "text": "Five locations mentioned."}
+
+        _, _, _, log = se.extract_and_merge(
+            turn, catalogs, events, llm, min_confidence=0.6,
+        )
+
+        assert log["synonym_explosion_warning"] is not None
+        assert log["synonym_explosion_warning"]["location"] == 5
+
+    def test_warning_absent_when_below_threshold(self, monkeypatch):
+        """Log record has no synonym_explosion_warning when <=3 new entities per type."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+        entities = [
+            {"name": f"location-{i}", "type": "location", "is_new": True,
+             "source_turn": "turn-001", "proposed_id": f"loc-{i}", "confidence": 0.8}
+            for i in range(3)
+        ]
+        llm = _make_stub_llm(entities)
+        catalogs = _fresh_catalogs()
+        events = []
+        turn = {"turn_id": "turn-001", "speaker": "dm", "text": "Three locations."}
+
+        _, _, _, log = se.extract_and_merge(
+            turn, catalogs, events, llm, min_confidence=0.6,
+        )
+
+        assert log["synonym_explosion_warning"] is None
