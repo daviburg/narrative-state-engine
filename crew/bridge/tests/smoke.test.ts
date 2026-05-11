@@ -1,19 +1,23 @@
 import { test, expect } from '@playwright/test';
 import { createBridge, type VSCodeBridge } from '../src/index';
 import * as path from 'path';
-import * as os from 'os';
-import * as fs from 'fs';
+import { isVSCodeRunning } from './helpers';
 
 /**
  * Smoke test for the VS Code agent bridge.
  *
+ * Uses the system's default VS Code profile (which has Copilot authenticated).
+ * Requires NO other VS Code instance to be running — VS Code's single-instance
+ * lock prevents Playwright from attaching to a second instance with the same
+ * user-data-dir.
+ *
  * SKIPPED by default — requires VS Code and GitHub Copilot to be installed.
  *
  * To run manually:
- *   cd crew/bridge
- *   npm install
- *   npm run build
- *   BRIDGE_SMOKE=1 npx playwright test tests/smoke.test.ts
+ *   1. Close all VS Code windows
+ *   2. cd crew/bridge
+ *      npm install && npm run build
+ *      BRIDGE_SMOKE=1 npx playwright test tests/smoke.test.ts
  */
 
 const SKIP_REASON =
@@ -21,32 +25,22 @@ const SKIP_REASON =
 
 test.describe('VS Code Bridge Smoke Test', () => {
   let bridge: VSCodeBridge;
-  let tmpDir: string;
-
-  test.beforeAll(async () => {
-    // Create a temp user data dir for clean state
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'nse-bridge-test-'));
-  });
 
   test.afterAll(async () => {
     if (bridge) {
       await bridge.close();
     }
-    // Clean up temp dir
-    if (tmpDir && fs.existsSync(tmpDir)) {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
   });
 
   test('launch VS Code, send prompt, read response', async () => {
     test.skip(!['1', 'true'].includes(process.env.BRIDGE_SMOKE ?? ''), SKIP_REASON);
+    test.skip(isVSCodeRunning(), 'Close all VS Code windows before running the smoke test (single-instance lock).');
 
     // Use the repo root as the workspace
     const workspacePath = path.resolve(__dirname, '..', '..', '..');
 
     bridge = await createBridge({
       workspacePath,
-      userDataDir: tmpDir,
       defaultTimeout: 180_000, // 3 minutes for CI-like environments
     });
 

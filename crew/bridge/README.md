@@ -28,7 +28,9 @@ await bridge.close();
 
 ## Running the Smoke Test
 
-The smoke test requires VS Code and GitHub Copilot to be installed locally:
+The smoke test requires VS Code and GitHub Copilot to be installed locally.
+
+> **Important:** Close all VS Code windows before running the smoke test. The bridge launches its own VS Code instance and an existing window can interfere with Electron discovery.
 
 ```bash
 BRIDGE_SMOKE=1 npx playwright test tests/smoke.test.ts
@@ -40,6 +42,23 @@ On Windows (PowerShell):
 $env:BRIDGE_SMOKE = "1"
 npx playwright test tests/smoke.test.ts
 ```
+
+## Running the Diagnostic Test
+
+The diagnostic test captures screenshots, accessibility trees, CSS selector probes, and raw HTML from the chat panel DOM. Use it to debug selector breakage after VS Code updates.
+
+```bash
+BRIDGE_DIAGNOSTIC=1 npx playwright test tests/diagnostic.test.ts
+```
+
+On Windows (PowerShell):
+
+```powershell
+$env:BRIDGE_DIAGNOSTIC = "1"
+npx playwright test tests/diagnostic.test.ts
+```
+
+Diagnostic output is saved to `test-results/diagnostic/` by default.
 
 ## Selectors
 
