@@ -139,10 +139,23 @@ export class ChatPanel {
   async waitForResponse(timeout: number = DEFAULT_RESPONSE_TIMEOUT): Promise<void> {
     const deadline = Date.now() + timeout;
 
-    // Phase 1: Wait for a new response container to appear
-    // We detect this by waiting for .interactive-response (the assistant's reply)
-    // to have the .chat-most-recent-response class, indicating VS Code has attached it.
-    await this.page.waitForTimeout(1_000);
+    // Phase 1: Wait for a new response container to appear.
+    // Count existing containers, then wait for the count to increase —
+    // this guarantees a response actually arrived before checking streaming.
+    const initialCount = await this.page.locator(SELECTORS.responseContainer).count();
+    try {
+      await this.page.waitForFunction(
+        (args: { selector: string; prev: number }) =>
+          document.querySelectorAll(args.selector).length > args.prev,
+        { selector: SELECTORS.responseContainer, prev: initialCount },
+        { timeout: Math.min(30_000, Math.max(deadline - Date.now(), 5_000)) },
+      );
+    } catch {
+      throw new Error(
+        `Timed out waiting for a new response container (had ${initialCount}). ` +
+        'The assistant may not have started replying.',
+      );
+    }
 
     // Phase 2: Wait for streaming indicator to appear then disappear
     const streamingSelector = `${SELECTORS.responseInProgress}, ${SELECTORS.stopButton}`;
@@ -167,7 +180,10 @@ export class ChatPanel {
           timeout: remaining,
         });
       } catch {
-        console.warn('Streaming indicator detach timed out — proceeding.');
+        throw new Error(
+          'Timed out waiting for streaming to finish (indicator never detached). ' +
+          `Elapsed: ${Date.now() - (deadline - timeout)}ms, timeout: ${timeout}ms`,
+        );
       }
     } else {
       // Fallback: poll the accessibility tree for content stability
@@ -202,7 +218,9 @@ export class ChatPanel {
       await this.page.waitForTimeout(POLL_INTERVAL);
     }
 
-    console.warn('Content stability check timed out — proceeding anyway.');
+    throw new Error(
+      'Content stability check timed out — response may be incomplete.',
+    );
   }
 
   /**

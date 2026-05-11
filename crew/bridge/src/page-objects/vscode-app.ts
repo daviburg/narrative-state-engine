@@ -115,7 +115,7 @@ export class VSCodeApp {
     for (let i = 0; i < 5; i++) {
       try {
         // Look for the X close button on the onboarding dialog
-        const closeBtn = page.locator('.onboarding-a-close, .dialog-shadow .codicon-close');
+        const closeBtn = page.locator(SELECTORS.onboardingClose);
         if (await closeBtn.first().isVisible({ timeout: 1_000 })) {
           await closeBtn.first().click();
           console.log('Closed onboarding dialog via X button');
@@ -128,7 +128,7 @@ export class VSCodeApp {
 
       try {
         // Fall back to clicking Continue/Next buttons to step through
-        const continueBtn = page.locator('button:has-text("Continue"), button:has-text("Next")').last();
+        const continueBtn = page.locator(SELECTORS.onboardingContinue).last();
         if (await continueBtn.isVisible({ timeout: 1_000 })) {
           await continueBtn.click();
           console.log('Clicked onboarding Continue/Next');

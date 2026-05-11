@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { createBridge, type VSCodeBridge } from '../src/index';
 import * as path from 'path';
-import * as child_process from 'child_process';
+import { isVSCodeRunning } from './helpers';
 
 /**
  * Smoke test for the VS Code agent bridge.
@@ -22,21 +22,6 @@ import * as child_process from 'child_process';
 
 const SKIP_REASON =
   'Requires VS Code + GitHub Copilot installed. Set BRIDGE_SMOKE=1 to run.';
-
-/** Check if VS Code is already running (would block Electron launch). */
-function isVSCodeRunning(): boolean {
-  try {
-    if (process.platform === 'win32') {
-      const out = child_process.execSync('tasklist /FI "IMAGENAME eq Code.exe" /NH', { encoding: 'utf8' });
-      return out.includes('Code.exe');
-    }
-    // macOS/Linux
-    const out = child_process.execSync('pgrep -x code || pgrep -x "Electron"', { encoding: 'utf8' });
-    return out.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
 
 test.describe('VS Code Bridge Smoke Test', () => {
   let bridge: VSCodeBridge;

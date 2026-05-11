@@ -2,8 +2,8 @@ import { test } from '@playwright/test';
 import { VSCodeApp } from '../src/page-objects/vscode-app';
 import { ChatPanel } from '../src/page-objects/chat-panel';
 import * as path from 'path';
-import * as child_process from 'child_process';
 import * as fs from 'fs';
+import { isVSCodeRunning } from './helpers';
 
 /**
  * Diagnostic test for discovering VS Code chat response DOM structure.
@@ -25,24 +25,6 @@ import * as fs from 'fs';
 
 const SKIP_REASON =
   'Set BRIDGE_DIAGNOSTIC=1 to run the DOM diagnostic test.';
-
-function isVSCodeRunning(): boolean {
-  try {
-    if (process.platform === 'win32') {
-      const out = child_process.execSync(
-        'tasklist /FI "IMAGENAME eq Code.exe" /NH',
-        { encoding: 'utf8' },
-      );
-      return out.includes('Code.exe');
-    }
-    const out = child_process.execSync('pgrep -x code || pgrep -x "Electron"', {
-      encoding: 'utf8',
-    });
-    return out.trim().length > 0;
-  } catch {
-    return false;
-  }
-}
 
 test.describe('DOM Diagnostic', () => {
   test('capture chat response DOM after sending a prompt', async () => {
