@@ -6,8 +6,9 @@ from unittest.mock import MagicMock
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 import semantic_extraction as se
-from semantic_extraction import _same_turn_dedup_gate
 from catalog_merger import CATALOG_KEYS
+
+_same_turn_dedup_gate = se._same_turn_dedup_gate
 
 
 def _make_proposal(name, etype="location", turn="turn-169", is_new=True):
