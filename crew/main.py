@@ -46,16 +46,21 @@ def cmd_release(args):
 
 
 def cmd_vscode(args):
+    from crewai import LLM
+
     from crew.crews.vscode_crew import create_vscode_crew
     from crew.tools.vscode_agent import (
         ensure_bridge_running,
         start_bridge_server,
     )
 
-    # Configure OpenAI-compatible endpoint for litellm (used by openai/ prefix)
-    os.environ.setdefault("OPENAI_API_KEY", "not-needed")
-    os.environ["OPENAI_API_BASE"] = args.llm_base_url
+    # Build LLM object directly — avoids litellm provider matching
     # For arclight, use: --llm-base-url http://arclight:8000/v1
+    llm = LLM(
+        model=args.llm,
+        base_url=args.llm_base_url,
+        api_key="not-needed",
+    )
 
     bridge_url = f"http://127.0.0.1:{args.port}"
     proc = None
@@ -71,7 +76,7 @@ def cmd_vscode(args):
             task_description=args.task,
             agent_name=args.agent,
             bridge_url=bridge_url,
-            llm=args.llm,
+            llm=llm,
         )
         result = crew.kickoff()
         print(result)
@@ -121,8 +126,8 @@ def main():
 
     # VS Code agent command
     vsc = subparsers.add_parser("vscode", help="Delegate a task to VS Code Copilot agent")
-    vsc.add_argument("--llm", default="openai/qwen3.5-9b-q4_k_m",
-        help="LLM identifier (default: openai/qwen3.5-9b-q4_k_m)")
+    vsc.add_argument("--llm", default="qwen3.5-9b-q4_k_m",
+        help="LLM model name (default: qwen3.5-9b-q4_k_m)")
     vsc.add_argument("--llm-base-url", default="http://localhost:8081/v1",
         help="Base URL for OpenAI-compatible LLM server (default: http://localhost:8081/v1)")
     vsc.add_argument("--task", required=True, help="Task description for the agent")

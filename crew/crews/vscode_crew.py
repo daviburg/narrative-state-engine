@@ -1,5 +1,7 @@
 """VS Code agent crew — delegates tasks to VS Code Copilot via HTTP bridge."""
 
+from typing import Any
+
 from crewai import Agent, Crew, Process, Task
 
 from crew.tools.vscode_agent import VSCodeAgentTool
@@ -9,7 +11,7 @@ def create_vscode_crew(
     task_description: str,
     agent_name: str = "developer",
     bridge_url: str = "http://127.0.0.1:7400",
-    llm: str = "openai/qwen3.5-9b-q4_k_m",
+    llm: Any = None,
 ) -> Crew:
     """Create a crew that delegates work to a VS Code Copilot agent.
 
