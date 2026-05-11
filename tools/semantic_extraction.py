@@ -702,6 +702,15 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     if isinstance(vs, dict) and "last_updated_turn" not in vs and has_valid_turn:
         vs["last_updated_turn"] = turn_id
 
+    # Strip character-only schema fields from items (#339)
+    if entity_data.get("type") == "item":
+        _ITEM_INVALID_ATTRS = {"species", "race", "class", "alignment", "age"}
+        sa = entity_data.get("stable_attributes", {})
+        if isinstance(sa, dict):
+            for attr_key in list(sa.keys()):
+                if attr_key.lower() in _ITEM_INVALID_ATTRS:
+                    del sa[attr_key]
+
     # Coerce LLM relationship fields to V2 format
     for rel in entity_data.get("relationships", []):
         if "relationship" in rel and "current_relationship" not in rel:
@@ -762,6 +771,15 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 print(f"  COERCE: relationship type '{rt}' → 'other' (unmapped)", file=sys.stderr)
             else:
                 print(f"  COERCE: relationship type '{rt}' → '{mapped}'", file=sys.stderr)
+
+    # Normalize attribute key casing (#336)
+    for attr_dict_key in ("stable_attributes", "volatile_state"):
+        attr_dict = entity_data.get(attr_dict_key)
+        if isinstance(attr_dict, dict):
+            normalized = {}
+            for k, v in attr_dict.items():
+                normalized[k.lower()] = v
+            entity_data[attr_dict_key] = normalized
 
     return entity_data
 
@@ -1625,6 +1643,22 @@ def _is_misclassified_location(entity: dict) -> bool:
     return False
 
 
+_ABSTRACT_ITEM_RE = re.compile(
+    r"\b(method|protocol|technique|process|procedure|approach|strategy|practice|discipline)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_misclassified_item(entity: dict) -> bool:
+    """Return True if entity is an abstract concept misclassified as item."""
+    if entity.get("type") != "item":
+        return False
+    name = entity.get("name", "").strip()
+    if _ABSTRACT_ITEM_RE.search(name):
+        return True
+    return False
+
+
 def _build_catalog_name_index(catalogs: dict) -> dict[str, dict]:
     """Build a normalized-name -> entity lookup across all catalogs.
 
@@ -2333,6 +2367,22 @@ def extract_and_merge(
             continue
         _type_filtered.append(entity_ref)
     qualified = _type_filtered
+
+    # Reject misclassified items (#339)
+    _item_filtered = []
+    for entity_ref in qualified:
+        if _is_misclassified_item(entity_ref):
+            eid = get_entity_id(entity_ref)
+            print(f"  FILTER: rejected '{entity_ref.get('name')}' as item "
+                  f"(abstract concept name pattern)", file=sys.stderr)
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "misclassified_item",
+            })
+            continue
+        _item_filtered.append(entity_ref)
+    qualified = _item_filtered
 
     # Reject entities whose name already exists in catalogs under a different type (#303)
     _catalog_name_index = _build_catalog_name_index(catalogs)
