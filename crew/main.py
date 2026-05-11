@@ -2,7 +2,11 @@
 
 import argparse
 import os
+import sys
 import subprocess
+
+# Ensure the repo root is on sys.path so `crew` is importable as a package
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def cmd_extract(args):
