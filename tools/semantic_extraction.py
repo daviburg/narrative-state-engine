@@ -2170,7 +2170,9 @@ def _same_turn_dedup_gate(
     are always kept.
     """
     groups: dict[tuple[str, str], list[dict]] = {}
-    for entity in entities:
+    identity_index: dict[int, int] = {}  # id(entity) -> index in entities list
+    for idx, entity in enumerate(entities):
+        identity_index[id(entity)] = idx
         if not entity.get("is_new", True):
             continue
         key = (entity.get("source_turn", ""), entity.get("type", ""))
@@ -2185,7 +2187,7 @@ def _same_turn_dedup_gate(
         survivor_name = survivor.get("name", "")
         for entity in group[1:]:
             eid = entity.get("proposed_id") or entity.get("existing_id", "")
-            idx = next((i for i, e in enumerate(entities) if e is entity), None)
+            idx = identity_index.get(id(entity))
             if idx is not None:
                 to_remove.add(idx)
                 print(f"  DEDUP-GATE: dropping '{entity.get('name')}' ({eid}) "
