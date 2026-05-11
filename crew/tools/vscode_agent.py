@@ -16,7 +16,7 @@ def ensure_bridge_running(url: str = "http://127.0.0.1:7400") -> bool:
     try:
         resp = requests.get(f"{url}/health", timeout=5)
         return resp.status_code == 200
-    except requests.ConnectionError:
+    except requests.RequestException:
         return False
 
 
@@ -40,26 +40,36 @@ def start_bridge_server(workspace_path: str, port: int = 7400) -> subprocess.Pop
             f"Port {port} is already in use. Stop the existing server first."
         )
 
+    bridge_abs = os.path.abspath(BRIDGE_DIR)
+    server_js = os.path.join(bridge_abs, "dist", "server.js")
+    if not os.path.isfile(server_js):
+        raise RuntimeError(
+            f"Bridge server not built: {server_js} not found. "
+            f"Run 'npm install && npm run build' in {bridge_abs}"
+        )
+
     proc = subprocess.Popen(
         ["node", "dist/server.js", "--port", str(port)],
-        cwd=os.path.abspath(BRIDGE_DIR),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        cwd=bridge_abs,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
     )
 
     deadline = time.monotonic() + 30
     while time.monotonic() < deadline:
         if proc.poll() is not None:
-            stderr = proc.stderr.read().decode() if proc.stderr else ""
             raise RuntimeError(
-                f"Bridge server exited with code {proc.returncode}: {stderr}"
+                f"Bridge server exited with code {proc.returncode}"
             )
         if ensure_bridge_running(url):
             # Start a session with the workspace path
             try:
                 requests.post(
                     f"{url}/session/start",
-                    json={"workspacePath": workspace_path},
+                    json={
+                        "workspacePath": workspace_path,
+                        "defaultTimeout": 300000,
+                    },
                     timeout=30,
                 )
             except requests.RequestException as exc:

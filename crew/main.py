@@ -2,6 +2,7 @@
 
 import argparse
 import os
+import subprocess
 
 
 def cmd_extract(args):
@@ -49,10 +50,11 @@ def cmd_vscode(args):
 
     bridge_url = f"http://127.0.0.1:{args.port}"
     proc = None
+    workspace = os.path.abspath(args.workspace)
 
     if not ensure_bridge_running(bridge_url):
         print(f"Starting bridge server on port {args.port}...")
-        proc = start_bridge_server(args.workspace, port=args.port)
+        proc = start_bridge_server(workspace, port=args.port)
         print("Bridge server ready.")
 
     try:
@@ -70,9 +72,13 @@ def cmd_vscode(args):
             try:
                 requests.post(f"{bridge_url}/session/close", timeout=10)
             except requests.RequestException:
-                pass
+                pass  # Best-effort session close; server is being terminated
             proc.terminate()
-            proc.wait(timeout=10)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
 
 
 def main():
