@@ -48,6 +48,14 @@ Check proactively when testing wrapper/subprocess code:
 - Bash: `set -e` does not apply to background processes (`&`) — can be misleading
 - Cross-platform: shebang lines, line endings (`\r\n` vs `\n`), path separators
 
+## Unverifiable Test Protocol
+
+When a test cannot be executed due to environment constraints (missing hardware, unavailable services, platform-specific limitations):
+- Report "manual verification required" — do not silently skip the test
+- State the exact reason the test cannot run in the current environment
+- Provide the exact commands a human would use to verify manually
+- Tag the finding as `manual-verify` in your output
+
 ## Output Format
 - Test results as pass/fail summaries with failure details
 - Extraction quality reports as tables (metric, expected, actual, delta)
