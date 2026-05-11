@@ -251,6 +251,31 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/stop_extraction_detached.ps1` | Stop detached extraction runs by PID file |
 | `tools/run_with_heartbeat.py` / `.ps1` / `.sh` | Heartbeat wrapper — keeps terminal alive during long commands for idle-detection-based completion notification |
 
+### CrewAI HTTP Bridge
+
+The `crew/bridge/` directory contains a TypeScript HTTP server that bridges CrewAI agents to VS Code Copilot Chat. Python tools in `crew/tools/vscode_agent.py` communicate with the bridge via HTTP.
+
+**Bridge endpoints** (default `http://127.0.0.1:7400`):
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/health` | GET | Liveness check |
+| `/session/start` | POST | Initialize workspace session |
+| `/chat/send` | POST | Send a prompt to a VS Code Copilot agent and receive the response |
+| `/chat/new` | POST | Start a new chat session (clears context) |
+| `/chat/metrics` | GET | Return usage metrics (turns, tokens sent/received) |
+| `/session/close` | POST | Close session and clean up |
+
+**Python tools** (`crew/tools/vscode_agent.py`):
+- `VSCodeAgentTool` — CrewAI `BaseTool` that sends prompts to `/chat/send` (300s timeout for long-running agent responses)
+- `VSCodeNewChatTool`, `VSCodeMetricsTool`, `VSCodeSessionCloseTool` — auxiliary tools for session management
+- `start_bridge_server()` — launches the Node.js bridge, polls `/health` until ready (max 30s)
+- `ensure_bridge_running()` — checks bridge availability
+
+**Crew** (`crew/crews/vscode_crew.py`): `create_vscode_crew()` creates a single-agent crew that delegates a task description to VS Code Copilot via the bridge.
+
+**CLI** (`crew/main.py`): `python -m crew.main vscode --task "..." [--agent developer] [--workspace .] [--port 7400]` starts the bridge (if not running), kicks off the crew, and cleans up on completion.
+
 ---
 
 ## Design Decisions
