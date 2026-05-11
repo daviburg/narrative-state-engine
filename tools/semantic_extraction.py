@@ -1548,6 +1548,8 @@ _GENERIC_STEMS = {
     # Pronouns — should never become entity IDs
     "she", "he", "they", "it", "her", "him", "them",
     "his", "hers", "its", "their", "theirs",
+    # Generic group nouns and number words (#338)
+    "two", "three", "men", "women", "people", "others", "figures",
 }
 
 # --- Type classification filters (#303) ---
@@ -1558,6 +1560,14 @@ _LEADING_ARTICLE_RE = re.compile(r"^(?:the|a|an)\s+", re.IGNORECASE)
 _NON_CHARACTER_EXTRAS = {
     "birth", "belly", "feast", "meal", "sickness", "disease",
     "structure", "fragment", "celebration",
+    # Body parts (#338)
+    "shoulders", "lips", "body", "hands", "eyes", "skin",
+    "chest", "head", "face", "arms", "legs", "feet",
+    "throat", "neck", "back", "fingers", "toes",
+    # Generic group nouns (#338)
+    "figures", "men", "women", "people", "others",
+    # Numbers-as-names (#338)
+    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
 }
 # Words in _PC_ALIAS_WORD_BLOCKLIST that ARE valid character names/roles and
 # must not trigger the type classification filter.
@@ -1582,7 +1592,16 @@ def _get_non_character_names() -> set[str]:
 
 
 # Names that are clearly non-spatial and should never be type "location"
-_NON_LOCATION_NAMES = {"feast", "celebration", "fragment", "birth", "death"}
+_NON_LOCATION_NAMES = {
+    "feast", "celebration", "fragment", "birth", "death",
+    # Body parts (#338)
+    "body", "lips", "shoulders", "hands", "eyes", "skin",
+    "chest", "head", "face", "arms", "legs", "feet",
+    "belly", "throat", "neck", "back", "fingers", "toes",
+    # Abstract concepts / generic surfaces (#338)
+    "edge", "ground", "surface", "air", "sky",
+    "reaction", "pattern", "method", "result",
+}
 
 
 def _strip_leading_article(name: str) -> str:
@@ -1622,6 +1641,16 @@ def _is_misclassified_location(entity: dict) -> bool:
     stripped = _strip_leading_article(name).strip()
     if name in _NON_LOCATION_NAMES or stripped in _NON_LOCATION_NAMES:
         return True
+    # Reject if head noun (last token) is a blocklisted word (#338)
+    head = stripped.split()[-1] if stripped else ""
+    if head and head in _NON_LOCATION_NAMES:
+        return True
+    # Reject possessive body references: "his lips", "her shoulders" (#338)
+    tokens = stripped.split()
+    if tokens and tokens[0] in ("his", "her", "their", "its", "my"):
+        remainder = " ".join(tokens[1:])
+        if remainder in _NON_LOCATION_NAMES:
+            return True
     return False
 
 
