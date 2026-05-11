@@ -48,6 +48,11 @@ def cmd_vscode(args):
         start_bridge_server,
     )
 
+    # Configure OpenAI-compatible endpoint for litellm (used by openai/ prefix)
+    os.environ.setdefault("OPENAI_API_KEY", "not-needed")
+    os.environ["OPENAI_API_BASE"] = args.llm_base_url
+    # For arclight, use: --llm-base-url http://arclight:8000/v1
+
     bridge_url = f"http://127.0.0.1:{args.port}"
     proc = None
     workspace = os.path.abspath(args.workspace)
@@ -62,6 +67,7 @@ def cmd_vscode(args):
             task_description=args.task,
             agent_name=args.agent,
             bridge_url=bridge_url,
+            llm=args.llm,
         )
         result = crew.kickoff()
         print(result)
@@ -86,8 +92,12 @@ def main():
         description="CrewAI orchestration for narrative-state-engine"
     )
     parser.add_argument(
-        "--llm", default="ollama/qwen2.5:14b-8k",
-        help="LLM identifier for agent reasoning (default: ollama/qwen2.5:14b-8k)"
+        "--llm", default="openai/qwen3.5-9b-q4_k_m",
+        help="LLM identifier for agent reasoning (default: openai/qwen3.5-9b-q4_k_m)"
+    )
+    parser.add_argument(
+        "--llm-base-url", default="http://localhost:8081/v1",
+        help="Base URL for OpenAI-compatible LLM server (default: http://localhost:8081/v1)"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
