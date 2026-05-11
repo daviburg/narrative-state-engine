@@ -19,7 +19,7 @@ def create_vscode_crew(
         task_description: What the crew should accomplish.
         agent_name: VS Code agent mode to use (default: "developer").
         bridge_url: URL of the HTTP bridge server.
-        llm: LLM identifier for agent reasoning.
+        llm: A ``crewai.LLM`` instance or model-name string for agent reasoning.
 
     Returns:
         A Crew ready to kick off.
