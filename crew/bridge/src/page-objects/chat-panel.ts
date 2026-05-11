@@ -227,15 +227,15 @@ export class ChatPanel {
    * Get the text content of the chat panel area (for stability comparison).
    */
   private async getChatPanelText(): Promise<string> {
-    return this.page.evaluate(() => {
-      const sendBtn = document.querySelector('button[aria-label^="Send"]');
+    return this.page.evaluate((sendBtnSel) => {
+      const sendBtn = document.querySelector(sendBtnSel);
       if (!sendBtn) return '';
       let container: Element | null = sendBtn;
       for (let i = 0; i < 6 && container?.parentElement; i++) {
         container = container.parentElement;
       }
       return (container as HTMLElement)?.innerText ?? '';
-    });
+    }, SELECTORS.sendButton);
   }
 
   /**
@@ -358,8 +358,8 @@ export class ChatPanel {
     );
 
     // 4. CSS class census — all unique classes in the chat panel area
-    const classCensus = await this.page.evaluate(() => {
-      const sendBtn = document.querySelector('button[aria-label^="Send"]');
+    const classCensus = await this.page.evaluate((sendBtnSel) => {
+      const sendBtn = document.querySelector(sendBtnSel);
       if (!sendBtn) return { error: 'Send button not found' };
 
       // Walk up ~8 levels to find a reasonable ancestor encompassing the chat area
@@ -382,7 +382,7 @@ export class ChatPanel {
       };
       walk(container);
       return classMap;
-    });
+    }, SELECTORS.sendButton);
 
     fs.writeFileSync(
       path.join(outputDir, 'css-class-census.json'),
@@ -390,8 +390,8 @@ export class ChatPanel {
     );
 
     // 5. Raw HTML of the chat area (truncated to 500KB)
-    const chatHtml = await this.page.evaluate(() => {
-      const sendBtn = document.querySelector('button[aria-label^="Send"]');
+    const chatHtml = await this.page.evaluate((sendBtnSel) => {
+      const sendBtn = document.querySelector(sendBtnSel);
       if (!sendBtn) return '<no-send-button-found />';
 
       let container: Element | null = sendBtn;
@@ -402,7 +402,7 @@ export class ChatPanel {
       return html.length > 500_000
         ? html.substring(0, 500_000) + '\n<!-- TRUNCATED -->'
         : html;
-    });
+    }, SELECTORS.sendButton);
 
     fs.writeFileSync(path.join(outputDir, 'chat-panel.html'), chatHtml);
 
