@@ -52,6 +52,11 @@ def cmd_vscode(args):
         start_bridge_server,
     )
 
+    # Configure OpenAI-compatible endpoint for litellm (used by openai/ prefix)
+    os.environ.setdefault("OPENAI_API_KEY", "not-needed")
+    os.environ["OPENAI_API_BASE"] = args.llm_base_url
+    # For arclight, use: --llm-base-url http://arclight:8000/v1
+
     bridge_url = f"http://127.0.0.1:{args.port}"
     proc = None
     workspace = os.path.abspath(args.workspace)
@@ -66,6 +71,7 @@ def cmd_vscode(args):
             task_description=args.task,
             agent_name=args.agent,
             bridge_url=bridge_url,
+            llm=args.llm,
         )
         result = crew.kickoff()
         print(result)
@@ -115,6 +121,10 @@ def main():
 
     # VS Code agent command
     vsc = subparsers.add_parser("vscode", help="Delegate a task to VS Code Copilot agent")
+    vsc.add_argument("--llm", default="openai/qwen3.5-9b-q4_k_m",
+        help="LLM identifier (default: openai/qwen3.5-9b-q4_k_m)")
+    vsc.add_argument("--llm-base-url", default="http://localhost:8081/v1",
+        help="Base URL for OpenAI-compatible LLM server (default: http://localhost:8081/v1)")
     vsc.add_argument("--task", required=True, help="Task description for the agent")
     vsc.add_argument("--agent", default="developer", help="VS Code agent mode (default: developer)")
     vsc.add_argument("--workspace", default=os.getcwd(), help="Workspace path (default: cwd)")
