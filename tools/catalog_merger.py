@@ -1117,7 +1117,20 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
     # description that happens to land on the same entity ID.
     if update.get("identity") and update["identity"] != current.get("identity"):
         if not is_pc:
-            current["identity"] = update["identity"]
+            update_name = update.get("name", "").lower()
+            current_name = current.get("name", "").lower()
+            if update_name and current_name and update_name != current_name:
+                _trivial = {"a", "an", "the", "of"}
+                old_tokens = set(current_name.replace("-", " ").split()) - _trivial
+                new_tokens = set(update_name.replace("-", " ").split()) - _trivial
+                if old_tokens and new_tokens and not (old_tokens & new_tokens):
+                    print(f"  GUARD: rejecting identity update for '{current.get('id')}' — "
+                          f"update name '{update_name}' doesn't match current '{current_name}'",
+                          file=sys.stderr)
+                else:
+                    current["identity"] = update["identity"]
+            else:
+                current["identity"] = update["identity"]
 
     if update.get("current_status"):
         current["current_status"] = update["current_status"]
@@ -1166,29 +1179,38 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
                     alias_list_pc.append(candidate_name)
                     aliases_pc["value"] = alias_list_pc
         else:
-            old_name = current["name"]
-            if "stable_attributes" not in current:
-                current["stable_attributes"] = {}
-            sa = current["stable_attributes"]
-            existing_aliases = sa.get("aliases", {})
-            if isinstance(existing_aliases, dict):
-                val = existing_aliases.get("value", [])
-                if isinstance(val, str):
-                    val = [a.strip() for a in val.split(",") if a.strip()]
-                if old_name not in val:
-                    val.append(old_name)
-                alias_turn = (update.get("last_updated_turn")
-                              or current.get("last_updated_turn")
-                              or current.get("first_seen_turn", ""))
-                sa["aliases"] = {"value": val, "inference": False,
-                                 "source_turn": alias_turn}
+            # Guard: reject name changes with no word overlap (#339)
+            _trivial = {"a", "an", "the", "of", "and", "with"}
+            old_tokens = set(current["name"].lower().replace("-", " ").split()) - _trivial
+            new_tokens = set(update["name"].lower().replace("-", " ").split()) - _trivial
+            if old_tokens and new_tokens and not (old_tokens & new_tokens):
+                print(f"  GUARD: rejecting name change '{current['name']}' → "
+                      f"'{update['name']}' (no word overlap — possible identity "
+                      f"corruption)", file=sys.stderr)
             else:
-                alias_turn = (update.get("last_updated_turn")
-                              or current.get("last_updated_turn")
-                              or current.get("first_seen_turn", ""))
-                sa["aliases"] = {"value": [old_name], "inference": False,
-                                 "source_turn": alias_turn}
-            current["name"] = update["name"]
+                old_name = current["name"]
+                if "stable_attributes" not in current:
+                    current["stable_attributes"] = {}
+                sa = current["stable_attributes"]
+                existing_aliases = sa.get("aliases", {})
+                if isinstance(existing_aliases, dict):
+                    val = existing_aliases.get("value", [])
+                    if isinstance(val, str):
+                        val = [a.strip() for a in val.split(",") if a.strip()]
+                    if old_name not in val:
+                        val.append(old_name)
+                    alias_turn = (update.get("last_updated_turn")
+                                  or current.get("last_updated_turn")
+                                  or current.get("first_seen_turn", ""))
+                    sa["aliases"] = {"value": val, "inference": False,
+                                     "source_turn": alias_turn}
+                else:
+                    alias_turn = (update.get("last_updated_turn")
+                                  or current.get("last_updated_turn")
+                                  or current.get("first_seen_turn", ""))
+                    sa["aliases"] = {"value": [old_name], "inference": False,
+                                     "source_turn": alias_turn}
+                current["name"] = update["name"]
 
     # Update last_updated_turn — keep the latest (max) to prevent
     # re-extraction of earlier turns from regressing the value (#314).
