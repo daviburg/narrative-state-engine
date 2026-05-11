@@ -53,4 +53,9 @@ Rules:
 - proposed_id and existing_id are mutually exclusive.
 - Extract from ALL text: narration, descriptions, memories, quest briefings.
 - Environmental locations where action occurs should be extracted.
+- SYNONYM CONSOLIDATION: If the DM uses multiple synonyms for the same place, object, or
+  group in one turn (e.g. "safe haven", "hidden refuge", "defensible sanctuary" all
+  describing the same location), extract ONE entity using the most specific or proper name.
+  Do NOT create separate entities for each synonym. When unsure, prefer the name that would
+  make the best catalog entry title.
 - Abstract/distant references count (departed village, sought artifact).
