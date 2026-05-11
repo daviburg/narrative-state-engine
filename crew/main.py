@@ -1,6 +1,8 @@
 """CLI entry point for CrewAI orchestration."""
 
 import argparse
+import os
+import subprocess
 
 
 def cmd_extract(args):
@@ -39,6 +41,46 @@ def cmd_release(args):
     print(result)
 
 
+def cmd_vscode(args):
+    from crew.crews.vscode_crew import create_vscode_crew
+    from crew.tools.vscode_agent import (
+        ensure_bridge_running,
+        start_bridge_server,
+    )
+
+    bridge_url = f"http://127.0.0.1:{args.port}"
+    proc = None
+    workspace = os.path.abspath(args.workspace)
+
+    if not ensure_bridge_running(bridge_url):
+        print(f"Starting bridge server on port {args.port}...")
+        proc = start_bridge_server(workspace, port=args.port)
+        print("Bridge server ready.")
+
+    try:
+        crew = create_vscode_crew(
+            task_description=args.task,
+            agent_name=args.agent,
+            bridge_url=bridge_url,
+        )
+        result = crew.kickoff()
+        print(result)
+    finally:
+        if proc is not None:
+            import requests
+
+            try:
+                requests.post(f"{bridge_url}/session/close", timeout=10)
+            except requests.RequestException:
+                pass  # Best-effort session close; server is being terminated
+            proc.terminate()
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="CrewAI orchestration for narrative-state-engine"
@@ -66,6 +108,14 @@ def main():
     rel = subparsers.add_parser("release", help="Run release validation crew")
     rel.add_argument("--branch", required=True, help="Branch name to validate")
     rel.set_defaults(func=cmd_release)
+
+    # VS Code agent command
+    vsc = subparsers.add_parser("vscode", help="Delegate a task to VS Code Copilot agent")
+    vsc.add_argument("--task", required=True, help="Task description for the agent")
+    vsc.add_argument("--agent", default="developer", help="VS Code agent mode (default: developer)")
+    vsc.add_argument("--workspace", default=os.getcwd(), help="Workspace path (default: cwd)")
+    vsc.add_argument("--port", type=int, default=7400, help="Bridge server port (default: 7400)")
+    vsc.set_defaults(func=cmd_vscode)
 
     args = parser.parse_args()
     args.func(args)
