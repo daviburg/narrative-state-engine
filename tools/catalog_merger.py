@@ -1112,25 +1112,37 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
     """Update an existing entity with new information."""
     is_pc = current.get("id") == "char-player"
 
+    # Upfront mismatch detection: if the update's name has zero word overlap
+    # with the current name, skip all merges to prevent identity corruption (#339).
+    _name_mismatch = False
+    if not is_pc and update.get("name") and current.get("name"):
+        update_name_lower = update["name"].lower()
+        current_name_lower = current["name"].lower()
+        if update_name_lower != current_name_lower:
+            _trivial = {"a", "an", "the", "of", "and", "with"}
+            old_tokens = set(current_name_lower.replace("-", " ").split()) - _trivial
+            new_tokens = set(update_name_lower.replace("-", " ").split()) - _trivial
+            if old_tokens and new_tokens and not (old_tokens & new_tokens):
+                _name_mismatch = True
+                print(f"  GUARD: name mismatch for '{current.get('id')}' — "
+                      f"'{current['name']}' vs '{update['name']}' "
+                      f"(no word overlap — skipping all merges)", file=sys.stderr)
+
+    if _name_mismatch:
+        # Only advance last_updated_turn (safe metadata), skip all content merges
+        if update.get("last_updated_turn"):
+            existing_num = _parse_turn_number(current.get("last_updated_turn"))
+            update_num = _parse_turn_number(update["last_updated_turn"])
+            if not existing_num or (update_num and update_num >= existing_num):
+                current["last_updated_turn"] = update["last_updated_turn"]
+        return
+
     # Never overwrite the PC's identity from a per-turn update — the PC's
     # identity is established early and should not be replaced by an NPC
     # description that happens to land on the same entity ID.
     if update.get("identity") and update["identity"] != current.get("identity"):
         if not is_pc:
-            update_name = update.get("name", "").lower()
-            current_name = current.get("name", "").lower()
-            if update_name and current_name and update_name != current_name:
-                _trivial = {"a", "an", "the", "of"}
-                old_tokens = set(current_name.replace("-", " ").split()) - _trivial
-                new_tokens = set(update_name.replace("-", " ").split()) - _trivial
-                if old_tokens and new_tokens and not (old_tokens & new_tokens):
-                    print(f"  GUARD: rejecting identity update for '{current.get('id')}' — "
-                          f"update name '{update_name}' doesn't match current '{current_name}'",
-                          file=sys.stderr)
-                else:
-                    current["identity"] = update["identity"]
-            else:
-                current["identity"] = update["identity"]
+            current["identity"] = update["identity"]
 
     if update.get("current_status"):
         current["current_status"] = update["current_status"]

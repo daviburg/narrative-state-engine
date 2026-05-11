@@ -706,9 +706,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     if entity_data.get("type") == "item":
         _ITEM_INVALID_ATTRS = {"species", "race", "class", "alignment", "age"}
         sa = entity_data.get("stable_attributes", {})
-        for attr_key in list(sa.keys()):
-            if attr_key.lower() in _ITEM_INVALID_ATTRS:
-                del sa[attr_key]
+        if isinstance(sa, dict):
+            for attr_key in list(sa.keys()):
+                if attr_key.lower() in _ITEM_INVALID_ATTRS:
+                    del sa[attr_key]
 
     # Coerce LLM relationship fields to V2 format
     for rel in entity_data.get("relationships", []):
