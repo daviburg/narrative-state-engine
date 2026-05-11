@@ -92,12 +92,8 @@ def main():
         description="CrewAI orchestration for narrative-state-engine"
     )
     parser.add_argument(
-        "--llm", default="openai/qwen3.5-9b-q4_k_m",
-        help="LLM identifier for agent reasoning (default: openai/qwen3.5-9b-q4_k_m)"
-    )
-    parser.add_argument(
-        "--llm-base-url", default="http://localhost:8081/v1",
-        help="Base URL for OpenAI-compatible LLM server (default: http://localhost:8081/v1)"
+        "--llm", default="ollama/qwen2.5:14b-8k",
+        help="LLM identifier for agent reasoning (default: ollama/qwen2.5:14b-8k)"
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -121,6 +117,10 @@ def main():
 
     # VS Code agent command
     vsc = subparsers.add_parser("vscode", help="Delegate a task to VS Code Copilot agent")
+    vsc.add_argument("--llm", default="openai/qwen3.5-9b-q4_k_m",
+        help="LLM identifier (default: openai/qwen3.5-9b-q4_k_m)")
+    vsc.add_argument("--llm-base-url", default="http://localhost:8081/v1",
+        help="Base URL for OpenAI-compatible LLM server (default: http://localhost:8081/v1)")
     vsc.add_argument("--task", required=True, help="Task description for the agent")
     vsc.add_argument("--agent", default="developer", help="VS Code agent mode (default: developer)")
     vsc.add_argument("--workspace", default=os.getcwd(), help="Workspace path (default: cwd)")
