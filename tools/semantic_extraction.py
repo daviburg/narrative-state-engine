@@ -772,6 +772,15 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             else:
                 print(f"  COERCE: relationship type '{rt}' → '{mapped}'", file=sys.stderr)
 
+    # Normalize attribute key casing (#336)
+    for attr_dict_key in ("stable_attributes", "volatile_state"):
+        attr_dict = entity_data.get(attr_dict_key)
+        if isinstance(attr_dict, dict):
+            normalized = {}
+            for k, v in attr_dict.items():
+                normalized[k.lower()] = v
+            entity_data[attr_dict_key] = normalized
+
     return entity_data
 
 
