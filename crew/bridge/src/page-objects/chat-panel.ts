@@ -290,6 +290,44 @@ export class ChatPanel {
   }
 
   /**
+   * Start a new chat session.
+   *
+   * Sends the "New Chat" keyboard shortcut (Ctrl+N / Cmd+N), then waits
+   * for the chat to reset. Falls back to Command Palette if the shortcut
+   * doesn't work.
+   */
+  async newChat(): Promise<void> {
+    // Try Ctrl+N (the "New Chat (Ctrl+N)" shortcut in the Chat panel)
+    await this.page.keyboard.press(`${platformModifier()}+n`);
+
+    // Wait for the chat to reset — response containers should drop to 0
+    try {
+      await this.page.waitForFunction(
+        (sel: string) => document.querySelectorAll(sel).length === 0,
+        SELECTORS.responseContainer,
+        { timeout: 5_000 },
+      );
+      return;
+    } catch {
+      // Shortcut may not have worked — try Command Palette fallback
+    }
+
+    // Fallback: Command Palette → "Chat: New Chat"
+    await this.page.keyboard.press(`${platformModifier()}+Shift+p`);
+    await this.page.waitForSelector(SELECTORS.commandPaletteInput, { timeout: 5_000 });
+    const input = this.page.locator(SELECTORS.commandPaletteInput);
+    await input.fill('Chat: New Chat');
+    await this.page.keyboard.press('Enter');
+
+    // Wait for reset
+    await this.page.waitForFunction(
+      (sel: string) => document.querySelectorAll(sel).length === 0,
+      SELECTORS.responseContainer,
+      { timeout: 10_000 },
+    );
+  }
+
+  /**
    * Capture diagnostic information about the chat panel DOM.
    * Saves screenshots, accessibility tree, CSS selector probe results,
    * and raw HTML to the specified output directory.

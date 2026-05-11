@@ -4,6 +4,8 @@
   "private": true,
   "scripts": {
     "build": "tsc",
+    "serve": "node dist/server.js",
+    "start:server": "tsc && node dist/server.js",
     "test": "npx playwright test",
     "test:smoke": "npx playwright test tests/smoke.test.ts"
   },
