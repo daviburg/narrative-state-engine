@@ -19,6 +19,14 @@ class TestBodyPartCharacterRejection:
         entity = {"name": "Two", "type": "character"}
         assert _is_misclassified_character(entity)
 
+    def test_four_rejected_as_character(self):
+        entity = {"name": "Four", "type": "character"}
+        assert _is_misclassified_character(entity)
+
+    def test_ten_rejected_as_character(self):
+        entity = {"name": "ten", "type": "character"}
+        assert _is_misclassified_character(entity)
+
     def test_men_rejected_as_character(self):
         entity = {"name": "men", "type": "character"}
         assert _is_misclassified_character(entity)

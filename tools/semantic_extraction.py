@@ -1549,26 +1549,30 @@ _GENERIC_STEMS = {
     "she", "he", "they", "it", "her", "him", "them",
     "his", "hers", "its", "their", "theirs",
     # Generic group nouns and number words (#338)
-    "two", "three", "men", "women", "people", "others", "figures",
+    "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+    "men", "women", "people", "others", "figures",
 }
 
 # --- Type classification filters (#303) ---
 # Leading articles stripped before matching against blocklists.
 _LEADING_ARTICLE_RE = re.compile(r"^(?:the|a|an)\s+", re.IGNORECASE)
 
+# Shared body-part words used by both character and location filters (#338)
+_BODY_PART_WORDS = {
+    "shoulders", "lips", "body", "hands", "eyes", "skin",
+    "chest", "head", "face", "arms", "legs", "feet",
+    "throat", "neck", "back", "fingers", "toes",
+}
+
 # Extra non-character words beyond _PC_ALIAS_WORD_BLOCKLIST.
 _NON_CHARACTER_EXTRAS = {
     "birth", "belly", "feast", "meal", "sickness", "disease",
     "structure", "fragment", "celebration",
-    # Body parts (#338)
-    "shoulders", "lips", "body", "hands", "eyes", "skin",
-    "chest", "head", "face", "arms", "legs", "feet",
-    "throat", "neck", "back", "fingers", "toes",
     # Generic group nouns (#338)
     "figures", "men", "women", "people", "others",
     # Numbers-as-names (#338)
     "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
-}
+} | _BODY_PART_WORDS
 # Words in _PC_ALIAS_WORD_BLOCKLIST that ARE valid character names/roles and
 # must not trigger the type classification filter.
 _CHARACTER_ROLE_ALLOWLIST = {
@@ -1594,14 +1598,11 @@ def _get_non_character_names() -> set[str]:
 # Names that are clearly non-spatial and should never be type "location"
 _NON_LOCATION_NAMES = {
     "feast", "celebration", "fragment", "birth", "death",
-    # Body parts (#338)
-    "body", "lips", "shoulders", "hands", "eyes", "skin",
-    "chest", "head", "face", "arms", "legs", "feet",
-    "belly", "throat", "neck", "back", "fingers", "toes",
+    "belly",
     # Abstract concepts / generic surfaces (#338)
     "edge", "ground", "surface", "air", "sky",
     "reaction", "pattern", "method", "result",
-}
+} | _BODY_PART_WORDS
 
 
 def _strip_leading_article(name: str) -> str:
