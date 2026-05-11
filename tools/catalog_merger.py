@@ -1129,7 +1129,12 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
         if "stable_attributes" not in current:
             current["stable_attributes"] = {}
         for key, value in update["stable_attributes"].items():
-            current["stable_attributes"][key] = value
+            normalized = key.lower()
+            # Remove case-variant duplicates (#336)
+            for existing_key in list(current["stable_attributes"].keys()):
+                if existing_key.lower() == normalized and existing_key != normalized:
+                    del current["stable_attributes"][existing_key]
+            current["stable_attributes"][normalized] = value
         # Cross-reference guard: reject aliases matching other entity names (#302)
         if known_entity_names:
             sa_merged = current["stable_attributes"]
@@ -1145,7 +1150,12 @@ def _update_existing_entity(current: dict, update: dict, *, known_entity_names: 
         if "volatile_state" not in current:
             current["volatile_state"] = {}
         for key, value in update["volatile_state"].items():
-            current["volatile_state"][key] = value
+            normalized = key.lower()
+            # Remove case-variant duplicates (#336)
+            for existing_key in list(current["volatile_state"].keys()):
+                if existing_key.lower() == normalized and existing_key != normalized:
+                    del current["volatile_state"][existing_key]
+            current["volatile_state"][normalized] = value
 
     # Handle name changes / aliases via stable_attributes.aliases
     # For char-player, never overwrite the canonical name — but still record
