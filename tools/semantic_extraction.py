@@ -2155,6 +2155,49 @@ def _find_cross_catalog_type_conflict(
     return None
 
 
+def _same_turn_dedup_gate(
+    entities: list[dict],
+    threshold: int = 3,
+) -> list[dict]:
+    """Consolidate same-turn, same-type entity proposals that likely refer to the same thing (#337).
+
+    When more than ``threshold`` new entities of the same type share the same
+    source_turn, keep only the entity with the longest (most specific) name
+    per type. This catches synonym explosion where the DM uses multiple
+    phrases for the same concept.
+
+    Only applies to NEW entities (is_new=True). Existing entity references
+    are always kept.
+    """
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for entity in entities:
+        if not entity.get("is_new", True):
+            continue
+        key = (entity.get("source_turn", ""), entity.get("type", ""))
+        groups.setdefault(key, []).append(entity)
+
+    to_remove: set[int] = set()
+    for (turn, etype), group in groups.items():
+        if len(group) <= threshold:
+            continue
+        group.sort(key=lambda e: len(e.get("name", "")), reverse=True)
+        survivor = group[0]
+        survivor_name = survivor.get("name", "")
+        for entity in group[1:]:
+            eid = entity.get("proposed_id") or entity.get("existing_id", "")
+            idx = next((i for i, e in enumerate(entities) if e is entity), None)
+            if idx is not None:
+                to_remove.add(idx)
+                print(f"  DEDUP-GATE: dropping '{entity.get('name')}' ({eid}) "
+                      f"— same turn/type as '{survivor_name}' "
+                      f"({len(group)} {etype} proposals in {turn})",
+                      file=sys.stderr)
+
+    if not to_remove:
+        return entities
+    return [e for i, e in enumerate(entities) if i not in to_remove]
+
+
 # Meta-labels that should never be accepted as PC aliases (#186)
 _PC_ALIAS_BLOCKLIST = {
     "player character", "pc", "player", "the player",
@@ -2726,6 +2769,23 @@ def _run_discovery_phase(
         _cross_catalog_filtered.append(entity_ref)
     qualified = _cross_catalog_filtered
 
+    # Same-turn dedup gate: consolidate synonym explosion (#337)
+    _dedup_threshold = (
+        _cfg.get("synonym_dedup_threshold", 4) if isinstance(_cfg, dict) else 4
+    )
+    qualified = _same_turn_dedup_gate(
+        qualified, threshold=_dedup_threshold, filtered_log=_discovery_filtered
+    )
+
+    # Log same-turn entity density (#337)
+    _new_by_type: dict[str, int] = {}
+    for _ent in discovered:
+        if _ent.get("is_new", True):
+            _etype = _ent.get("type", "unknown")
+            _new_by_type[_etype] = _new_by_type.get(_etype, 0) + 1
+    if any(v > _dedup_threshold for v in _new_by_type.values()):
+        phase_log["synonym_explosion_warning"] = _new_by_type
+
     # Within-turn dedup (#365)
     qualified = _within_turn_dedup(qualified)
 
@@ -2836,6 +2896,7 @@ def extract_and_merge(
         _pf_phase = prefetched_discovery["phase_log"]
         _phase_log["discovery_ok"] = _pf_phase.get("discovery_ok", True)
         _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
+        _phase_log["synonym_explosion_warning"] = _pf_phase.get("synonym_explosion_warning")
         _disc_sys_tmpl = prefetched_discovery.get("discovery_sys_tmpl")
         _disc_user_prompt = prefetched_discovery.get("discovery_user_prompt")
     else:
@@ -2849,6 +2910,7 @@ def extract_and_merge(
         _discovery_filtered = _discovery_result["discovery_filtered"]
         _phase_log["discovery_ok"] = _discovery_result["phase_log"]["discovery_ok"]
         _phase_log["discovery_error"] = _discovery_result["phase_log"]["discovery_error"]
+        _phase_log["synonym_explosion_warning"] = _discovery_result["phase_log"].get("synonym_explosion_warning")
         _disc_sys_tmpl = _discovery_result.get("discovery_sys_tmpl")
         _disc_user_prompt = _discovery_result.get("discovery_user_prompt")
 
@@ -3527,6 +3589,7 @@ def extract_and_merge(
         "new_temporal_signals": max(0, _temporal_after - _temporal_before),
         "discovery_proposals": _discovery_proposals,
         "discovery_filtered": _discovery_filtered,
+        "synonym_explosion_warning": _phase_log.get("synonym_explosion_warning"),
         "elapsed_ms": _elapsed_ms,
         "discovery_ms": int((_t_after_discovery - _t0) * 1000),
         "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
