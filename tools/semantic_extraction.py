@@ -3862,13 +3862,13 @@ def _run_periodic_dedup(
         canonical_result = find_entity_by_id(catalogs, canonical_id)
         if not canonical_result:
             continue
-        canonical_entity, canonical_file = canonical_result
+        canonical_file, canonical_entity = canonical_result
 
         for vid in variant_patterns:
             variant_result = find_entity_by_id(catalogs, vid)
             if not variant_result:
                 continue
-            variant_entity, variant_file = variant_result
+            variant_file, variant_entity = variant_result
 
             dedup_merge_entity(canonical_entity, variant_entity)
             catalogs[variant_file] = [
