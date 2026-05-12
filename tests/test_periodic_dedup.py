@@ -1,11 +1,8 @@
 """Tests for periodic dedup audit during extraction (#366)."""
 
-import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -278,11 +275,10 @@ class TestIntervalConfig:
         # Verify the interval-check pattern: turn_number % 0 would raise,
         # but the guard `dedup_interval > 0` prevents it.
         dedup_interval = 0
-        turn_number = 50
         should_fire = (
             dedup_interval > 0
-            and turn_number is not None
-            and turn_number % dedup_interval == 0
+            and 50 is not None
+            and 50 % dedup_interval == 0
         )
         assert should_fire is False
 
