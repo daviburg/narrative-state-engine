@@ -1108,14 +1108,14 @@ def merge_entity(catalogs: dict, entity: dict) -> None:
             print(f"  WARNING: New entity '{entity_id}' missing required fields: {missing}. Skipping.")
 
 
-def _update_existing_entity(current: dict, update: dict, *, known_entity_names: set[str] | None = None) -> None:
+def _update_existing_entity(current: dict, update: dict, *, known_entity_names: set[str] | None = None, skip_name_guard: bool = False) -> None:
     """Update an existing entity with new information."""
     is_pc = current.get("id") == "char-player"
 
     # Upfront mismatch detection: if the update's name has zero word overlap
     # with the current name, skip all merges to prevent identity corruption (#339).
     _name_mismatch = False
-    if not is_pc and update.get("name") and current.get("name"):
+    if not skip_name_guard and not is_pc and update.get("name") and current.get("name"):
         update_name_lower = update["name"].lower()
         current_name_lower = current["name"].lower()
         if update_name_lower != current_name_lower:

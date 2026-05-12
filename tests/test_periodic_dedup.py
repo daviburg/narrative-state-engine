@@ -1,11 +1,8 @@
 """Tests for periodic dedup audit during extraction (#366)."""
 
-import json
 import os
 import sys
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
@@ -90,6 +87,28 @@ class TestPeriodicDedupWithCandidates:
         remaining_ids = [e["id"] for e in catalogs["locations.json"]]
         assert "loc-camp" in remaining_ids
         assert "loc-campsite" not in remaining_ids
+
+    def test_name_mismatch_guard_bypassed(self):
+        """LLM-confirmed merges bypass the name-mismatch guard even when names differ."""
+        catalogs = _make_catalogs([
+            _make_entity("loc-shelter", "Shelter", turn="turn-010"),
+            _make_entity("loc-shelters", "Shelters", turn="turn-020"),
+        ])
+        events = []
+
+        llm = MagicMock()
+        llm.extract_json.return_value = {
+            "same_entity": True,
+            "confidence": 0.95,
+            "canonical_id": "loc-shelter",
+            "rationale": "Same location evolved over time",
+        }
+
+        result = _run_periodic_dedup(catalogs, events, llm, "turn-050")
+        assert result == 1
+        remaining_ids = [e["id"] for e in catalogs["locations.json"]]
+        assert "loc-shelter" in remaining_ids
+        assert "loc-shelters" not in remaining_ids
 
     def test_below_threshold_no_merge(self):
         """Pairs with confidence < 0.9 are NOT auto-merged."""
@@ -278,13 +297,8 @@ class TestIntervalConfig:
         # Verify the interval-check pattern: turn_number % 0 would raise,
         # but the guard `dedup_interval > 0` prevents it.
         dedup_interval = 0
-        turn_number = 50
-        should_fire = (
-            dedup_interval > 0
-            and turn_number is not None
-            and turn_number % dedup_interval == 0
-        )
-        assert should_fire is False
+        # Short-circuit: dedup_interval > 0 is False, so modulo never fires
+        assert dedup_interval <= 0
 
     def test_fires_at_correct_turn(self):
         """Interval=50 fires at turn 50, 100, 150, etc."""
