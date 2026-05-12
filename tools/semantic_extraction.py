@@ -3764,6 +3764,7 @@ def _run_periodic_dedup(
     """
     from dedup_audit import (
         generate_candidates,
+        score_pair,
         _entity_lookup,
         AUTO_MERGE_THRESHOLD,
         SCORING_SYSTEM_PROMPT,
