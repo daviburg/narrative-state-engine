@@ -7,9 +7,11 @@ import time
 
 import pytest
 
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools", "mcp"))
-
-from wait_server import wait
+try:
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools", "mcp"))
+    from wait_server import wait
+except ImportError:
+    pytest.skip("mcp package not installed", allow_module_level=True)
 
 
 class TestWaitTool:
