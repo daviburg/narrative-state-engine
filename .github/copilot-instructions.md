@@ -96,6 +96,8 @@ When a code change alters tool behavior, data flow, schemas, or output format:
 | `config/ollama/*.Modelfile` | Ollama context-size variants | Yes |
 | `templates/extraction/*.md` | LLM prompt templates for semantic extraction | Yes |
 | `requirements-llm.txt` | Optional LLM dependencies | Yes |
+| `requirements-mcp.txt` | Optional MCP server dependencies | Yes |
+| `.vscode/mcp.json` | MCP server registration for VS Code | Yes |
 
 ---
 

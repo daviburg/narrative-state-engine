@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "wait-server": {
+      "command": "python",
+      "args": ["tools/mcp/wait_server.py"],
+      "cwd": "${workspaceFolder}"
+    }
+  }
+}
