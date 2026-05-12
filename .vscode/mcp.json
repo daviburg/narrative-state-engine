@@ -1,6 +1,7 @@
 {
   "servers": {
     "wait-server": {
+      "type": "stdio",
       "command": "python",
       "args": ["tools/mcp/wait_server.py"],
       "cwd": "${workspaceFolder}"
