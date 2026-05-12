@@ -379,7 +379,7 @@ python server/ov_serve.py --model-dir ./models/qwen3-8b-int4-ov --port 8000 \
 
 The included `server/ov_serve.py` provides:
 
-- **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/models`, `/health`, `/admin/flush` endpoints
+- **OpenAI-compatible API** — `/v1/chat/completions`, `/v1/models`, `/health` endpoints
 - **Thinking suppression** — passes `enable_thinking=False` in
   `apply_chat_template(..., extra_context={'enable_thinking': False})`,
   preventing qwen3 models from wasting ~80% of output tokens on `<think>`

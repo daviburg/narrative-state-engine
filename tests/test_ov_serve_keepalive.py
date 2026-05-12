@@ -229,7 +229,7 @@ async def test_cli_timeout_keep_alive_forwarded_to_uvicorn():
 
 @pytest.mark.asyncio
 async def test_admin_flush_drains_queue(async_client):
-    """POST /admin/flush drains queued requests with 503 (#361)."""
+    """POST /admin/flush returns ok when queue is empty (#361)."""
     # Queue is empty initially
     resp = await async_client.post("/admin/flush")
     assert resp.status_code == 200
@@ -273,6 +273,11 @@ async def test_admin_flush_clears_pending_requests(_patch_globals):
     assert data["status"] == "ok"
     assert ov_serve.batch_queue.qsize() == 0
 
+    # Verify /health also reports queue_depth: 0 after flush
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        health_resp = await client.get("/health")
+    assert health_resp.json()["queue_depth"] == 0
+
     # All futures should have exceptions
     for f in futures:
         assert f.done()
@@ -280,3 +285,22 @@ async def test_admin_flush_clears_pending_requests(_patch_globals):
         with pytest.raises(HTTPException) as exc_info:
             f.result()
         assert exc_info.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_admin_flush_before_queue_init(_patch_globals):
+    """POST /admin/flush returns gracefully when batch_queue is None (#361)."""
+    import httpx
+
+    saved_queue = ov_serve.batch_queue
+    ov_serve.batch_queue = None
+    try:
+        transport = httpx.ASGITransport(app=ov_serve.app, raise_app_exceptions=False)
+        async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+            resp = await client.post("/admin/flush")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["flushed"] == 0
+        assert data["status"] == "ok"
+    finally:
+        ov_serve.batch_queue = saved_queue

@@ -256,8 +256,10 @@ async def admin_flush():
     In-flight batches (currently in pipeline.generate()) are NOT interrupted.
     Only requests waiting in the queue are cancelled.
     """
+    if batch_queue is None:
+        return {"flushed": 0, "status": "ok"}
     flushed = 0
-    while not batch_queue.empty():
+    while True:
         try:
             queued_req = batch_queue.get_nowait()
             if not queued_req.future.done():
