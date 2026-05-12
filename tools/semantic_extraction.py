@@ -1602,6 +1602,10 @@ def _get_non_character_names() -> set[str]:
 # Names that are clearly non-spatial and should never be type "location"
 _NON_LOCATION_NAMES = {"feast", "celebration", "fragment", "birth", "death"}
 
+# Possessive-pronoun prefix — location names starting with these are body parts
+# or personal attributes, not real locations (#363)
+_POSSESSIVE_PREFIX_RE = re.compile(r"^(?:his|her|their|my|your|its)\s+", re.IGNORECASE)
+
 
 def _strip_leading_article(name: str) -> str:
     """Strip leading 'the', 'a', 'an' from a name for blocklist matching."""
@@ -1640,6 +1644,9 @@ def _is_misclassified_location(entity: dict) -> bool:
     stripped = _strip_leading_article(name).strip()
     if name in _NON_LOCATION_NAMES or stripped in _NON_LOCATION_NAMES:
         return True
+    # Reject possessive-pronoun prefixed names (body parts / personal attributes) (#363)
+    if _POSSESSIVE_PREFIX_RE.match(name):
+        return True
     return False
 
 
@@ -1657,6 +1664,80 @@ def _is_misclassified_item(entity: dict) -> bool:
     if _ABSTRACT_ITEM_RE.search(name):
         return True
     return False
+
+
+def _within_turn_dedup(entities: list[dict]) -> list[dict]:
+    """Deduplicate is_new entities discovered in the same turn (#365).
+
+    For each pair of is_new=True entities, checks:
+    - Character substring: name_a (lowered, >=4 chars) is substring of name_b, or vice versa
+    - Levenshtein distance <= 3
+    - SequenceMatcher ratio >= 0.6
+
+    Keeps the entity with the longer name (more specific).
+    """
+    from difflib import SequenceMatcher
+
+    new_entities = [e for e in entities if e.get("is_new", False)]
+    non_new = [e for e in entities if not e.get("is_new", False)]
+
+    if len(new_entities) < 2:
+        return entities
+
+    # Track which indices to drop (keep the longer-named entity)
+    drop_indices: set[int] = set()
+
+    for i in range(len(new_entities)):
+        if i in drop_indices:
+            continue
+        name_a = new_entities[i].get("name", "").strip().lower()
+        if not name_a:
+            continue
+        for j in range(i + 1, len(new_entities)):
+            if j in drop_indices:
+                continue
+            name_b = new_entities[j].get("name", "").strip().lower()
+            if not name_b:
+                continue
+
+            matched = False
+
+            # Check 1: Character substring (both names >= 4 chars)
+            if len(name_a) >= 4 and len(name_b) >= 4:
+                if name_a in name_b or name_b in name_a:
+                    matched = True
+
+            # Check 2: Levenshtein distance <= 3
+            if not matched:
+                dist = _levenshtein(name_a, name_b)
+                if dist <= 3:
+                    matched = True
+
+            # Check 3: SequenceMatcher ratio >= 0.6
+            if not matched:
+                ratio = SequenceMatcher(None, name_a, name_b).ratio()
+                if ratio >= 0.6:
+                    matched = True
+
+            if matched:
+                # Drop the shorter name, keep the longer (more specific)
+                if len(name_a) >= len(name_b):
+                    drop_idx = j
+                    keep_name = name_a
+                    drop_name = name_b
+                else:
+                    drop_idx = i
+                    keep_name = name_b
+                    drop_name = name_a
+                drop_indices.add(drop_idx)
+                print(
+                    f"  WITHIN-TURN DEDUP: dropping '{drop_name}' "
+                    f"in favor of '{keep_name}'",
+                    file=sys.stderr,
+                )
+
+    kept = [e for idx, e in enumerate(new_entities) if idx not in drop_indices]
+    return non_new + kept
 
 
 def _build_catalog_name_index(catalogs: dict) -> dict[str, dict]:
@@ -2358,6 +2439,9 @@ def extract_and_merge(
             continue
         _cross_catalog_filtered.append(entity_ref)
     qualified = _cross_catalog_filtered
+
+    # Within-turn dedup: merge similar is_new entities from same turn (#365)
+    qualified = _within_turn_dedup(qualified)
 
     # --- Pre-compute task inputs for phases 2-4 ---
 
@@ -3075,6 +3159,26 @@ def _dedup_catalogs(catalogs: dict) -> tuple[int, dict[str, str]]:
                         union(idx_a, idx_b)
                         print(f"  DEDUP (token-overlap): linking '{name_a}' and '{name_b}' as duplicates")
                         continue
+
+                # Rule 2b: Character-level substring containment (#365)
+                # If the shorter normalized name (>=4 chars) is a character
+                # substring of the longer name AND is a prefix of at least one
+                # token in the longer name, merge them. This catches name
+                # variants like elder/eldorman and camp/camping grounds without
+                # false-merging coincidental substrings like ring/spring.
+                if len(name_a) >= 4 and len(name_b) >= 4:
+                    if name_a in name_b or name_b in name_a:
+                        shorter = name_a if len(name_a) <= len(name_b) else name_b
+                        longer = name_b if len(name_a) <= len(name_b) else name_a
+                        longer_tokens = longer.replace("-", " ").split()
+                        # Shorter must NOT be a standalone token AND must be
+                        # a prefix of at least one token in the longer name
+                        if shorter not in longer_tokens and any(
+                            t.startswith(shorter) for t in longer_tokens
+                        ):
+                            union(idx_a, idx_b)
+                            print(f"  DEDUP (char-substring): linking '{name_a}' and '{name_b}' as duplicates")
+                            continue
 
                 # Rule 3: ID stem overlap (hyphen-segment containment)
                 # Guard: require smaller stem set to have at least 2 segments
@@ -3903,6 +4007,17 @@ def _merge_pc_aliases(
             pc_cooccurring_ids.update(rel)
     pc_cooccurring_ids.discard("char-player")
 
+    # Build set of known PC aliases for token-match rescue (#364)
+    _pc_alias_set: set[str] = set()
+    _pc_sa = pc_entry.get("stable_attributes", {})
+    _pc_aliases_attr = _pc_sa.get("aliases")
+    if isinstance(_pc_aliases_attr, dict):
+        _alias_val = _pc_aliases_attr.get("value", [])
+        if isinstance(_alias_val, list):
+            _pc_alias_set = {a.strip().lower() for a in _alias_val if isinstance(a, str) and a.strip()}
+        elif isinstance(_alias_val, str) and _alias_val:
+            _pc_alias_set = {a.strip().lower() for a in _alias_val.split(",") if a.strip()}
+
     for entity in list(entities):
         eid = entity.get("id", "")
         if eid == "char-player" or not eid:
@@ -3928,8 +4043,17 @@ def _merge_pc_aliases(
         # to avoid matching substrings inside larger words or names.
         name_pattern = r"(?<!\w)" + re.escape(name) + r"(?!\w)"
         occurrences = len(re.findall(name_pattern, pc_text, re.IGNORECASE))
+        _token_rescued = False
         if occurrences < 2:
-            continue
+            # Rescue via PC alias token match (#364): if a name token matches
+            # a known PC alias (>=4 chars, capitalized), allow the merge.
+            if _pc_alias_set:
+                for token in name.split():
+                    if len(token) >= 4 and token[0].isupper() and token.lower() in _pc_alias_set:
+                        _token_rescued = True
+                        break
+            if not _token_rescued:
+                continue
 
         # Check candidate has minimal data (≤3 turns span)
         first = entity.get("first_seen_turn", "")
@@ -3983,6 +4107,9 @@ def _merge_pc_aliases(
                         _independent_event_counts.get(ref_eid, 0) + 1
                     )
         independent_refs = _independent_event_counts.get(eid, 0)
+        # Token-rescued candidates require zero independent events (#364)
+        if _token_rescued and independent_refs > 0:
+            continue
         if independent_refs >= 2:
             continue
 

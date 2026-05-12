@@ -983,3 +983,97 @@ class TestPCAliasFalsePositives:
         assert "char-anya" not in merged
         # 1 original PC + 5 non-merged entities = 6 remain
         assert len(catalogs["characters.json"]) == 6
+
+
+# ---------------------------------------------------------------------------
+# #364 — PC alias token match
+# ---------------------------------------------------------------------------
+
+class TestPCAliasTokenMatch:
+    """Verify _merge_pc_aliases() token-match rescue merges PC alias forks."""
+
+    def test_token_match_fenouille_moonwind(self):
+        """'Fenouille Moonwind' with PC alias 'Fenouille' and zero events → merge."""
+        catalogs = {
+            "characters.json": [
+                {
+                    **_make_entity("char-player", "Player Character", "turn-001"),
+                    "stable_attributes": {
+                        "aliases": {"value": ["Fenouille"], "source_turn": "turn-001"},
+                    },
+                },
+                _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
+                             "turn-059", "turn-059"),
+            ]
+        }
+        # Candidate name does NOT appear >=2 times in PC text (no occurrence rescue)
+        events = [
+            _make_event("evt-1", "The druid enters the cave", ["char-player"], "turn-100"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille-moonwind" in merged
+        assert len(catalogs["characters.json"]) == 1
+
+    def test_token_match_with_independent_events_no_merge(self):
+        """Token match but candidate has independent events → don't merge."""
+        catalogs = {
+            "characters.json": [
+                {
+                    **_make_entity("char-player", "Player Character", "turn-001"),
+                    "stable_attributes": {
+                        "aliases": {"value": ["Fenouille"], "source_turn": "turn-001"},
+                    },
+                },
+                _make_entity("char-fenouille-moonwind", "Fenouille Moonwind",
+                             "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The druid enters the cave", ["char-player"], "turn-100"),
+            # Independent events (without char-player)
+            _make_event("evt-2", "Fenouille Moonwind speaks to the elder",
+                        ["char-fenouille-moonwind"], "turn-101"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-fenouille-moonwind" not in merged
+        assert len(catalogs["characters.json"]) == 2
+
+    def test_short_token_no_match(self):
+        """Token 'Mo' is < 4 chars → should not trigger token match."""
+        catalogs = {
+            "characters.json": [
+                {
+                    **_make_entity("char-player", "Player Character", "turn-001"),
+                    "stable_attributes": {
+                        "aliases": {"value": ["Mo"], "source_turn": "turn-001"},
+                    },
+                },
+                _make_entity("char-mo-nightwalker", "Mo Nightwalker",
+                             "turn-059", "turn-059"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The druid enters the cave", ["char-player"], "turn-100"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-mo-nightwalker" not in merged
+
+    def test_non_alias_token_no_match(self):
+        """'Elder' is not a PC alias — should not trigger token match."""
+        catalogs = {
+            "characters.json": [
+                {
+                    **_make_entity("char-player", "Player Character", "turn-001"),
+                    "stable_attributes": {
+                        "aliases": {"value": ["Fenouille"], "source_turn": "turn-001"},
+                    },
+                },
+                _make_entity("char-the-elder", "The Elder",
+                             "turn-016", "turn-016"),
+            ]
+        }
+        events = [
+            _make_event("evt-1", "The druid enters the cave", ["char-player"], "turn-100"),
+        ]
+        merged = _merge_pc_aliases(catalogs, events, "")
+        assert "char-the-elder" not in merged
