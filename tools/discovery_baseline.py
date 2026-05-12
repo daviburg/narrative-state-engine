@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """Discovery baseline measurement harness for issue #310.
 
 Loads catalogs and transcript data, runs entity discovery against a live LLM,
@@ -289,9 +289,9 @@ def main():
             for entity in result["entities"]:
                 if entity.get("existing_id") and not entity.get("name"):
                     eid = entity["existing_id"]
-                    result = find_entity_by_id(catalogs, eid)
-                    if result:
-                        _, cat_entry = result
+                    lookup = find_entity_by_id(catalogs, eid)
+                    if lookup:
+                        _, cat_entry = lookup
                         entity.setdefault("name", cat_entry.get("name", eid))
                         entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
                     else:
@@ -374,3 +374,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
