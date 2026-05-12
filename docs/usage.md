@@ -394,6 +394,10 @@ The included `server/ov_serve.py` provides:
 - **HTTP keep-alive** (#316) — defaults to 120-second keep-alive timeout,
   preventing TCP connection drops between sequential extraction requests.
   Configurable via `--timeout-keep-alive`.
+- **Admin flush** (#361) — `POST /admin/flush` drains all queued requests,
+  failing them with 503. Use this to recover from orphan requests left by
+  killed extraction processes without restarting the server. In-flight
+  batches complete normally. Returns `{"flushed": N, "status": "ok"}`.
 
 Configure `config/llm.json` on the client machine:
 

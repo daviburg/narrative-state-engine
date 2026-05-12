@@ -12,6 +12,7 @@ Endpoints:
   POST /v1/chat/completions  — OpenAI-compatible chat completions
   GET  /v1/models            — List available models
   GET  /health               — Health check
+  POST /admin/flush          — Drain queued requests (503 each)
 
 Usage:
   pip install fastapi uvicorn openvino-genai
@@ -247,6 +248,28 @@ async def health():
         "queue_depth": queue_size,
         "request_timeout_s": REQUEST_TIMEOUT_S,
     }
+
+@app.post("/admin/flush")
+async def admin_flush():
+    """Drain all queued requests, failing them with 503.
+
+    In-flight batches (currently in pipeline.generate()) are NOT interrupted.
+    Only requests waiting in the queue are cancelled.
+    """
+    if batch_queue is None:
+        return {"flushed": 0, "status": "ok"}
+    flushed = 0
+    while True:
+        try:
+            queued_req = batch_queue.get_nowait()
+            if not queued_req.future.done():
+                queued_req.future.set_exception(
+                    HTTPException(status_code=503, detail="Flushed by admin")
+                )
+            flushed += 1
+        except asyncio.QueueEmpty:
+            break
+    return {"flushed": flushed, "status": "ok"}
 
 @app.get("/v1/models")
 async def list_models():

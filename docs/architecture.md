@@ -245,7 +245,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/llm_client.py` | Provider-agnostic LLM client (OpenAI, Ollama, Google Gemini, etc.) with automatic fallback provider support (#301) |
 | `tools/dedup_audit.py` | LLM-assisted post-extraction dedup: identifies duplicate entities via name similarity heuristics, scores with LLM, auto-merges or flags for review (#306) |
 | `tools/discovery_baseline.py` | Discovery output measurement harness: runs entity discovery against a live LLM, reports token consumption, entity counts, and categorization (active/passive/spurious) (#310) |
-| `server/ov_serve.py` | OpenVINO GenAI REST server — OpenAI-compatible `/v1/chat/completions` endpoint using `ContinuousBatchingPipeline` with prefix caching and dynamic batching. Supports `--device` flag for multi-GPU targeting (e.g., `GPU.0`, `GPU.1`) (#299) |
+| `server/ov_serve.py` | OpenVINO GenAI REST server — OpenAI-compatible `/v1/chat/completions` endpoint using `ContinuousBatchingPipeline` with prefix caching and dynamic batching. Supports `--device` flag for multi-GPU targeting (e.g., `GPU.0`, `GPU.1`) (#299). `POST /admin/flush` drains orphan queued requests (#361) |
 | `tools/start_extraction_detached.ps1` | Launch semantic extraction in a detached process with log/PID files; supports `-Framework`/`-PlayerLabel` passthrough and safe argument quoting for values with spaces |
 | `tools/watch_extraction_detached.ps1` | Show status and tail logs for detached extraction runs |
 | `tools/stop_extraction_detached.ps1` | Stop detached extraction runs by PID file |
