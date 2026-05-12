@@ -12,6 +12,7 @@ from semantic_extraction import (
     _post_batch_orphan_sweep,
     _name_mention_discovery,
     _normalize_entity_id,
+    _sweep_stale_items,
     format_detail_prompt,
     _extract_turn_number,
     _extract_themes,
@@ -342,6 +343,121 @@ class TestPostBatchOrphanSweep:
         ]
         count = _post_batch_orphan_sweep(catalogs, events)
         assert count == 0
+
+
+# ---------------------------------------------------------------------------
+# Stale-item sweep tests (#367)
+# ---------------------------------------------------------------------------
+
+class TestSweepStaleItems:
+    """Items with low event references are removed after a staleness window."""
+
+    def _base_catalogs(self):
+        return {
+            "characters.json": [
+                {"id": "char-player", "name": "Player Character", "type": "character"}
+            ],
+            "locations.json": [],
+            "factions.json": [],
+            "items.json": [],
+        }
+
+    def test_removes_item_with_zero_refs_old(self):
+        """Item with 0 event refs, 30 turns old → removed."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-bowl", "name": "Bowl", "type": "item", "first_seen_turn": "turn-010"}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["char-player"], "turn_id": "turn-040"},
+        ]
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert "item-bowl" in removed
+        assert len(catalogs["items.json"]) == 0
+
+    def test_removes_item_with_one_ref_old(self):
+        """Item with 1 event ref, 30 turns old → removed (below threshold of 2)."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-fork", "name": "Fork", "type": "item", "first_seen_turn": "turn-010"}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["char-player", "item-fork"], "turn_id": "turn-040"},
+        ]
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert "item-fork" in removed
+        assert len(catalogs["items.json"]) == 0
+
+    def test_keeps_item_with_enough_refs(self):
+        """Item with 3 event refs, 30 turns old → kept."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-sword", "name": "Sword", "type": "item", "first_seen_turn": "turn-010"}
+        )
+        events = [
+            {"id": f"evt-{i}", "related_entities": ["item-sword"], "turn_id": f"turn-{30 + i}"}
+            for i in range(3)
+        ]
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert removed == []
+        assert len(catalogs["items.json"]) == 1
+
+    def test_keeps_item_not_old_enough(self):
+        """Item with 0 event refs, 5 turns old → kept (not old enough)."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-cup", "name": "Cup", "type": "item", "first_seen_turn": "turn-035"}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["char-player"], "turn_id": "turn-040"},
+        ]
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert removed == []
+        assert len(catalogs["items.json"]) == 1
+
+    def test_keeps_character_with_zero_refs(self):
+        """Character with 0 event refs → kept (only items are swept)."""
+        catalogs = self._base_catalogs()
+        catalogs["characters.json"].append(
+            {"id": "char-nobody", "name": "Nobody", "type": "character", "first_seen_turn": "turn-001"}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["char-player"], "turn_id": "turn-040"},
+        ]
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert removed == []
+        # Character still in catalog
+        assert len(catalogs["characters.json"]) == 2
+
+    def test_keeps_item_at_exact_threshold(self):
+        """Item with exactly 2 event refs, 30 turns old → kept (at threshold, not below)."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-ring", "name": "Ring", "type": "item", "first_seen_turn": "turn-010"}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["item-ring"], "turn_id": "turn-030"},
+            {"id": "evt-2", "related_entities": ["item-ring"], "turn_id": "turn-035"},
+        ]
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert removed == []
+        assert len(catalogs["items.json"]) == 1
+
+    def test_no_crash_on_missing_items_catalog(self):
+        """Handles missing items.json gracefully."""
+        catalogs = {"characters.json": [], "locations.json": []}
+        events = []
+        removed = _sweep_stale_items(catalogs, events, "turn-040")
+        assert removed == []
+
+    def test_no_crash_on_invalid_turn(self):
+        """Handles invalid current_turn gracefully."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-x", "name": "X", "type": "item", "first_seen_turn": "turn-010"}
+        )
+        removed = _sweep_stale_items(catalogs, [], "invalid")
+        assert removed == []
 
 
 # ---------------------------------------------------------------------------

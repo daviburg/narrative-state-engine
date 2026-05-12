@@ -3348,6 +3348,76 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
     return stubs_created
 
 
+# ---------------------------------------------------------------------------
+# Post-extraction stale-item sweep (#367)
+# ---------------------------------------------------------------------------
+
+_STALE_ITEM_MIN_REFS = 2       # Default minimum event references to survive
+_STALE_ITEM_WINDOW = 25        # Default turns since first_seen before eligible
+
+
+def _sweep_stale_items(
+    catalogs: dict,
+    events: list[dict],
+    current_turn: str,
+    min_event_refs: int = _STALE_ITEM_MIN_REFS,
+    staleness_turns: int = _STALE_ITEM_WINDOW,
+) -> list[str]:
+    """Remove items with fewer than *min_event_refs* event references after a staleness window.
+
+    An item is considered stale if:
+    1. It has fewer than min_event_refs event references (in related_entities across all events)
+    2. At least staleness_turns have passed since its first_seen_turn
+    3. It's of type "item" (don't touch characters, locations, factions)
+
+    Returns list of removed entity IDs.
+    """
+    current_num = _parse_turn_number(current_turn)
+    if current_num is None:
+        return []
+
+    # Count how many events reference each entity ID
+    # Normalize turn-tagged IDs (e.g. item-foo-turn-082 -> item-foo) so that
+    # references are counted against the canonical catalog ID.
+    known_ids = _collect_all_entity_ids(catalogs)
+    ref_counts: dict[str, int] = {}
+    for event in events:
+        for eid in event.get("related_entities", []):
+            if eid:
+                eid = _normalize_entity_id(eid, known_ids)
+                ref_counts[eid] = ref_counts.get(eid, 0) + 1
+
+    items = catalogs.get("items.json", [])
+    removed_ids: list[str] = []
+    kept: list[dict] = []
+
+    for entity in items:
+        eid = entity.get("id", "")
+        first_seen = _parse_turn_number(entity.get("first_seen_turn"))
+        ref_count = ref_counts.get(eid, 0)
+
+        if (
+            first_seen is not None
+            and (current_num - first_seen) >= staleness_turns
+            and ref_count < min_event_refs
+        ):
+            name = entity.get("name", eid)
+            first_turn = entity.get("first_seen_turn", "?")
+            print(
+                f"  [STALE-ITEM] Removing {eid} ({name}): "
+                f"{ref_count} event refs, first_seen {first_turn}",
+                file=sys.stderr,
+            )
+            removed_ids.append(eid)
+        else:
+            kept.append(entity)
+
+    if removed_ids:
+        catalogs["items.json"] = kept
+
+    return removed_ids
+
+
 # Minimum event-description mentions for name-mention discovery to create a stub
 _NAME_MENTION_MIN_EVENTS = 2
 
@@ -3671,6 +3741,161 @@ def backfill_stubs(
                 print(f"  Cleared stub notes from enriched entity: {entity.get('id', 'unknown')}")
 
     return backfilled
+
+
+# ---------------------------------------------------------------------------
+# Periodic dedup audit — LLM-assisted dedup during extraction (#366)
+# ---------------------------------------------------------------------------
+
+_DEFAULT_DEDUP_AUDIT_INTERVAL = 50  # Run every N turns; 0 = disabled
+
+
+def _run_periodic_dedup(
+    catalogs: dict,
+    events_list: list,
+    llm: "LLMClient",
+    turn_id: str,
+) -> int:
+    """Run LLM-assisted dedup audit on current catalog state.
+
+    Generates candidate pairs, scores them with the LLM using an enhanced
+    prompt that includes narrative evolution awareness, auto-merges
+    high-confidence pairs (>=0.9), and returns the count of merges applied.
+    """
+    from dedup_audit import (
+        generate_candidates,
+        _entity_lookup,
+        AUTO_MERGE_THRESHOLD,
+        SCORING_SYSTEM_PROMPT,
+    )
+
+    candidates = generate_candidates(catalogs)
+    if not candidates:
+        return 0
+
+    print(f"  DEDUP-AUDIT ({turn_id}): {len(candidates)} candidate pair(s)")
+
+    # Enhanced scoring prompt with narrative evolution awareness
+    evolution_prompt = SCORING_SYSTEM_PROMPT + (
+        "\n\nAdditional guidance:\n"
+        "- Same location that was renamed, rebuilt, or upgraded over time "
+        "counts as the same entity. Consider narrative evolution.\n"
+        "- An entity whose name changed as it evolved (e.g. shelters → "
+        "communal home → longhouse) should be treated as the same entity.\n"
+        "- Weight description overlap and relationship continuity heavily "
+        "when names differ significantly."
+    )
+
+    lookup = _entity_lookup(catalogs)
+
+    merge_pairs: list[dict] = []
+    for id_a, id_b, reason in candidates:
+        entity_a = lookup.get(id_a)
+        entity_b = lookup.get(id_b)
+        if not entity_a or not entity_b:
+            continue
+
+        # Score using enhanced prompt
+        json_a = json.dumps(entity_a, indent=2, default=str)
+        json_b = json.dumps(entity_b, indent=2, default=str)
+        user_prompt = f"Entity A:\n{json_a}\n\nEntity B:\n{json_b}"
+
+        try:
+            result = llm.extract_json(
+                system_prompt=evolution_prompt,
+                user_prompt=user_prompt,
+            )
+        except Exception as e:
+            print(f"  DEDUP-AUDIT: LLM error scoring {id_a} vs {id_b}: {e}", file=sys.stderr)
+            continue
+
+        if not isinstance(result, dict):
+            continue
+
+        try:
+            confidence = max(0.0, min(1.0, float(result.get("confidence", 0.0))))
+        except (TypeError, ValueError):
+            confidence = 0.0
+
+        same = bool(result.get("same_entity", False))
+        canonical_id = result.get("canonical_id", id_a)
+        if canonical_id not in (id_a, id_b):
+            canonical_id = id_a
+
+        if same and confidence >= AUTO_MERGE_THRESHOLD:
+            variant_id = id_b if canonical_id == id_a else id_a
+            merge_pairs.append({
+                "entity_a_id": id_a,
+                "entity_b_id": id_b,
+                "confidence": confidence,
+                "rationale": result.get("rationale", ""),
+                "canonical_id": canonical_id,
+                "canonical_name": lookup[canonical_id].get("name", canonical_id),
+                "variant_name": lookup[variant_id].get("name", variant_id),
+            })
+            print(
+                f"  DEDUP-AUDIT: MERGE {id_a} + {id_b} "
+                f"(confidence={confidence:.2f}, {result.get('rationale', '')})"
+            )
+        elif same and confidence >= 0.6:
+            print(
+                f"  DEDUP-AUDIT: REVIEW {id_a} vs {id_b} "
+                f"(confidence={confidence:.2f}, {result.get('rationale', '')})"
+            )
+
+    if not merge_pairs:
+        print(f"  DEDUP-AUDIT ({turn_id}): no merges to apply")
+        return 0
+
+    # Apply merges via coreference hints
+    from dedup_audit import _build_coreference_hints
+
+    hints = _build_coreference_hints(merge_pairs)
+    groups = hints.get("character_groups", [])
+
+    merged_ids: list[str] = []
+    from catalog_merger import dedup_merge_entity
+
+    for group in groups:
+        canonical_id = group.get("canonical_id", "")
+        variant_patterns = set(group.get("variant_id_patterns", []))
+        if not canonical_id:
+            continue
+
+        canonical_result = find_entity_by_id(catalogs, canonical_id)
+        if not canonical_result:
+            continue
+        canonical_file, canonical_entity = canonical_result
+
+        for vid in variant_patterns:
+            variant_result = find_entity_by_id(catalogs, vid)
+            if not variant_result:
+                continue
+            variant_file, variant_entity = variant_result
+
+            dedup_merge_entity(canonical_entity, variant_entity)
+            catalogs[variant_file] = [
+                e for e in catalogs[variant_file] if e.get("id") != vid
+            ]
+            merged_ids.append(vid)
+
+            # Rewrite stale IDs in events
+            for event in events_list:
+                related = event.get("related_entities", [])
+                event["related_entities"] = [
+                    canonical_id if eid == vid else eid for eid in related
+                ]
+            # Rewrite relationship refs
+            for _fn, entities in catalogs.items():
+                for entity in entities:
+                    for rel in entity.get("relationships", []):
+                        if rel.get("source_id") == vid:
+                            rel["source_id"] = canonical_id
+                        if rel.get("target_id") == vid:
+                            rel["target_id"] = canonical_id
+
+    print(f"  DEDUP-AUDIT ({turn_id}): merged {len(merged_ids)} entity/entities")
+    return len(merged_ids)
 
 
 # ---------------------------------------------------------------------------
@@ -4655,6 +4880,7 @@ def _extract_segmented(
         seg_refresh_interval = _seg_refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
         seg_refresh_batch = _seg_refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
         seg_checkpoint_interval = _read_checkpoint_interval(_seg_refresh_cfg)
+        seg_dedup_interval = _seg_refresh_cfg.get("dedup_audit_interval", _DEFAULT_DEDUP_AUDIT_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_DEDUP_AUDIT_INTERVAL
 
         seg_failed_turns: list[str] = []
 
@@ -4738,6 +4964,16 @@ def _extract_segmented(
                                                  seg_catalogs, llm)
                     if refreshed:
                         print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
+
+            # --- Periodic dedup audit (#366) ---
+            if seg_turn_number is None:
+                seg_turn_number = _parse_turn_number(turn_id)
+            if (
+                seg_dedup_interval > 0
+                and seg_turn_number is not None
+                and seg_turn_number % seg_dedup_interval == 0
+            ):
+                _run_periodic_dedup(seg_catalogs, seg_events, llm, turn_id)
 
             # Intra-segment checkpoint: persist catalogs periodically (#220)
             if (i + 1) % seg_checkpoint_interval == 0 and not dry_run:
@@ -4847,6 +5083,15 @@ def _extract_segmented(
     name_stubs = _name_mention_discovery(final_catalogs, final_events)
     if name_stubs:
         print(f"  Post-reconciliation name-mention discovery: {name_stubs} stub(s)")
+
+    # Stale-item sweep (#367) — remove ephemeral items with few event refs
+    _seg_stale_cfg = getattr(llm, "config", None) or {}
+    _seg_stale_min = _seg_stale_cfg.get("stale_item_min_refs", _STALE_ITEM_MIN_REFS) if isinstance(_seg_stale_cfg, dict) else _STALE_ITEM_MIN_REFS
+    _seg_stale_win = _seg_stale_cfg.get("stale_item_window", _STALE_ITEM_WINDOW) if isinstance(_seg_stale_cfg, dict) else _STALE_ITEM_WINDOW
+    seg_last_turn = turn_dicts[-1]["turn_id"] if turn_dicts else ""
+    seg_stale_removed = _sweep_stale_items(final_catalogs, final_events, seg_last_turn, _seg_stale_min, _seg_stale_win)
+    if seg_stale_removed:
+        print(f"  Post-reconciliation stale-item sweep removed {len(seg_stale_removed)} item(s)")
 
     entities_final = sum(len(v) for v in final_catalogs.values())
 
@@ -5172,6 +5417,7 @@ def extract_semantic_batch(
     refresh_interval = _refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
     refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
     checkpoint_interval = _read_checkpoint_interval(_refresh_cfg)
+    dedup_interval = _refresh_cfg.get("dedup_audit_interval", _DEFAULT_DEDUP_AUDIT_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_DEDUP_AUDIT_INTERVAL
 
     # Re-attempt previously failed turns before continuing
     if previously_failed:
@@ -5325,6 +5571,16 @@ def extract_semantic_batch(
                 if refreshed:
                     print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
+        # --- Periodic dedup audit (#366) ---
+        if current_turn_number is None:
+            current_turn_number = _parse_turn_number(turn_id)
+        if (
+            dedup_interval > 0
+            and current_turn_number is not None
+            and current_turn_number % dedup_interval == 0
+        ):
+            _run_periodic_dedup(catalogs, events_list, llm, turn_id)
+
         # Checkpoint every N turns (configurable via config/llm.json checkpoint_interval, default 25)
         if (i + 1) % checkpoint_interval == 0:
             _save_progress(progress_file, turn_id, total, catalogs, dry_run,
@@ -5400,6 +5656,16 @@ def extract_semantic_batch(
     if name_stubs:
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Name-mention discovery created {name_stubs} stub(s); {entities_after} entities now")
+
+    # --- Phase 4c: Stale-item sweep (#367) ---
+    _stale_cfg = getattr(llm, "config", None) or {}
+    _stale_min_refs = _stale_cfg.get("stale_item_min_refs", _STALE_ITEM_MIN_REFS) if isinstance(_stale_cfg, dict) else _STALE_ITEM_MIN_REFS
+    _stale_window = _stale_cfg.get("stale_item_window", _STALE_ITEM_WINDOW) if isinstance(_stale_cfg, dict) else _STALE_ITEM_WINDOW
+    last_turn_id = turn_dicts[-1]["turn_id"] if turn_dicts else ""
+    stale_removed = _sweep_stale_items(catalogs, events_list, last_turn_id, _stale_min_refs, _stale_window)
+    if stale_removed:
+        entities_after = sum(len(v) for v in catalogs.values())
+        print(f"  Stale-item sweep removed {len(stale_removed)} item(s); {entities_after} entities remain")
 
     # Report if PC extraction was skipped due to consecutive failures (#149)
     if _pc_skipped_turns > 0:
