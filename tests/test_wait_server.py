@@ -51,3 +51,28 @@ class TestWaitTool:
         """Result should include actual elapsed time."""
         result = asyncio.run(wait(1))
         assert "actual elapsed" in result
+
+    def test_rejects_bool(self):
+        """Booleans should be rejected even though isinstance(True, int) is True."""
+        result = asyncio.run(wait(True))
+        assert "Error" in result
+        result = asyncio.run(wait(False))
+        assert "Error" in result
+
+    def test_accepts_boundary_one(self):
+        """Boundary value: wait(1) should succeed."""
+        result = asyncio.run(wait(1))
+        assert "Wait complete" in result
+
+    def test_wait_cancelled(self):
+        """CancelledError during sleep should return a cancellation message."""
+
+        async def cancel_after(delay):
+            task = asyncio.create_task(wait(60))
+            await asyncio.sleep(delay)
+            task.cancel()
+            return await task
+
+        result = asyncio.run(cancel_after(0.1))
+        assert "cancelled" in result.lower()
+        assert "60s" in result

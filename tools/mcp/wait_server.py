@@ -30,7 +30,7 @@ async def wait(seconds: int, message: str = "") -> str:
     Returns:
         Confirmation with actual elapsed time
     """
-    if not isinstance(seconds, int) or seconds < 1:
+    if isinstance(seconds, bool) or not isinstance(seconds, int) or seconds < 1:
         return f"Error: seconds must be a positive integer, got {seconds}"
     if seconds > MAX_WAIT_SECONDS:
         return (
@@ -42,7 +42,11 @@ async def wait(seconds: int, message: str = "") -> str:
     if message:
         print(f"[wait-server] Waiting {seconds}s: {message}")
 
-    await asyncio.sleep(seconds)
+    try:
+        await asyncio.sleep(seconds)
+    except asyncio.CancelledError:
+        elapsed = time.monotonic() - start
+        return f"Wait cancelled after {elapsed:.1f}s of {seconds}s requested"
 
     elapsed = time.monotonic() - start
     result = f"Wait complete. Requested: {seconds}s, actual elapsed: {elapsed:.1f}s"
