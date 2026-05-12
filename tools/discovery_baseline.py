@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Discovery baseline measurement harness for issue #310.
 
 Loads catalogs and transcript data, runs entity discovery against a live LLM,
