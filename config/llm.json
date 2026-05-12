@@ -19,6 +19,7 @@
   "entity_refresh_interval": 50,
   "entity_refresh_batch_size": 10,
   "checkpoint_interval": 25,
+  "dedup_audit_interval": 50,
   "skip_response_format": true,
   "fallback": {
     "base_url": "http://localhost:8081/v1",

@@ -3873,7 +3873,7 @@ def _run_periodic_dedup(
                 continue
             variant_file, variant_entity = variant_result
 
-            dedup_merge_entity(canonical_entity, variant_entity)
+            dedup_merge_entity(canonical_entity, variant_entity, skip_name_guard=True)
             catalogs[variant_file] = [
                 e for e in catalogs[variant_file] if e.get("id") != vid
             ]
@@ -3931,6 +3931,31 @@ def _read_checkpoint_interval(llm_config: dict) -> int:
         )
         return _DEFAULT_CHECKPOINT_INTERVAL
     return value
+
+
+def _read_dedup_interval(llm_config: dict) -> int:
+    """Return dedup audit interval from config dict, with validation.
+
+    Falls back to _DEFAULT_DEDUP_AUDIT_INTERVAL on missing or invalid values.
+    A value of 0 disables periodic dedup.
+    """
+    raw = llm_config.get("dedup_audit_interval", _DEFAULT_DEDUP_AUDIT_INTERVAL) if isinstance(llm_config, dict) else _DEFAULT_DEDUP_AUDIT_INTERVAL
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        print(
+            f"  WARNING: Invalid dedup_audit_interval {raw!r}; using default {_DEFAULT_DEDUP_AUDIT_INTERVAL}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_DEDUP_AUDIT_INTERVAL
+    if value < 0:
+        print(
+            f"  WARNING: dedup_audit_interval must be >= 0, got {value!r}; using default {_DEFAULT_DEDUP_AUDIT_INTERVAL}",
+            file=sys.stderr,
+        )
+        return _DEFAULT_DEDUP_AUDIT_INTERVAL
+    return value
+
 
 # Type-aware slot allocation shares (must sum to 1.0)
 _REFRESH_TYPE_SHARES: dict[str, float] = {
@@ -4880,7 +4905,7 @@ def _extract_segmented(
         seg_refresh_interval = _seg_refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
         seg_refresh_batch = _seg_refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
         seg_checkpoint_interval = _read_checkpoint_interval(_seg_refresh_cfg)
-        seg_dedup_interval = _seg_refresh_cfg.get("dedup_audit_interval", _DEFAULT_DEDUP_AUDIT_INTERVAL) if isinstance(_seg_refresh_cfg, dict) else _DEFAULT_DEDUP_AUDIT_INTERVAL
+        seg_dedup_interval = _read_dedup_interval(_seg_refresh_cfg)
 
         seg_failed_turns: list[str] = []
 
@@ -5417,7 +5442,7 @@ def extract_semantic_batch(
     refresh_interval = _refresh_cfg.get("entity_refresh_interval", _DEFAULT_REFRESH_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_INTERVAL
     refresh_batch_size = _refresh_cfg.get("entity_refresh_batch_size", _DEFAULT_REFRESH_BATCH_SIZE) if isinstance(_refresh_cfg, dict) else _DEFAULT_REFRESH_BATCH_SIZE
     checkpoint_interval = _read_checkpoint_interval(_refresh_cfg)
-    dedup_interval = _refresh_cfg.get("dedup_audit_interval", _DEFAULT_DEDUP_AUDIT_INTERVAL) if isinstance(_refresh_cfg, dict) else _DEFAULT_DEDUP_AUDIT_INTERVAL
+    dedup_interval = _read_dedup_interval(_refresh_cfg)
 
     # Re-attempt previously failed turns before continuing
     if previously_failed:
