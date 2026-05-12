@@ -3363,10 +3363,10 @@ def _sweep_stale_items(
     min_event_refs: int = _STALE_ITEM_MIN_REFS,
     staleness_turns: int = _STALE_ITEM_WINDOW,
 ) -> list[str]:
-    """Remove items with insufficient event references after a staleness window.
+    """Remove items with fewer than *min_event_refs* event references after a staleness window.
 
     An item is considered stale if:
-    1. It has <= min_event_refs event references (in related_entities across all events)
+    1. It has fewer than min_event_refs event references (in related_entities across all events)
     2. At least staleness_turns have passed since its first_seen_turn
     3. It's of type "item" (don't touch characters, locations, factions)
 
@@ -3377,10 +3377,14 @@ def _sweep_stale_items(
         return []
 
     # Count how many events reference each entity ID
+    # Normalize turn-tagged IDs (e.g. item-foo-turn-082 -> item-foo) so that
+    # references are counted against the canonical catalog ID.
+    known_ids = _collect_all_entity_ids(catalogs)
     ref_counts: dict[str, int] = {}
     for event in events:
         for eid in event.get("related_entities", []):
             if eid:
+                eid = _normalize_entity_id(eid, known_ids)
                 ref_counts[eid] = ref_counts.get(eid, 0) + 1
 
     items = catalogs.get("items.json", [])
@@ -3760,7 +3764,6 @@ def _run_periodic_dedup(
     """
     from dedup_audit import (
         generate_candidates,
-        score_pair,
         _entity_lookup,
         AUTO_MERGE_THRESHOLD,
         SCORING_SYSTEM_PROMPT,
