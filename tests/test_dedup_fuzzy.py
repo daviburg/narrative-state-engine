@@ -5,7 +5,7 @@ from unittest.mock import patch, MagicMock
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from semantic_extraction import _dedup_catalogs
+from semantic_extraction import _dedup_catalogs, _within_turn_dedup
 
 
 def _make_entity(id_, name, turn="turn-001"):
@@ -139,6 +139,74 @@ def test_no_false_merge_herb_party_vs_hunting_party():
     assert len(catalogs["factions.json"]) == 2
 
 
+# ---------------------------------------------------------------------------
+# #365 — Within-turn dedup
+# ---------------------------------------------------------------------------
+
+def _make_discovery(name, is_new=True):
+    """Make a minimal discovery entity for _within_turn_dedup tests."""
+    return {"name": name, "is_new": is_new, "type": "character"}
+
+
+def test_within_turn_dedup_elder_eldorman():
+    """'elder' is a substring of 'eldorman' → keep 'eldorman'."""
+    entities = [_make_discovery("elder"), _make_discovery("eldorman")]
+    result = _within_turn_dedup(entities)
+    names = [e["name"] for e in result]
+    assert "eldorman" in names
+    assert "elder" not in names
+
+
+def test_within_turn_dedup_camp_camping_grounds():
+    """'camp' is a substring of 'camping grounds' → keep 'camping grounds'."""
+    entities = [_make_discovery("camp"), _make_discovery("camping grounds")]
+    result = _within_turn_dedup(entities)
+    names = [e["name"] for e in result]
+    assert "camping grounds" in names
+    assert "camp" not in names
+
+
+def test_within_turn_dedup_no_similarity():
+    """Dissimilar names → keep both."""
+    entities = [_make_discovery("wizard"), _make_discovery("goblin")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 2
+
+
+def test_within_turn_dedup_short_names_kept():
+    """Short dissimilar names skip substring check and have high Levenshtein → keep both."""
+    entities = [_make_discovery("ax"), _make_discovery("grove")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 2
+
+
+def test_within_turn_dedup_non_new_untouched():
+    """Non-new entities should not be deduped."""
+    entities = [
+        _make_discovery("elder", is_new=False),
+        _make_discovery("eldorman", is_new=True),
+    ]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 2
+
+
+# ---------------------------------------------------------------------------
+# #365 — Character substring in _dedup_catalogs
+# ---------------------------------------------------------------------------
+
+def test_char_substring_merge_star_starlight():
+    """'star' is a character substring of 'starlight' → merge in _dedup_catalogs."""
+    catalogs = {
+        "items.json": [
+            _make_entity("item-star", "star", "turn-001"),
+            _make_entity("item-starlight", "starlight", "turn-001"),
+        ]
+    }
+    count, merge_map = _dedup_catalogs(catalogs)
+    assert count == 1
+    assert len(catalogs["items.json"]) == 1
+
+
 def test_no_false_merge_broad_figure_vs_lone_figure():
     """'broad figure' and 'a lone figure' should NOT merge."""
     catalogs = {
@@ -233,3 +301,63 @@ def test_dedup_normalize_map_in_merge_map():
     # The turn-tagged entity gets normalized + deduped; its old ID is in merge_map
     assert "char-shaman-turn-082" in merge_map
     assert merge_map["char-shaman-turn-082"] == "char-shaman"
+
+
+# ---------------------------------------------------------------------------
+# #365 review feedback - Additional within-turn dedup tests
+# ---------------------------------------------------------------------------
+
+
+def test_within_turn_dedup_levenshtein_merge():
+    """Levenshtein distance <= 3 should merge (e.g. 'shaman' vs 'shamn')."""
+    entities = [_make_discovery("shaman"), _make_discovery("shamn")]
+    result = _within_turn_dedup(entities)
+    names = [e["name"] for e in result]
+    assert len(result) == 1
+    assert "shaman" in names
+
+
+def test_within_turn_dedup_sequence_matcher_merge():
+    """SequenceMatcher ratio >= 0.6 should merge similar names (lev > 3, not substring)."""
+    # 'elder spirit totem' vs 'elder spirits totem pole' -- ratio ~0.86, lev=6
+    entities = [_make_discovery("elder spirit totem"), _make_discovery("elder spirits totem pole")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 1
+    names = [e["name"] for e in result]
+    assert "elder spirits totem pole" in names  # longer name kept
+
+
+def test_within_turn_dedup_no_false_merge_oaks_cloaks():
+    """'oaks' is a substring of 'cloaks of shadow' but not a token prefix -- no merge."""
+    entities = [_make_discovery("oaks"), _make_discovery("cloaks of shadow")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 2
+
+
+def test_within_turn_dedup_preserves_ordering():
+    """Result should preserve original entity ordering (non-new + new interleaved)."""
+    entities = [
+        _make_discovery("existing-npc", is_new=False),
+        _make_discovery("elder"),
+        _make_discovery("another-npc", is_new=False),
+        _make_discovery("eldorman"),
+    ]
+    result = _within_turn_dedup(entities)
+    names = [e["name"] for e in result]
+    # elder dropped, eldorman kept; non-new entities stay in original positions
+    assert names == ["existing-npc", "another-npc", "eldorman"]
+
+
+def test_within_turn_dedup_cascade_drop():
+    """If A is dropped because of B, A should not cause further drops against C."""
+    entities = [
+        _make_discovery("camp"),
+        _make_discovery("camping grounds"),
+        _make_discovery("forest clearing"),
+    ]
+    result = _within_turn_dedup(entities)
+    names = [e["name"] for e in result]
+    assert "camp" not in names
+    assert "camping grounds" in names
+    assert "forest clearing" in names
+    assert len(result) == 2

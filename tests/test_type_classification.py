@@ -100,3 +100,29 @@ class TestValidLocationNotRejected:
 
     def test_dense_forest_not_rejected(self):
         assert not _is_misclassified_location({"name": "dense forest", "type": "location"})
+
+
+class TestPossessivePrefixLocationRejected:
+    """Possessive-pronoun prefixed location names are body parts, not locations (#363)."""
+
+    def test_his_lips_rejected(self):
+        assert _is_misclassified_location({"name": "his lips", "type": "location"})
+
+    def test_his_shoulders_rejected(self):
+        assert _is_misclassified_location({"name": "his shoulders", "type": "location"})
+
+    def test_her_hands_rejected(self):
+        assert _is_misclassified_location({"name": "her hands", "type": "location"})
+
+    def test_their_backs_rejected(self):
+        assert _is_misclassified_location({"name": "their backs", "type": "location"})
+
+    def test_my_kingdom_rejected(self):
+        assert _is_misclassified_location({"name": "my kingdom", "type": "location"})
+
+    def test_frigid_woods_not_rejected(self):
+        assert not _is_misclassified_location({"name": "frigid woods", "type": "location"})
+
+    def test_historic_building_not_rejected(self):
+        """'historic' starts with 'his' as substring but not as a word."""
+        assert not _is_misclassified_location({"name": "historic building", "type": "location"})
