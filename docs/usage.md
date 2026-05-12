@@ -1392,6 +1392,45 @@ Rebuild the scene graph after extraction runs or catalog updates to keep the ind
 
 ---
 
+## MCP Tools
+
+The repository includes lightweight MCP (Model Context Protocol) servers that provide utility tools for VS Code Copilot agents.
+
+### Setup
+
+Install the MCP dependency:
+
+```bash
+pip install -r requirements-mcp.txt
+```
+
+MCP servers are registered in `.vscode/mcp.json` and discovered automatically by VS Code.
+
+### Wait Tool
+
+The `wait` tool lets the coordinator agent pause for a specified duration before resuming work, enabling token-efficient monitoring of long-running processes.
+
+**Tool:** `wait(seconds, message)`
+
+| Parameter | Type | Required | Description |
+|---|---|---|---|
+| `seconds` | int | Yes | Duration to wait (1–14400, max 4 hours) |
+| `message` | string | No | Description of what you're waiting for |
+
+**Returns:** Confirmation with actual elapsed time.
+
+**Example usage pattern** (coordinator agent):
+1. Launch a detached extraction run
+2. Estimate remaining time (e.g. 2 hours)
+3. Call `wait(seconds=5760, message="extraction run ~80% of estimated 2h")`
+4. After wait completes, dispatch a status check subagent
+
+**Error handling:**
+- Rejects `seconds < 1` or `seconds > 14400`
+- Rejects non-integer values
+
+---
+
 ## Using with VS Code Copilot
 
 Open the repo in VS Code with GitHub Copilot enabled.

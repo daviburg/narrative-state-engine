@@ -252,6 +252,15 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/watch_extraction_detached.ps1` | Show status and tail logs for detached extraction runs |
 | `tools/stop_extraction_detached.ps1` | Stop detached extraction runs by PID file |
 | `tools/run_with_heartbeat.py` / `.ps1` / `.sh` | Heartbeat wrapper — keeps terminal alive during long commands for idle-detection-based completion notification |
+| `tools/mcp/wait_server.py` | MCP server exposing a `wait(seconds, message)` tool for coordinator scheduling during long-running workflows |
+
+### MCP Tools
+
+Lightweight Model Context Protocol (MCP) servers provide utility tools for VS Code Copilot agents.
+
+- `tools/mcp/wait_server.py` — exposes a `wait(seconds, message)` tool that lets the coordinator agent pause for a specified duration (1–14400 seconds, max 4 hours) before resuming. Uses `asyncio.sleep()` for non-blocking wait. Returns actual elapsed time on completion.
+- Registered in `.vscode/mcp.json` for automatic discovery by VS Code
+- Dependencies: `mcp` package (`pip install -r requirements-mcp.txt`)
 
 ### CrewAI HTTP Bridge
 
