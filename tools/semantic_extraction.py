@@ -4928,6 +4928,25 @@ def _extract_segmented(
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     quota_exhausted = False
 
+    # Pre-load existing catalogs/events/timeline from disk so that entities
+    # from prior extraction batches (e.g. when resuming with --start-turn)
+    # survive reconciliation.  They are injected as a synthetic "base"
+    # segment so _reconcile_segments merges them with new segments.  (#376)
+    base_catalogs = load_catalogs(catalog_dir)
+    base_events = load_events(catalog_dir)
+    base_timeline = load_timeline(catalog_dir)
+    base_entity_count = sum(len(v) for v in base_catalogs.values())
+    if base_entity_count > 0:
+        print(f"  Loaded {base_entity_count} pre-existing entities from catalog directory")
+        segments.append({
+            "id": "base",
+            "catalogs": base_catalogs,
+            "events": base_events,
+            "timeline": base_timeline,
+            "turn_range": ("", ""),
+            "failed_turns": [],
+        })
+
     for start in range(0, total, segment_size):
         end = min(start + segment_size, total)
         segment_turns = turn_dicts[start:end]
