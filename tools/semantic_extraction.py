@@ -5754,6 +5754,13 @@ def extract_semantic_batch(
                 save_events(catalog_dir, events_list)
                 save_timeline(catalog_dir, timeline)
 
+    # --- End-of-loop checkpoint: ensure entities survive if process is killed during
+    # post-batch passes (refresh, dedup, orphan sweep, etc.) (#379)
+    if not dry_run and turn_dicts:
+        save_catalogs(catalog_dir, catalogs)
+        save_events(catalog_dir, events_list)
+        save_timeline(catalog_dir, timeline)
+
     # Shut down the discovery prefetch executor
     if _prefetch_executor is not None:
         _prefetch_executor.shutdown(wait=False)
