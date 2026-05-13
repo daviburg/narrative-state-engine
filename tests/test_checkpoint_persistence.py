@@ -375,3 +375,60 @@ class TestResumeLoadsPersisted:
         ids = {e["id"] for e in chars}
         assert "char-alpha" in ids, "Pre-existing entity char-alpha not loaded on resume"
         assert "char-beta" in ids, "Pre-existing entity char-beta not loaded on resume"
+
+
+# ---------------------------------------------------------------------------
+# Non-segmented path: end-of-loop checkpoint (#379)
+# ---------------------------------------------------------------------------
+
+class TestEndOfLoopCheckpoint:
+    """Verify the unconditional save after the main extraction loop."""
+
+    def test_end_of_loop_checkpoint_saves_when_under_interval(self, tmp_path):
+        """save_catalogs must be called after the loop even when fewer than
+        checkpoint_interval turns are processed (no modulo checkpoint fired)."""
+        session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
+
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
+            catalogs["characters.json"].append(
+                _make_entity(f"char-eol-{len(catalogs['characters.json']) + 1}",
+                             f"EolEnt {len(catalogs['characters.json'])}")
+            )
+            return catalogs, events, False, {}
+
+        turns = _make_turns(1, 5)  # 5 turns, checkpoint_interval=25 → no modulo checkpoint
+
+        save_calls = []
+
+        def tracking_save(cdir, cats, **kw):
+            save_calls.append(sum(len(v) for v in cats.values()))
+
+        with patch("semantic_extraction.LLMClient") as mock_llm_cls, \
+             patch("semantic_extraction.extract_and_merge", side_effect=mock_extract_and_merge), \
+             patch("semantic_extraction._ensure_player_character"), \
+             patch("semantic_extraction.find_stale_entities", return_value=[]), \
+             patch("semantic_extraction.save_catalogs", side_effect=tracking_save), \
+             patch("semantic_extraction.save_events"), \
+             patch("semantic_extraction.save_timeline"), \
+             patch("semantic_extraction.cleanup_dangling_relationships", return_value={}), \
+             patch("semantic_extraction._post_batch_orphan_sweep", return_value=0), \
+             patch("semantic_extraction._name_mention_discovery", return_value=0), \
+             patch("semantic_extraction.load_catalogs", return_value=_empty_catalogs()), \
+             patch("semantic_extraction.load_events", return_value=[]), \
+             patch("semantic_extraction.load_timeline", return_value=[]):
+            mock_llm_cls.return_value = MagicMock(config={"checkpoint_interval": 25})
+
+            from semantic_extraction import extract_semantic_batch
+            extract_semantic_batch(
+                turns, session_dir, framework_dir=framework_dir,
+                config_path="unused",
+            )
+
+        # With 5 turns and checkpoint_interval=25, no modulo checkpoint fires.
+        # The end-of-loop checkpoint (#379) must still call save_catalogs.
+        assert len(save_calls) >= 1, (
+            "save_catalogs was never called — end-of-loop checkpoint missing"
+        )
+        assert save_calls[0] == 5, (
+            f"Expected 5 entities at end-of-loop save, got {save_calls[0]}"
+        )
