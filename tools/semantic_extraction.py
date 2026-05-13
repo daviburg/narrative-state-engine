@@ -2136,74 +2136,24 @@ def _extract_events_parallel(
         return None
 
 
-def extract_and_merge(
+def _run_discovery_phase(
     turn: dict,
     catalogs: dict,
-    events_list: list,
-    llm: LLMClient,
+    llm: "LLMClient",
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
-    catalog_dir: str | None = None,
-    timeline: list | None = None,
-) -> tuple[dict, list, bool, dict]:
-    """Process one turn through all extraction agents.
+) -> dict:
+    """Run entity discovery (phase 1) and return results for later merge.
 
-    Args:
-        turn: Dict with keys turn_id, speaker, text.
-        catalogs: Dict keyed by catalog filename, values are entity arrays.
-        events_list: Current list of events.
-        llm: LLM client instance.
-        min_confidence: Minimum confidence to catalog an entity.
-        catalog_dir: Optional path to the catalog directory, used to load
-            arc sidecar files for relationship compaction (#120).
-        timeline: Optional list of timeline entries.  When provided, temporal
-            signals are extracted from the turn and merged in-place (#263).
+    This is extracted so the batch loop can pre-fetch discovery for the next
+    turn while the current turn's phases 2-4 are still running.
 
-    Returns:
-        Tuple of (catalogs, events_list, turn_failed, log_record) where
-        turn_failed is True when a non-PC extraction agent encountered an
-        LLM error (e.g. 429, quota exhaustion, timeout).  PC extraction
-        failures are tracked separately via ``_pc_consecutive_failures``
-        and the ``pc_ok`` / ``pc_error`` fields in log_record.
-        log_record is a dict summarising per-phase outcomes for this turn;
-        phases that were skipped have their ``*_ok`` field set to None.
+    Returns a dict with keys: ``qualified``, ``turn_failed``, ``phase_log``,
+    ``discovery_proposals``, ``discovery_filtered``.
     """
-    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
-    _t0 = time.monotonic()
-    _entities_before = sum(len(v) for v in catalogs.values())
-    _events_before = len(events_list)
-
-    # Per-phase tracking for extraction log (#217)
-    # Phases that can be skipped start as None so the log does not report
-    # a successful extraction when that phase never actually ran.
-    _phase_log: dict = {
-        "discovery_ok": True, "discovery_error": None,
-        "detail_ok": True, "detail_error": None,
-        "pc_ok": None, "pc_error": None,
-        "relationships_ok": None, "relationships_error": None,
-        "events_ok": True, "events_error": None,
-    }
-
-    # Load arc sidecar for PC relationship compaction (#120)
-    # V2 layout stores per-entity files under <catalog_dir>/characters/;
-    # fall back to catalog root for legacy/V1 layouts.
-    pc_arcs_data = None
-    if catalog_dir:
-        arcs_candidates = [
-            os.path.join(catalog_dir, "characters", "char-player.arcs.json"),
-            os.path.join(catalog_dir, "char-player.arcs.json"),
-        ]
-        for arcs_path in arcs_candidates:
-            if os.path.isfile(arcs_path):
-                try:
-                    with open(arcs_path, "r", encoding="utf-8-sig") as f:
-                        pc_arcs_data = json.load(f)
-                except (json.JSONDecodeError, OSError):
-                    pass  # Ignore corrupt/unreadable arcs file
-                break
-
-    # --- 1. Entity Discovery ---
     turn_failed = False
+    phase_log: dict = {"discovery_ok": True, "discovery_error": None}
+
     current_turn_num = _parse_turn_number(turn_id)
     _ctx_len = getattr(llm, "context_length", None)
     if not isinstance(_ctx_len, int):
@@ -2217,15 +2167,8 @@ def extract_and_merge(
         entity_context_budget=_entity_budget,
         turn_text=turn.get("text"),
     )
-    # discovery_temperature override (#251) — allows a higher temperature
-    # for entity discovery without affecting detail/relationship/event phases.
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
-    # discovery_max_tokens override (#191) — discovery responses grow with
-    # catalog size; allow a higher output budget than the default max_tokens.
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
-    # relationship_max_tokens override — relationship responses grow with
-    # entity density; allow a higher output budget for entity-dense turns.
-    _rel_max_tokens = _cfg.get("relationship_max_tokens") if isinstance(_cfg, dict) else None
     try:
         discovery_result = llm.extract_json(
             system_prompt=load_template("entity-discovery"),
@@ -2234,8 +2177,6 @@ def extract_and_merge(
             max_tokens=_discovery_max_tokens,
         )
     except LLMTruncationError as trunc_err:
-        # Discovery hit the token ceiling. Retry with 2× token budget first
-        # (prefer complete response over lossy repair).
         _retry_max = (_discovery_max_tokens or llm.max_tokens) * 2
         _effective_max = _discovery_max_tokens or llm.max_tokens
         print(f"  TRUNCATED: Discovery for {turn_id} hit max_tokens={_effective_max}, "
@@ -2248,7 +2189,6 @@ def extract_and_merge(
                 max_tokens=_retry_max,
             )
         except LLMTruncationError as retry_trunc:
-            # Still truncated at 2× — fall back to lossy JSON repair
             partial = retry_trunc.partial_text
             print(f"  TRUNCATED (2nd attempt): Still hit limit at {_retry_max}, "
                   f"attempting repair...", file=sys.stderr)
@@ -2258,7 +2198,6 @@ def extract_and_merge(
                       f"from truncated response", file=sys.stderr)
                 discovery_result = repaired
             else:
-                # Repair on 2nd attempt failed — try repair on 1st attempt's partial
                 repaired_orig = _repair_truncated_discovery(trunc_err.partial_text)
                 if repaired_orig is not None:
                     print(f"  REPAIRED (from 1st attempt): Recovered "
@@ -2270,10 +2209,9 @@ def extract_and_merge(
                           f"{retry_trunc}", file=sys.stderr)
                     discovery_result = {"entities": []}
                     turn_failed = True
-                    _phase_log["discovery_ok"] = False
-                    _phase_log["discovery_error"] = str(retry_trunc)
+                    phase_log["discovery_ok"] = False
+                    phase_log["discovery_error"] = str(retry_trunc)
         except LLMExtractionError as retry_err:
-            # Non-truncation failure on retry — fall back to repair on original
             print(f"  WARNING: Retry failed for {turn_id}: {retry_err}, "
                   f"attempting repair on original...", file=sys.stderr)
             repaired = _repair_truncated_discovery(trunc_err.partial_text)
@@ -2286,39 +2224,36 @@ def extract_and_merge(
                       f"{retry_err}", file=sys.stderr)
                 discovery_result = {"entities": []}
                 turn_failed = True
-                _phase_log["discovery_ok"] = False
-                _phase_log["discovery_error"] = str(retry_err)
+                phase_log["discovery_ok"] = False
+                phase_log["discovery_error"] = str(retry_err)
     except QuotaExhaustedError:
         raise
     except LLMExtractionError as e:
         print(f"  WARNING: Entity discovery failed for {turn_id}: {e}", file=sys.stderr)
         discovery_result = {"entities": []}
         turn_failed = True
-        _phase_log["discovery_ok"] = False
-        _phase_log["discovery_error"] = str(e)
+        phase_log["discovery_ok"] = False
+        phase_log["discovery_error"] = str(e)
 
     if not isinstance(discovery_result, dict):
         print(f"  WARNING: Discovery returned non-dict for {turn_id}, skipping", file=sys.stderr)
         discovery_result = {"entities": []}
         turn_failed = True
-        _phase_log["discovery_ok"] = False
-        _phase_log["discovery_error"] = _phase_log["discovery_error"] or "non-dict response"
+        phase_log["discovery_ok"] = False
+        phase_log["discovery_error"] = phase_log["discovery_error"] or "non-dict response"
 
     discovered = discovery_result.get("entities", [])
 
-    # Defensive shape check: ensure entities is a list of dicts (#250 review)
     if not isinstance(discovered, list):
         print(f"  WARNING: Discovery entities is not a list for {turn_id}, skipping", file=sys.stderr)
         discovered = []
         turn_failed = True
-        _phase_log["discovery_ok"] = False
-        _phase_log["discovery_error"] = _phase_log["discovery_error"] or "entities field is not a list"
+        phase_log["discovery_ok"] = False
+        phase_log["discovery_error"] = phase_log["discovery_error"] or "entities field is not a list"
     else:
         discovered = [e for e in discovered if isinstance(e, dict)]
 
-    # Expand compact discovery entries (#310): entries with only
-    # existing_id + confidence need name/type filled from catalogs
-    # so downstream code (detail selection, relationship builder) works.
+    # Expand compact discovery entries (#310)
     _compact_count = 0
     for entity in discovered:
         if entity.get("existing_id") and not entity.get("name"):
@@ -2337,12 +2272,10 @@ def extract_and_merge(
     if _compact_count:
         print(f"  Expanded {_compact_count} compact discovery entries from catalog")
 
-    # Post-process discovery results: ensure provenance and fix ID prefixes
+    # Post-process: ensure provenance and fix ID prefixes
     for entity in discovered:
-        # Ensure source_turn is always set (smaller models may omit it)
         if not entity.get("source_turn"):
             entity["source_turn"] = turn_id
-        # Fix proposed_id prefix if it doesn't match the declared type
         pid = entity.get("proposed_id", "")
         etype = entity.get("type", "")
         if pid and etype:
@@ -2350,8 +2283,7 @@ def extract_and_merge(
             if not validate_id_prefix(pid, etype):
                 entity["proposed_id"] = fix_id_prefix(pid, etype)
 
-    # Build discovery log entries for all proposed entities (#250)
-    # Use None for missing fields to distinguish absent from default values.
+    # Build discovery log entries (#250)
     _discovery_proposals = []
     for entity in discovered:
         _discovery_proposals.append({
@@ -2362,7 +2294,7 @@ def extract_and_merge(
             "confidence": entity.get("confidence"),
         })
 
-    # Filter by confidence, tracking rejections (#250)
+    # Filter by confidence (#250)
     _discovery_filtered = []
     qualified = []
     for entity in discovered:
@@ -2376,7 +2308,7 @@ def extract_and_merge(
                 "reason": "below_confidence_threshold",
             })
 
-    # Reject concept-prefix entities at discovery acceptance time (#124)
+    # Reject concept-prefix entities (#124)
     filtered_qualified = []
     for entity_ref in qualified:
         eid = get_entity_id(entity_ref)
@@ -2433,7 +2365,7 @@ def extract_and_merge(
         _item_filtered.append(entity_ref)
     qualified = _item_filtered
 
-    # Reject entities whose name already exists in catalogs under a different type (#303)
+    # Reject cross-catalog type conflicts (#303)
     _catalog_name_index = _build_catalog_name_index(catalogs)
     _cross_catalog_filtered = []
     for entity_ref in qualified:
@@ -2453,8 +2385,127 @@ def extract_and_merge(
         _cross_catalog_filtered.append(entity_ref)
     qualified = _cross_catalog_filtered
 
-    # Within-turn dedup: merge similar is_new entities from same turn (#365)
+    # Within-turn dedup (#365)
     qualified = _within_turn_dedup(qualified)
+
+    return {
+        "qualified": qualified,
+        "turn_failed": turn_failed,
+        "phase_log": phase_log,
+        "discovery_proposals": _discovery_proposals,
+        "discovery_filtered": _discovery_filtered,
+    }
+
+
+def extract_and_merge(
+    turn: dict,
+    catalogs: dict,
+    events_list: list,
+    llm: LLMClient,
+    min_confidence: float = DEFAULT_MIN_CONFIDENCE,
+    catalog_dir: str | None = None,
+    timeline: list | None = None,
+    prefetched_discovery: dict | None = None,
+    on_discovery_done: "callable | None" = None,
+) -> tuple[dict, list, bool, dict]:
+    """Process one turn through all extraction agents.
+
+    Args:
+        turn: Dict with keys turn_id, speaker, text.
+        catalogs: Dict keyed by catalog filename, values are entity arrays.
+        events_list: Current list of events.
+        llm: LLM client instance.
+        min_confidence: Minimum confidence to catalog an entity.
+        catalog_dir: Optional path to the catalog directory, used to load
+            arc sidecar files for relationship compaction (#120).
+        timeline: Optional list of timeline entries.  When provided, temporal
+            signals are extracted from the turn and merged in-place (#263).
+        prefetched_discovery: Optional pre-fetched discovery result from
+            inter-turn pipelining.  When provided, the discovery LLM call
+            is skipped and this result is used directly.  Keys:
+            ``qualified``, ``turn_failed``, ``phase_log``,
+            ``discovery_proposals``, ``discovery_filtered``.
+        on_discovery_done: Optional callback invoked after discovery completes
+            (or prefetched result is consumed) but before phases 2-4 start.
+            Used by the batch loop to submit the next turn's discovery prefetch
+            so it overlaps with this turn's detail/relationship/event phases.
+
+    Returns:
+        Tuple of (catalogs, events_list, turn_failed, log_record) where
+        turn_failed is True when a non-PC extraction agent encountered an
+        LLM error (e.g. 429, quota exhaustion, timeout).  PC extraction
+        failures are tracked separately via ``_pc_consecutive_failures``
+        and the ``pc_ok`` / ``pc_error`` fields in log_record.
+        log_record is a dict summarising per-phase outcomes for this turn;
+        phases that were skipped have their ``*_ok`` field set to None.
+    """
+    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
+    turn_id = turn["turn_id"]
+    _t0 = time.monotonic()
+    _entities_before = sum(len(v) for v in catalogs.values())
+    _events_before = len(events_list)
+
+    # Per-phase tracking for extraction log (#217)
+    # Phases that can be skipped start as None so the log does not report
+    # a successful extraction when that phase never actually ran.
+    _phase_log: dict = {
+        "discovery_ok": True, "discovery_error": None,
+        "detail_ok": True, "detail_error": None,
+        "pc_ok": None, "pc_error": None,
+        "relationships_ok": None, "relationships_error": None,
+        "events_ok": True, "events_error": None,
+    }
+
+    # Load arc sidecar for PC relationship compaction (#120)
+    # V2 layout stores per-entity files under <catalog_dir>/characters/;
+    # fall back to catalog root for legacy/V1 layouts.
+    pc_arcs_data = None
+    if catalog_dir:
+        arcs_candidates = [
+            os.path.join(catalog_dir, "characters", "char-player.arcs.json"),
+            os.path.join(catalog_dir, "char-player.arcs.json"),
+        ]
+        for arcs_path in arcs_candidates:
+            if os.path.isfile(arcs_path):
+                try:
+                    with open(arcs_path, "r", encoding="utf-8-sig") as f:
+                        pc_arcs_data = json.load(f)
+                except (json.JSONDecodeError, OSError):
+                    pass  # Ignore corrupt/unreadable arcs file
+                break
+
+    # --- 1. Entity Discovery ---
+    turn_failed = False
+    _cfg = getattr(llm, "config", None)
+    # relationship_max_tokens override — relationship responses grow with
+    # entity density; allow a higher output budget for entity-dense turns.
+    _rel_max_tokens = _cfg.get("relationship_max_tokens") if isinstance(_cfg, dict) else None
+
+    if prefetched_discovery is not None:
+        _t_after_discovery = time.monotonic()
+        qualified = prefetched_discovery["qualified"]
+        turn_failed = prefetched_discovery["turn_failed"]
+        _discovery_proposals = prefetched_discovery["discovery_proposals"]
+        _discovery_filtered = prefetched_discovery["discovery_filtered"]
+        _pf_phase = prefetched_discovery["phase_log"]
+        _phase_log["discovery_ok"] = _pf_phase.get("discovery_ok", True)
+        _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
+    else:
+        _discovery_result = _run_discovery_phase(
+            turn, catalogs, llm, min_confidence,
+        )
+        _t_after_discovery = time.monotonic()
+        qualified = _discovery_result["qualified"]
+        turn_failed = _discovery_result["turn_failed"]
+        _discovery_proposals = _discovery_result["discovery_proposals"]
+        _discovery_filtered = _discovery_result["discovery_filtered"]
+        _phase_log["discovery_ok"] = _discovery_result["phase_log"]["discovery_ok"]
+        _phase_log["discovery_error"] = _discovery_result["phase_log"]["discovery_error"]
+
+    # Notify the batch loop so it can submit the next turn's discovery prefetch
+    # while this turn's phases 2-4 run on the GPU.
+    if on_discovery_done is not None:
+        on_discovery_done()
 
     # --- Pre-compute task inputs for phases 2-4 ---
 
@@ -3008,6 +3059,8 @@ def extract_and_merge(
 
         llm.delay()
 
+    _t_after_parallel = time.monotonic()
+
     # --- Phase 5: Temporal signal extraction (#263) ---
     _temporal_before = len(timeline) if timeline is not None else 0
     if timeline is not None:
@@ -3024,6 +3077,8 @@ def extract_and_merge(
             print(f"  WARNING: Temporal extraction failed for {turn_id}: {e}", file=sys.stderr)
             _phase_log["temporal_ok"] = False
             _phase_log["temporal_error"] = str(e)
+
+    _t_after_temporal = time.monotonic()
 
     # Build extraction log record (#217)
     _elapsed_ms = int((time.monotonic() - _t0) * 1000)
@@ -3051,6 +3106,9 @@ def extract_and_merge(
         "discovery_proposals": _discovery_proposals,
         "discovery_filtered": _discovery_filtered,
         "elapsed_ms": _elapsed_ms,
+        "discovery_ms": int((_t_after_discovery - _t0) * 1000),
+        "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
+        "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
     }
     return catalogs, events_list, turn_failed, _log_record
 
@@ -4944,6 +5002,7 @@ def _extract_segmented(
                         "relationships_ok": False, "relationships_error": None,
                         "events_ok": False, "events_error": None,
                         "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                        "discovery_ms": 0, "parallel_ms": 0, "temporal_ms": 0,
                     })
                 quota_exhausted = True
                 break
@@ -4959,6 +5018,7 @@ def _extract_segmented(
                     "relationships_ok": False, "relationships_error": None,
                     "events_ok": False, "events_error": None,
                     "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                    "discovery_ms": 0, "parallel_ms": 0, "temporal_ms": 0,
                 }
 
             # Write per-turn extraction log (#217)
@@ -5477,6 +5537,7 @@ def extract_semantic_batch(
                         "relationships_ok": False, "relationships_error": None,
                         "events_ok": False, "events_error": None,
                         "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                        "discovery_ms": 0, "parallel_ms": 0, "temporal_ms": 0,
                     })
                 quota_exhausted = True
                 break
@@ -5499,25 +5560,82 @@ def extract_semantic_batch(
         _print_retry_stats(llm)
         return
 
+    # Inter-turn discovery pipelining: pre-fetch next turn's discovery while
+    # the current turn's detail/relationship/event phases run on the GPU.
+    # Only enabled when parallel_workers > 1 (multi-GPU setup).
+    _pw_batch = getattr(llm, "parallel_workers", 1)
+    _pipeline_enabled = isinstance(_pw_batch, int) and _pw_batch > 1
+    _prefetch_future = None
+    _prefetch_executor = (
+        concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="discovery-prefetch")
+        if _pipeline_enabled else None
+    )
+
     for i in range(start_from, total):
         turn = turn_dicts[i]
         turn_id = turn["turn_id"]
 
         # Skip turns already successfully extracted (#191)
         if turn_id in _already_extracted:
+            # Cancel any prefetch that was for this (skipped) turn
+            if _prefetch_future is not None and getattr(_prefetch_future, "_turn_id", None) == turn_id:
+                _prefetch_future.cancel()
+                _prefetch_future = None
             continue
 
         if (i - start_from) % 25 == 0 and i > start_from:
             entities_now = sum(len(v) for v in catalogs.values())
             print(f"  ... {turn_id} ({i + 1}/{total}, {entities_now} entities)")
 
+        # Collect pre-fetched discovery result for this turn (if available)
+        _prefetched = None
+        if _prefetch_future is not None:
+            if getattr(_prefetch_future, "_turn_id", None) == turn_id:
+                try:
+                    _prefetched = _prefetch_future.result()
+                except QuotaExhaustedError:
+                    _prefetch_future = None
+                    raise
+                except Exception as e:
+                    # Prefetch failed — fall back to inline discovery
+                    print(f"  Prefetch discovery failed for {turn_id}: {e}, "
+                          f"falling back to inline", file=sys.stderr)
+            _prefetch_future = None
+
         turn_failed = False
         _turn_log = None
         try:
-            catalogs, events_list, turn_failed, _turn_log = extract_and_merge(
-                turn, catalogs, events_list, llm, min_confidence,
+            _eam_kwargs = dict(
                 catalog_dir=catalog_dir,
                 timeline=timeline,
+            )
+            if _prefetched is not None:
+                _eam_kwargs["prefetched_discovery"] = _prefetched
+
+            # Build callback to submit next-turn discovery prefetch.
+            # Called after discovery completes, before phases 2-4 start,
+            # so the prefetch overlaps with this turn's detail/relationship/event GPU work.
+            if _pipeline_enabled and _prefetch_executor is not None:
+                _next_idx = i + 1
+                while _next_idx < total and turn_dicts[_next_idx]["turn_id"] in _already_extracted:
+                    _next_idx += 1
+
+                if _next_idx < total:
+                    _next_turn = turn_dicts[_next_idx]
+
+                    def _submit_prefetch(_nt=_next_turn, _cats=catalogs, _l=llm, _mc=min_confidence):
+                        nonlocal _prefetch_future
+                        _f = _prefetch_executor.submit(
+                            _run_discovery_phase, _nt, _cats, _l, _mc,
+                        )
+                        _f._turn_id = _nt["turn_id"]
+                        _prefetch_future = _f
+
+                    _eam_kwargs["on_discovery_done"] = _submit_prefetch
+
+            catalogs, events_list, turn_failed, _turn_log = extract_and_merge(
+                turn, catalogs, events_list, llm, min_confidence,
+                **_eam_kwargs,
             )
         except QuotaExhaustedError as e:
             print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
@@ -5543,6 +5661,7 @@ def extract_semantic_batch(
                     "relationships_ok": False, "relationships_error": None,
                     "events_ok": False, "events_error": None,
                     "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                    "discovery_ms": 0, "parallel_ms": 0, "temporal_ms": 0,
                 })
             quota_exhausted = True
             break
@@ -5558,6 +5677,7 @@ def extract_semantic_batch(
                 "relationships_ok": False, "relationships_error": None,
                 "events_ok": False, "events_error": None,
                 "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+                "discovery_ms": 0, "parallel_ms": 0, "temporal_ms": 0,
             }
             # Save progress and catalogs so entities survive interruption (#220)
             _save_progress(progress_file, turn_dicts[i - 1]["turn_id"] if i > 0 else "",
@@ -5614,6 +5734,10 @@ def extract_semantic_batch(
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
                 save_timeline(catalog_dir, timeline)
+
+    # Shut down the discovery prefetch executor
+    if _prefetch_executor is not None:
+        _prefetch_executor.shutdown(wait=False)
 
     # --- Final entity refresh — catch entities stale since last modulo checkpoint (#212) ---
     # Skip refresh if quota was exhausted — no further LLM calls (#215)
@@ -5779,6 +5903,7 @@ def extract_semantic_single(
             "relationships_ok": False, "relationships_error": None,
             "events_ok": False, "events_error": None,
             "new_entities": 0, "new_events": 0, "elapsed_ms": 0,
+            "discovery_ms": 0, "parallel_ms": 0, "temporal_ms": 0,
         }
         _write_extraction_log(extraction_log_path, _turn_log)
         print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)

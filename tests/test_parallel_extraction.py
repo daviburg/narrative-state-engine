@@ -221,3 +221,109 @@ class TestParallelExtraction:
         assert log["detail_error"] == "test error"
         # Events should still have succeeded
         assert log["events_ok"] is True
+
+
+class TestDiscoveryPipelining:
+    """Tests for the inter-turn discovery pipelining feature."""
+
+    def test_run_discovery_phase_returns_expected_keys(self, monkeypatch):
+        """_run_discovery_phase returns dict with all required keys."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+
+        llm = MagicMock()
+        llm.config = {}
+        llm.context_length = 8192
+        llm.max_tokens = 2048
+        llm.extract_json = MagicMock(return_value={
+            "entities": [
+                {"name": "Elder", "is_new": True, "proposed_id": "char-elder",
+                 "type": "character", "confidence": 0.9, "source_turn": "turn-001"},
+            ]
+        })
+
+        turn = {"turn_id": "turn-001", "speaker": "DM", "text": "The elder speaks."}
+        catalogs = _fresh_catalogs()
+
+        result = se._run_discovery_phase(turn, catalogs, llm, min_confidence=0.6)
+
+        assert "qualified" in result
+        assert "turn_failed" in result
+        assert "phase_log" in result
+        assert "discovery_proposals" in result
+        assert "discovery_filtered" in result
+        assert result["turn_failed"] is False
+        assert result["phase_log"]["discovery_ok"] is True
+        assert len(result["qualified"]) == 1
+        assert result["qualified"][0]["name"] == "Elder"
+
+    def test_prefetched_discovery_skips_llm_call(self, monkeypatch):
+        """extract_and_merge with prefetched_discovery skips the LLM discovery call."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+
+        llm = _make_parallel_llm(discovery_entities=[])
+
+        turn = {"turn_id": "turn-001", "speaker": "DM", "text": "The elder speaks."}
+        catalogs = _fresh_catalogs()
+
+        prefetched = {
+            "qualified": [],
+            "turn_failed": False,
+            "phase_log": {"discovery_ok": True, "discovery_error": None},
+            "discovery_proposals": [],
+            "discovery_filtered": [],
+        }
+
+        _, _, turn_failed, log = se.extract_and_merge(
+            turn, catalogs, [], llm, min_confidence=0.6,
+            prefetched_discovery=prefetched,
+        )
+
+        # Discovery should show as OK from prefetch
+        assert log["discovery_ok"] is True
+        # discovery_ms should be ~0 since it was prefetched
+        assert log["discovery_ms"] < 100  # less than 100ms
+
+    def test_on_discovery_done_callback_invoked(self, monkeypatch):
+        """on_discovery_done callback is called after discovery, before phases 2-4."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+
+        llm = _make_parallel_llm(discovery_entities=[])
+        turn = {"turn_id": "turn-001", "speaker": "DM", "text": "The elder speaks."}
+        catalogs = _fresh_catalogs()
+
+        callback_called = [False]
+
+        def _on_discovery():
+            callback_called[0] = True
+
+        se.extract_and_merge(
+            turn, catalogs, [], llm, min_confidence=0.6,
+            on_discovery_done=_on_discovery,
+        )
+
+        assert callback_called[0] is True
+
+    def test_timing_fields_in_log_record(self, monkeypatch):
+        """Log record includes discovery_ms, parallel_ms, temporal_ms."""
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+
+        llm = _make_parallel_llm(discovery_entities=[])
+        turn = {"turn_id": "turn-001", "speaker": "DM", "text": "Some text."}
+        catalogs = _fresh_catalogs()
+
+        _, _, _, log = se.extract_and_merge(
+            turn, catalogs, [], llm, min_confidence=0.6,
+        )
+
+        assert "discovery_ms" in log
+        assert "parallel_ms" in log
+        assert "temporal_ms" in log
+        assert isinstance(log["discovery_ms"], int)
+        assert isinstance(log["parallel_ms"], int)
+        assert isinstance(log["temporal_ms"], int)
+        # Sum should approximately equal elapsed_ms (within rounding)
+        phase_sum = log["discovery_ms"] + log["parallel_ms"] + log["temporal_ms"]
+        assert abs(phase_sum - log["elapsed_ms"]) <= 2  # 2ms tolerance
