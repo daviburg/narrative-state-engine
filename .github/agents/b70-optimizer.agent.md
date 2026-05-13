@@ -31,6 +31,7 @@ Choose the backend based on model availability and workload. Advise other agents
   - https://github.com/huggingface/optimum-intel
   - https://github.com/openvinotoolkit/openvino
 - Diagnose performance regressions and timeout issues
+- Manage arclight server lifecycle: start/stop/restart LLM servers, SSH admin tasks, OS shutdown/reboot for hardware maintenance
 - Document optimal configurations in `config/` and `docs/`
 
 ## Constraints
@@ -49,6 +50,17 @@ Choose the backend based on model availability and workload. Advise other agents
 - Baseline (single B70, llama-server): 52.7 tok/s, ~18s/turn, ~2h for 344 turns
 - qwen3.5 INT4 on OpenVINO: BROKEN (linear attention weight corruption) — use INT8 or FP16
 - Use `skip_response_format: true` in llm.json
+
+## Server Administration
+
+- **Host**: arclight (192.168.10.169)
+- **SSH accounts**: `nse-agent` (no sudo), `david` (sudo, requires `-t` for TTY)
+- **LLM server binary**: `/home/nse-agent/llama-b9127-vulkan/llama-b9127/llama-server`
+- **Model path**: `/home/nse-agent/models/Qwen3.5-9B-Q4_K_M.gguf`
+- **Ports**: 8000 (Vulkan0), 8001 (Vulkan1)
+- **Launch flags**: `-m <model> --port <port> -np 1 --reasoning off --reasoning-format none -c 32768 --host 0.0.0.0 -ngl 999 --split-mode none --device Vulkan{0,1}`
+- **Shutdown**: `ssh -t david@arclight "sudo shutdown now"` (requires interactive password)
+- **Health check**: `Invoke-RestMethod -Uri "http://192.168.10.169:{8000,8001}/health"`
 
 ## Output Format
 
