@@ -138,6 +138,67 @@ class TestSegmentedCheckpointPersistence:
 
 
 # ---------------------------------------------------------------------------
+# Segmented path: pre-existing entities survive new extraction (#376)
+# ---------------------------------------------------------------------------
+
+class TestPreExistingEntitiesSurviveSegmentedExtraction:
+    """Pre-existing entities on disk must not be dropped when running
+    segmented extraction (e.g. when resuming with --start-turn)."""
+
+    def test_preexisting_entities_survive_segmented_extraction(self, tmp_path):
+        """Entities from a prior batch must remain after a new segmented run."""
+        session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
+
+        # Seed 3 pre-existing entities on disk (simulating a prior batch)
+        seed_catalogs = _empty_catalogs()
+        for i in range(1, 4):
+            seed_catalogs["characters.json"].append(
+                _make_entity(f"char-old-{i}", f"OldChar {i}")
+            )
+        save_catalogs(catalog_dir, seed_catalogs)
+
+        # Verify seed is on disk
+        pre = load_catalogs(catalog_dir)
+        assert sum(len(v) for v in pre.values()) == 3
+
+        _call_count = [0]
+
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
+            _call_count[0] += 1
+            n = _call_count[0]
+            catalogs["characters.json"].append(
+                _make_entity(f"char-new-{n}", f"Newcomer{n}")
+            )
+            return catalogs, events, False, {}
+
+        turns = _make_turns(10, 4)  # 4 new turns (simulating --start-turn 10)
+
+        with patch("semantic_extraction.LLMClient") as mock_llm_cls, \
+             patch("semantic_extraction.extract_and_merge", side_effect=mock_extract_and_merge), \
+             patch("semantic_extraction._ensure_player_character"), \
+             patch("semantic_extraction.find_stale_entities", return_value=[]), \
+             patch("semantic_extraction.cleanup_dangling_relationships", return_value={}), \
+             patch("semantic_extraction._post_batch_orphan_sweep", return_value=0), \
+             patch("semantic_extraction._name_mention_discovery", return_value=0):
+            mock_llm_cls.return_value = MagicMock(config={"checkpoint_interval": 25})
+
+            from semantic_extraction import extract_semantic_batch
+            extract_semantic_batch(
+                turns, session_dir, framework_dir=framework_dir,
+                config_path="unused", segment_size=2,
+            )
+
+        # All 3 old + 4 new entities must be on disk
+        post = load_catalogs(catalog_dir)
+        total = sum(len(v) for v in post.values())
+        old_ids = {e["id"] for e in post["characters.json"]}
+        assert "char-old-1" in old_ids, "Pre-existing entity char-old-1 was dropped"
+        assert "char-old-2" in old_ids, "Pre-existing entity char-old-2 was dropped"
+        assert "char-old-3" in old_ids, "Pre-existing entity char-old-3 was dropped"
+        assert total >= 7, f"Expected >= 7 entities (3 old + 4 new), got {total}"
+
+
+# ---------------------------------------------------------------------------
 # Segmented path: intra-segment checkpoint persists catalogs
 # ---------------------------------------------------------------------------
 
