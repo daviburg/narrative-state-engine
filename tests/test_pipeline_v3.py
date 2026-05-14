@@ -459,6 +459,39 @@ class TestSweepStaleItems:
         removed = _sweep_stale_items(catalogs, [], "invalid")
         assert removed == []
 
+    def test_sweep_then_dangling_cleanup_removes_orphans(self):
+        """After stale sweep removes an item, cleanup should remove relationships to it."""
+        from catalog_merger import cleanup_dangling_relationships
+
+        catalogs = self._base_catalogs()
+        # Add a stale item (only 1 event ref, seen at turn-005, current is turn-040)
+        catalogs["items.json"].append(
+            {"id": "item-stale-thing", "name": "Stale Thing", "type": "item",
+             "first_seen_turn": "turn-005", "relationships": []}
+        )
+        # Add a character that references the stale item
+        catalogs["characters.json"].append(
+            {"id": "char-hero", "name": "Hero", "type": "character",
+             "first_seen_turn": "turn-001", "relationships": [
+                 {"target_id": "item-stale-thing", "type": "social", "description": "owns"}
+             ]}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["item-stale-thing"], "turn_id": "turn-005"},
+        ]
+
+        # Step 1: sweep removes the stale item
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert "item-stale-thing" in removed
+
+        # Step 2: cleanup catches the orphaned relationship
+        dangling = cleanup_dangling_relationships(catalogs)
+        assert "char-hero" in dangling
+        assert "item-stale-thing" in dangling["char-hero"]
+        # The relationship should now be gone
+        hero = [e for e in catalogs["characters.json"] if e["id"] == "char-hero"][0]
+        assert len(hero["relationships"]) == 0
+
 
 # ---------------------------------------------------------------------------
 # Pronoun entity filter tests (#116)

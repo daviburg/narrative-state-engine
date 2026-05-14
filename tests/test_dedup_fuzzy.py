@@ -361,3 +361,35 @@ def test_within_turn_dedup_cascade_drop():
     assert "camping grounds" in names
     assert "forest clearing" in names
     assert len(result) == 2
+
+
+def test_within_turn_dedup_short_name_no_false_merge_furs_forest():
+    """Short name 'furs' must NOT merge with 'forest' — different entity types entirely."""
+    entities = [_make_discovery("furs"), _make_discovery("forest")]
+    result = _within_turn_dedup(entities)
+    names = [e["name"] for e in result]
+    assert "furs" in names
+    assert "forest" in names
+    assert len(result) == 2
+
+
+def test_within_turn_dedup_short_exact_match():
+    """Short names that are exact matches should still be deduped."""
+    entities = [_make_discovery("axe"), _make_discovery("axe")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 1
+
+
+def test_within_turn_dedup_short_substring_match():
+    """Short names 'ice' vs 'icy' — not exact token match, so no merge."""
+    entities = [_make_discovery("ice"), _make_discovery("icy")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 2
+
+
+def test_within_turn_dedup_short_name_exact_token():
+    """Short name 'ax' as a token in 'war ax' should merge."""
+    entities = [_make_discovery("ax"), _make_discovery("war ax")]
+    result = _within_turn_dedup(entities)
+    assert len(result) == 1
+    assert result[0]["name"] == "war ax"
