@@ -181,10 +181,14 @@ def analyze_dm_turns(
                 user_prompt=user_prompt,
             )
         except QuotaExhaustedError:
-            print("  ERROR: LLM quota exhausted, stopping analysis.", file=sys.stderr)
+            print(
+                f"  ERROR: LLM quota exhausted at batch starting {batch_ids[0]}, "
+                f"stopping analysis. Partial results will be saved.",
+                file=sys.stderr,
+            )
             break
         except LLMExtractionError as e:
-            print(f"  WARNING: LLM extraction failed for batch: {e}", file=sys.stderr)
+            print(f"  WARNING: LLM extraction failed for batch starting {batch_ids[0]}: {e}", file=sys.stderr)
             continue
 
         if not isinstance(result, dict):
@@ -507,6 +511,12 @@ def analyze_batch(
     """Analyze all DM turns in a session and update the profile.
 
     Called from bootstrap_session.py or standalone CLI.
+
+    When ``start_turn`` is 0 (the default) and the existing profile already has
+    a ``last_updated_turn`` beyond the empty-profile sentinel (turn-001), the
+    analysis automatically resumes from the turn after the last-updated one.
+    This makes repeated or interrupted runs resilient: they pick up where they
+    left off instead of re-processing the entire transcript from the beginning.
     """
     if LLMClient is None:
         print("  WARNING: LLM client not available for DM profile analysis.", file=sys.stderr)
@@ -515,13 +525,27 @@ def analyze_batch(
     profile_path = os.path.join(framework_dir, "dm-profile", "dm-profile.json")
     profile = load_dm_profile(profile_path)
 
+    # Auto-resume: when no explicit start_turn is given, pick up from the turn
+    # after the profile's last_updated_turn so that partial runs (interrupted by
+    # quota exhaustion or connection errors) continue from where they stopped
+    # rather than re-processing turns that have already been analyzed.
+    effective_start = start_turn
+    if not effective_start:
+        last_turn_num = _parse_turn_number(profile.get("last_updated_turn", "turn-001"))
+        if last_turn_num > 1:  # "turn-001" is the empty-profile sentinel
+            effective_start = last_turn_num + 1
+            print(
+                f"  Resuming DM profile analysis from turn {effective_start} "
+                f"(profile last updated: {profile.get('last_updated_turn')})"
+            )
+
     try:
         llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: DM profile analysis not available: {e}", file=sys.stderr)
         return
 
-    turns = list_dm_turns(session_dir, start_turn=start_turn, max_turns=max_turns)
+    turns = list_dm_turns(session_dir, start_turn=effective_start, max_turns=max_turns)
     if not turns:
         print("  No DM turns found for profile analysis.")
         return
