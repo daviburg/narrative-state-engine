@@ -203,6 +203,21 @@ inherit from the primary config. `LLMTruncationError` and
 `QuotaExhaustedError` are never retried through the fallback — they
 propagate immediately.
 
+### Context Optimizations
+
+As entity catalogs grow, extraction prompts can exceed the model's context
+window. The pipeline applies three budget-control optimizations automatically
+to trim prompt content. These are always active and require no configuration.
+
+| Optimization | Effect |
+|---|---|
+| **Relationship relevance scoring** | Applies a 3-tier priority system to relationship context in the relationship-mapper prompt. Tier 1 (full history) for both endpoints mentioned in the current turn; tier 2 (current + last update) for one endpoint mentioned + recently updated; tier 3 (summary only) for one endpoint mentioned + active. Dormant/resolved relationships are omitted unless both endpoints are mentioned. Token budget: 20% of `context_length`. |
+| **Arc-aware compression** | Extends the PC-only volatile-state digest and relationship-history trimming to all entities. History arrays are capped to 3 entries per key; entries older than 50 turns are digested to a summary line; relationship histories are trimmed to last 3 entries. |
+| **Scene-scoped detail** | Trims non-PC catalog entries in the entity-detail prompt: volatile state is digested and capped, relationships are filtered to mentioned + recent (20 turns) and capped at 15, stable attributes are preserved in full. |
+
+Monitor the `prompt_metrics` field in `extraction-log.jsonl` to verify
+budget compliance.
+
 ### Timeout Watchdog
 
 The LLM client includes a wall-clock watchdog that prevents indefinite hangs

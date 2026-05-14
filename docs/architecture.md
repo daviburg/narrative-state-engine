@@ -178,6 +178,31 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - **Periodic dedup audit** (#366): During extraction, `_run_periodic_dedup()` runs every `dedup_audit_interval` turns (default: 50, configurable in `config/llm.json`, set to 0 to disable). It reuses `dedup_audit.generate_candidates()` to find candidate pairs from the in-memory catalog state, scores them with an enhanced LLM prompt that includes narrative evolution awareness (recognizing entities that were renamed, rebuilt, or upgraded over time as the same entity), auto-merges high-confidence pairs (≥0.9) with the name-mismatch guard bypassed (since the LLM has already confirmed entity identity), rewrites event references and relationship IDs, and logs results. **Current limitation:** candidate generation uses string-similarity heuristics only (Levenshtein distance, substring match, same-turn co-occurrence), so entities with completely different names will not be surfaced as candidates. Entities with partial name overlap are covered. Runs in both segmented and non-segmented extraction modes, at the same hook point as entity refresh.
 - **Temporal extraction integration** (#263): The semantic extraction pipeline calls `temporal_extraction.extract_temporal_signals()` per-turn after event extraction (Phase 5). Pattern-based detection identifies season transitions, time-skip language, biological markers, and construction milestones directly from turn text and finalized events. Signals are merged into the timeline via `merge_temporal_signals()` with deduplication by `(source_turn, type, season, raw_text)`. The timeline is loaded alongside catalogs and events, saved at every checkpoint and at the end of extraction, and reconciled across segments in segmented mode. The extraction log records `temporal_ok`, `temporal_error`, and `new_temporal_signals` per turn. When `timeline` is not passed to `extract_and_merge()` (legacy callers), temporal extraction is skipped gracefully.
 
+### Context Budget Optimizations (Extraction)
+
+The extraction pipeline applies context budget controls automatically to prevent prompt overflow as catalogs grow. All optimizations are always active — no configuration needed.
+
+**Discovery** (always active): Uses 4-tier priority scoring (mentioned → co-located → one-hop → recency backfill) with a token budget (25% of context window) and automatic tier degradation — full → brief → id-only → omit. See #233, #310.
+
+**Relationship Relevance Scoring**: Applies a 3-tier priority system to `_collect_existing_relationships()`:
+- Tier 1 (full history): both endpoints mentioned in current turn
+- Tier 2 (current + last update): one endpoint mentioned + updated within 15 turns
+- Tier 3 (summary only): one endpoint mentioned + active status
+- Omit: dormant/resolved relationships unless both endpoints are mentioned
+- Token budget: 20% of context window with automatic tier degradation
+
+**Arc-Aware Compression**: Generalizes the PC-only volatile digest and relationship compaction to all entities:
+- History arrays capped to 3 entries per key (same as PC)
+- Entries older than 50 turns digested to a summary line
+- Relationship histories trimmed to last 3 entries (arc summaries used for PC when available)
+
+**Scene-Scoped Entity Detail**: Trims non-PC catalog entries in the entity-detail prompt:
+- Volatile state: digested + capped to 3 entries per key
+- Relationships: filtered to mentioned + recent (20 turns), capped at 15
+- Stable attributes: preserved in full
+
+**Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
+
 ### Story Summary Layer (Framework)
 
 High-level narrative arc summary generated from extracted data.

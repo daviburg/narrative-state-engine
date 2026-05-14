@@ -44,6 +44,8 @@ from catalog_merger import (
     _levenshtein,
     CATALOG_KEYS,
     _filter_entity_aliases,
+    _estimate_tokens,
+    _find_mentioned_entities,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
@@ -1133,6 +1135,45 @@ _PC_MAX_VOLATILE_SNAPSHOTS = 3
 # Number of turns beyond which volatile state entries are digested (#121)
 _DIGEST_WINDOW = 50
 
+# ---------------------------------------------------------------------------
+# Context optimization constants
+# ---------------------------------------------------------------------------
+
+# Relationship relevance scoring thresholds
+_REL_RECENCY_WINDOW = 15       # Turns within which a relationship is "recent" (tier 2)
+_REL_TOKEN_BUDGET_FRACTION = 0.2  # Fraction of context_length for relationship block
+
+# Scene-scoped entity detail thresholds
+_SCENE_REL_RECENCY_WINDOW = 20   # Relationships updated within this many turns are kept
+_SCENE_MAX_RELATIONSHIPS = 15    # Max relationships after trimming
+
+# Arc-aware compression: max volatile snapshots per key (same as PC)
+_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
+
+
+def _record_prompt_tokens(
+    metrics: dict[str, dict], phase: str, system_prompt: str, user_prompt: str
+) -> None:
+    """Record estimated token count for a prompt in the metrics accumulator."""
+    tokens = _estimate_tokens(system_prompt + user_prompt)
+    entry = metrics.get(phase)
+    if entry is None:
+        metrics[phase] = {"input_tokens": tokens, "calls": 1}
+    else:
+        entry["input_tokens"] += tokens
+        entry["calls"] += 1
+
+
+def _finalize_prompt_metrics(metrics: dict[str, dict]) -> dict[str, dict]:
+    """Compute averages for multi-call phases."""
+    result = {}
+    for phase, entry in metrics.items():
+        out = dict(entry)
+        if out["calls"] > 1:
+            out["avg_per_call"] = out["input_tokens"] // out["calls"]
+        result[phase] = out
+    return result
+
 
 def _parse_turn_number(turn_id: str | None) -> int | None:
     """Parse turn number from a turn ID string like 'turn-042'."""
@@ -1255,6 +1296,7 @@ def _compact_relationships_with_arcs(
 def _format_prior_entity_context(
     current_entry: dict | None,
     arcs_data: dict | None = None,
+    config: dict | None = None,
 ) -> str:
     """Format the prior entity state for injection into the detail prompt.
 
@@ -1267,11 +1309,16 @@ def _format_prior_entity_context(
     - Last 3 volatile_state snapshots only
     - Relationship histories replaced with arc summaries when available (#120)
     - Old volatile state entries digested into count + themes (#121)
+
+    Arc-aware compression is always active: the same volatile state digest
+    and relationship compaction is applied to all entities.
     """
     if not current_entry:
         return "{}"
 
     is_pc = current_entry.get("id") == "char-player"
+    # Trimming always applies to all entities (arc-aware compression)
+    should_trim = True
 
     prior: dict = {}
     # V2 fields
@@ -1282,7 +1329,7 @@ def _format_prior_entity_context(
     if "status_updated_turn" in current_entry:
         prior["status_updated_turn"] = current_entry["status_updated_turn"]
 
-    # stable_attributes — trimmed for PC
+    # stable_attributes — trimmed for PC only (non-PC keeps all even with arc_aware)
     sa = current_entry.get("stable_attributes")
     if sa:
         if is_pc:
@@ -1292,13 +1339,14 @@ def _format_prior_entity_context(
         else:
             prior["stable_attributes"] = sa
 
-    # volatile_state — digest first, then cap recent entries for PC (#121)
+    # volatile_state — digest + cap for PC, or for non-PC when arc_aware is on
     vs = current_entry.get("volatile_state")
     if vs:
-        if is_pc and isinstance(vs, dict):
+        if should_trim and isinstance(vs, dict):
             current_turn_num = _parse_turn_number(
                 current_entry.get("last_updated_turn", "")
             )
+            max_snapshots = _PC_MAX_VOLATILE_SNAPSHOTS if is_pc else _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS
             # Digest old entries BEFORE trimming so history is compressed
             # rather than silently dropped.
             if current_turn_num:
@@ -1308,25 +1356,26 @@ def _format_prior_entity_context(
             # Cap recent list-valued entries to keep prompt size bounded
             trimmed_vs = {}
             for k, v in digested_vs.items():
-                if isinstance(v, list) and len(v) > _PC_MAX_VOLATILE_SNAPSHOTS:
+                if isinstance(v, list) and len(v) > max_snapshots:
                     # If the digest produced a summary at index 0 (a string),
                     # preserve it and cap the rest to last N entries.
                     if v and isinstance(v[0], str) and v[0].startswith("["):
-                        trimmed_vs[k] = v[:1] + v[-(  _PC_MAX_VOLATILE_SNAPSHOTS):]
+                        trimmed_vs[k] = v[:1] + v[-max_snapshots:]
                     else:
-                        trimmed_vs[k] = v[-_PC_MAX_VOLATILE_SNAPSHOTS:]
+                        trimmed_vs[k] = v[-max_snapshots:]
                 else:
                     trimmed_vs[k] = v
             prior["volatile_state"] = trimmed_vs
         else:
             prior["volatile_state"] = vs
 
-    # Relationships — compact with arc summaries for PC (#120)
+    # Relationships — compact with arc summaries for PC (#120),
+    # or trim history for all entities (arc-aware compression, always-on)
     rels = current_entry.get("relationships")
     if rels and is_pc and arcs_data:
         prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
-    elif rels and is_pc:
-        # No arc data — trim history to last 3 entries
+    elif rels:
+        # Trim history to last 3 entries for all entities
         compact_rels = []
         for rel in rels:
             trimmed = dict(rel)
@@ -1364,9 +1413,18 @@ def format_detail_prompt(
     entity_ref: dict,
     current_entry: dict | None,
     arcs_data: dict | None = None,
+    config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
 ) -> str:
-    """Format the user prompt for entity detail extraction."""
-    prior_json = _format_prior_entity_context(current_entry, arcs_data=arcs_data)
+    """Format the user prompt for entity detail extraction.
+
+    Scene-scoped detail is always active: the current catalog entry is
+    trimmed to reduce context size — volatile_state is digested,
+    relationships are filtered by recency and mention relevance, and capped.
+    """
+    prior_json = _format_prior_entity_context(
+        current_entry, arcs_data=arcs_data, config=config,
+    )
     entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
     is_pc = (entity_id == "char-player")
     prompt = (
@@ -1384,16 +1442,121 @@ def format_detail_prompt(
     # For PC, skip the full catalog entry to avoid context bloat (#119).
     # The trimmed prior_json already contains all essential entity context.
     if not is_pc:
-        entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
+        if current_entry:
+            _current_turn = _parse_turn_number(turn.get('turn_id', ''))
+            entry_json = json.dumps(
+                _trim_entry_for_scene(current_entry, mentioned_ids=mentioned_ids,
+                                      current_turn_num=_current_turn),
+                indent=2,
+            )
+        else:
+            entry_json = "{}"
         prompt += f"\n\n## Current Catalog Entry\n```json\n{entry_json}\n```"
     return prompt
 
 
-def _collect_existing_relationships(catalogs: dict, entity_ids: list[str]) -> str:
+def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
+                          current_turn_num: int | None = None) -> dict:
+    """Trim a catalog entry for scene-scoped detail injection.
+
+    Keeps all stable_attributes and identity, but trims volatile_state
+    and relationships to reduce token footprint.
+
+    *mentioned_ids* is the set of entity IDs discovered in the current
+    turn (from the discovery phase).  Relationships whose target is in
+    this set are kept regardless of recency.
+
+    *current_turn_num* is the turn number currently being processed.
+    When provided, it is used for recency calculation instead of the
+    entry's own ``last_updated_turn``.
+    """
+    if mentioned_ids is None:
+        mentioned_ids = set()
+    trimmed = {}
+    # Copy core fields
+    for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn",
+                "identity", "current_status", "status_updated_turn", "notes"):
+        if key in entry:
+            trimmed[key] = entry[key]
+
+    # Keep all stable_attributes (they're typically small)
+    if "stable_attributes" in entry:
+        trimmed["stable_attributes"] = entry["stable_attributes"]
+
+    # volatile_state: digest + keep last N entries per key
+    vs = entry.get("volatile_state")
+    if vs and isinstance(vs, dict):
+        current_turn_num = _parse_turn_number(entry.get("last_updated_turn", ""))
+        if current_turn_num:
+            digested = _build_volatile_digest(vs, current_turn_num)
+        else:
+            digested = dict(vs)
+        trimmed_vs = {}
+        for k, v in digested.items():
+            if isinstance(v, list) and len(v) > _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS:
+                if v and isinstance(v[0], str) and v[0].startswith("["):
+                    trimmed_vs[k] = v[:1] + v[-_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS:]
+                else:
+                    trimmed_vs[k] = v[-_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS:]
+            else:
+                trimmed_vs[k] = v
+        trimmed["volatile_state"] = trimmed_vs
+    elif vs:
+        trimmed["volatile_state"] = vs
+
+    # relationships: filter by recency and mention, cap at _SCENE_MAX_RELATIONSHIPS
+    rels = entry.get("relationships")
+    if rels and isinstance(rels, list):
+        _recency_ref = current_turn_num or _parse_turn_number(entry.get("last_updated_turn", ""))
+
+        kept = []
+        summary = []
+        for rel in rels:
+            target_id = rel.get("target_id", "")
+            status = rel.get("status", "active")
+            rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
+            turn_dist = (_recency_ref - rel_turn) if (_recency_ref and rel_turn is not None) else 9999
+
+            if target_id in mentioned_ids:
+                kept.append(rel)
+            elif status == "active" and turn_dist <= _SCENE_REL_RECENCY_WINDOW:
+                kept.append(rel)
+            else:
+                # Compress to one-line summary
+                summary.append({
+                    "target_id": target_id,
+                    "relationship_type": rel.get("relationship_type", rel.get("type", "")),
+                    "status": status,
+                })
+
+        # Trim history on kept relationships (arc-aware compression)
+        for rel in kept:
+            hist = rel.get("history")
+            if hist and isinstance(hist, list) and len(hist) > 3:
+                rel["history"] = hist[-3:]
+
+        # Cap total
+        all_rels = kept + summary
+        trimmed["relationships"] = all_rels[:_SCENE_MAX_RELATIONSHIPS]
+
+    return trimmed
+
+
+def _collect_existing_relationships(
+    catalogs: dict,
+    entity_ids: list[str],
+    config: dict | None = None,
+    turn_text: str = "",
+    current_turn_num: int | None = None,
+    context_length: int | None = None,
+) -> str:
     """Gather existing relationships for the given entities and format as JSON.
 
     Returns a compact JSON string containing per-entity relationships so the
     relationship-mapper LLM can update rather than duplicate them.
+
+    Relationship relevance scoring is always active: applies a tiered
+    priority system with a token budget to keep the relationship block bounded.
     """
     result: dict[str, list] = {}
     for eid in entity_ids:
@@ -1405,7 +1568,123 @@ def _collect_existing_relationships(catalogs: dict, entity_ids: list[str]) -> st
                 result[eid] = rels
     if not result:
         return ""
-    return json.dumps(result, indent=2)
+
+    # --- Relationship relevance scoring ---
+    # Determine which entity IDs are mentioned in the turn text
+    mentioned_ids = set(entity_ids)
+    if turn_text:
+        # Also detect mentions by name/alias in the turn text
+        all_entities = []
+        for eid in entity_ids:
+            found = find_entity_by_id(catalogs, eid)
+            if found:
+                all_entities.append(found[1])
+        text_mentioned = _find_mentioned_entities(all_entities, turn_text)
+        mentioned_ids |= text_mentioned
+
+    # Flatten all relationships with their owning entity ID
+    scored: list[tuple[int, str, dict]] = []  # (tier, owner_id, rel)
+    for owner_id, rels in result.items():
+        for rel in rels:
+            source_id = rel.get("source_id", owner_id)
+            target_id = rel.get("target_id", "")
+            both_mentioned = source_id in mentioned_ids and target_id in mentioned_ids
+            one_mentioned = source_id in mentioned_ids or target_id in mentioned_ids
+            status = rel.get("status", "active")
+            rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
+            turn_dist = (current_turn_num - rel_turn) if (current_turn_num and rel_turn is not None) else 9999
+
+            if both_mentioned:
+                tier = 1  # full
+            elif one_mentioned and turn_dist <= _REL_RECENCY_WINDOW:
+                tier = 2  # recent
+            elif one_mentioned and status == "active":
+                tier = 3  # summary
+            else:
+                tier = 4  # omit
+            scored.append((tier, owner_id, rel))
+
+    # Compute token budget
+    budget = int((context_length or 32768) * _REL_TOKEN_BUDGET_FRACTION)
+    formatted = _format_relationships_budgeted(scored, budget)
+
+    raw_tokens = _estimate_tokens(json.dumps(result, indent=2))
+    opt_tokens = _estimate_tokens(formatted)
+    print(f"  [ctx-opt] Relationship scoring: {raw_tokens} → {opt_tokens} tokens "
+          f"(budget={budget})", file=sys.stderr)
+    return formatted
+
+
+def _format_rel_by_tier(tier: int, rel: dict) -> dict:
+    """Format a single relationship according to its tier."""
+    if tier == 1:
+        # Full — return as-is
+        return dict(rel)
+    elif tier == 2:
+        # Recent — current state + last history entry
+        trimmed = {k: v for k, v in rel.items() if k != "history"}
+        history = rel.get("history", [])
+        if history:
+            trimmed["history"] = history[-1:]
+        return trimmed
+    elif tier == 3:
+        # Summary — one-line compact form
+        return {
+            "source_id": rel.get("source_id", ""),
+            "target_id": rel.get("target_id", ""),
+            "relationship_type": rel.get("relationship_type", rel.get("type", "")),
+            "status": rel.get("status", "active"),
+        }
+    return {}  # tier 4 — omit
+
+
+def _format_relationships_budgeted(
+    scored: list[tuple[int, str, dict]], budget: int
+) -> str:
+    """Format scored relationships within a token budget.
+
+    Starts with all items formatted at their assigned tier, then degrades
+    tier-3 to omit and tier-2 to summary form if over budget.
+    """
+    # Group by owner for output structure
+    def _build_output(items: list[tuple[int, str, dict]]) -> dict[str, list]:
+        out: dict[str, list] = {}
+        for tier, owner_id, rel in items:
+            if tier >= 4:
+                continue
+            formatted = _format_rel_by_tier(tier, rel)
+            if formatted:
+                out.setdefault(owner_id, []).append(formatted)
+        return out
+
+    # Initial pass with assigned tiers
+    output = _build_output(scored)
+    text = json.dumps(output, indent=2) if output else ""
+    if _estimate_tokens(text) <= budget:
+        return text
+
+    # Over budget — degrade tier 3 to omit
+    degraded = [(4 if t == 3 else t, o, r) for t, o, r in scored]
+    output = _build_output(degraded)
+    text = json.dumps(output, indent=2) if output else ""
+    if _estimate_tokens(text) <= budget:
+        return text
+
+    # Still over — degrade tier 2 to summary (tier 3)
+    degraded = [(3 if t == 2 else t, o, r) for t, o, r in degraded]
+    output = _build_output(degraded)
+    text = json.dumps(output, indent=2) if output else ""
+    if _estimate_tokens(text) <= budget:
+        return text
+
+    # Safety valve: tier-1 histories dominate — trim them to last 2 entries
+    for owner_rels in output.values():
+        for rel in owner_rels:
+            hist = rel.get("history")
+            if hist and isinstance(hist, list) and len(hist) > 2:
+                rel["history"] = hist[-2:]
+    text = json.dumps(output, indent=2) if output else ""
+    return text
 
 
 def format_relationship_prompt(turn: dict, mentioned_entities: list,
@@ -2011,6 +2290,8 @@ def _extract_single_entity_detail(
     entity_ref: dict,
     current_entry: dict | None,
     pc_arcs_data: dict | None,
+    config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
 ) -> tuple[dict, dict | None, str | None]:
     """Run entity-detail extraction for a single entity.
 
@@ -2026,7 +2307,8 @@ def _extract_single_entity_detail(
         detail_result = llm.extract_json(
             system_prompt=load_template("entity-detail"),
             user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
-                                             arcs_data=entity_arcs),
+                                             arcs_data=entity_arcs, config=config,
+                                             mentioned_ids=mentioned_ids),
         )
     except QuotaExhaustedError:
         raise
@@ -2169,10 +2451,12 @@ def _run_discovery_phase(
     )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
+    _disc_sys_tmpl = load_template("entity-discovery")
+    _disc_user_prompt = format_discovery_prompt(turn, known)
     try:
         discovery_result = llm.extract_json(
-            system_prompt=load_template("entity-discovery"),
-            user_prompt=format_discovery_prompt(turn, known),
+            system_prompt=_disc_sys_tmpl,
+            user_prompt=_disc_user_prompt,
             temperature=_discovery_temp,
             max_tokens=_discovery_max_tokens,
         )
@@ -2183,8 +2467,8 @@ def _run_discovery_phase(
               f"retrying with max_tokens={_retry_max}...", file=sys.stderr)
         try:
             discovery_result = llm.extract_json(
-                system_prompt=load_template("entity-discovery"),
-                user_prompt=format_discovery_prompt(turn, known),
+                system_prompt=_disc_sys_tmpl,
+                user_prompt=_disc_user_prompt,
                 temperature=_discovery_temp,
                 max_tokens=_retry_max,
             )
@@ -2394,6 +2678,8 @@ def _run_discovery_phase(
         "phase_log": phase_log,
         "discovery_proposals": _discovery_proposals,
         "discovery_filtered": _discovery_filtered,
+        "discovery_sys_tmpl": _disc_sys_tmpl,
+        "discovery_user_prompt": _disc_user_prompt,
     }
 
 
@@ -2456,6 +2742,9 @@ def extract_and_merge(
         "events_ok": True, "events_error": None,
     }
 
+    # Prompt token instrumentation — accumulate per-phase token counts
+    _prompt_metrics: dict[str, dict] = {}
+
     # Load arc sidecar for PC relationship compaction (#120)
     # V2 layout stores per-entity files under <catalog_dir>/characters/;
     # fall back to catalog root for legacy/V1 layouts.
@@ -2490,6 +2779,8 @@ def extract_and_merge(
         _pf_phase = prefetched_discovery["phase_log"]
         _phase_log["discovery_ok"] = _pf_phase.get("discovery_ok", True)
         _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
+        _disc_sys_tmpl = prefetched_discovery.get("discovery_sys_tmpl")
+        _disc_user_prompt = prefetched_discovery.get("discovery_user_prompt")
     else:
         _discovery_result = _run_discovery_phase(
             turn, catalogs, llm, min_confidence,
@@ -2501,6 +2792,12 @@ def extract_and_merge(
         _discovery_filtered = _discovery_result["discovery_filtered"]
         _phase_log["discovery_ok"] = _discovery_result["phase_log"]["discovery_ok"]
         _phase_log["discovery_error"] = _discovery_result["phase_log"]["discovery_error"]
+        _disc_sys_tmpl = _discovery_result.get("discovery_sys_tmpl")
+        _disc_user_prompt = _discovery_result.get("discovery_user_prompt")
+
+    # Instrument discovery prompt tokens (captured at build site, not re-computed)
+    if _disc_sys_tmpl and _disc_user_prompt:
+        _record_prompt_tokens(_prompt_metrics, "discovery", _disc_sys_tmpl, _disc_user_prompt)
 
     # Notify the batch loop so it can submit the next turn's discovery prefetch
     # while this turn's phases 2-4 run on the GPU.
@@ -2551,11 +2848,22 @@ def extract_and_merge(
     existing_rels_json = None
     if _run_rels:
         entity_id_list = [e["id"] for e in mentioned_entities]
-        existing_rels_json = _collect_existing_relationships(catalogs, entity_id_list)
+        _current_turn_num = _parse_turn_number(turn_id)
+        _ctx_len = getattr(llm, "context_length", None)
+        existing_rels_json = _collect_existing_relationships(
+            catalogs, entity_id_list,
+            config=_cfg,
+            turn_text=turn.get("text", ""),
+            current_turn_num=_current_turn_num,
+            context_length=_ctx_len if isinstance(_ctx_len, int) else None,
+        )
 
     # Pre-compute event inputs
     next_evt_id = get_next_event_id(events_list)
     entity_ids = [e["id"] for e in mentioned_entities]
+
+    # Pre-compute mentioned entity IDs for scene-scoped trimming
+    _mentioned_ids: set[str] = {e["id"] for e in mentioned_entities}
 
     # Determine PC extraction eligibility
     pc_already_extracted = any(
@@ -2582,6 +2890,31 @@ def extract_and_merge(
 
     # --- Execute phases 2-4 ---
     _pw = getattr(llm, "parallel_workers", 1)
+
+    # --- Prompt token instrumentation ---
+    # Estimate tokens for each phase from pre-computed prompt inputs.
+    _detail_sys_tmpl = load_template("entity-detail")
+    for entity_ref, current_entry in _entity_tasks:
+        entity_id = get_entity_id(entity_ref)
+        _entity_arcs = pc_arcs_data if entity_id == "char-player" else None
+        _detail_user_prompt = format_detail_prompt(
+            turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
+            mentioned_ids=_mentioned_ids,
+        )
+        _record_prompt_tokens(_prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt)
+    if _run_pc:
+        _pc_user_prompt = format_detail_prompt(
+            turn, _pc_ref, _pc_entry, arcs_data=pc_arcs_data, config=_cfg,
+            mentioned_ids=_mentioned_ids,
+        )
+        _record_prompt_tokens(_prompt_metrics, "entity_detail", _detail_sys_tmpl, _pc_user_prompt)
+    if _run_rels:
+        _rel_sys_tmpl = load_template("relationship-mapper")
+        _rel_user_prompt = format_relationship_prompt(turn, mentioned_entities, existing_rels_json)
+        _record_prompt_tokens(_prompt_metrics, "relationship_mapper", _rel_sys_tmpl, _rel_user_prompt)
+    _evt_sys_tmpl = load_template("event-extractor")
+    _evt_user_prompt = format_event_prompt(turn, next_evt_id, entity_ids)
+    _record_prompt_tokens(_prompt_metrics, "event_extractor", _evt_sys_tmpl, _evt_user_prompt)
     _use_parallel = isinstance(_pw, int) and _pw > 1
 
     if _use_parallel:
@@ -2600,7 +2933,8 @@ def extract_and_merge(
             for entity_ref, current_entry in _entity_tasks:
                 f = pool.submit(
                     _extract_single_entity_detail,
-                    llm, turn, entity_ref, current_entry, pc_arcs_data,
+                    llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
+                    _mentioned_ids,
                 )
                 futures_map[f] = ("detail", entity_ref)
 
@@ -2619,6 +2953,7 @@ def extract_and_merge(
                         system_prompt=load_template("entity-detail"),
                         user_prompt=format_detail_prompt(
                             turn, _ref, _entry, arcs_data=pc_arcs_data,
+                            config=_cfg, mentioned_ids=_mentioned_ids,
                         ),
                         timeout=_timeout,
                         max_tokens=llm.pc_max_tokens,
@@ -2828,7 +3163,8 @@ def extract_and_merge(
                 detail_result = llm.extract_json(
                     system_prompt=load_template("entity-detail"),
                     user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
-                                                     arcs_data=entity_arcs),
+                                                     arcs_data=entity_arcs, config=_cfg,
+                                                     mentioned_ids=_mentioned_ids),
                 )
             except QuotaExhaustedError:
                 raise
@@ -2871,7 +3207,8 @@ def extract_and_merge(
                 detail_result = llm.extract_json(
                     system_prompt=load_template("entity-detail"),
                     user_prompt=format_detail_prompt(turn, _pc_ref, _pc_entry,
-                                                     arcs_data=pc_arcs_data),
+                                                     arcs_data=pc_arcs_data, config=_cfg,
+                                                     mentioned_ids=_mentioned_ids),
                     timeout=_pc_timeout,
                     max_tokens=llm.pc_max_tokens,
                 )
@@ -3109,6 +3446,7 @@ def extract_and_merge(
         "discovery_ms": int((_t_after_discovery - _t0) * 1000),
         "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
         "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
+        "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
     }
     return catalogs, events_list, turn_failed, _log_record
 
