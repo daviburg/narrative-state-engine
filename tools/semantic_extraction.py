@@ -1847,6 +1847,35 @@ _PC_ALIAS_WORD_BLOCKLIST = {
     "guard", "scout", "shaman", "merchant", "captain",
 }
 
+# Single-word stems that are clearly not character names: directional adjectives
+# and generic group nouns not already covered by _PC_ALIAS_WORD_BLOCKLIST or
+# _GENERIC_STEMS.  Used by _is_plausible_character_name().
+_ABSTRACT_CHAR_STEM_BLOCKLIST: frozenset[str] = frozenset({
+    # Cardinal / directional adjectives
+    "northern", "eastern", "western", "central",
+    # Generic plural role nouns not in _GENERIC_STEMS
+    "scouts",
+})
+
+
+def _is_plausible_character_name(name: str) -> bool:
+    """Return True if *name* could plausibly be a character name.
+
+    Returns False for single abstract nouns, common adjectives, directional
+    words, and other patterns that are clearly not character names.  Checks
+    _GENERIC_STEMS, _ABSTRACT_CHAR_STEM_BLOCKLIST, and the derived
+    non-character-names set built from _PC_ALIAS_WORD_BLOCKLIST.
+    """
+    low = name.lower().strip()
+    if low in _GENERIC_STEMS:
+        return False
+    if low in _ABSTRACT_CHAR_STEM_BLOCKLIST:
+        return False
+    if low in _get_non_character_names():
+        return False
+    return True
+
+
 # Maximum volatile_state keys retained for PC after merge (#214)
 _PC_VOLATILE_STATE_MAX_KEYS = 30
 # Core volatile_state keys that are always preserved during pruning (#214)
@@ -1909,6 +1938,9 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
 
         # Infer type and name from the ID
         inferred_type = _infer_type_from_prefix(eid)
+        # Skip abstract/concept single-word names for character stubs
+        if inferred_type == "character" and not _is_plausible_character_name(stem):
+            continue
         # Build a human-readable name: strip prefix, replace hyphens, title-case
         inferred_name = stem.replace("-", " ").title()
 
@@ -3370,6 +3402,9 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             continue
 
         inferred_type = _infer_type_from_prefix(eid)
+        # Skip abstract/concept single-word names for character stubs
+        if inferred_type == "character" and not _is_plausible_character_name(stem):
+            continue
 
         # Type-specific thresholds
         if inferred_type == "location":
@@ -3546,7 +3581,7 @@ def _name_mention_discovery(catalogs: dict, events_list: list) -> int:
             word_lower = word.lower()
             if word_lower in _NAME_MENTION_STOPWORDS:
                 continue
-            if word_lower in _GENERIC_STEMS:
+            if not _is_plausible_character_name(word_lower):
                 continue
             if word_lower in known_names:
                 continue
