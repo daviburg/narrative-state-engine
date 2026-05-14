@@ -1986,8 +1986,23 @@ def _within_turn_dedup(entities: list[dict]) -> list[dict]:
 
             matched = False
 
+            # Short-name guard: names < 5 chars skip fuzzy matching (#dedup-false-positive)
+            min_len = min(len(name_a), len(name_b))
+            if min_len < 5:
+                # Only exact match, exact-token match, or token-prefix for short names
+                if name_a == name_b:
+                    matched = True
+                else:
+                    shorter = name_a if len(name_a) <= len(name_b) else name_b
+                    longer = name_b if len(name_a) <= len(name_b) else name_a
+                    longer_tokens = longer.replace("-", " ").split()
+                    if shorter in longer_tokens or any(t.startswith(shorter) for t in longer_tokens):
+                        matched = True
+                if not matched:
+                    continue  # skip fuzzy checks for this pair
+
             # Check 1: Character substring with token-prefix guard (both >= 4 chars)
-            if len(name_a) >= 4 and len(name_b) >= 4:
+            if not matched and len(name_a) >= 4 and len(name_b) >= 4:
                 if name_a in name_b or name_b in name_a:
                     shorter = name_a if len(name_a) <= len(name_b) else name_b
                     longer = name_b if len(name_a) <= len(name_b) else name_a
@@ -5511,12 +5526,6 @@ def _extract_segmented(
         _rewrite_stale_ids(final_catalogs, final_events, merge_map)
         print(f"  Post-reconciliation dedup merged {dupes_merged} duplicate(s)")
 
-    # Clean up dangling relationship targets (#184)
-    dangling_removed = cleanup_dangling_relationships(final_catalogs)
-    if dangling_removed:
-        total_removed = sum(len(v) for v in dangling_removed.values())
-        print(f"  Removed {total_removed} dangling relationship target(s)")
-
     orphan_stubs = _post_batch_orphan_sweep(final_catalogs, final_events)
     if orphan_stubs:
         print(f"  Post-reconciliation orphan sweep: {orphan_stubs} stub(s)")
@@ -5534,6 +5543,13 @@ def _extract_segmented(
     seg_stale_removed = _sweep_stale_items(final_catalogs, final_events, seg_last_turn, _seg_stale_min, _seg_stale_win)
     if seg_stale_removed:
         print(f"  Post-reconciliation stale-item sweep removed {len(seg_stale_removed)} item(s)")
+
+    # Clean up dangling relationship targets (#184) — runs AFTER stale sweep
+    # so relationships pointing to swept items are also removed
+    dangling_removed = cleanup_dangling_relationships(final_catalogs)
+    if dangling_removed:
+        total_removed = sum(len(v) for v in dangling_removed.values())
+        print(f"  Removed {total_removed} dangling relationship target(s)")
 
     entities_final = sum(len(v) for v in final_catalogs.values())
 
@@ -6144,12 +6160,6 @@ def extract_semantic_batch(
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Post-batch dedup merged {dupes_merged} duplicate(s); {entities_after} entities remain")
 
-    # Clean up dangling relationship targets (#184)
-    dangling_removed = cleanup_dangling_relationships(catalogs)
-    if dangling_removed:
-        total_removed = sum(len(v) for v in dangling_removed.values())
-        print(f"  Removed {total_removed} dangling relationship target(s) from {len(dangling_removed)} entit(ies)")
-
     # Apply coreference hints (manual merge rules, #162)
     hints_path = os.path.join(session_dir, "coreference-hints.json")
     if os.path.isfile(hints_path):
@@ -6179,6 +6189,13 @@ def extract_semantic_batch(
     if stale_removed:
         entities_after = sum(len(v) for v in catalogs.values())
         print(f"  Stale-item sweep removed {len(stale_removed)} item(s); {entities_after} entities remain")
+
+    # Clean up dangling relationship targets (#184) — runs AFTER stale sweep
+    # so relationships pointing to swept items are also removed
+    dangling_removed = cleanup_dangling_relationships(catalogs)
+    if dangling_removed:
+        total_removed = sum(len(v) for v in dangling_removed.values())
+        print(f"  Removed {total_removed} dangling relationship target(s) from {len(dangling_removed)} entit(ies)")
 
     # Report if PC extraction was skipped due to consecutive failures (#149)
     if _pc_skipped_turns > 0:
