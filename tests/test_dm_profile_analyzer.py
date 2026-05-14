@@ -10,22 +10,22 @@ import pytest
 # Add tools/ to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from dm_profile_analyzer import (
-    _aggregate_adversarial_level,
-    _empty_profile,
-    _format_analysis_prompt,
-    _parse_turn_number,
-    analyze_batch,
-    analyze_dm_turns,
-    list_dm_turns,
-    load_dm_profile,
-    load_template,
-    merge_observations,
-    merge_user_input,
-    parse_user_input,
-    save_dm_profile,
-)
 import dm_profile_analyzer as _mod
+
+# Local aliases — keep _mod reference for monkeypatch.setattr
+_aggregate_adversarial_level = _mod._aggregate_adversarial_level
+_empty_profile = _mod._empty_profile
+_format_analysis_prompt = _mod._format_analysis_prompt
+_parse_turn_number = _mod._parse_turn_number
+analyze_batch = _mod.analyze_batch
+analyze_dm_turns = _mod.analyze_dm_turns
+list_dm_turns = _mod.list_dm_turns
+load_dm_profile = _mod.load_dm_profile
+load_template = _mod.load_template
+merge_observations = _mod.merge_observations
+merge_user_input = _mod.merge_user_input
+parse_user_input = _mod.parse_user_input
+save_dm_profile = _mod.save_dm_profile
 
 
 # ---------------------------------------------------------------------------
