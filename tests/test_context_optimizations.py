@@ -1,12 +1,15 @@
 """Tests for context budget optimization features (#387).
 
+All three optimizations (relationship relevance scoring, arc-aware compression,
+scene-scoped detail) are always active — no config flags.
+
 Covers:
 - _trim_entry_for_scene(): scene-scoped detail injection with mention filtering
 - _format_rel_by_tier(): per-tier relationship formatting
 - _format_relationships_budgeted(): budget-aware relationship formatting
 - Relationship relevance scoring in _collect_existing_relationships()
 - Arc-aware compression in _format_prior_entity_context()
-- Scene-scoped detail toggle in format_detail_prompt()
+- Scene-scoped detail in format_detail_prompt()
 """
 
 import json
@@ -341,12 +344,10 @@ class TestRelationshipScoring:
         """Both endpoints mentioned → tier 1 (full)."""
         rels = [_make_rel("char-bob", source_id="char-alice", last_updated_turn="turn-50")]
         catalogs = self._make_catalogs_with_rels("char-alice", rels)
-        config = {"context_optimizations": {"relationship_relevance_scoring": True}}
 
         result = se._collect_existing_relationships(
             catalogs,
             entity_ids=["char-alice", "char-bob"],
-            config=config,
             turn_text="Alice and Bob met in the forest",
             current_turn_num=100,
             context_length=32768,
@@ -365,12 +366,10 @@ class TestRelationshipScoring:
         """One endpoint mentioned + recent → tier 2."""
         rels = [_make_rel("char-stranger", source_id="char-alice", last_updated_turn="turn-95")]
         catalogs = self._make_catalogs_with_rels("char-alice", rels)
-        config = {"context_optimizations": {"relationship_relevance_scoring": True}}
 
         result = se._collect_existing_relationships(
             catalogs,
             entity_ids=["char-alice"],
-            config=config,
             turn_text="Alice walked through the market",
             current_turn_num=100,
             context_length=32768,
@@ -388,12 +387,10 @@ class TestRelationshipScoring:
         """One endpoint mentioned + active + old → tier 3 (summary)."""
         rels = [_make_rel("char-stranger", source_id="char-alice", last_updated_turn="turn-10")]
         catalogs = self._make_catalogs_with_rels("char-alice", rels)
-        config = {"context_optimizations": {"relationship_relevance_scoring": True}}
 
         result = se._collect_existing_relationships(
             catalogs,
             entity_ids=["char-alice"],
-            config=config,
             turn_text="Alice walked through the market",
             current_turn_num=100,
             context_length=32768,
@@ -413,12 +410,10 @@ class TestRelationshipScoring:
                        last_updated_turn="turn-10", status="dormant"),
         ]
         catalogs = self._make_catalogs_with_rels("char-alice", rels)
-        config = {"context_optimizations": {"relationship_relevance_scoring": True}}
 
         result = se._collect_existing_relationships(
             catalogs,
             entity_ids=["char-alice"],
-            config=config,
             turn_text="Alice walked through the market",
             current_turn_num=100,
             context_length=32768,
@@ -433,23 +428,6 @@ class TestRelationshipScoring:
             # Empty string is valid — no relationships to return
             pass
 
-    def test_scoring_disabled_returns_raw(self):
-        """Without scoring enabled, returns raw JSON."""
-        rels = [_make_rel("char-bob", source_id="char-alice")]
-        catalogs = self._make_catalogs_with_rels("char-alice", rels)
-        config = {"context_optimizations": {}}
-
-        result = se._collect_existing_relationships(
-            catalogs,
-            entity_ids=["char-alice"],
-            config=config,
-        )
-        assert result
-        parsed = json.loads(result)
-        # Raw format — has all fields
-        assert "char-alice" in parsed
-        assert len(parsed["char-alice"]) == 1
-
 
 # ===========================================================================
 # E. Arc-aware compression tests (_format_prior_entity_context)
@@ -459,7 +437,7 @@ class TestArcAwareCompression:
     """Tests for arc-aware compression in _format_prior_entity_context."""
 
     def test_non_pc_long_volatile_state_digested(self):
-        """Non-PC entity with long volatile_state gets digested when arc_aware is on."""
+        """Non-PC entity with long volatile_state gets digested (always-on)."""
         vs = {
             "location": [
                 "Moved to town square (turn-10)",
@@ -477,9 +455,8 @@ class TestArcAwareCompression:
             volatile_state=vs,
             last_updated_turn="turn-100",
         )
-        config = {"context_optimizations": {"arc_aware_compression": True}}
 
-        result_json = se._format_prior_entity_context(entry, config=config)
+        result_json = se._format_prior_entity_context(entry)
         result = json.loads(result_json)
         vs_out = result.get("volatile_state", {})
         loc = vs_out.get("location", [])
@@ -498,9 +475,8 @@ class TestArcAwareCompression:
             ],
         }]
         entry = _make_entry(entity_id="char-npc", relationships=rels)
-        config = {"context_optimizations": {"arc_aware_compression": True}}
 
-        result_json = se._format_prior_entity_context(entry, config=config)
+        result_json = se._format_prior_entity_context(entry)
         result = json.loads(result_json)
         out_rels = result.get("relationships", [])
         assert len(out_rels) == 1
@@ -526,31 +502,13 @@ class TestArcAwareCompression:
         result = json.loads(result_json)
         assert "volatile_state" in result
 
-    def test_non_pc_no_compression_without_config(self):
-        """Non-PC without arc_aware: volatile_state is not trimmed."""
-        vs = {
-            "location": [f"Place {i} (turn-{i})" for i in range(1, 10)],
-        }
-        entry = _make_entry(
-            entity_id="char-npc",
-            volatile_state=vs,
-            last_updated_turn="turn-100",
-        )
-        config = {"context_optimizations": {}}
-
-        result_json = se._format_prior_entity_context(entry, config=config)
-        result = json.loads(result_json)
-        # Without arc_aware, all entries should be preserved
-        loc = result.get("volatile_state", {}).get("location", [])
-        assert len(loc) == 9
-
 
 # ===========================================================================
 # F. Scene-scoped detail tests (format_detail_prompt)
 # ===========================================================================
 
 class TestSceneScopedDetail:
-    """Tests for scene_scoped_detail toggle in format_detail_prompt."""
+    """Tests for scene-scoped detail (always-on) in format_detail_prompt."""
 
     def _make_turn(self, text="The elder speaks of ancient times"):
         return {
@@ -567,19 +525,18 @@ class TestSceneScopedDetail:
             "is_new": False,
         }
 
-    def test_scene_scoped_true_trims_entry(self):
-        """With scene_scoped_detail: true, entry is trimmed."""
+    def test_scene_scoped_trims_entry(self):
+        """Entry is always trimmed via scene-scoped detail."""
         rels = [
             _make_rel("char-old-friend", last_updated_turn="turn-5"),
             _make_rel("char-recent", last_updated_turn="turn-98"),
         ]
         entry = _make_entry(relationships=rels)
-        config = {"context_optimizations": {"scene_scoped_detail": True}}
         mentioned = {"char-old-friend"}
 
         prompt = se.format_detail_prompt(
             self._make_turn(), self._make_entity_ref(),
-            current_entry=entry, config=config, mentioned_ids=mentioned,
+            current_entry=entry, mentioned_ids=mentioned,
         )
         # The prompt should contain a "Current Catalog Entry" section
         assert "Current Catalog Entry" in prompt
@@ -592,32 +549,8 @@ class TestSceneScopedDetail:
         # Should be trimmed — relationships should be present but capped
         assert "relationships" in parsed or len(rels) == 0
 
-    def test_scene_scoped_false_full_entry(self):
-        """With scene_scoped_detail: false, entry is full (no trimming)."""
-        rels = [
-            _make_rel("char-old-friend", last_updated_turn="turn-5"),
-            _make_rel("char-recent", last_updated_turn="turn-98"),
-        ]
-        entry = _make_entry(relationships=rels)
-        config = {"context_optimizations": {"scene_scoped_detail": False}}
-
-        prompt = se.format_detail_prompt(
-            self._make_turn(), self._make_entity_ref(),
-            current_entry=entry, config=config,
-        )
-        assert "Current Catalog Entry" in prompt
-        json_start = prompt.index("Current Catalog Entry") + len("Current Catalog Entry")
-        json_block = prompt[json_start:]
-        json_str = json_block.split("```json\n")[1].split("\n```")[0]
-        parsed = json.loads(json_str)
-        # Full entry — all relationships present with all fields
-        assert len(parsed["relationships"]) == 2
-        for r in parsed["relationships"]:
-            assert "source_id" in r
-            assert "last_updated_turn" in r
-
     def test_scene_scoped_no_config(self):
-        """Without config, entry is full."""
+        """Without config, entry is still trimmed (always-on)."""
         entry = _make_entry()
         prompt = se.format_detail_prompt(
             self._make_turn(), self._make_entity_ref(),
@@ -633,11 +566,10 @@ class TestSceneScopedDetail:
             "type": "character",
             "existing_id": "char-player",
         }
-        config = {"context_optimizations": {"scene_scoped_detail": True}}
 
         prompt = se.format_detail_prompt(
             self._make_turn(), ref,
-            current_entry=entry, config=config,
+            current_entry=entry,
         )
         assert "Current Catalog Entry" not in prompt
 
@@ -649,12 +581,11 @@ class TestSceneScopedDetail:
             _make_rel("char-mentioned", last_updated_turn="turn-1"),  # very old
         ]
         entry = _make_entry(relationships=rels)
-        config = {"context_optimizations": {"scene_scoped_detail": True}}
         mentioned = {"char-mentioned"}
 
         prompt = se.format_detail_prompt(
             self._make_turn(), self._make_entity_ref(),
-            current_entry=entry, config=config, mentioned_ids=mentioned,
+            current_entry=entry, mentioned_ids=mentioned,
         )
         json_start = prompt.index("Current Catalog Entry") + len("Current Catalog Entry")
         json_block = prompt[json_start:]

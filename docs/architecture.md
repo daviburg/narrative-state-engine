@@ -180,28 +180,28 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 
 ### Context Budget Optimizations (Extraction)
 
-The extraction pipeline includes optional context budget controls that prevent prompt overflow as catalogs grow. All features are controlled via the `context_optimizations` block in `config/llm.json` and default to `false` for backward compatibility.
+The extraction pipeline applies context budget controls automatically to prevent prompt overflow as catalogs grow. All optimizations are always active — no configuration needed.
 
 **Discovery** (always active): Uses 4-tier priority scoring (mentioned → co-located → one-hop → recency backfill) with a token budget (25% of context window) and automatic tier degradation — full → brief → id-only → omit. See #233, #310.
 
-**Relationship Relevance Scoring** (`relationship_relevance_scoring`): Applies a 3-tier priority system to `_collect_existing_relationships()`:
+**Relationship Relevance Scoring**: Applies a 3-tier priority system to `_collect_existing_relationships()`:
 - Tier 1 (full history): both endpoints mentioned in current turn
 - Tier 2 (current + last update): one endpoint mentioned + updated within 15 turns
 - Tier 3 (summary only): one endpoint mentioned + active status
 - Omit: dormant/resolved relationships unless both endpoints are mentioned
 - Token budget: 20% of context window with automatic tier degradation
 
-**Arc-Aware Compression** (`arc_aware_compression`): Generalizes the PC-only volatile digest and relationship compaction to all entities:
+**Arc-Aware Compression**: Generalizes the PC-only volatile digest and relationship compaction to all entities:
 - History arrays capped to 3 entries per key (same as PC)
 - Entries older than 50 turns digested to a summary line
 - Relationship histories trimmed to last 3 entries (arc summaries used for PC when available)
 
-**Scene-Scoped Entity Detail** (`scene_scoped_detail`): Trims non-PC catalog entries in the entity-detail prompt:
+**Scene-Scoped Entity Detail**: Trims non-PC catalog entries in the entity-detail prompt:
 - Volatile state: digested + capped to 3 entries per key
 - Relationships: filtered to mentioned + recent (20 turns), capped at 15
 - Stable attributes: preserved in full
 
-**Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring, independent of optimization flags.
+**Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 
 ### Story Summary Layer (Framework)
 

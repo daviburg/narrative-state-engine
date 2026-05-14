@@ -20,10 +20,5 @@
   "entity_refresh_batch_size": 10,
   "checkpoint_interval": 25,
   "dedup_audit_interval": 50,
-  "skip_response_format": true,
-  "context_optimizations": {
-    "relationship_relevance_scoring": false,
-    "arc_aware_compression": false,
-    "scene_scoped_detail": false
-  }
+  "skip_response_format": true
 }

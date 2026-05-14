@@ -1310,17 +1310,15 @@ def _format_prior_entity_context(
     - Relationship histories replaced with arc summaries when available (#120)
     - Old volatile state entries digested into count + themes (#121)
 
-    When ``arc_aware_compression`` is enabled in config, the same volatile
-    state digest and relationship compaction is applied to non-PC entities.
+    Arc-aware compression is always active: the same volatile state digest
+    and relationship compaction is applied to all entities.
     """
     if not current_entry:
         return "{}"
 
     is_pc = current_entry.get("id") == "char-player"
-    ctx_opts = (config or {}).get("context_optimizations", {})
-    arc_aware = ctx_opts.get("arc_aware_compression", False)
-    # Apply trimming for PC always, and for non-PC when arc_aware is enabled
-    should_trim = is_pc or arc_aware
+    # Trimming always applies to all entities (arc-aware compression)
+    should_trim = True
 
     prior: dict = {}
     # V2 fields
@@ -1372,12 +1370,12 @@ def _format_prior_entity_context(
             prior["volatile_state"] = vs
 
     # Relationships — compact with arc summaries for PC (#120),
-    # or trim history for non-PC when arc_aware is enabled
+    # or trim history for all entities (arc-aware compression, always-on)
     rels = current_entry.get("relationships")
     if rels and is_pc and arcs_data:
         prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
-    elif rels and (is_pc or arc_aware):
-        # No arc data, or non-PC with arc_aware — trim history to last 3 entries
+    elif rels:
+        # Trim history to last 3 entries for all entities
         compact_rels = []
         for rel in rels:
             trimmed = dict(rel)
@@ -1420,8 +1418,8 @@ def format_detail_prompt(
 ) -> str:
     """Format the user prompt for entity detail extraction.
 
-    When ``scene_scoped_detail`` is enabled in config, the current catalog
-    entry is trimmed to reduce context size: volatile_state is digested,
+    Scene-scoped detail is always active: the current catalog entry is
+    trimmed to reduce context size — volatile_state is digested,
     relationships are filtered by recency and mention relevance, and capped.
     """
     prior_json = _format_prior_entity_context(
@@ -1444,14 +1442,13 @@ def format_detail_prompt(
     # For PC, skip the full catalog entry to avoid context bloat (#119).
     # The trimmed prior_json already contains all essential entity context.
     if not is_pc:
-        ctx_opts = (config or {}).get("context_optimizations", {})
-        if ctx_opts.get("scene_scoped_detail") and current_entry:
+        if current_entry:
             entry_json = json.dumps(
                 _trim_entry_for_scene(current_entry, mentioned_ids=mentioned_ids),
                 indent=2,
             )
         else:
-            entry_json = json.dumps(current_entry, indent=2) if current_entry else "{}"
+            entry_json = "{}"
         prompt += f"\n\n## Current Catalog Entry\n```json\n{entry_json}\n```"
     return prompt
 
@@ -1545,9 +1542,8 @@ def _collect_existing_relationships(
     Returns a compact JSON string containing per-entity relationships so the
     relationship-mapper LLM can update rather than duplicate them.
 
-    When ``relationship_relevance_scoring`` is enabled in config, applies
-    a tiered priority system with a token budget to keep the relationship
-    block bounded.
+    Relationship relevance scoring is always active: applies a tiered
+    priority system with a token budget to keep the relationship block bounded.
     """
     result: dict[str, list] = {}
     for eid in entity_ids:
@@ -1559,10 +1555,6 @@ def _collect_existing_relationships(
                 result[eid] = rels
     if not result:
         return ""
-
-    ctx_opts = (config or {}).get("context_optimizations", {})
-    if not ctx_opts.get("relationship_relevance_scoring"):
-        return json.dumps(result, indent=2)
 
     # --- Relationship relevance scoring ---
     # Determine which entity IDs are mentioned in the turn text
