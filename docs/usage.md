@@ -1233,6 +1233,31 @@ python tools/dm_profile_analyzer.py --session sessions/session-001 --user-input 
 - **Incremental**: `ingest_turn.py --extract` updates the DM profile for each new DM turn.
 - **Analysis**: `analyze_next_move.py` includes the DM profile summary in the analysis output when `--framework` is specified.
 
+### Auto-Resume Behavior
+
+By default the tool **automatically resumes** from where it left off. When `--start-turn` is not specified, it reads `last_updated_turn` from the existing profile and starts from the next turn. This makes interrupted or incremental runs efficient — already-analyzed turns are never re-processed.
+
+```bash
+# First run: analyzes turns 1–50, profile saved with last_updated_turn = turn-050
+python tools/dm_profile_analyzer.py --session sessions/session-001
+
+# Second run: automatically resumes from turn-051
+python tools/dm_profile_analyzer.py --session sessions/session-001
+```
+
+To force a **full reanalysis** from the beginning, either pass `--start-turn 1` or delete the profile file:
+
+```bash
+# Force full reanalysis using --start-turn
+python tools/dm_profile_analyzer.py --session sessions/session-001 --start-turn 1
+
+# Or delete the profile to reset
+rm framework/dm-profile/dm-profile.json
+python tools/dm_profile_analyzer.py --session sessions/session-001
+```
+
+> **Note on partial failures**: if a batch fails mid-run (LLM extraction error), the watermark advances only through the last *consecutively* successful batch from the start. This prevents silently skipping failed turns on the next run — the failed range will be retried automatically on resume.
+
 ### Confidence Scores
 
 - Observations from single turns get lower confidence (0.3–0.5)
