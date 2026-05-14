@@ -1443,8 +1443,10 @@ def format_detail_prompt(
     # The trimmed prior_json already contains all essential entity context.
     if not is_pc:
         if current_entry:
+            _current_turn = _parse_turn_number(turn.get('turn_id', ''))
             entry_json = json.dumps(
-                _trim_entry_for_scene(current_entry, mentioned_ids=mentioned_ids),
+                _trim_entry_for_scene(current_entry, mentioned_ids=mentioned_ids,
+                                      current_turn_num=_current_turn),
                 indent=2,
             )
         else:
@@ -1453,7 +1455,8 @@ def format_detail_prompt(
     return prompt
 
 
-def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None) -> dict:
+def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
+                          current_turn_num: int | None = None) -> dict:
     """Trim a catalog entry for scene-scoped detail injection.
 
     Keeps all stable_attributes and identity, but trims volatile_state
@@ -1462,6 +1465,10 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None) ->
     *mentioned_ids* is the set of entity IDs discovered in the current
     turn (from the discovery phase).  Relationships whose target is in
     this set are kept regardless of recency.
+
+    *current_turn_num* is the turn number currently being processed.
+    When provided, it is used for recency calculation instead of the
+    entry's own ``last_updated_turn``.
     """
     if mentioned_ids is None:
         mentioned_ids = set()
@@ -1500,7 +1507,7 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None) ->
     # relationships: filter by recency and mention, cap at _SCENE_MAX_RELATIONSHIPS
     rels = entry.get("relationships")
     if rels and isinstance(rels, list):
-        current_turn_num = _parse_turn_number(entry.get("last_updated_turn", ""))
+        _recency_ref = current_turn_num or _parse_turn_number(entry.get("last_updated_turn", ""))
 
         kept = []
         summary = []
@@ -1508,7 +1515,7 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None) ->
             target_id = rel.get("target_id", "")
             status = rel.get("status", "active")
             rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
-            turn_dist = (current_turn_num - rel_turn) if (current_turn_num and rel_turn is not None) else 9999
+            turn_dist = (_recency_ref - rel_turn) if (_recency_ref and rel_turn is not None) else 9999
 
             if target_id in mentioned_ids:
                 kept.append(rel)
@@ -1521,6 +1528,12 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None) ->
                     "relationship_type": rel.get("relationship_type", rel.get("type", "")),
                     "status": status,
                 })
+
+        # Trim history on kept relationships (arc-aware compression)
+        for rel in kept:
+            hist = rel.get("history")
+            if hist and isinstance(hist, list) and len(hist) > 3:
+                rel["history"] = hist[-3:]
 
         # Cap total
         all_rels = kept + summary
@@ -1660,6 +1673,16 @@ def _format_relationships_budgeted(
     # Still over — degrade tier 2 to summary (tier 3)
     degraded = [(3 if t == 2 else t, o, r) for t, o, r in degraded]
     output = _build_output(degraded)
+    text = json.dumps(output, indent=2) if output else ""
+    if _estimate_tokens(text) <= budget:
+        return text
+
+    # Safety valve: tier-1 histories dominate — trim them to last 2 entries
+    for owner_rels in output.values():
+        for rel in owner_rels:
+            hist = rel.get("history")
+            if hist and isinstance(hist, list) and len(hist) > 2:
+                rel["history"] = hist[-2:]
     text = json.dumps(output, indent=2) if output else ""
     return text
 
@@ -2428,10 +2451,12 @@ def _run_discovery_phase(
     )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
+    _disc_sys_tmpl = load_template("entity-discovery")
+    _disc_user_prompt = format_discovery_prompt(turn, known)
     try:
         discovery_result = llm.extract_json(
-            system_prompt=load_template("entity-discovery"),
-            user_prompt=format_discovery_prompt(turn, known),
+            system_prompt=_disc_sys_tmpl,
+            user_prompt=_disc_user_prompt,
             temperature=_discovery_temp,
             max_tokens=_discovery_max_tokens,
         )
@@ -2442,8 +2467,8 @@ def _run_discovery_phase(
               f"retrying with max_tokens={_retry_max}...", file=sys.stderr)
         try:
             discovery_result = llm.extract_json(
-                system_prompt=load_template("entity-discovery"),
-                user_prompt=format_discovery_prompt(turn, known),
+                system_prompt=_disc_sys_tmpl,
+                user_prompt=_disc_user_prompt,
                 temperature=_discovery_temp,
                 max_tokens=_retry_max,
             )
@@ -2653,6 +2678,8 @@ def _run_discovery_phase(
         "phase_log": phase_log,
         "discovery_proposals": _discovery_proposals,
         "discovery_filtered": _discovery_filtered,
+        "discovery_sys_tmpl": _disc_sys_tmpl,
+        "discovery_user_prompt": _disc_user_prompt,
     }
 
 
@@ -2752,6 +2779,8 @@ def extract_and_merge(
         _pf_phase = prefetched_discovery["phase_log"]
         _phase_log["discovery_ok"] = _pf_phase.get("discovery_ok", True)
         _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
+        _disc_sys_tmpl = prefetched_discovery.get("discovery_sys_tmpl")
+        _disc_user_prompt = prefetched_discovery.get("discovery_user_prompt")
     else:
         _discovery_result = _run_discovery_phase(
             turn, catalogs, llm, min_confidence,
@@ -2763,22 +2792,12 @@ def extract_and_merge(
         _discovery_filtered = _discovery_result["discovery_filtered"]
         _phase_log["discovery_ok"] = _discovery_result["phase_log"]["discovery_ok"]
         _phase_log["discovery_error"] = _discovery_result["phase_log"]["discovery_error"]
+        _disc_sys_tmpl = _discovery_result.get("discovery_sys_tmpl")
+        _disc_user_prompt = _discovery_result.get("discovery_user_prompt")
 
-    # Instrument discovery prompt tokens (estimate from known entity list)
-    _disc_ctx_len = getattr(llm, "context_length", None)
-    if not isinstance(_disc_ctx_len, int):
-        _disc_ctx_len = None
-    _disc_entity_budget = _cfg.get("entity_context_budget") if isinstance(_cfg, dict) else None
-    _disc_known = format_known_entities_bounded(
-        catalogs,
-        current_turn=_parse_turn_number(turn_id),
-        context_length=_disc_ctx_len,
-        entity_context_budget=_disc_entity_budget,
-        turn_text=turn.get("text"),
-    )
-    _disc_sys_tmpl = load_template("entity-discovery")
-    _disc_user_prompt = format_discovery_prompt(turn, _disc_known)
-    _record_prompt_tokens(_prompt_metrics, "discovery", _disc_sys_tmpl, _disc_user_prompt)
+    # Instrument discovery prompt tokens (captured at build site, not re-computed)
+    if _disc_sys_tmpl and _disc_user_prompt:
+        _record_prompt_tokens(_prompt_metrics, "discovery", _disc_sys_tmpl, _disc_user_prompt)
 
     # Notify the batch loop so it can submit the next turn's discovery prefetch
     # while this turn's phases 2-4 run on the GPU.

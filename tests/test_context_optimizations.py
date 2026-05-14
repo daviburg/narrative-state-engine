@@ -597,3 +597,151 @@ class TestSceneScopedDetail:
         assert len(mentioned_rel) >= 1
         # Full form has source_id
         assert "source_id" in mentioned_rel[0]
+
+
+# ===========================================================================
+# G. Fix verification tests (deferred review items)
+# ===========================================================================
+
+class TestCurrentTurnNumRecency:
+    """Fix 1: Recency uses current_turn_num parameter, not entry's own turn."""
+
+    def test_recency_uses_current_turn_num(self):
+        """When current_turn_num is provided, recency is calculated from it."""
+        # Entry last updated at turn-50, but current turn is 100.
+        # Relationship at turn-85 is within 20-turn window of 100 but NOT of 50.
+        rels = [
+            _make_rel("char-recent-from-current", last_updated_turn="turn-85"),
+        ]
+        entry = _make_entry(last_updated_turn="turn-50", relationships=rels)
+
+        # Without current_turn_num: uses entry's turn-50, so turn-85 is 35 turns away (outside window)
+        result_no_param = se._trim_entry_for_scene(entry, mentioned_ids=set())
+        old_rel = result_no_param["relationships"][0]
+        # Should be summarized (no source_id) since 85 - 50 = -35, but actually 50 - 85 = negative...
+        # Actually _parse_turn_number("turn-85") = 85, entry turn = 50, so 50 - 85 = -35 -> <= 20, kept!
+        # Let's use a scenario where it matters: entry at turn-200, rel at turn-150
+        rels2 = [
+            _make_rel("char-boundary", last_updated_turn="turn-150"),
+        ]
+        entry2 = _make_entry(last_updated_turn="turn-200", relationships=rels2)
+
+        # With entry's turn-200: distance = 200 - 150 = 50 (outside 20-turn window) -> summarized
+        result_entry_turn = se._trim_entry_for_scene(entry2, mentioned_ids=set())
+        boundary_rel = result_entry_turn["relationships"][0]
+        assert "source_id" not in boundary_rel  # summarized
+
+        # With current_turn_num=160: distance = 160 - 150 = 10 (inside window) -> kept
+        result_current_turn = se._trim_entry_for_scene(
+            entry2, mentioned_ids=set(), current_turn_num=160)
+        boundary_rel2 = result_current_turn["relationships"][0]
+        assert "source_id" in boundary_rel2  # kept in full form
+
+    def test_current_turn_num_none_falls_back_to_entry(self):
+        """When current_turn_num is None, falls back to entry's last_updated_turn."""
+        rels = [
+            _make_rel("char-old", last_updated_turn="turn-50"),
+        ]
+        entry = _make_entry(last_updated_turn="turn-100", relationships=rels)
+
+        result_none = se._trim_entry_for_scene(entry, mentioned_ids=set(), current_turn_num=None)
+        result_default = se._trim_entry_for_scene(entry, mentioned_ids=set())
+        assert result_none == result_default
+
+
+class TestHistoryTrimmingOnKeptRelationships:
+    """Fix 3: History is trimmed to 3 entries on kept relationships."""
+
+    def test_kept_relationship_history_trimmed(self):
+        """Kept relationships have their history capped at 3 entries."""
+        long_history = [
+            {"turn": f"turn-{i}", "event": f"event {i}"}
+            for i in range(10)
+        ]
+        rels = [
+            _make_rel("char-mentioned", last_updated_turn="turn-95",
+                       history=long_history),
+        ]
+        entry = _make_entry(relationships=rels)
+
+        result = se._trim_entry_for_scene(entry, mentioned_ids={"char-mentioned"})
+        kept_rel = next(r for r in result["relationships"]
+                        if r["target_id"] == "char-mentioned")
+        assert "history" in kept_rel
+        assert len(kept_rel["history"]) == 3
+        # Should keep last 3
+        assert kept_rel["history"][0]["turn"] == "turn-7"
+
+    def test_kept_relationship_short_history_unchanged(self):
+        """Kept relationships with <= 3 history entries are untouched."""
+        short_history = [
+            {"turn": "turn-1", "event": "met"},
+            {"turn": "turn-5", "event": "allied"},
+        ]
+        rels = [
+            _make_rel("char-friend", last_updated_turn="turn-95",
+                       history=short_history),
+        ]
+        entry = _make_entry(relationships=rels)
+
+        result = se._trim_entry_for_scene(entry, mentioned_ids={"char-friend"})
+        kept_rel = next(r for r in result["relationships"]
+                        if r["target_id"] == "char-friend")
+        assert len(kept_rel["history"]) == 2
+
+    def test_recency_kept_relationship_also_trimmed(self):
+        """Relationships kept by recency (not mention) also get history trimmed."""
+        long_history = [
+            {"turn": f"turn-{i}", "event": f"event {i}"}
+            for i in range(8)
+        ]
+        rels = [
+            _make_rel("char-recent", last_updated_turn="turn-95",
+                       history=long_history),
+        ]
+        entry = _make_entry(relationships=rels)
+
+        # Not mentioned, but recent (turn-95 within 20 of turn-100)
+        result = se._trim_entry_for_scene(entry, mentioned_ids=set())
+        kept_rel = next(r for r in result["relationships"]
+                        if r["target_id"] == "char-recent")
+        assert len(kept_rel["history"]) == 3
+
+
+class TestBudgetOverflowSafetyValve:
+    """Fix 4: Budget overflow safety valve for tier-1 dominant cases."""
+
+    def test_tier1_overflow_trims_history(self):
+        """When tier-1 items alone exceed budget, histories are trimmed to 2."""
+        big_history = [
+            {"turn": f"turn-{i}", "event": f"event {'x' * 200}"}
+            for i in range(20)
+        ]
+        scored = [
+            (1, "char-a", _make_rel("char-b", source_id="char-a",
+                                     history=big_history)),
+            (1, "char-a", _make_rel("char-c", source_id="char-a",
+                                     history=big_history)),
+        ]
+        # Very small budget — tier-1 items should trigger safety valve
+        result = se._format_relationships_budgeted(scored, budget=1)
+        if result:
+            parsed = json.loads(result)
+            for rel in parsed.get("char-a", []):
+                hist = rel.get("history", [])
+                assert len(hist) <= 2
+
+    def test_under_budget_no_trimming(self):
+        """When under budget, tier-1 histories are NOT trimmed."""
+        history = [
+            {"turn": f"turn-{i}", "event": f"event {i}"}
+            for i in range(5)
+        ]
+        scored = [
+            (1, "char-a", _make_rel("char-b", source_id="char-a",
+                                     history=history)),
+        ]
+        result = se._format_relationships_budgeted(scored, budget=100000)
+        parsed = json.loads(result)
+        rel = parsed["char-a"][0]
+        assert len(rel["history"]) == 5  # all preserved
