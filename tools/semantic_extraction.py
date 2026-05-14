@@ -1416,6 +1416,7 @@ def format_detail_prompt(
     current_entry: dict | None,
     arcs_data: dict | None = None,
     config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
 ) -> str:
     """Format the user prompt for entity detail extraction.
 
@@ -1446,7 +1447,7 @@ def format_detail_prompt(
         ctx_opts = (config or {}).get("context_optimizations", {})
         if ctx_opts.get("scene_scoped_detail") and current_entry:
             entry_json = json.dumps(
-                _trim_entry_for_scene(current_entry, turn.get("text", "")),
+                _trim_entry_for_scene(current_entry, mentioned_ids=mentioned_ids),
                 indent=2,
             )
         else:
@@ -1455,12 +1456,18 @@ def format_detail_prompt(
     return prompt
 
 
-def _trim_entry_for_scene(entry: dict, turn_text: str) -> dict:
+def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None) -> dict:
     """Trim a catalog entry for scene-scoped detail injection.
 
     Keeps all stable_attributes and identity, but trims volatile_state
     and relationships to reduce token footprint.
+
+    *mentioned_ids* is the set of entity IDs discovered in the current
+    turn (from the discovery phase).  Relationships whose target is in
+    this set are kept regardless of recency.
     """
+    if mentioned_ids is None:
+        mentioned_ids = set()
     trimmed = {}
     # Copy core fields
     for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn",
@@ -1497,16 +1504,6 @@ def _trim_entry_for_scene(entry: dict, turn_text: str) -> dict:
     rels = entry.get("relationships")
     if rels and isinstance(rels, list):
         current_turn_num = _parse_turn_number(entry.get("last_updated_turn", ""))
-        # Determine mentioned entity IDs from turn text
-        # Build a minimal entity list from relationship targets for mention detection
-        target_ids_in_text: set[str] = set()
-        if turn_text:
-            # Simple approach: check if target_id appears in turn text
-            text_lower = turn_text.lower()
-            for rel in rels:
-                tid = rel.get("target_id", "")
-                if tid and tid.lower() in text_lower:
-                    target_ids_in_text.add(tid)
 
         kept = []
         summary = []
@@ -1516,7 +1513,7 @@ def _trim_entry_for_scene(entry: dict, turn_text: str) -> dict:
             rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
             turn_dist = (current_turn_num - rel_turn) if (current_turn_num and rel_turn is not None) else 9999
 
-            if target_id in target_ids_in_text:
+            if target_id in mentioned_ids:
                 kept.append(rel)
             elif status == "active" and turn_dist <= _SCENE_REL_RECENCY_WINDOW:
                 kept.append(rel)
@@ -1598,8 +1595,6 @@ def _collect_existing_relationships(
                 tier = 2  # recent
             elif one_mentioned and status == "active":
                 tier = 3  # summary
-            elif both_mentioned or (status in ("dormant", "resolved") and not both_mentioned):
-                tier = 4  # omit
             else:
                 tier = 4  # omit
             scored.append((tier, owner_id, rel))
@@ -2281,6 +2276,7 @@ def _extract_single_entity_detail(
     current_entry: dict | None,
     pc_arcs_data: dict | None,
     config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
 ) -> tuple[dict, dict | None, str | None]:
     """Run entity-detail extraction for a single entity.
 
@@ -2296,7 +2292,8 @@ def _extract_single_entity_detail(
         detail_result = llm.extract_json(
             system_prompt=load_template("entity-detail"),
             user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
-                                             arcs_data=entity_arcs, config=config),
+                                             arcs_data=entity_arcs, config=config,
+                                             mentioned_ids=mentioned_ids),
         )
     except QuotaExhaustedError:
         raise
@@ -2854,6 +2851,9 @@ def extract_and_merge(
     next_evt_id = get_next_event_id(events_list)
     entity_ids = [e["id"] for e in mentioned_entities]
 
+    # Pre-compute mentioned entity IDs for scene-scoped trimming
+    _mentioned_ids: set[str] = {e["id"] for e in mentioned_entities}
+
     # Determine PC extraction eligibility
     pc_already_extracted = any(
         get_entity_id(e) == "char-player" for e in qualified
@@ -2888,11 +2888,13 @@ def extract_and_merge(
         _entity_arcs = pc_arcs_data if entity_id == "char-player" else None
         _detail_user_prompt = format_detail_prompt(
             turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
+            mentioned_ids=_mentioned_ids,
         )
         _record_prompt_tokens(_prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt)
     if _run_pc:
         _pc_user_prompt = format_detail_prompt(
             turn, _pc_ref, _pc_entry, arcs_data=pc_arcs_data, config=_cfg,
+            mentioned_ids=_mentioned_ids,
         )
         _record_prompt_tokens(_prompt_metrics, "entity_detail", _detail_sys_tmpl, _pc_user_prompt)
     if _run_rels:
@@ -2921,6 +2923,7 @@ def extract_and_merge(
                 f = pool.submit(
                     _extract_single_entity_detail,
                     llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
+                    _mentioned_ids,
                 )
                 futures_map[f] = ("detail", entity_ref)
 
@@ -2939,7 +2942,7 @@ def extract_and_merge(
                         system_prompt=load_template("entity-detail"),
                         user_prompt=format_detail_prompt(
                             turn, _ref, _entry, arcs_data=pc_arcs_data,
-                            config=_cfg,
+                            config=_cfg, mentioned_ids=_mentioned_ids,
                         ),
                         timeout=_timeout,
                         max_tokens=llm.pc_max_tokens,
@@ -3149,7 +3152,8 @@ def extract_and_merge(
                 detail_result = llm.extract_json(
                     system_prompt=load_template("entity-detail"),
                     user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
-                                                     arcs_data=entity_arcs, config=_cfg),
+                                                     arcs_data=entity_arcs, config=_cfg,
+                                                     mentioned_ids=_mentioned_ids),
                 )
             except QuotaExhaustedError:
                 raise
@@ -3192,7 +3196,8 @@ def extract_and_merge(
                 detail_result = llm.extract_json(
                     system_prompt=load_template("entity-detail"),
                     user_prompt=format_detail_prompt(turn, _pc_ref, _pc_entry,
-                                                     arcs_data=pc_arcs_data, config=_cfg),
+                                                     arcs_data=pc_arcs_data, config=_cfg,
+                                                     mentioned_ids=_mentioned_ids),
                     timeout=_pc_timeout,
                     max_tokens=llm.pc_max_tokens,
                 )
