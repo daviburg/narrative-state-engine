@@ -613,24 +613,28 @@ class TestPCDetailPromptContext:
         prompt = format_detail_prompt(turn, ref, entry)
         assert "## Current Catalog Entry" not in prompt
 
-    def test_non_pc_prompt_includes_current_catalog_entry(self):
+    def test_non_pc_prompt_omits_current_catalog_entry(self):
         turn = self._make_turn()
         ref = {"name": "Kael", "type": "character", "existing_id": "char-kael"}
         entry = self._make_entry("char-kael")
         prompt = format_detail_prompt(turn, ref, entry)
-        assert "## Current Catalog Entry" in prompt
+        assert "## Current Catalog Entry" not in prompt
 
-    def test_pc_prompt_shorter_than_non_pc(self):
+    def test_pc_prompt_has_trimmed_stable_attributes(self):
         turn = self._make_turn()
         pc_ref = {"name": "Player Character", "type": "character", "existing_id": "char-player"}
         pc_entry = self._make_entry("char-player")
+        # Add extra stable_attributes that are NOT in the PC key set
+        pc_entry["stable_attributes"]["background"] = {"value": "Noble"}
+        pc_entry["stable_attributes"]["alignment"] = {"value": "Lawful Good"}
         pc_prompt = format_detail_prompt(turn, pc_ref, pc_entry)
 
-        npc_ref = {"name": "Player Character", "type": "character", "existing_id": "char-npc"}
-        npc_entry = self._make_entry("char-player")
+        npc_ref = {"name": "NPC", "type": "character", "existing_id": "char-npc"}
+        npc_entry = dict(pc_entry)
         npc_entry["id"] = "char-npc"
         npc_prompt = format_detail_prompt(turn, npc_ref, npc_entry)
 
+        # PC prompt trims stable_attributes to key set, so it should be shorter
         assert len(pc_prompt) < len(npc_prompt)
 
 

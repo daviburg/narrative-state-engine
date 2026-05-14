@@ -469,6 +469,7 @@ class TestArcAwareCompression:
             "target_id": "char-ally",
             "type": "ally",
             "status": "active",
+            "last_updated_turn": "turn-95",
             "history": [
                 {"turn": f"turn-{i}", "event": f"event {i}"}
                 for i in range(1, 8)
@@ -526,7 +527,7 @@ class TestSceneScopedDetail:
         }
 
     def test_scene_scoped_trims_entry(self):
-        """Entry is always trimmed via scene-scoped detail."""
+        """Entry is trimmed via scene-scoped relationship filtering in prior context."""
         rels = [
             _make_rel("char-old-friend", last_updated_turn="turn-5"),
             _make_rel("char-recent", last_updated_turn="turn-98"),
@@ -538,25 +539,24 @@ class TestSceneScopedDetail:
             self._make_turn(), self._make_entity_ref(),
             current_entry=entry, mentioned_ids=mentioned,
         )
-        # The prompt should contain a "Current Catalog Entry" section
-        assert "Current Catalog Entry" in prompt
-        # Parse the JSON from the prompt to verify trimming
-        json_start = prompt.index("Current Catalog Entry") + len("Current Catalog Entry")
-        json_block = prompt[json_start:]
-        # Extract JSON between ```json and ```
-        json_str = json_block.split("```json\n")[1].split("\n```")[0]
-        parsed = json.loads(json_str)
+        # No separate "Current Catalog Entry" — consolidated into prior state
+        assert "Current Catalog Entry" not in prompt
+        assert "Prior entity state" in prompt
+        # Parse the JSON from the prior entity state section
+        json_block = prompt.split("```json\n")[1].split("\n```")[0]
+        parsed = json.loads(json_block)
         # Should be trimmed — relationships should be present but capped
         assert "relationships" in parsed or len(rels) == 0
 
     def test_scene_scoped_no_config(self):
-        """Without config, entry is still trimmed (always-on)."""
+        """Without config, entry is still trimmed (always-on) in prior context."""
         entry = _make_entry()
         prompt = se.format_detail_prompt(
             self._make_turn(), self._make_entity_ref(),
             current_entry=entry, config=None,
         )
-        assert "Current Catalog Entry" in prompt
+        assert "Current Catalog Entry" not in prompt
+        assert "Prior entity state" in prompt
 
     def test_pc_entity_skips_catalog_entry(self):
         """PC entity never gets the catalog entry section."""
@@ -574,7 +574,7 @@ class TestSceneScopedDetail:
         assert "Current Catalog Entry" not in prompt
 
     def test_mentioned_ids_passed_through(self):
-        """Verify mentioned_ids parameter reaches _trim_entry_for_scene."""
+        """Verify mentioned_ids reaches scene-scoped relationship filtering."""
         # If mentioned_ids works, the mentioned entity's relationship
         # will be kept in full form even if old
         rels = [
@@ -587,10 +587,10 @@ class TestSceneScopedDetail:
             self._make_turn(), self._make_entity_ref(),
             current_entry=entry, mentioned_ids=mentioned,
         )
-        json_start = prompt.index("Current Catalog Entry") + len("Current Catalog Entry")
-        json_block = prompt[json_start:]
-        json_str = json_block.split("```json\n")[1].split("\n```")[0]
-        parsed = json.loads(json_str)
+        assert "Current Catalog Entry" not in prompt
+        # Parse the JSON from the prior entity state section
+        json_block = prompt.split("```json\n")[1].split("\n```")[0]
+        parsed = json.loads(json_block)
         # The mentioned entity's relationship should be in full form
         rels_out = parsed.get("relationships", [])
         mentioned_rel = [r for r in rels_out if r.get("target_id") == "char-mentioned"]

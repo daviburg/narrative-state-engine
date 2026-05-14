@@ -1297,6 +1297,8 @@ def _format_prior_entity_context(
     current_entry: dict | None,
     arcs_data: dict | None = None,
     config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
+    current_turn_num: int | None = None,
 ) -> str:
     """Format the prior entity state for injection into the detail prompt.
 
@@ -1312,6 +1314,10 @@ def _format_prior_entity_context(
 
     Arc-aware compression is always active: the same volatile state digest
     and relationship compaction is applied to all entities.
+
+    For non-PC entities, relationships are filtered by mention relevance and
+    recency (same as scene-scoped trimming), capped at
+    ``_SCENE_MAX_RELATIONSHIPS``.
     """
     if not current_entry:
         return "{}"
@@ -1343,14 +1349,14 @@ def _format_prior_entity_context(
     vs = current_entry.get("volatile_state")
     if vs:
         if should_trim and isinstance(vs, dict):
-            current_turn_num = _parse_turn_number(
+            _vs_turn_num = _parse_turn_number(
                 current_entry.get("last_updated_turn", "")
             )
             max_snapshots = _PC_MAX_VOLATILE_SNAPSHOTS if is_pc else _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS
             # Digest old entries BEFORE trimming so history is compressed
             # rather than silently dropped.
-            if current_turn_num:
-                digested_vs = _build_volatile_digest(vs, current_turn_num)
+            if _vs_turn_num:
+                digested_vs = _build_volatile_digest(vs, _vs_turn_num)
             else:
                 digested_vs = dict(vs)
             # Cap recent list-valued entries to keep prompt size bounded
@@ -1370,12 +1376,12 @@ def _format_prior_entity_context(
             prior["volatile_state"] = vs
 
     # Relationships — compact with arc summaries for PC (#120),
-    # or trim history for all entities (arc-aware compression, always-on)
+    # or filter by mention relevance + recency for non-PC (scene-scoped).
     rels = current_entry.get("relationships")
     if rels and is_pc and arcs_data:
         prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
-    elif rels:
-        # Trim history to last 3 entries for all entities
+    elif rels and is_pc:
+        # PC without arcs: just trim history to last 3 entries
         compact_rels = []
         for rel in rels:
             trimmed = dict(rel)
@@ -1383,6 +1389,44 @@ def _format_prior_entity_context(
                 trimmed["history"] = trimmed["history"][-3:]
             compact_rels.append(trimmed)
         prior["relationships"] = compact_rels
+    elif rels:
+        # Non-PC: scene-scoped filtering (mentioned + recent, capped)
+        _mentioned = mentioned_ids or set()
+        _recency_ref = current_turn_num or _parse_turn_number(
+            current_entry.get("last_updated_turn", "")
+        )
+
+        kept = []
+        summary = []
+        for rel in rels:
+            target_id = rel.get("target_id", "")
+            status = rel.get("status", "active")
+            rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
+            turn_dist = (
+                (_recency_ref - rel_turn)
+                if (_recency_ref and rel_turn is not None)
+                else 9999
+            )
+
+            if target_id in _mentioned:
+                kept.append(dict(rel))
+            elif status == "active" and turn_dist <= _SCENE_REL_RECENCY_WINDOW:
+                kept.append(dict(rel))
+            else:
+                summary.append({
+                    "target_id": target_id,
+                    "relationship_type": rel.get("relationship_type", rel.get("type", "")),
+                    "status": status,
+                })
+
+        # Trim history on kept relationships
+        for r in kept:
+            hist = r.get("history")
+            if hist and isinstance(hist, list) and len(hist) > 3:
+                r["history"] = hist[-3:]
+
+        all_rels = kept + summary
+        prior["relationships"] = all_rels[:_SCENE_MAX_RELATIONSHIPS]
 
     # Always include basic metadata
     for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn", "notes"):
@@ -1418,15 +1462,17 @@ def format_detail_prompt(
 ) -> str:
     """Format the user prompt for entity detail extraction.
 
-    Scene-scoped detail is always active: the current catalog entry is
-    trimmed to reduce context size — volatile_state is digested,
-    relationships are filtered by recency and mention relevance, and capped.
+    Uses a single "Prior entity state" section with scene-scoped relationship
+    filtering (mentioned + recent, capped at ``_SCENE_MAX_RELATIONSHIPS``) for
+    all entities.  The previously-separate "Current Catalog Entry" section was
+    removed to eliminate 60-80% content overlap that wasted tokens.
     """
+    _current_turn = _parse_turn_number(turn.get('turn_id', ''))
     prior_json = _format_prior_entity_context(
         current_entry, arcs_data=arcs_data, config=config,
+        mentioned_ids=mentioned_ids, current_turn_num=_current_turn,
     )
     entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
-    is_pc = (entity_id == "char-player")
     prompt = (
         f"## Current Turn\n"
         f"Turn ID: {turn['turn_id']}\n"
@@ -1439,19 +1485,6 @@ def format_detail_prompt(
         f"## Prior entity state (for reference, update as needed):\n"
         f"```json\n{prior_json}\n```"
     )
-    # For PC, skip the full catalog entry to avoid context bloat (#119).
-    # The trimmed prior_json already contains all essential entity context.
-    if not is_pc:
-        if current_entry:
-            _current_turn = _parse_turn_number(turn.get('turn_id', ''))
-            entry_json = json.dumps(
-                _trim_entry_for_scene(current_entry, mentioned_ids=mentioned_ids,
-                                      current_turn_num=_current_turn),
-                indent=2,
-            )
-        else:
-            entry_json = "{}"
-        prompt += f"\n\n## Current Catalog Entry\n```json\n{entry_json}\n```"
     return prompt
 
 
