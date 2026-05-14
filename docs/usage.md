@@ -203,6 +203,32 @@ inherit from the primary config. `LLMTruncationError` and
 `QuotaExhaustedError` are never retried through the fallback — they
 propagate immediately.
 
+### Context Optimizations
+
+As entity catalogs grow, extraction prompts can exceed the model's context
+window. The `context_optimizations` block in `config/llm.json` enables
+optional budget controls that trim prompt content to fit. All three flags
+default to `false` for backward compatibility.
+
+```json
+{
+  "context_optimizations": {
+    "relationship_relevance_scoring": false,
+    "arc_aware_compression": false,
+    "scene_scoped_detail": false
+  }
+}
+```
+
+| Flag | Effect |
+|---|---|
+| `relationship_relevance_scoring` | Applies a 3-tier priority system to relationship context in the relationship-mapper prompt. Tier 1 (full history) for both endpoints mentioned in the current turn; tier 2 (current + last update) for one endpoint mentioned + recently updated; tier 3 (summary only) for one endpoint mentioned + active. Dormant/resolved relationships are omitted unless both endpoints are mentioned. Token budget: 20% of `context_length`. |
+| `arc_aware_compression` | Extends the PC-only volatile-state digest and relationship-history trimming to all entities. History arrays are capped to 3 entries per key; entries older than 50 turns are digested to a summary line; relationship histories are trimmed to last 3 entries. |
+| `scene_scoped_detail` | Trims non-PC catalog entries in the entity-detail prompt: volatile state is digested and capped, relationships are filtered to mentioned + recent (20 turns) and capped at 15, stable attributes are preserved in full. |
+
+Enable flags incrementally and monitor the `prompt_metrics` field in
+`extraction-log.jsonl` to verify budget compliance.
+
 ### Timeout Watchdog
 
 The LLM client includes a wall-clock watchdog that prevents indefinite hangs
@@ -1232,31 +1258,6 @@ python tools/dm_profile_analyzer.py --session sessions/session-001 --user-input 
 - **Bootstrap**: `bootstrap_session.py` automatically runs DM profile analysis after semantic extraction.
 - **Incremental**: `ingest_turn.py --extract` updates the DM profile for each new DM turn.
 - **Analysis**: `analyze_next_move.py` includes the DM profile summary in the analysis output when `--framework` is specified.
-
-### Auto-Resume Behavior
-
-By default the tool **automatically resumes** from where it left off. When `--start-turn` is not specified, it reads `last_updated_turn` from the existing profile and starts from the next turn. This makes interrupted or incremental runs efficient — already-analyzed turns are never re-processed.
-
-```bash
-# First run: analyzes turns 1–50, profile saved with last_updated_turn = turn-050
-python tools/dm_profile_analyzer.py --session sessions/session-001
-
-# Second run: automatically resumes from turn-051
-python tools/dm_profile_analyzer.py --session sessions/session-001
-```
-
-To force a **full reanalysis** from the beginning, either pass `--start-turn 1` or delete the profile file:
-
-```bash
-# Force full reanalysis using --start-turn
-python tools/dm_profile_analyzer.py --session sessions/session-001 --start-turn 1
-
-# Or delete the profile to reset
-rm framework/dm-profile/dm-profile.json
-python tools/dm_profile_analyzer.py --session sessions/session-001
-```
-
-> **Note on partial failures**: if a batch fails mid-run (LLM extraction error), the watermark advances only through the last *consecutively* successful batch from the start. This prevents silently skipping failed turns on the next run — the failed range will be retried automatically on resume.
 
 ### Confidence Scores
 

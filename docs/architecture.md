@@ -194,14 +194,14 @@ The extraction pipeline includes optional context budget controls that prevent p
 **Arc-Aware Compression** (`arc_aware_compression`): Generalizes the PC-only volatile digest and relationship compaction to all entities:
 - History arrays capped to 3 entries per key (same as PC)
 - Entries older than 50 turns digested to a summary line
-- Resolved relationships compressed to one-line notation
+- Relationship histories trimmed to last 3 entries (arc summaries used for PC when available)
 
 **Scene-Scoped Entity Detail** (`scene_scoped_detail`): Trims non-PC catalog entries in the entity-detail prompt:
 - Volatile state: digested + capped to 3 entries per key
 - Relationships: filtered to mentioned + recent (20 turns), capped at 15
 - Stable attributes: preserved in full
 
-**Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_tokens` field) for performance monitoring, independent of optimization flags.
+**Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring, independent of optimization flags.
 
 ### Story Summary Layer (Framework)
 
