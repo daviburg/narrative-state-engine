@@ -617,10 +617,9 @@ class TestCurrentTurnNumRecency:
 
         # Without current_turn_num: uses entry's turn-50, so turn-85 is 35 turns away (outside window)
         result_no_param = se._trim_entry_for_scene(entry, mentioned_ids=set())
-        old_rel = result_no_param["relationships"][0]
-        # Should be summarized (no source_id) since 85 - 50 = -35, but actually 50 - 85 = negative...
-        # Actually _parse_turn_number("turn-85") = 85, entry turn = 50, so 50 - 85 = -35 -> <= 20, kept!
-        # Let's use a scenario where it matters: entry at turn-200, rel at turn-150
+        assert "relationships" in result_no_param  # verify trimming ran
+        # The entry's own turn (50) is used as reference; 50 - 85 = -35 -> kept (not outside window)
+        # Use a scenario where distance matters: entry at turn-200, rel at turn-150
         rels2 = [
             _make_rel("char-boundary", last_updated_turn="turn-150"),
         ]
