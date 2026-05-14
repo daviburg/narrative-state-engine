@@ -159,14 +159,22 @@ def analyze_dm_turns(
     profile: dict,
     llm: "LLMClient",
     batch_size: int = 5,
-) -> list[dict]:
-    """Analyze DM turns in batches and return observations.
+) -> tuple[list[dict], str | None]:
+    """Analyze DM turns in batches and return observations with watermark.
 
     Sends batches of DM turns to the LLM for behavioral analysis.
-    Returns a flat list of observation dicts.
+    Returns a tuple of:
+    - A flat list of observation dicts (including from non-consecutive batches)
+    - The watermark turn ID: the last turn of the last *consecutively* successful
+      batch from the start of the range. If a batch raises LLMExtractionError the
+      consecutive run is broken and the watermark stops before that gap, even if
+      later batches succeed. Returns None if no batch succeeded.
     """
     template = load_template()
     all_observations = []
+    # Track the last turn of the last unbroken run of successful batches.
+    last_consecutive_turn: str | None = None
+    sequence_broken = False
 
     for i in range(0, len(turns), batch_size):
         batch = turns[i : i + batch_size]
@@ -181,19 +189,27 @@ def analyze_dm_turns(
                 user_prompt=user_prompt,
             )
         except QuotaExhaustedError:
-            print("  ERROR: LLM quota exhausted, stopping analysis.", file=sys.stderr)
+            print(
+                f"  ERROR: LLM quota exhausted at batch starting {batch_ids[0]}, "
+                f"stopping analysis. Partial results will be saved if any observations "
+                f"were successfully extracted.",
+                file=sys.stderr,
+            )
             break
         except LLMExtractionError as e:
-            print(f"  WARNING: LLM extraction failed for batch: {e}", file=sys.stderr)
+            print(f"  WARNING: LLM extraction failed for batch starting {batch_ids[0]}: {e}", file=sys.stderr)
+            sequence_broken = True
             continue
 
         if not isinstance(result, dict):
             print(f"  WARNING: Non-dict response for batch, skipping", file=sys.stderr)
+            sequence_broken = True
             continue
 
         observations = result.get("observations", [])
         if not isinstance(observations, list):
             print(f"  WARNING: observations is not a list, skipping", file=sys.stderr)
+            sequence_broken = True
             continue
 
         # Validate each observation
@@ -216,17 +232,32 @@ def analyze_dm_turns(
         all_observations.extend(valid)
         print(f"    → {len(valid)} observations extracted")
 
+        # Advance watermark only while the run from the start is unbroken.
+        if not sequence_broken:
+            last_consecutive_turn = batch_ids[-1]
+
         # Brief delay between batches
         if i + batch_size < len(turns):
             llm.delay()
 
-    return all_observations
+    return all_observations, last_consecutive_turn
 
 
-def merge_observations(profile: dict, observations: list[dict]) -> dict:
+def merge_observations(
+    profile: dict,
+    observations: list[dict],
+    watermark_turn: str | None = None,
+) -> dict:
     """Merge LLM-extracted observations into the DM profile.
 
     Updates the profile in place and returns it.
+
+    ``watermark_turn`` should be the last turn of the last *consecutively*
+    successful batch as returned by ``analyze_dm_turns()``.  When provided it
+    is used as the new ``last_updated_turn`` (preventing the watermark from
+    jumping past failed batches).  When omitted the highest ``source_turn``
+    seen in the observations is used (backward-compatible behaviour for direct
+    callers).
     """
     if not observations:
         return profile
@@ -240,10 +271,17 @@ def merge_observations(profile: dict, observations: list[dict]) -> dict:
         field = obs["field"]
         by_field.setdefault(field, []).append(obs)
 
-        # Track latest turn — only accept schema-valid turn IDs
-        source = obs.get("source_turn", "")
-        if _TURN_ID_RE.match(source) and _parse_turn_number(source) > _parse_turn_number(latest_turn):
-            latest_turn = source
+    if watermark_turn is not None:
+        # Use the explicit consecutive-success watermark supplied by the caller.
+        if _TURN_ID_RE.match(watermark_turn) and _parse_turn_number(watermark_turn) > _parse_turn_number(latest_turn):
+            latest_turn = watermark_turn
+    else:
+        # Fallback: infer watermark from observation source turns (used when
+        # merge_observations is called directly without a watermark).
+        for obs in observations:
+            source = obs.get("source_turn", "")
+            if _TURN_ID_RE.match(source) and _parse_turn_number(source) > _parse_turn_number(latest_turn):
+                latest_turn = source
 
     # Merge tone — pick highest-confidence observation
     if "tone" in by_field:
@@ -484,10 +522,10 @@ def analyze_single_turn(
         return
 
     turn = {"turn_id": turn_id, "speaker": speaker, "text": text}
-    observations = analyze_dm_turns([turn], profile, llm, batch_size=1)
+    observations, watermark = analyze_dm_turns([turn], profile, llm, batch_size=1)
 
     if observations:
-        profile = merge_observations(profile, observations)
+        profile = merge_observations(profile, observations, watermark_turn=watermark)
         save_dm_profile(profile, profile_path, dry_run=dry_run)
         print(f"  DM profile updated with {len(observations)} observation(s)")
     else:
@@ -507,6 +545,12 @@ def analyze_batch(
     """Analyze all DM turns in a session and update the profile.
 
     Called from bootstrap_session.py or standalone CLI.
+
+    When ``start_turn`` is 0 (the default) and the existing profile already has
+    a ``last_updated_turn`` beyond the empty-profile sentinel (turn-001), the
+    analysis automatically resumes from the turn after the last-updated one.
+    This makes repeated or interrupted runs resilient: they pick up where they
+    left off instead of re-processing the entire transcript from the beginning.
     """
     if LLMClient is None:
         print("  WARNING: LLM client not available for DM profile analysis.", file=sys.stderr)
@@ -515,13 +559,27 @@ def analyze_batch(
     profile_path = os.path.join(framework_dir, "dm-profile", "dm-profile.json")
     profile = load_dm_profile(profile_path)
 
+    # Auto-resume: when no explicit start_turn is given, pick up from the turn
+    # after the profile's last_updated_turn so that partial runs (interrupted by
+    # quota exhaustion or connection errors) continue from where they stopped
+    # rather than re-processing turns that have already been analyzed.
+    effective_start = start_turn
+    if not effective_start:
+        last_turn_num = _parse_turn_number(profile.get("last_updated_turn", "turn-001"))
+        if last_turn_num > 1:  # "turn-001" is the empty-profile sentinel
+            effective_start = last_turn_num + 1
+            print(
+                f"  Resuming DM profile analysis from turn {effective_start} "
+                f"(profile last updated: {profile.get('last_updated_turn')})"
+            )
+
     try:
         llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: DM profile analysis not available: {e}", file=sys.stderr)
         return
 
-    turns = list_dm_turns(session_dir, start_turn=start_turn, max_turns=max_turns)
+    turns = list_dm_turns(session_dir, start_turn=effective_start, max_turns=max_turns)
     if not turns:
         print("  No DM turns found for profile analysis.")
         return
@@ -529,13 +587,13 @@ def analyze_batch(
     print(f"  Analyzing {len(turns)} DM turns for behavioral patterns...")
     t0 = time.monotonic()
 
-    observations = analyze_dm_turns(turns, profile, llm, batch_size=batch_size)
+    observations, watermark = analyze_dm_turns(turns, profile, llm, batch_size=batch_size)
 
     elapsed = time.monotonic() - t0
     print(f"  Extracted {len(observations)} observations in {elapsed:.1f}s")
 
     if observations:
-        profile = merge_observations(profile, observations)
+        profile = merge_observations(profile, observations, watermark_turn=watermark)
         save_dm_profile(profile, profile_path, dry_run=dry_run)
         print(f"  DM profile updated (confidence: {profile['confidence']})")
     else:

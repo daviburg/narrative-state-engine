@@ -10,20 +10,22 @@ import pytest
 # Add tools/ to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
-from dm_profile_analyzer import (
-    _aggregate_adversarial_level,
-    _empty_profile,
-    _format_analysis_prompt,
-    _parse_turn_number,
-    analyze_dm_turns,
-    list_dm_turns,
-    load_dm_profile,
-    load_template,
-    merge_observations,
-    merge_user_input,
-    parse_user_input,
-    save_dm_profile,
-)
+import dm_profile_analyzer as _mod
+
+# Local aliases — keep _mod reference for monkeypatch.setattr
+_aggregate_adversarial_level = _mod._aggregate_adversarial_level
+_empty_profile = _mod._empty_profile
+_format_analysis_prompt = _mod._format_analysis_prompt
+_parse_turn_number = _mod._parse_turn_number
+analyze_batch = _mod.analyze_batch
+analyze_dm_turns = _mod.analyze_dm_turns
+list_dm_turns = _mod.list_dm_turns
+load_dm_profile = _mod.load_dm_profile
+load_template = _mod.load_template
+merge_observations = _mod.merge_observations
+merge_user_input = _mod.merge_user_input
+parse_user_input = _mod.parse_user_input
+save_dm_profile = _mod.save_dm_profile
 
 
 # ---------------------------------------------------------------------------
@@ -491,7 +493,7 @@ class TestAnalyzeDMTurns:
         turns = [{"turn_id": "turn-001", "speaker": "dm", "text": "The shadows press in..."}]
         profile = _empty_profile()
 
-        observations = analyze_dm_turns(turns, profile, llm, batch_size=5)
+        observations, _ = analyze_dm_turns(turns, profile, llm, batch_size=5)
         assert len(observations) == 2
         assert observations[0]["field"] == "tone"
         assert observations[1]["field"] == "adversarial_level"
@@ -506,7 +508,7 @@ class TestAnalyzeDMTurns:
         llm = MockLLMClient(responses=[mock_response])
         turns = [{"turn_id": "turn-001", "speaker": "dm", "text": "Test"}]
 
-        observations = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=5)
+        observations, _ = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=5)
         assert len(observations) == 1
         assert observations[0]["field"] == "tone"
 
@@ -514,7 +516,7 @@ class TestAnalyzeDMTurns:
         llm = MockLLMClient(responses=["not a dict"])
         turns = [{"turn_id": "turn-001", "speaker": "dm", "text": "Test"}]
 
-        observations = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=5)
+        observations, _ = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=5)
         assert observations == []
 
     def test_batching(self):
@@ -525,7 +527,7 @@ class TestAnalyzeDMTurns:
         llm = MockLLMClient(responses=responses)
         turns = [{"turn_id": f"turn-{i:03d}", "speaker": "dm", "text": f"Turn {i}"} for i in range(1, 8)]
 
-        observations = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=3)
+        observations, _ = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=3)
         # 7 turns / batch_size=3 = 3 batches
         assert llm._call_count == 3
         assert len(observations) == 3
@@ -540,7 +542,7 @@ class TestAnalyzeDMTurns:
         llm = MockLLMClient(responses=[mock_response])
         turns = [{"turn_id": "turn-001", "speaker": "dm", "text": "Test"}]
 
-        observations = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=5)
+        observations, _ = analyze_dm_turns(turns, _empty_profile(), llm, batch_size=5)
         assert len(observations) == 1
         assert observations[0]["observation"] == "Valid"
 
@@ -568,10 +570,10 @@ class TestRoundTrip:
         turns = [{"turn_id": "turn-010", "speaker": "dm", "text": "The air grows thick as you approach."}]
 
         profile = _empty_profile()
-        observations = analyze_dm_turns(turns, profile, llm, batch_size=5)
+        observations, watermark = analyze_dm_turns(turns, profile, llm, batch_size=5)
         assert len(observations) == 5
 
-        profile = merge_observations(profile, observations)
+        profile = merge_observations(profile, observations, watermark_turn=watermark)
         assert profile["tone"] == "Tense and atmospheric"
         assert profile["adversarial_level"] == "moderate"
         assert profile["confidence"] > 0.0
@@ -622,3 +624,255 @@ class TestSchemaCompliance:
 
         profile = _empty_profile()
         jsonschema.validate(instance=profile, schema=schema)
+
+
+# ---------------------------------------------------------------------------
+# Tests — analyze_batch auto-resume resilience (#fix-dm-profiler-resilience)
+# ---------------------------------------------------------------------------
+
+class MockLLMClientForBatch(MockLLMClient):
+    """Mock LLM that also exposes parallel_workers and config for analyze_batch."""
+    parallel_workers = 1
+    config = {}
+
+
+class TestAnalyzeBatchAutoResume:
+    """analyze_batch must resume from last_updated_turn when start_turn == 0."""
+
+    def _make_session(self, tmp_path, n_dm_turns: int, start: int = 1) -> str:
+        """Create a fake session with n_dm_turns DM transcript files."""
+        transcript_dir = tmp_path / "transcript"
+        transcript_dir.mkdir(parents=True, exist_ok=True)
+        for i in range(start, start + n_dm_turns):
+            (transcript_dir / f"turn-{i:03d}-dm.md").write_text(
+                f"DM turn {i} text.", encoding="utf-8"
+            )
+        return str(tmp_path)
+
+    def _make_profile(self, tmp_path, last_updated_turn: str) -> str:
+        """Write a profile with a given last_updated_turn and return its path."""
+        profile_dir = tmp_path / "framework" / "dm-profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = profile_dir / "dm-profile.json"
+        profile = _empty_profile()
+        profile["last_updated_turn"] = last_updated_turn
+        profile["confidence"] = 0.5  # non-zero so it looks populated
+        profile_path.write_text(json.dumps(profile, indent=2), encoding="utf-8")
+        return str(tmp_path / "framework")
+
+    def test_auto_resume_skips_already_profiled_turns(self, tmp_path, monkeypatch):
+        """When profile has last_updated_turn=turn-005, batch starts from turn-006."""
+        session_dir = self._make_session(tmp_path / "session", n_dm_turns=10, start=1)
+        framework_dir = self._make_profile(tmp_path / "fw", last_updated_turn="turn-005")
+
+        collected_start_turns = []
+
+        original_list_dm_turns = _mod.list_dm_turns
+
+        def spy_list_dm_turns(sd, start_turn=0, max_turns=0):
+            collected_start_turns.append(start_turn)
+            return original_list_dm_turns(sd, start_turn=start_turn, max_turns=max_turns)
+
+        monkeypatch.setattr(_mod, "list_dm_turns", spy_list_dm_turns)
+
+        # Mock LLMClient so no real HTTP calls are made
+        mock_response = {
+            "observations": [
+                {"field": "tone", "observation": "Dark", "evidence": "", "confidence": 0.6, "source_turn": "turn-007"},
+            ]
+        }
+
+        class _FakeLLMClient:
+            def __init__(self, *a, **kw): pass
+            def extract_json(self, *a, **kw): return mock_response
+            def delay(self): pass
+
+        monkeypatch.setattr(_mod, "LLMClient", _FakeLLMClient)
+
+        analyze_batch(
+            session_dir=session_dir,
+            framework_dir=framework_dir,
+            start_turn=0,   # no explicit start — should auto-resume
+        )
+
+        # list_dm_turns must have been called with effective_start=6 (turn-005 + 1)
+        assert collected_start_turns == [6], (
+            f"Expected auto-resume start=6, got {collected_start_turns}"
+        )
+
+    def test_no_auto_resume_when_start_turn_explicit(self, tmp_path, monkeypatch):
+        """Explicit start_turn overrides auto-resume logic."""
+        session_dir = self._make_session(tmp_path / "session", n_dm_turns=10, start=1)
+        framework_dir = self._make_profile(tmp_path / "fw", last_updated_turn="turn-005")
+
+        collected_start_turns = []
+
+        original_list_dm_turns = _mod.list_dm_turns
+
+        def spy_list_dm_turns(sd, start_turn=0, max_turns=0):
+            collected_start_turns.append(start_turn)
+            return original_list_dm_turns(sd, start_turn=start_turn, max_turns=max_turns)
+
+        monkeypatch.setattr(_mod, "list_dm_turns", spy_list_dm_turns)
+
+        class _FakeLLMClient:
+            def __init__(self, *a, **kw): pass
+            def extract_json(self, *a, **kw): return {"observations": []}
+            def delay(self): pass
+
+        monkeypatch.setattr(_mod, "LLMClient", _FakeLLMClient)
+
+        analyze_batch(
+            session_dir=session_dir,
+            framework_dir=framework_dir,
+            start_turn=3,   # explicit start_turn — must be respected as-is
+        )
+
+        assert collected_start_turns == [3], (
+            f"Expected explicit start=3, got {collected_start_turns}"
+        )
+
+    def test_no_auto_resume_on_empty_profile(self, tmp_path, monkeypatch):
+        """Empty profile (turn-001 sentinel) must NOT trigger auto-resume."""
+        session_dir = self._make_session(tmp_path / "session", n_dm_turns=5, start=1)
+
+        # Use a fresh empty profile (last_updated_turn = turn-001)
+        profile_dir = tmp_path / "framework" / "dm-profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        (profile_dir / "dm-profile.json").write_text(
+            json.dumps(_empty_profile(), indent=2), encoding="utf-8"
+        )
+        framework_dir = str(tmp_path / "framework")
+
+        collected_start_turns = []
+
+        original_list_dm_turns = _mod.list_dm_turns
+
+        def spy_list_dm_turns(sd, start_turn=0, max_turns=0):
+            collected_start_turns.append(start_turn)
+            return original_list_dm_turns(sd, start_turn=start_turn, max_turns=max_turns)
+
+        monkeypatch.setattr(_mod, "list_dm_turns", spy_list_dm_turns)
+
+        class _FakeLLMClient:
+            def __init__(self, *a, **kw): pass
+            def extract_json(self, *a, **kw): return {"observations": []}
+            def delay(self): pass
+
+        monkeypatch.setattr(_mod, "LLMClient", _FakeLLMClient)
+
+        analyze_batch(session_dir=session_dir, framework_dir=framework_dir, start_turn=0)
+
+        # Empty profile — should start from 0 (no skip)
+        assert collected_start_turns == [0], (
+            f"Expected start=0 for empty profile, got {collected_start_turns}"
+        )
+
+    def test_partial_run_saved_on_quota_exhausted(self, tmp_path, monkeypatch):
+        """Observations collected before QuotaExhaustedError must be saved."""
+        from llm_client import QuotaExhaustedError
+
+        session_dir = self._make_session(tmp_path / "session", n_dm_turns=6, start=1)
+
+        profile_dir = tmp_path / "framework" / "dm-profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = profile_dir / "dm-profile.json"
+        profile_path.write_text(json.dumps(_empty_profile(), indent=2), encoding="utf-8")
+        framework_dir = str(tmp_path / "framework")
+
+        call_count = [0]
+
+        class _FakeLLMClient:
+            def __init__(self, *a, **kw): pass
+
+            def extract_json(self, *a, **kw):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    # First batch succeeds
+                    return {
+                        "observations": [
+                            {"field": "tone", "observation": "Dark", "evidence": "",
+                             "confidence": 0.7, "source_turn": "turn-002"},
+                        ]
+                    }
+                # Second batch raises QuotaExhaustedError
+                raise QuotaExhaustedError("quota gone")
+
+            def delay(self): pass
+
+        monkeypatch.setattr(_mod, "LLMClient", _FakeLLMClient)
+
+        analyze_batch(
+            session_dir=session_dir,
+            framework_dir=framework_dir,
+            start_turn=0,
+            batch_size=3,   # batch 1 = turns 1-3, batch 2 = turns 4-6
+        )
+
+        # Profile must have been saved with observations from the first batch.
+        # Watermark must be turn-003 (last turn of the first successful batch),
+        # not turn-002 (which is only the source_turn of the observation).
+        saved = load_dm_profile(str(profile_path))
+        assert saved.get("tone") == "Dark", "Partial observations before QuotaExhaustedError must be saved"
+        assert saved.get("last_updated_turn") == "turn-003"
+
+    def test_llm_extraction_error_watermark_is_last_consecutive_success(self, tmp_path, monkeypatch):
+        """When a middle batch raises LLMExtractionError and a later batch succeeds,
+        the watermark must be the last turn of the last *consecutively* successful
+        batch from the start — NOT the highest turn seen across all batches."""
+        from llm_client import LLMExtractionError
+
+        # 9 turns → 3 batches of 3 (turns 1–3, 4–6, 7–9)
+        session_dir = self._make_session(tmp_path / "session", n_dm_turns=9, start=1)
+
+        profile_dir = tmp_path / "framework" / "dm-profile"
+        profile_dir.mkdir(parents=True, exist_ok=True)
+        profile_path = profile_dir / "dm-profile.json"
+        profile_path.write_text(json.dumps(_empty_profile(), indent=2), encoding="utf-8")
+        framework_dir = str(tmp_path / "framework")
+
+        call_count = [0]
+
+        class _FakeLLMClient:
+            def __init__(self, *a, **kw): pass
+
+            def extract_json(self, *a, **kw):
+                call_count[0] += 1
+                if call_count[0] == 1:
+                    # Batch 1 (turns 1-3) succeeds
+                    return {
+                        "observations": [
+                            {"field": "tone", "observation": "Dark", "evidence": "",
+                             "confidence": 0.7, "source_turn": "turn-002"},
+                        ]
+                    }
+                elif call_count[0] == 2:
+                    # Batch 2 (turns 4-6) fails — breaks the consecutive run
+                    raise LLMExtractionError("parse error in batch 2")
+                else:
+                    # Batch 3 (turns 7-9) succeeds — but sequence is already broken
+                    return {
+                        "observations": [
+                            {"field": "tone", "observation": "Grim", "evidence": "",
+                             "confidence": 0.8, "source_turn": "turn-008"},
+                        ]
+                    }
+
+            def delay(self): pass
+
+        monkeypatch.setattr(_mod, "LLMClient", _FakeLLMClient)
+
+        analyze_batch(
+            session_dir=session_dir,
+            framework_dir=framework_dir,
+            start_turn=0,
+            batch_size=3,
+        )
+
+        saved = load_dm_profile(str(profile_path))
+        # Watermark must be turn-003 (last turn of the last consecutive success = batch 1),
+        # NOT turn-008/turn-009 (from the later non-consecutive successful batch).
+        assert saved.get("last_updated_turn") == "turn-003", (
+            f"Watermark must be last consecutive success (turn-003), "
+            f"got {saved.get('last_updated_turn')}"
+        )
