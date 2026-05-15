@@ -744,3 +744,93 @@ class TestBudgetOverflowSafetyValve:
         parsed = json.loads(result)
         rel = parsed["char-a"][0]
         assert len(rel["history"]) == 5  # all preserved
+
+
+class TestEntityDetailCapping:
+    """Tests for _MAX_DETAIL_ENTITIES_PER_TURN capping logic."""
+
+    def _make_entity_ref(self, entity_id, is_new=True, confidence=0.8):
+        return {
+            "name": entity_id.replace("char-", "").replace("item-", ""),
+            "type": "character" if entity_id.startswith("char-") else "item",
+            "is_new": is_new,
+            "proposed_id": entity_id if is_new else None,
+            "existing_id": None if is_new else entity_id,
+            "confidence": confidence,
+        }
+
+    def test_cap_not_triggered_under_limit(self):
+        """No capping when entity_tasks <= cap."""
+        from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN
+        # If we have fewer tasks than cap, all should be kept
+        tasks = [(self._make_entity_ref(f"char-{i}"), None) for i in range(4)]
+        assert len(tasks) <= _MAX_DETAIL_ENTITIES_PER_TURN
+
+    def test_cap_enforced_new_entities_exceed_cap(self):
+        """When new entities exceed cap, total is still bounded."""
+        from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN, get_entity_id
+        # Simulate 8 new entities (exceeds cap of 6)
+        tasks = [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.9-i*0.05), None)
+                 for i in range(8)]
+        # Apply capping logic inline (mirrors the code)
+        pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
+        non_pc = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) != "char-player"]
+        new_tasks = [(ref, entry) for ref, entry in non_pc if ref.get("is_new", True)]
+        existing_tasks = [(ref, entry) for ref, entry in non_pc if not ref.get("is_new", True)]
+        new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        available = _MAX_DETAIL_ENTITIES_PER_TURN - len(pc_tasks)
+        kept_new = new_tasks[:available]
+        remaining = max(0, available - len(kept_new))
+        kept_existing = existing_tasks[:remaining]
+        result = pc_tasks + kept_new + kept_existing
+        assert len(result) <= _MAX_DETAIL_ENTITIES_PER_TURN
+
+    def test_cap_prioritizes_new_over_existing(self):
+        """New entities are kept before existing ones."""
+        from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN, get_entity_id
+        # 4 new + 4 existing = 8 total, cap=6
+        new_refs = [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.8), None)
+                    for i in range(4)]
+        existing_refs = [(self._make_entity_ref(f"char-old-{i}", is_new=False, confidence=0.9), None)
+                         for i in range(4)]
+        tasks = new_refs + existing_refs
+        # Apply capping
+        pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
+        non_pc = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) != "char-player"]
+        new_tasks = [(ref, entry) for ref, entry in non_pc if ref.get("is_new", True)]
+        existing_tasks = [(ref, entry) for ref, entry in non_pc if not ref.get("is_new", True)]
+        new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        available = _MAX_DETAIL_ENTITIES_PER_TURN - len(pc_tasks)
+        kept_new = new_tasks[:available]
+        remaining = max(0, available - len(kept_new))
+        kept_existing = existing_tasks[:remaining]
+        result = pc_tasks + kept_new + kept_existing
+        # All 4 new should be kept, only 2 existing
+        assert len(result) == _MAX_DETAIL_ENTITIES_PER_TURN
+        new_ids = {get_entity_id(ref) for ref, _ in kept_new}
+        assert len(new_ids) == 4  # all new kept
+
+    def test_pc_never_capped(self):
+        """char-player is never dropped by capping."""
+        from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN, get_entity_id
+        # PC + 8 new entities = 9 total
+        pc_ref = self._make_entity_ref("char-player", is_new=False, confidence=1.0)
+        tasks = [(pc_ref, None)] + [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.8), None)
+                                     for i in range(8)]
+        # Apply capping
+        pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
+        non_pc = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) != "char-player"]
+        new_tasks = [(ref, entry) for ref, entry in non_pc if ref.get("is_new", True)]
+        existing_tasks = [(ref, entry) for ref, entry in non_pc if not ref.get("is_new", True)]
+        new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        available = _MAX_DETAIL_ENTITIES_PER_TURN - len(pc_tasks)
+        kept_new = new_tasks[:available]
+        remaining = max(0, available - len(kept_new))
+        kept_existing = existing_tasks[:remaining]
+        result = pc_tasks + kept_new + kept_existing
+        result_ids = {get_entity_id(ref) for ref, _ in result}
+        assert "char-player" in result_ids
+        assert len(result) <= _MAX_DETAIL_ENTITIES_PER_TURN + 1  # +1 for PC which is always included

@@ -2894,14 +2894,20 @@ def extract_and_merge(
                          if get_entity_id(ref) != "char-player"]
         _new_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if ref.get("is_new", True)]
         _existing_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if not ref.get("is_new", True)]
+        # Sort both by confidence descending
+        _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
         _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
-        # PC always included; new entities next; fill remaining with highest-confidence existing
-        _remaining_slots = max(0, _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks) - len(_new_tasks))
-        _entity_detail_capped_count = max(0, len(_existing_tasks) - _remaining_slots)
-        _entity_tasks = _pc_tasks + _new_tasks + _existing_tasks[:_remaining_slots]
+        # Enforce hard cap: PC slots + new slots + existing slots <= cap
+        _available = _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks)
+        _kept_new = _new_tasks[:_available]
+        _remaining = max(0, _available - len(_kept_new))
+        _kept_existing = _existing_tasks[:_remaining]
+        _capped_count = len(_non_pc_tasks) - len(_kept_new) - len(_kept_existing)
+        _entity_detail_capped_count = max(0, _capped_count)
+        _entity_tasks = _pc_tasks + _kept_new + _kept_existing
         if _entity_detail_capped_count > 0:
             print(f"  INFO: Capped entity detail calls from {len(_pc_tasks) + len(_non_pc_tasks)} to {len(_entity_tasks)} "
-                  f"(pc: {len(_pc_tasks)}, new: {len(_new_tasks)}, existing kept: {_remaining_slots})", file=sys.stderr)
+                  f"(pc: {len(_pc_tasks)}, new: {len(_kept_new)}, existing: {len(_kept_existing)})", file=sys.stderr)
 
     # Build mentioned_entities for relationship / event phases
     mentioned_entities = []
