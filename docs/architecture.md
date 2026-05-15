@@ -198,8 +198,9 @@ The extraction pipeline applies context budget controls automatically to prevent
 
 **Scene-Scoped Entity Detail**: Trims non-PC catalog entries in the entity-detail prompt:
 - Volatile state: digested + capped to 3 entries per key
-- Relationships: filtered to mentioned + recent (20 turns), capped at 15
+- Relationships: filtered to mentioned + recent (10 turns), capped at 8
 - Stable attributes: preserved in full
+- Entity detail calls per turn capped at 6 (PC excluded from cap; new entities prioritized over existing)
 
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 

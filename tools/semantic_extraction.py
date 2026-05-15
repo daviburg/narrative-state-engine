@@ -1144,8 +1144,11 @@ _REL_RECENCY_WINDOW = 15       # Turns within which a relationship is "recent" (
 _REL_TOKEN_BUDGET_FRACTION = 0.2  # Fraction of context_length for relationship block
 
 # Scene-scoped entity detail thresholds
-_SCENE_REL_RECENCY_WINDOW = 20   # Relationships updated within this many turns are kept
-_SCENE_MAX_RELATIONSHIPS = 15    # Max relationships after trimming
+_SCENE_REL_RECENCY_WINDOW = 10   # Relationships updated within this many turns are kept
+_SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
+
+# Entity detail call cap to prevent O(n²) scaling
+_MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
 # Arc-aware compression: max volatile snapshots per key (same as PC)
 _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
@@ -2878,6 +2881,34 @@ def extract_and_merge(
                 _, current_entry = result
         _entity_tasks.append((entity_ref, current_entry))
 
+    # Cap entity detail calls per turn to prevent O(n²) scaling
+    # Priority: PC always included, new entities next, then existing by confidence (descending)
+    # Note: is_new defaults to True so entities missing the field (unlikely but possible)
+    # are treated as new — this is conservative since new entities need detail extraction.
+    _entity_detail_capped_count = 0
+    if len(_entity_tasks) > _MAX_DETAIL_ENTITIES_PER_TURN:
+        # Exclude char-player from capping — PC is always processed
+        _pc_tasks = [(ref, entry) for ref, entry in _entity_tasks
+                     if get_entity_id(ref) == "char-player"]
+        _non_pc_tasks = [(ref, entry) for ref, entry in _entity_tasks
+                         if get_entity_id(ref) != "char-player"]
+        _new_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if ref.get("is_new", True)]
+        _existing_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if not ref.get("is_new", True)]
+        # Sort both by confidence descending
+        _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        # Enforce hard cap: PC slots + new slots + existing slots <= cap
+        _available = _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks)
+        _kept_new = _new_tasks[:_available]
+        _remaining = max(0, _available - len(_kept_new))
+        _kept_existing = _existing_tasks[:_remaining]
+        _capped_count = len(_non_pc_tasks) - len(_kept_new) - len(_kept_existing)
+        _entity_detail_capped_count = max(0, _capped_count)
+        _entity_tasks = _pc_tasks + _kept_new + _kept_existing
+        if _entity_detail_capped_count > 0:
+            print(f"  INFO: Capped entity detail calls from {len(_pc_tasks) + len(_non_pc_tasks)} to {len(_entity_tasks)} "
+                  f"(pc: {len(_pc_tasks)}, new: {len(_kept_new)}, existing: {len(_kept_existing)})", file=sys.stderr)
+
     # Build mentioned_entities for relationship / event phases
     mentioned_entities = []
     for entity_ref in qualified:
@@ -3503,6 +3534,7 @@ def extract_and_merge(
         "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
         "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
         "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
+        "entity_detail_capped_count": _entity_detail_capped_count,
     }
     return catalogs, events_list, turn_failed, _log_record
 
