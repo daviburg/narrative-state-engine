@@ -1129,6 +1129,10 @@ def _repair_truncated_relationships(partial_text: str) -> list | None:
 # "carried-forward" attributes.
 _PC_KEY_STABLE_ATTRS = {"species", "race", "class", "aliases"}
 
+# Key stable attributes sent in entity detail prompts for non-PC entities.
+# Other attributes are omitted to save tokens — the LLM can add them back if the turn reveals new info.
+_NPC_KEY_STABLE_ATTRS = {"role", "species", "race", "class", "aliases", "appearance", "allegiance", "notable_features"}
+
 # Maximum number of volatile_state snapshots to include for PC
 _PC_MAX_VOLATILE_SNAPSHOTS = 3
 
@@ -1145,13 +1149,13 @@ _REL_TOKEN_BUDGET_FRACTION = 0.2  # Fraction of context_length for relationship 
 
 # Scene-scoped entity detail thresholds
 _SCENE_REL_RECENCY_WINDOW = 10   # Relationships updated within this many turns are kept
-_SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
+_SCENE_MAX_RELATIONSHIPS = 5     # Max relationships after trimming
 
 # Entity detail call cap to prevent O(n²) scaling
 _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
-# Arc-aware compression: max volatile snapshots per key (same as PC)
-_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
+# Arc-aware compression: max volatile snapshots per key
+_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 1
 
 
 def _record_prompt_tokens(
@@ -1340,7 +1344,24 @@ def _filter_relationships_for_scene(
         if hist and isinstance(hist, list) and len(hist) > 3:
             r["history"] = hist[-3:]
 
+    # Type-aware scoring for prioritization before capping.
+    # Kinship and partnership are high-value context,
+    # spatial relationships are low-value (change frequently).
+    def _rel_score(r: dict) -> float:
+        score = 0.0
+        # Kept relationships (full detail) score higher than summaries
+        if r in kept:
+            score += 50
+        # Type-aware bonus
+        _type = r.get("type", "")
+        if _type in ("kinship", "partnership"):
+            score += 20  # Always keep family ties
+        elif _type == "spatial":
+            score -= 10  # Deprioritize location-based relationships
+        return score
+
     all_rels = kept + summary
+    all_rels.sort(key=_rel_score, reverse=True)
     return all_rels[:max_relationships]
 
 
@@ -1394,7 +1415,21 @@ def _format_prior_entity_context(
             if trimmed_sa:
                 prior["stable_attributes"] = trimmed_sa
         else:
-            prior["stable_attributes"] = sa
+            # Non-PC: only send key identifying attributes to save tokens
+            trimmed_sa = {k: v for k, v in sa.items() if k in _NPC_KEY_STABLE_ATTRS}
+            if trimmed_sa:
+                prior["stable_attributes"] = trimmed_sa
+
+    # Strip provenance metadata from stable attribute values in the prompt.
+    # The LLM produces these fields in output — it doesn't need them as input.
+    if "stable_attributes" in prior:
+        compressed_sa = {}
+        for k, v in prior["stable_attributes"].items():
+            if isinstance(v, dict) and "value" in v:
+                compressed_sa[k] = v["value"]
+            else:
+                compressed_sa[k] = v
+        prior["stable_attributes"] = compressed_sa
 
     # volatile_state — digest + cap for PC, or for non-PC when arc_aware is on
     vs = current_entry.get("volatile_state")
@@ -2894,9 +2929,27 @@ def extract_and_merge(
                          if get_entity_id(ref) != "char-player"]
         _new_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if ref.get("is_new", True)]
         _existing_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if not ref.get("is_new", True)]
-        # Sort both by confidence descending
+        # Sort new by confidence descending
         _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
-        _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        # Score existing entities by scene relevance, not just confidence.
+        # Higher score = more likely to have meaningful updates this turn.
+        _turn_text_lower = turn.get("text", "").lower()
+        def _detail_relevance(task_tuple):
+            ref, entry = task_tuple
+            score = ref.get("confidence", 0.5) * 10  # Base: confidence
+            # Bonus: entity name appears in turn text (directly mentioned)
+            _name = ref.get("name", "")
+            if _name and len(_name) >= 3 and _name.lower() in _turn_text_lower:
+                score += 20
+            # Bonus: entity was recently updated (likely still active in scene)
+            if entry:
+                _last = _parse_turn_number(entry.get("last_updated_turn", ""))
+                _current = _parse_turn_number(turn.get("turn_id", ""))
+                if _last and _current and (_current - _last) <= 5:
+                    score += 10
+            return score
+
+        _existing_tasks.sort(key=_detail_relevance, reverse=True)
         # Enforce hard cap: PC slots + new slots + existing slots <= cap
         _available = _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks)
         _kept_new = _new_tasks[:_available]
