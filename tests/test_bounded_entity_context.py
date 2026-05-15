@@ -345,13 +345,13 @@ class TestThreeTierFormatting:
     """Entities get full/brief/id-only based on age relative to current turn."""
 
     def test_recent_full_mid_brief_old_id_only(self):
-        """Recent (<= 10 turns) → full, mid-age (11-20) → brief, old (21-50) → id-only."""
+        """Recent (<= 10 turns) → full, mid-age (11-20) → brief, old (21-30) → id-only."""
         recent = _make_entity("char-r", "Recent", identity="Active hero",
                               aliases=["R"], last_updated_turn="turn-095")
         mid = _make_entity("char-m", "MidAge", identity="Semi-active",
                            aliases=["M"], last_updated_turn="turn-082")
         old = _make_entity("char-o", "OldEntity", identity="Ancient NPC",
-                           aliases=["O"], last_updated_turn="turn-055")
+                           aliases=["O"], last_updated_turn="turn-075")
         catalogs = _make_catalogs([recent, mid, old])
         result = format_known_entities_bounded(
             catalogs, current_turn=100, context_length=100000,

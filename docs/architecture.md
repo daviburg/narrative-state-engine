@@ -186,7 +186,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 
 The extraction pipeline applies context budget controls automatically to prevent prompt overflow as catalogs grow. All optimizations are always active — no configuration needed.
 
-**Discovery** (always active): Uses 4-tier priority scoring (mentioned → co-located → one-hop → recency backfill) with a token budget (25% of context window) and automatic tier degradation — full → brief → id-only → omit. See #233, #310.
+**Discovery** (always active): Uses 4-tier priority scoring (mentioned → co-located → one-hop → recency backfill) with a token budget (15% of context window, reduced from 25%) and automatic tier degradation — full → brief → id-only → omit. Staleness threshold reduced from 50 to 30 turns — entities not updated in 30+ turns are excluded from discovery context. See #233, #310.
 
 **Relationship Relevance Scoring**: Applies a 3-tier priority system to `_collect_existing_relationships()`:
 - Tier 1 (full history): both endpoints mentioned in current turn
@@ -201,10 +201,11 @@ The extraction pipeline applies context budget controls automatically to prevent
 - Relationship histories trimmed to last 3 entries (arc summaries used for PC when available)
 
 **Scene-Scoped Entity Detail**: Trims non-PC catalog entries in the entity-detail prompt:
-- Volatile state: digested + capped to 3 entries per key
-- Relationships: filtered to mentioned + recent (10 turns), capped at 8
-- Stable attributes: preserved in full
-- Entity detail calls per turn capped at 6 (PC excluded from cap; new entities prioritized over existing)
+- Volatile state: digested + capped to 1 entry per key (reduced from 3 for token savings; digest summary preserves history)
+- Relationships: filtered to mentioned + recent (10 turns), capped at 5 (reduced from 8). Type-aware prioritization: kinship/partnership relationships get +20 scoring bonus, spatial relationships get -10 penalty. Family ties are preserved; transient location links are deprioritized.
+- Stable attributes (non-PC): filtered to key identifying attributes only (`role`, `species`, `race`, `class`, `aliases`, `appearance`, `allegiance`, `notable_features`). Non-identifying attributes omitted from prompt. PC uses its own key attribute set (`species`, `race`, `class`, `aliases`).
+- Stable attribute provenance stripping: `inference`, `confidence`, and `source_turn` metadata removed from stable attribute values in the prompt — the LLM produces these fields in output, it doesn't need them as input context.
+- Entity detail calls per turn capped at 6 (PC excluded from cap; new entities prioritized over existing). Existing entities ranked by scene relevance (name appears in turn text +20, updated within last 5 turns +10) rather than discovery confidence alone.
 
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 

@@ -249,8 +249,11 @@ class TestPCContextTrimming:
         }
         result = json.loads(_format_prior_entity_context(entry))
         sa = result.get("stable_attributes", {})
-        assert "backstory" in sa
-        assert "motivation" in sa
+        # Non-PC entities now only keep key identifying attributes
+        assert "race" in sa
+        # backstory and motivation are not in _NPC_KEY_STABLE_ATTRS
+        assert "backstory" not in sa
+        assert "motivation" not in sa
 
     def test_trims_volatile_state_lists(self):
         entry = {
@@ -673,13 +676,11 @@ class TestPCDetailPromptContext:
         pc_entry["stable_attributes"]["alignment"] = {"value": "Lawful Good"}
         pc_prompt = format_detail_prompt(turn, pc_ref, pc_entry)
 
-        npc_ref = {"name": "NPC", "type": "character", "existing_id": "char-npc"}
-        npc_entry = dict(pc_entry)
-        npc_entry["id"] = "char-npc"
-        npc_prompt = format_detail_prompt(turn, npc_ref, npc_entry)
-
-        # PC prompt trims stable_attributes to key set, so it should be shorter
-        assert len(pc_prompt) < len(npc_prompt)
+        # PC prompt should not contain trimmed-away attributes
+        assert "Noble" not in pc_prompt
+        assert "Lawful Good" not in pc_prompt
+        # PC prompt should still contain key attributes
+        assert "species" in pc_prompt.lower() or "race" in pc_prompt.lower() or "class" in pc_prompt.lower()
 
 
 # ---------------------------------------------------------------------------
