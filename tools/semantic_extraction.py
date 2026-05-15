@@ -1293,6 +1293,54 @@ def _compact_relationships_with_arcs(
     return compact_rels
 
 
+def _filter_relationships_for_scene(
+    rels: list,
+    mentioned_ids: set[str],
+    current_turn_num: int | None,
+    recency_window: int = _SCENE_REL_RECENCY_WINDOW,
+    max_relationships: int = _SCENE_MAX_RELATIONSHIPS,
+) -> list:
+    """Filter and compress relationships for scene-scoped injection.
+
+    Keeps relationships whose target is mentioned or recently active.
+    Compresses the rest to one-line summaries (using ``"type"`` key for
+    schema consistency and including ``"current_relationship"``).
+    Trims history on kept relationships.  Caps total at *max_relationships*.
+    """
+    kept: list[dict] = []
+    summary: list[dict] = []
+    for rel in rels:
+        target_id = rel.get("target_id", "")
+        status = rel.get("status", "active")
+        rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
+        turn_dist = (
+            (current_turn_num - rel_turn)
+            if (current_turn_num and rel_turn is not None)
+            else 9999
+        )
+
+        if target_id in mentioned_ids:
+            kept.append(dict(rel))
+        elif status == "active" and turn_dist <= recency_window:
+            kept.append(dict(rel))
+        else:
+            summary.append({
+                "target_id": target_id,
+                "type": rel.get("type", rel.get("relationship_type", "")),
+                "status": status,
+                "current_relationship": rel.get("current_relationship", ""),
+            })
+
+    # Trim history on kept relationships
+    for r in kept:
+        hist = r.get("history")
+        if hist and isinstance(hist, list) and len(hist) > 3:
+            r["history"] = hist[-3:]
+
+    all_rels = kept + summary
+    return all_rels[:max_relationships]
+
+
 def _format_prior_entity_context(
     current_entry: dict | None,
     arcs_data: dict | None = None,
@@ -1349,7 +1397,7 @@ def _format_prior_entity_context(
     vs = current_entry.get("volatile_state")
     if vs:
         if should_trim and isinstance(vs, dict):
-            _vs_turn_num = _parse_turn_number(
+            _vs_turn_num = current_turn_num or _parse_turn_number(
                 current_entry.get("last_updated_turn", "")
             )
             max_snapshots = _PC_MAX_VOLATILE_SNAPSHOTS if is_pc else _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS
@@ -1395,38 +1443,9 @@ def _format_prior_entity_context(
         _recency_ref = current_turn_num or _parse_turn_number(
             current_entry.get("last_updated_turn", "")
         )
-
-        kept = []
-        summary = []
-        for rel in rels:
-            target_id = rel.get("target_id", "")
-            status = rel.get("status", "active")
-            rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
-            turn_dist = (
-                (_recency_ref - rel_turn)
-                if (_recency_ref and rel_turn is not None)
-                else 9999
-            )
-
-            if target_id in _mentioned:
-                kept.append(dict(rel))
-            elif status == "active" and turn_dist <= _SCENE_REL_RECENCY_WINDOW:
-                kept.append(dict(rel))
-            else:
-                summary.append({
-                    "target_id": target_id,
-                    "relationship_type": rel.get("relationship_type", rel.get("type", "")),
-                    "status": status,
-                })
-
-        # Trim history on kept relationships
-        for r in kept:
-            hist = r.get("history")
-            if hist and isinstance(hist, list) and len(hist) > 3:
-                r["history"] = hist[-3:]
-
-        all_rels = kept + summary
-        prior["relationships"] = all_rels[:_SCENE_MAX_RELATIONSHIPS]
+        prior["relationships"] = _filter_relationships_for_scene(
+            rels, _mentioned, _recency_ref,
+        )
 
     # Always include basic metadata
     for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn", "notes"):
@@ -1462,10 +1481,17 @@ def format_detail_prompt(
 ) -> str:
     """Format the user prompt for entity detail extraction.
 
-    Uses a single "Prior entity state" section with scene-scoped relationship
-    filtering (mentioned + recent, capped at ``_SCENE_MAX_RELATIONSHIPS``) for
-    all entities.  The previously-separate "Current Catalog Entry" section was
-    removed to eliminate 60-80% content overlap that wasted tokens.
+    Uses a single "Prior entity state" section.  The previously-separate
+    "Current Catalog Entry" section was removed to eliminate 60-80% content
+    overlap that wasted tokens.
+
+    **PC (``char-player``)**: arc-compaction on relationships (with arc
+    summaries when available) and volatile-state digest/history-trim.
+    Mention/recency filtering is *not* applied.
+
+    **Non-PC entities**: relationships are filtered by mention relevance and
+    recency, then capped at ``_SCENE_MAX_RELATIONSHIPS``.  Volatile state is
+    digested and trimmed the same way as PC.
     """
     _current_turn = _parse_turn_number(turn.get('turn_id', ''))
     prior_json = _format_prior_entity_context(
@@ -1519,9 +1545,9 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
     # volatile_state: digest + keep last N entries per key
     vs = entry.get("volatile_state")
     if vs and isinstance(vs, dict):
-        current_turn_num = _parse_turn_number(entry.get("last_updated_turn", ""))
-        if current_turn_num:
-            digested = _build_volatile_digest(vs, current_turn_num)
+        _vs_turn_num = current_turn_num or _parse_turn_number(entry.get("last_updated_turn", ""))
+        if _vs_turn_num:
+            digested = _build_volatile_digest(vs, _vs_turn_num)
         else:
             digested = dict(vs)
         trimmed_vs = {}
@@ -1541,36 +1567,9 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
     rels = entry.get("relationships")
     if rels and isinstance(rels, list):
         _recency_ref = current_turn_num or _parse_turn_number(entry.get("last_updated_turn", ""))
-
-        kept = []
-        summary = []
-        for rel in rels:
-            target_id = rel.get("target_id", "")
-            status = rel.get("status", "active")
-            rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
-            turn_dist = (_recency_ref - rel_turn) if (_recency_ref and rel_turn is not None) else 9999
-
-            if target_id in mentioned_ids:
-                kept.append(rel)
-            elif status == "active" and turn_dist <= _SCENE_REL_RECENCY_WINDOW:
-                kept.append(rel)
-            else:
-                # Compress to one-line summary
-                summary.append({
-                    "target_id": target_id,
-                    "relationship_type": rel.get("relationship_type", rel.get("type", "")),
-                    "status": status,
-                })
-
-        # Trim history on kept relationships (arc-aware compression)
-        for rel in kept:
-            hist = rel.get("history")
-            if hist and isinstance(hist, list) and len(hist) > 3:
-                rel["history"] = hist[-3:]
-
-        # Cap total
-        all_rels = kept + summary
-        trimmed["relationships"] = all_rels[:_SCENE_MAX_RELATIONSHIPS]
+        trimmed["relationships"] = _filter_relationships_for_scene(
+            rels, mentioned_ids, _recency_ref,
+        )
 
     return trimmed
 
@@ -1981,10 +1980,16 @@ def _is_misclassified_item(entity: dict) -> bool:
 def _within_turn_dedup(entities: list[dict]) -> list[dict]:
     """Deduplicate is_new entities discovered in the same turn (#365).
 
-    For each pair of is_new=True entities, checks:
+    For each pair of is_new=True entities, checks (in order):
+
+    **Short-name guard** (``min(len(a), len(b)) < 5``):
+    Only exact match, exact-token match, or token-prefix match is tried.
+    Levenshtein and SequenceMatcher are skipped to avoid false merges on
+    short names (e.g. "fire" / "fireplace").
+
+    **Standard checks** (both names >= 5 chars):
     - Character substring with token-prefix guard: the shorter name (>=4 chars)
-      must be a prefix of a token in the longer name (prevents false merges like
-      fire/fireplace)
+      must be a prefix of a token in the longer name
     - Levenshtein distance <= 3
     - SequenceMatcher ratio >= 0.6
 
