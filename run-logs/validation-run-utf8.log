@@ -1,0 +1,425 @@
+﻿python : WARNING: turns 260 and 261 are both player turns ù possible parsing 
+error
+At line:1 char:1
++ python tools/bootstrap_session.py --session sessions/session-import - ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (WARNING: turns ...e parsing error 
+   :String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+Auto-detected format: markdown
+
+Parsed 344 turns (172 DM, 172 player).
+
+Writing transcript files:
+  [WRITE]  sessions\session-import\transcript\turn-001-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-002-player.md
+  [WRITE]  sessions\session-import\transcript\turn-003-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-004-player.md
+  [WRITE]  sessions\session-import\transcript\turn-005-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-006-player.md
+  [WRITE]  sessions\session-import\transcript\turn-007-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-008-player.md
+  [WRITE]  sessions\session-import\transcript\turn-009-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-010-player.md
+  [WRITE]  sessions\session-import\transcript\turn-011-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-012-player.md
+  [WRITE]  sessions\session-import\transcript\turn-013-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-014-player.md
+  [WRITE]  sessions\session-import\transcript\turn-015-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-016-player.md
+  [WRITE]  sessions\session-import\transcript\turn-017-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-018-player.md
+  [WRITE]  sessions\session-import\transcript\turn-019-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-020-player.md
+  [WRITE]  sessions\session-import\transcript\turn-021-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-022-player.md
+  [WRITE]  sessions\session-import\transcript\turn-023-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-024-player.md
+  [WRITE]  sessions\session-import\transcript\turn-025-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-026-player.md
+  [WRITE]  sessions\session-import\transcript\turn-027-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-028-player.md
+  [WRITE]  sessions\session-import\transcript\turn-029-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-030-player.md
+  [WRITE]  sessions\session-import\transcript\turn-031-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-032-player.md
+  [WRITE]  sessions\session-import\transcript\turn-033-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-034-player.md
+  [WRITE]  sessions\session-import\transcript\turn-035-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-036-player.md
+  [WRITE]  sessions\session-import\transcript\turn-037-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-038-player.md
+  [WRITE]  sessions\session-import\transcript\turn-039-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-040-player.md
+  [WRITE]  sessions\session-import\transcript\turn-041-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-042-player.md
+  [WRITE]  sessions\session-import\transcript\turn-043-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-044-player.md
+  [WRITE]  sessions\session-import\transcript\turn-045-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-046-player.md
+  [WRITE]  sessions\session-import\transcript\turn-047-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-048-player.md
+  [WRITE]  sessions\session-import\transcript\turn-049-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-050-player.md
+  [WRITE]  sessions\session-import\transcript\turn-051-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-052-player.md
+  [WRITE]  sessions\session-import\transcript\turn-053-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-054-player.md
+  [WRITE]  sessions\session-import\transcript\turn-055-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-056-player.md
+  [WRITE]  sessions\session-import\transcript\turn-057-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-058-player.md
+  [WRITE]  sessions\session-import\transcript\turn-059-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-060-player.md
+  [WRITE]  sessions\session-import\transcript\turn-061-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-062-player.md
+  [WRITE]  sessions\session-import\transcript\turn-063-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-064-player.md
+  [WRITE]  sessions\session-import\transcript\turn-065-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-066-player.md
+  [WRITE]  sessions\session-import\transcript\turn-067-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-068-player.md
+  [WRITE]  sessions\session-import\transcript\turn-069-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-070-player.md
+  [WRITE]  sessions\session-import\transcript\turn-071-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-072-player.md
+  [WRITE]  sessions\session-import\transcript\turn-073-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-074-player.md
+  [WRITE]  sessions\session-import\transcript\turn-075-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-076-player.md
+  [WRITE]  sessions\session-import\transcript\turn-077-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-078-player.md
+  [WRITE]  sessions\session-import\transcript\turn-079-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-080-player.md
+  [WRITE]  sessions\session-import\transcript\turn-081-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-082-player.md
+  [WRITE]  sessions\session-import\transcript\turn-083-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-084-player.md
+  [WRITE]  sessions\session-import\transcript\turn-085-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-086-player.md
+  [WRITE]  sessions\session-import\transcript\turn-087-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-088-player.md
+  [WRITE]  sessions\session-import\transcript\turn-089-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-090-player.md
+  [WRITE]  sessions\session-import\transcript\turn-091-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-092-player.md
+  [WRITE]  sessions\session-import\transcript\turn-093-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-094-player.md
+  [WRITE]  sessions\session-import\transcript\turn-095-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-096-player.md
+  [WRITE]  sessions\session-import\transcript\turn-097-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-098-player.md
+  [WRITE]  sessions\session-import\transcript\turn-099-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-100-player.md
+  [WRITE]  sessions\session-import\transcript\turn-101-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-102-player.md
+  [WRITE]  sessions\session-import\transcript\turn-103-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-104-player.md
+  [WRITE]  sessions\session-import\transcript\turn-105-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-106-player.md
+  [WRITE]  sessions\session-import\transcript\turn-107-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-108-player.md
+  [WRITE]  sessions\session-import\transcript\turn-109-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-110-player.md
+  [WRITE]  sessions\session-import\transcript\turn-111-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-112-player.md
+  [WRITE]  sessions\session-import\transcript\turn-113-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-114-player.md
+  [WRITE]  sessions\session-import\transcript\turn-115-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-116-player.md
+  [WRITE]  sessions\session-import\transcript\turn-117-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-118-player.md
+  [WRITE]  sessions\session-import\transcript\turn-119-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-120-player.md
+  [WRITE]  sessions\session-import\transcript\turn-121-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-122-player.md
+  [WRITE]  sessions\session-import\transcript\turn-123-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-124-player.md
+  [WRITE]  sessions\session-import\transcript\turn-125-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-126-player.md
+  Multi-endpoint: 2 endpoints configured, round-robin dispatch enabled
+  Multi-endpoint: 2 endpoints configured, round-robin dispatch enabled
+  Skipping concept-prefix entity from discovery: concept-midwinter
+  WARNING: Dropping non-allowed char-player stable_attributes: ['species']
+  WITHIN-TURN DEDUP: dropping 'capturer-2' in favor of 'capturer-1'
+  NORMALIZE_LOC: 'forest' -> loc-forest
+  Multi-endpoint: 2 endpoints configured, round-robin dispatch enabled
+  Multi-endpoint: 2 endpoints configured, round-robin dispatch enabled
+  Multi-endpoint: 2 endpoints configured, round-robin dispatch enabled
+  Multi-endpoint: 2 endpoints configured, round-robin dispatch enabled
+WARNING: DM profile analysis failed: 'charmap' codec can't encode character 
+'\u2192' in position 4: character maps to <undefined>
+  [WRITE]  sessions\session-import\transcript\turn-127-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-128-player.md
+  [WRITE]  sessions\session-import\transcript\turn-129-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-130-player.md
+  [WRITE]  sessions\session-import\transcript\turn-131-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-132-player.md
+  [WRITE]  sessions\session-import\transcript\turn-133-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-134-player.md
+  [WRITE]  sessions\session-import\transcript\turn-135-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-136-player.md
+  [WRITE]  sessions\session-import\transcript\turn-137-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-138-player.md
+  [WRITE]  sessions\session-import\transcript\turn-139-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-140-player.md
+  [WRITE]  sessions\session-import\transcript\turn-141-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-142-player.md
+  [WRITE]  sessions\session-import\transcript\turn-143-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-144-player.md
+  [WRITE]  sessions\session-import\transcript\turn-145-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-146-player.md
+  [WRITE]  sessions\session-import\transcript\turn-147-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-148-player.md
+  [WRITE]  sessions\session-import\transcript\turn-149-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-150-player.md
+  [WRITE]  sessions\session-import\transcript\turn-151-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-152-player.md
+  [WRITE]  sessions\session-import\transcript\turn-153-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-154-player.md
+  [WRITE]  sessions\session-import\transcript\turn-155-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-156-player.md
+  [WRITE]  sessions\session-import\transcript\turn-157-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-158-player.md
+  [WRITE]  sessions\session-import\transcript\turn-159-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-160-player.md
+  [WRITE]  sessions\session-import\transcript\turn-161-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-162-player.md
+  [WRITE]  sessions\session-import\transcript\turn-163-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-164-player.md
+  [WRITE]  sessions\session-import\transcript\turn-165-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-166-player.md
+  [WRITE]  sessions\session-import\transcript\turn-167-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-168-player.md
+  [WRITE]  sessions\session-import\transcript\turn-169-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-170-player.md
+  [WRITE]  sessions\session-import\transcript\turn-171-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-172-player.md
+  [WRITE]  sessions\session-import\transcript\turn-173-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-174-player.md
+  [WRITE]  sessions\session-import\transcript\turn-175-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-176-player.md
+  [WRITE]  sessions\session-import\transcript\turn-177-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-178-player.md
+  [WRITE]  sessions\session-import\transcript\turn-179-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-180-player.md
+  [WRITE]  sessions\session-import\transcript\turn-181-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-182-player.md
+  [WRITE]  sessions\session-import\transcript\turn-183-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-184-player.md
+  [WRITE]  sessions\session-import\transcript\turn-185-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-186-player.md
+  [WRITE]  sessions\session-import\transcript\turn-187-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-188-player.md
+  [WRITE]  sessions\session-import\transcript\turn-189-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-190-player.md
+  [WRITE]  sessions\session-import\transcript\turn-191-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-192-player.md
+  [WRITE]  sessions\session-import\transcript\turn-193-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-194-player.md
+  [WRITE]  sessions\session-import\transcript\turn-195-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-196-player.md
+  [WRITE]  sessions\session-import\transcript\turn-197-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-198-player.md
+  [WRITE]  sessions\session-import\transcript\turn-199-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-200-player.md
+  [WRITE]  sessions\session-import\transcript\turn-201-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-202-player.md
+  [WRITE]  sessions\session-import\transcript\turn-203-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-204-player.md
+  [WRITE]  sessions\session-import\transcript\turn-205-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-206-player.md
+  [WRITE]  sessions\session-import\transcript\turn-207-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-208-player.md
+  [WRITE]  sessions\session-import\transcript\turn-209-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-210-player.md
+  [WRITE]  sessions\session-import\transcript\turn-211-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-212-player.md
+  [WRITE]  sessions\session-import\transcript\turn-213-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-214-player.md
+  [WRITE]  sessions\session-import\transcript\turn-215-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-216-player.md
+  [WRITE]  sessions\session-import\transcript\turn-217-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-218-player.md
+  [WRITE]  sessions\session-import\transcript\turn-219-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-220-player.md
+  [WRITE]  sessions\session-import\transcript\turn-221-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-222-player.md
+  [WRITE]  sessions\session-import\transcript\turn-223-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-224-player.md
+  [WRITE]  sessions\session-import\transcript\turn-225-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-226-player.md
+  [WRITE]  sessions\session-import\transcript\turn-227-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-228-player.md
+  [WRITE]  sessions\session-import\transcript\turn-229-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-230-player.md
+  [WRITE]  sessions\session-import\transcript\turn-231-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-232-player.md
+  [WRITE]  sessions\session-import\transcript\turn-233-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-234-player.md
+  [WRITE]  sessions\session-import\transcript\turn-235-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-236-player.md
+  [WRITE]  sessions\session-import\transcript\turn-237-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-238-player.md
+  [WRITE]  sessions\session-import\transcript\turn-239-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-240-player.md
+  [WRITE]  sessions\session-import\transcript\turn-241-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-242-player.md
+  [WRITE]  sessions\session-import\transcript\turn-243-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-244-player.md
+  [WRITE]  sessions\session-import\transcript\turn-245-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-246-player.md
+  [WRITE]  sessions\session-import\transcript\turn-247-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-248-player.md
+  [WRITE]  sessions\session-import\transcript\turn-249-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-250-player.md
+  [WRITE]  sessions\session-import\transcript\turn-251-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-252-player.md
+  [WRITE]  sessions\session-import\transcript\turn-253-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-254-player.md
+  [WRITE]  sessions\session-import\transcript\turn-255-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-256-player.md
+  [WRITE]  sessions\session-import\transcript\turn-257-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-258-player.md
+  [WRITE]  sessions\session-import\transcript\turn-259-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-260-player.md
+  [WRITE]  sessions\session-import\transcript\turn-261-player.md
+  [WRITE]  sessions\session-import\transcript\turn-262-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-263-player.md
+  [WRITE]  sessions\session-import\transcript\turn-264-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-265-player.md
+  [WRITE]  sessions\session-import\transcript\turn-266-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-267-player.md
+  [WRITE]  sessions\session-import\transcript\turn-268-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-269-player.md
+  [WRITE]  sessions\session-import\transcript\turn-270-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-271-player.md
+  [WRITE]  sessions\session-import\transcript\turn-272-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-273-player.md
+  [WRITE]  sessions\session-import\transcript\turn-274-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-275-player.md
+  [WRITE]  sessions\session-import\transcript\turn-276-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-277-player.md
+  [WRITE]  sessions\session-import\transcript\turn-278-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-279-player.md
+  [WRITE]  sessions\session-import\transcript\turn-280-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-281-player.md
+  [WRITE]  sessions\session-import\transcript\turn-282-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-283-player.md
+  [WRITE]  sessions\session-import\transcript\turn-284-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-285-player.md
+  [WRITE]  sessions\session-import\transcript\turn-286-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-287-player.md
+  [WRITE]  sessions\session-import\transcript\turn-288-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-289-player.md
+  [WRITE]  sessions\session-import\transcript\turn-290-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-291-player.md
+  [WRITE]  sessions\session-import\transcript\turn-292-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-293-player.md
+  [WRITE]  sessions\session-import\transcript\turn-294-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-295-player.md
+  [WRITE]  sessions\session-import\transcript\turn-296-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-297-player.md
+  [WRITE]  sessions\session-import\transcript\turn-298-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-299-player.md
+  [WRITE]  sessions\session-import\transcript\turn-300-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-301-player.md
+  [WRITE]  sessions\session-import\transcript\turn-302-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-303-player.md
+  [WRITE]  sessions\session-import\transcript\turn-304-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-305-player.md
+  [WRITE]  sessions\session-import\transcript\turn-306-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-307-player.md
+  [WRITE]  sessions\session-import\transcript\turn-308-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-309-player.md
+  [WRITE]  sessions\session-import\transcript\turn-310-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-311-player.md
+  [WRITE]  sessions\session-import\transcript\turn-312-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-313-player.md
+  [WRITE]  sessions\session-import\transcript\turn-314-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-315-player.md
+  [WRITE]  sessions\session-import\transcript\turn-316-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-317-player.md
+  [WRITE]  sessions\session-import\transcript\turn-318-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-319-player.md
+  [WRITE]  sessions\session-import\transcript\turn-320-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-321-player.md
+  [WRITE]  sessions\session-import\transcript\turn-322-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-323-player.md
+  [WRITE]  sessions\session-import\transcript\turn-324-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-325-player.md
+  [WRITE]  sessions\session-import\transcript\turn-326-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-327-player.md
+  [WRITE]  sessions\session-import\transcript\turn-328-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-329-player.md
+  [WRITE]  sessions\session-import\transcript\turn-330-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-331-player.md
+  [WRITE]  sessions\session-import\transcript\turn-332-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-333-player.md
+  [WRITE]  sessions\session-import\transcript\turn-334-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-335-player.md
+  [WRITE]  sessions\session-import\transcript\turn-336-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-337-player.md
+  [WRITE]  sessions\session-import\transcript\turn-338-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-339-player.md
+  [WRITE]  sessions\session-import\transcript\turn-340-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-341-player.md
+  [WRITE]  sessions\session-import\transcript\turn-342-dm.md
+  [WRITE]  sessions\session-import\transcript\turn-343-player.md
+  [WRITE]  sessions\session-import\transcript\turn-344-dm.md
+
+Writing raw transcript:
+  [SKIP]   sessions\session-import\raw\full-transcript.md (raw transcript is immutable by default; pass --allow-raw-overwrite to force replacement with backup)
+
+Checking metadata:
+
+Scaffolding derived files:
+  [SKIP]   sessions\session-import\derived\state.json (already exists)
+  [SKIP]   sessions\session-import\derived\objectives.json (already exists)
+  [SKIP]   sessions\session-import\derived\evidence.json (already exists)
+
+Scaffolding exports directory:
+  Limiting to first 10 of 344 turns (--max-turns).
+
+Extracting structured data:
+  1 mechanical event(s), 0 temporal marker(s), 0 season summary/summaries
+  [WRITE]  sessions\session-import\derived\session-events.json (1 entries)
+  [WRITE]  sessions\session-import\derived\timeline.json (0 entries)
+  [WRITE]  sessions\session-import\derived\season-summaries.json (0 entries)
+
+Running semantic extraction:
+  Processing 10 turns for semantic extraction...
+  Expanded 1 compact discovery entries from catalog
+  Expanded 1 compact discovery entries from catalog
+  Expanded 2 compact discovery entries from catalog
+
+  REFRESH: No stale entities at end-of-run
+  DEDUP (levenshtein): linking 'capturer-1' (char-capturer-1) and 'capturer-2' (char-capturer-2) as duplicates (distance=1)
+  Post-batch dedup merged 1 duplicate(s); 10 entities remain
+  Coreference hints: canonical entity 'char-kael' not found, skipping group 'Kael'
+  Semantic extraction complete: 10 entities, 5 events, 3 temporal signals
+
+  API stats: 54 requests, all succeeded
+  Stub backfill: 0 stub(s) enriched
+
+Generating wiki pages for review:
+  characters: 3 pages generated
+  locations: 5 pages generated
+  factions: 1 pages generated
+  items: 5 pages generated
+  timeline: 1 page generated
+  Wiki pages generated. Review framework-local/validation-run/catalogs/*/README.md and individual pages.
+
+Running DM profile analysis:
+  Analyzing 5 DM turns for behavioral patterns...
+  Analyzing DM turns turn-001ûturn-009...
+
+Extraction complete for turns turn-001 through turn-010.
+Wiki pages generated ù review framework-local/validation-run/catalogs/ for entity pages.
+
+Next steps:
+  python tools/update_state.py --session sessions\session-import
+  python tools/analyze_next_move.py --session sessions\session-import
+  python tools/validate.py --session sessions\session-import
+

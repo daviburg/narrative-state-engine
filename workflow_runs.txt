@@ -1,0 +1,501 @@
+﻿[1;37m{[m
+  [1;34m"total_count"[m[1;37m:[m 2[1;37m,[m
+  [1;34m"workflow_runs"[m[1;37m:[m [1;37m[[m
+    [1;37m{[m
+      [1;34m"id"[m[1;37m:[m 25747996545[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"CI"[m[1;37m,[m
+      [1;34m"node_id"[m[1;37m:[m [32m"WFR_kwLOR8x2GM8AAAAF_rM_gQ"[m[1;37m,[m
+      [1;34m"head_branch"[m[1;37m:[m [32m"feat/issue-371-coordinator-wait-tool"[m[1;37m,[m
+      [1;34m"head_sha"[m[1;37m:[m [32m"87f3d0593c71c020ca2ec44b89f584b861697b03"[m[1;37m,[m
+      [1;34m"path"[m[1;37m:[m [32m".github/workflows/ci.yml"[m[1;37m,[m
+      [1;34m"display_title"[m[1;37m:[m [32m"feat: add coordinator wait/sleep MCP tool (#371)"[m[1;37m,[m
+      [1;34m"run_number"[m[1;37m:[m 618[1;37m,[m
+      [1;34m"event"[m[1;37m:[m [32m"pull_request"[m[1;37m,[m
+      [1;34m"status"[m[1;37m:[m [32m"completed"[m[1;37m,[m
+      [1;34m"conclusion"[m[1;37m:[m [32m"failure"[m[1;37m,[m
+      [1;34m"workflow_id"[m[1;37m:[m 258177238[1;37m,[m
+      [1;34m"check_suite_id"[m[1;37m:[m 68646700230[1;37m,[m
+      [1;34m"check_suite_node_id"[m[1;37m:[m [32m"CS_kwDOR8x2GM8AAAAP-6mExg"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996545"[m[1;37m,[m
+      [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg/narrative-state-engine/actions/runs/25747996545"[m[1;37m,[m
+      [1;34m"pull_requests"[m[1;37m:[m [1;37m[[m
+        [1;37m{[m
+          [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/pulls/372"[m[1;37m,[m
+          [1;34m"id"[m[1;37m:[m 3670207467[1;37m,[m
+          [1;34m"number"[m[1;37m:[m 372[1;37m,[m
+          [1;34m"head"[m[1;37m:[m [1;37m{[m
+            [1;34m"ref"[m[1;37m:[m [32m"feat/issue-371-coordinator-wait-tool"[m[1;37m,[m
+            [1;34m"sha"[m[1;37m:[m [32m"32568384053b0512bc68ae7a09d69f1a2115b6a9"[m[1;37m,[m
+            [1;34m"repo"[m[1;37m:[m [1;37m{[m
+              [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+              [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+              [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m
+            [1;37m}[m
+          [1;37m}[m[1;37m,[m
+          [1;34m"base"[m[1;37m:[m [1;37m{[m
+            [1;34m"ref"[m[1;37m:[m [32m"main"[m[1;37m,[m
+            [1;34m"sha"[m[1;37m:[m [32m"0b26d14c27a74f805aac873c73fcfc7f5e843d95"[m[1;37m,[m
+            [1;34m"repo"[m[1;37m:[m [1;37m{[m
+              [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+              [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+              [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m
+            [1;37m}[m
+          [1;37m}[m
+        [1;37m}[m
+      [1;37m][m[1;37m,[m
+      [1;34m"created_at"[m[1;37m:[m [32m"2026-05-12T16:30:43Z"[m[1;37m,[m
+      [1;34m"updated_at"[m[1;37m:[m [32m"2026-05-12T16:31:03Z"[m[1;37m,[m
+      [1;34m"actor"[m[1;37m:[m [1;37m{[m
+        [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+        [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+        [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+        [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+        [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+        [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+        [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+        [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+        [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+        [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+        [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+        [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+        [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+        [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+        [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"run_attempt"[m[1;37m:[m 1[1;37m,[m
+      [1;34m"referenced_workflows"[m[1;37m:[m [1;37m[[m[1;37m][m[1;37m,[m
+      [1;34m"run_started_at"[m[1;37m:[m [32m"2026-05-12T16:30:43Z"[m[1;37m,[m
+      [1;34m"triggering_actor"[m[1;37m:[m [1;37m{[m
+        [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+        [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+        [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+        [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+        [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+        [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+        [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+        [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+        [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+        [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+        [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+        [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+        [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+        [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+        [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"jobs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996545/jobs"[m[1;37m,[m
+      [1;34m"logs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996545/logs"[m[1;37m,[m
+      [1;34m"check_suite_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/check-suites/68646700230"[m[1;37m,[m
+      [1;34m"artifacts_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996545/artifacts"[m[1;37m,[m
+      [1;34m"cancel_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996545/cancel"[m[1;37m,[m
+      [1;34m"rerun_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996545/rerun"[m[1;37m,[m
+      [1;34m"previous_attempt_url"[m[1;37m:[m [36mnull[m[1;37m,[m
+      [1;34m"workflow_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/workflows/258177238"[m[1;37m,[m
+      [1;34m"head_commit"[m[1;37m:[m [1;37m{[m
+        [1;34m"id"[m[1;37m:[m [32m"87f3d0593c71c020ca2ec44b89f584b861697b03"[m[1;37m,[m
+        [1;34m"tree_id"[m[1;37m:[m [32m"bfc3fe9031c0749cd2dcf5e16f217518f1cd3bab"[m[1;37m,[m
+        [1;34m"message"[m[1;37m:[m [32m"feat: add coordinator wait/sleep MCP tool for scheduling (#371)"[m[1;37m,[m
+        [1;34m"timestamp"[m[1;37m:[m [32m"2026-05-12T16:30:10Z"[m[1;37m,[m
+        [1;34m"author"[m[1;37m:[m [1;37m{[m
+          [1;34m"name"[m[1;37m:[m [32m"David Burg"[m[1;37m,[m
+          [1;34m"email"[m[1;37m:[m [32m"david_burg@hotmail.fr"[m
+        [1;37m}[m[1;37m,[m
+        [1;34m"committer"[m[1;37m:[m [1;37m{[m
+          [1;34m"name"[m[1;37m:[m [32m"David Burg"[m[1;37m,[m
+          [1;34m"email"[m[1;37m:[m [32m"david_burg@hotmail.fr"[m
+        [1;37m}[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"repository"[m[1;37m:[m [1;37m{[m
+        [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"R_kgDOR8x2GA"[m[1;37m,[m
+        [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m[1;37m,[m
+        [1;34m"full_name"[m[1;37m:[m [32m"daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"private"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"owner"[m[1;37m:[m [1;37m{[m
+          [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+          [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+          [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+          [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+          [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+          [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+          [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+          [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+          [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+          [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+          [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+          [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+          [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+          [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+          [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+          [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+          [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+          [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+          [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+        [1;37m}[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"description"[m[1;37m:[m [32m"A reusable player-side framework for AI-DM game sessions that preserves transcripts, maintains narrative state and catalogs, tracks objectives, infers DM behavior, and generates strategic next-prompt suggestions within a single game world. Later extensible to fiction authoring and RPG-to-book transformation."[m[1;37m,[m
+        [1;34m"fork"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"forks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/forks"[m[1;37m,[m
+        [1;34m"keys_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/keys{/key_id}"[m[1;37m,[m
+        [1;34m"collaborators_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/collaborators{/collaborator}"[m[1;37m,[m
+        [1;34m"teams_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/teams"[m[1;37m,[m
+        [1;34m"hooks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/hooks"[m[1;37m,[m
+        [1;34m"issue_events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/events{/number}"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/events"[m[1;37m,[m
+        [1;34m"assignees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/assignees{/user}"[m[1;37m,[m
+        [1;34m"branches_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/branches{/branch}"[m[1;37m,[m
+        [1;34m"tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/tags"[m[1;37m,[m
+        [1;34m"blobs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/blobs{/sha}"[m[1;37m,[m
+        [1;34m"git_tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/tags{/sha}"[m[1;37m,[m
+        [1;34m"git_refs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/refs{/sha}"[m[1;37m,[m
+        [1;34m"trees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/trees{/sha}"[m[1;37m,[m
+        [1;34m"statuses_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/statuses/{sha}"[m[1;37m,[m
+        [1;34m"languages_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/languages"[m[1;37m,[m
+        [1;34m"stargazers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/stargazers"[m[1;37m,[m
+        [1;34m"contributors_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contributors"[m[1;37m,[m
+        [1;34m"subscribers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscribers"[m[1;37m,[m
+        [1;34m"subscription_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscription"[m[1;37m,[m
+        [1;34m"commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/commits{/sha}"[m[1;37m,[m
+        [1;34m"git_commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/commits{/sha}"[m[1;37m,[m
+        [1;34m"comments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/comments{/number}"[m[1;37m,[m
+        [1;34m"issue_comment_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/comments{/number}"[m[1;37m,[m
+        [1;34m"contents_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contents/{+path}"[m[1;37m,[m
+        [1;34m"compare_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/compare/{base}...{head}"[m[1;37m,[m
+        [1;34m"merges_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/merges"[m[1;37m,[m
+        [1;34m"archive_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/{archive_format}{/ref}"[m[1;37m,[m
+        [1;34m"downloads_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/downloads"[m[1;37m,[m
+        [1;34m"issues_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues{/number}"[m[1;37m,[m
+        [1;34m"pulls_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/pulls{/number}"[m[1;37m,[m
+        [1;34m"milestones_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/milestones{/number}"[m[1;37m,[m
+        [1;34m"notifications_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/notifications{?since,all,participating}"[m[1;37m,[m
+        [1;34m"labels_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/labels{/name}"[m[1;37m,[m
+        [1;34m"releases_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/releases{/id}"[m[1;37m,[m
+        [1;34m"deployments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/deployments"[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"head_repository"[m[1;37m:[m [1;37m{[m
+        [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"R_kgDOR8x2GA"[m[1;37m,[m
+        [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m[1;37m,[m
+        [1;34m"full_name"[m[1;37m:[m [32m"daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"private"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"owner"[m[1;37m:[m [1;37m{[m
+          [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+          [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+          [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+          [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+          [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+          [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+          [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+          [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+          [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+          [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+          [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+          [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+          [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+          [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+          [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+          [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+          [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+          [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+          [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+        [1;37m}[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"description"[m[1;37m:[m [32m"A reusable player-side framework for AI-DM game sessions that preserves transcripts, maintains narrative state and catalogs, tracks objectives, infers DM behavior, and generates strategic next-prompt suggestions within a single game world. Later extensible to fiction authoring and RPG-to-book transformation."[m[1;37m,[m
+        [1;34m"fork"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"forks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/forks"[m[1;37m,[m
+        [1;34m"keys_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/keys{/key_id}"[m[1;37m,[m
+        [1;34m"collaborators_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/collaborators{/collaborator}"[m[1;37m,[m
+        [1;34m"teams_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/teams"[m[1;37m,[m
+        [1;34m"hooks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/hooks"[m[1;37m,[m
+        [1;34m"issue_events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/events{/number}"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/events"[m[1;37m,[m
+        [1;34m"assignees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/assignees{/user}"[m[1;37m,[m
+        [1;34m"branches_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/branches{/branch}"[m[1;37m,[m
+        [1;34m"tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/tags"[m[1;37m,[m
+        [1;34m"blobs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/blobs{/sha}"[m[1;37m,[m
+        [1;34m"git_tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/tags{/sha}"[m[1;37m,[m
+        [1;34m"git_refs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/refs{/sha}"[m[1;37m,[m
+        [1;34m"trees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/trees{/sha}"[m[1;37m,[m
+        [1;34m"statuses_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/statuses/{sha}"[m[1;37m,[m
+        [1;34m"languages_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/languages"[m[1;37m,[m
+        [1;34m"stargazers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/stargazers"[m[1;37m,[m
+        [1;34m"contributors_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contributors"[m[1;37m,[m
+        [1;34m"subscribers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscribers"[m[1;37m,[m
+        [1;34m"subscription_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscription"[m[1;37m,[m
+        [1;34m"commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/commits{/sha}"[m[1;37m,[m
+        [1;34m"git_commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/commits{/sha}"[m[1;37m,[m
+        [1;34m"comments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/comments{/number}"[m[1;37m,[m
+        [1;34m"issue_comment_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/comments{/number}"[m[1;37m,[m
+        [1;34m"contents_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contents/{+path}"[m[1;37m,[m
+        [1;34m"compare_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/compare/{base}...{head}"[m[1;37m,[m
+        [1;34m"merges_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/merges"[m[1;37m,[m
+        [1;34m"archive_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/{archive_format}{/ref}"[m[1;37m,[m
+        [1;34m"downloads_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/downloads"[m[1;37m,[m
+        [1;34m"issues_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues{/number}"[m[1;37m,[m
+        [1;34m"pulls_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/pulls{/number}"[m[1;37m,[m
+        [1;34m"milestones_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/milestones{/number}"[m[1;37m,[m
+        [1;34m"notifications_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/notifications{?since,all,participating}"[m[1;37m,[m
+        [1;34m"labels_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/labels{/name}"[m[1;37m,[m
+        [1;34m"releases_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/releases{/id}"[m[1;37m,[m
+        [1;34m"deployments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/deployments"[m
+      [1;37m}[m
+    [1;37m}[m[1;37m,[m
+    [1;37m{[m
+      [1;34m"id"[m[1;37m:[m 25747996524[1;37m,[m
+      [1;34m"name"[m[1;37m:[m [32m"CodeQL"[m[1;37m,[m
+      [1;34m"node_id"[m[1;37m:[m [32m"WFR_kwLOR8x2GM8AAAAF_rM_bA"[m[1;37m,[m
+      [1;34m"head_branch"[m[1;37m:[m [32m"feat/issue-371-coordinator-wait-tool"[m[1;37m,[m
+      [1;34m"head_sha"[m[1;37m:[m [32m"87f3d0593c71c020ca2ec44b89f584b861697b03"[m[1;37m,[m
+      [1;34m"path"[m[1;37m:[m [32m".github/workflows/codeql.yml"[m[1;37m,[m
+      [1;34m"display_title"[m[1;37m:[m [32m"feat: add coordinator wait/sleep MCP tool (#371)"[m[1;37m,[m
+      [1;34m"run_number"[m[1;37m:[m 623[1;37m,[m
+      [1;34m"event"[m[1;37m:[m [32m"pull_request"[m[1;37m,[m
+      [1;34m"status"[m[1;37m:[m [32m"completed"[m[1;37m,[m
+      [1;34m"conclusion"[m[1;37m:[m [32m"success"[m[1;37m,[m
+      [1;34m"workflow_id"[m[1;37m:[m 258177239[1;37m,[m
+      [1;34m"check_suite_id"[m[1;37m:[m 68646700225[1;37m,[m
+      [1;34m"check_suite_node_id"[m[1;37m:[m [32m"CS_kwDOR8x2GM8AAAAP-6mEwQ"[m[1;37m,[m
+      [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996524"[m[1;37m,[m
+      [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg/narrative-state-engine/actions/runs/25747996524"[m[1;37m,[m
+      [1;34m"pull_requests"[m[1;37m:[m [1;37m[[m
+        [1;37m{[m
+          [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/pulls/372"[m[1;37m,[m
+          [1;34m"id"[m[1;37m:[m 3670207467[1;37m,[m
+          [1;34m"number"[m[1;37m:[m 372[1;37m,[m
+          [1;34m"head"[m[1;37m:[m [1;37m{[m
+            [1;34m"ref"[m[1;37m:[m [32m"feat/issue-371-coordinator-wait-tool"[m[1;37m,[m
+            [1;34m"sha"[m[1;37m:[m [32m"32568384053b0512bc68ae7a09d69f1a2115b6a9"[m[1;37m,[m
+            [1;34m"repo"[m[1;37m:[m [1;37m{[m
+              [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+              [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+              [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m
+            [1;37m}[m
+          [1;37m}[m[1;37m,[m
+          [1;34m"base"[m[1;37m:[m [1;37m{[m
+            [1;34m"ref"[m[1;37m:[m [32m"main"[m[1;37m,[m
+            [1;34m"sha"[m[1;37m:[m [32m"0b26d14c27a74f805aac873c73fcfc7f5e843d95"[m[1;37m,[m
+            [1;34m"repo"[m[1;37m:[m [1;37m{[m
+              [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+              [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+              [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m
+            [1;37m}[m
+          [1;37m}[m
+        [1;37m}[m
+      [1;37m][m[1;37m,[m
+      [1;34m"created_at"[m[1;37m:[m [32m"2026-05-12T16:30:43Z"[m[1;37m,[m
+      [1;34m"updated_at"[m[1;37m:[m [32m"2026-05-12T16:32:26Z"[m[1;37m,[m
+      [1;34m"actor"[m[1;37m:[m [1;37m{[m
+        [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+        [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+        [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+        [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+        [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+        [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+        [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+        [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+        [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+        [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+        [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+        [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+        [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+        [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+        [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"run_attempt"[m[1;37m:[m 1[1;37m,[m
+      [1;34m"referenced_workflows"[m[1;37m:[m [1;37m[[m[1;37m][m[1;37m,[m
+      [1;34m"run_started_at"[m[1;37m:[m [32m"2026-05-12T16:30:43Z"[m[1;37m,[m
+      [1;34m"triggering_actor"[m[1;37m:[m [1;37m{[m
+        [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+        [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+        [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+        [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+        [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+        [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+        [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+        [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+        [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+        [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+        [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+        [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+        [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+        [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+        [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"jobs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996524/jobs"[m[1;37m,[m
+      [1;34m"logs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996524/logs"[m[1;37m,[m
+      [1;34m"check_suite_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/check-suites/68646700225"[m[1;37m,[m
+      [1;34m"artifacts_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996524/artifacts"[m[1;37m,[m
+      [1;34m"cancel_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996524/cancel"[m[1;37m,[m
+      [1;34m"rerun_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/runs/25747996524/rerun"[m[1;37m,[m
+      [1;34m"previous_attempt_url"[m[1;37m:[m [36mnull[m[1;37m,[m
+      [1;34m"workflow_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/actions/workflows/258177239"[m[1;37m,[m
+      [1;34m"head_commit"[m[1;37m:[m [1;37m{[m
+        [1;34m"id"[m[1;37m:[m [32m"87f3d0593c71c020ca2ec44b89f584b861697b03"[m[1;37m,[m
+        [1;34m"tree_id"[m[1;37m:[m [32m"bfc3fe9031c0749cd2dcf5e16f217518f1cd3bab"[m[1;37m,[m
+        [1;34m"message"[m[1;37m:[m [32m"feat: add coordinator wait/sleep MCP tool for scheduling (#371)"[m[1;37m,[m
+        [1;34m"timestamp"[m[1;37m:[m [32m"2026-05-12T16:30:10Z"[m[1;37m,[m
+        [1;34m"author"[m[1;37m:[m [1;37m{[m
+          [1;34m"name"[m[1;37m:[m [32m"David Burg"[m[1;37m,[m
+          [1;34m"email"[m[1;37m:[m [32m"david_burg@hotmail.fr"[m
+        [1;37m}[m[1;37m,[m
+        [1;34m"committer"[m[1;37m:[m [1;37m{[m
+          [1;34m"name"[m[1;37m:[m [32m"David Burg"[m[1;37m,[m
+          [1;34m"email"[m[1;37m:[m [32m"david_burg@hotmail.fr"[m
+        [1;37m}[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"repository"[m[1;37m:[m [1;37m{[m
+        [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"R_kgDOR8x2GA"[m[1;37m,[m
+        [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m[1;37m,[m
+        [1;34m"full_name"[m[1;37m:[m [32m"daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"private"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"owner"[m[1;37m:[m [1;37m{[m
+          [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+          [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+          [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+          [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+          [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+          [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+          [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+          [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+          [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+          [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+          [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+          [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+          [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+          [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+          [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+          [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+          [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+          [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+          [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+        [1;37m}[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"description"[m[1;37m:[m [32m"A reusable player-side framework for AI-DM game sessions that preserves transcripts, maintains narrative state and catalogs, tracks objectives, infers DM behavior, and generates strategic next-prompt suggestions within a single game world. Later extensible to fiction authoring and RPG-to-book transformation."[m[1;37m,[m
+        [1;34m"fork"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"forks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/forks"[m[1;37m,[m
+        [1;34m"keys_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/keys{/key_id}"[m[1;37m,[m
+        [1;34m"collaborators_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/collaborators{/collaborator}"[m[1;37m,[m
+        [1;34m"teams_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/teams"[m[1;37m,[m
+        [1;34m"hooks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/hooks"[m[1;37m,[m
+        [1;34m"issue_events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/events{/number}"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/events"[m[1;37m,[m
+        [1;34m"assignees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/assignees{/user}"[m[1;37m,[m
+        [1;34m"branches_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/branches{/branch}"[m[1;37m,[m
+        [1;34m"tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/tags"[m[1;37m,[m
+        [1;34m"blobs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/blobs{/sha}"[m[1;37m,[m
+        [1;34m"git_tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/tags{/sha}"[m[1;37m,[m
+        [1;34m"git_refs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/refs{/sha}"[m[1;37m,[m
+        [1;34m"trees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/trees{/sha}"[m[1;37m,[m
+        [1;34m"statuses_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/statuses/{sha}"[m[1;37m,[m
+        [1;34m"languages_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/languages"[m[1;37m,[m
+        [1;34m"stargazers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/stargazers"[m[1;37m,[m
+        [1;34m"contributors_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contributors"[m[1;37m,[m
+        [1;34m"subscribers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscribers"[m[1;37m,[m
+        [1;34m"subscription_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscription"[m[1;37m,[m
+        [1;34m"commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/commits{/sha}"[m[1;37m,[m
+        [1;34m"git_commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/commits{/sha}"[m[1;37m,[m
+        [1;34m"comments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/comments{/number}"[m[1;37m,[m
+        [1;34m"issue_comment_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/comments{/number}"[m[1;37m,[m
+        [1;34m"contents_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contents/{+path}"[m[1;37m,[m
+        [1;34m"compare_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/compare/{base}...{head}"[m[1;37m,[m
+        [1;34m"merges_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/merges"[m[1;37m,[m
+        [1;34m"archive_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/{archive_format}{/ref}"[m[1;37m,[m
+        [1;34m"downloads_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/downloads"[m[1;37m,[m
+        [1;34m"issues_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues{/number}"[m[1;37m,[m
+        [1;34m"pulls_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/pulls{/number}"[m[1;37m,[m
+        [1;34m"milestones_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/milestones{/number}"[m[1;37m,[m
+        [1;34m"notifications_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/notifications{?since,all,participating}"[m[1;37m,[m
+        [1;34m"labels_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/labels{/name}"[m[1;37m,[m
+        [1;34m"releases_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/releases{/id}"[m[1;37m,[m
+        [1;34m"deployments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/deployments"[m
+      [1;37m}[m[1;37m,[m
+      [1;34m"head_repository"[m[1;37m:[m [1;37m{[m
+        [1;34m"id"[m[1;37m:[m 1204581912[1;37m,[m
+        [1;34m"node_id"[m[1;37m:[m [32m"R_kgDOR8x2GA"[m[1;37m,[m
+        [1;34m"name"[m[1;37m:[m [32m"narrative-state-engine"[m[1;37m,[m
+        [1;34m"full_name"[m[1;37m:[m [32m"daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"private"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"owner"[m[1;37m:[m [1;37m{[m
+          [1;34m"login"[m[1;37m:[m [32m"daviburg"[m[1;37m,[m
+          [1;34m"id"[m[1;37m:[m 12040431[1;37m,[m
+          [1;34m"node_id"[m[1;37m:[m [32m"MDQ6VXNlcjEyMDQwNDMx"[m[1;37m,[m
+          [1;34m"avatar_url"[m[1;37m:[m [32m"https://avatars.githubusercontent.com/u/12040431?v=4"[m[1;37m,[m
+          [1;34m"gravatar_id"[m[1;37m:[m [32m""[m[1;37m,[m
+          [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg"[m[1;37m,[m
+          [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg"[m[1;37m,[m
+          [1;34m"followers_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/followers"[m[1;37m,[m
+          [1;34m"following_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/following{/other_user}"[m[1;37m,[m
+          [1;34m"gists_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/gists{/gist_id}"[m[1;37m,[m
+          [1;34m"starred_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/starred{/owner}{/repo}"[m[1;37m,[m
+          [1;34m"subscriptions_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/subscriptions"[m[1;37m,[m
+          [1;34m"organizations_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/orgs"[m[1;37m,[m
+          [1;34m"repos_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/repos"[m[1;37m,[m
+          [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/events{/privacy}"[m[1;37m,[m
+          [1;34m"received_events_url"[m[1;37m:[m [32m"https://api.github.com/users/daviburg/received_events"[m[1;37m,[m
+          [1;34m"type"[m[1;37m:[m [32m"User"[m[1;37m,[m
+          [1;34m"user_view_type"[m[1;37m:[m [32m"public"[m[1;37m,[m
+          [1;34m"site_admin"[m[1;37m:[m [33mfalse[m
+        [1;37m}[m[1;37m,[m
+        [1;34m"html_url"[m[1;37m:[m [32m"https://github.com/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"description"[m[1;37m:[m [32m"A reusable player-side framework for AI-DM game sessions that preserves transcripts, maintains narrative state and catalogs, tracks objectives, infers DM behavior, and generates strategic next-prompt suggestions within a single game world. Later extensible to fiction authoring and RPG-to-book transformation."[m[1;37m,[m
+        [1;34m"fork"[m[1;37m:[m [33mfalse[m[1;37m,[m
+        [1;34m"url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine"[m[1;37m,[m
+        [1;34m"forks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/forks"[m[1;37m,[m
+        [1;34m"keys_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/keys{/key_id}"[m[1;37m,[m
+        [1;34m"collaborators_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/collaborators{/collaborator}"[m[1;37m,[m
+        [1;34m"teams_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/teams"[m[1;37m,[m
+        [1;34m"hooks_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/hooks"[m[1;37m,[m
+        [1;34m"issue_events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/events{/number}"[m[1;37m,[m
+        [1;34m"events_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/events"[m[1;37m,[m
+        [1;34m"assignees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/assignees{/user}"[m[1;37m,[m
+        [1;34m"branches_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/branches{/branch}"[m[1;37m,[m
+        [1;34m"tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/tags"[m[1;37m,[m
+        [1;34m"blobs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/blobs{/sha}"[m[1;37m,[m
+        [1;34m"git_tags_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/tags{/sha}"[m[1;37m,[m
+        [1;34m"git_refs_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/refs{/sha}"[m[1;37m,[m
+        [1;34m"trees_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/trees{/sha}"[m[1;37m,[m
+        [1;34m"statuses_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/statuses/{sha}"[m[1;37m,[m
+        [1;34m"languages_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/languages"[m[1;37m,[m
+        [1;34m"stargazers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/stargazers"[m[1;37m,[m
+        [1;34m"contributors_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contributors"[m[1;37m,[m
+        [1;34m"subscribers_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscribers"[m[1;37m,[m
+        [1;34m"subscription_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/subscription"[m[1;37m,[m
+        [1;34m"commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/commits{/sha}"[m[1;37m,[m
+        [1;34m"git_commits_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/git/commits{/sha}"[m[1;37m,[m
+        [1;34m"comments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/comments{/number}"[m[1;37m,[m
+        [1;34m"issue_comment_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues/comments{/number}"[m[1;37m,[m
+        [1;34m"contents_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/contents/{+path}"[m[1;37m,[m
+        [1;34m"compare_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/compare/{base}...{head}"[m[1;37m,[m
+        [1;34m"merges_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/merges"[m[1;37m,[m
+        [1;34m"archive_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/{archive_format}{/ref}"[m[1;37m,[m
+        [1;34m"downloads_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/downloads"[m[1;37m,[m
+        [1;34m"issues_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/issues{/number}"[m[1;37m,[m
+        [1;34m"pulls_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/pulls{/number}"[m[1;37m,[m
+        [1;34m"milestones_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/milestones{/number}"[m[1;37m,[m
+        [1;34m"notifications_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/notifications{?since,all,participating}"[m[1;37m,[m
+        [1;34m"labels_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/labels{/name}"[m[1;37m,[m
+        [1;34m"releases_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/releases{/id}"[m[1;37m,[m
+        [1;34m"deployments_url"[m[1;37m:[m [32m"https://api.github.com/repos/daviburg/narrative-state-engine/deployments"[m
+      [1;37m}[m
+    [1;37m}[m
+  [1;37m][m
+[1;37m}[m

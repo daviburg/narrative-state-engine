@@ -1347,13 +1347,15 @@ def _filter_relationships_for_scene(
     # Type-aware scoring for prioritization before capping.
     # Kinship and partnership are high-value context,
     # spatial relationships are low-value (change frequently).
+    _kept_ids = {id(r) for r in kept}
+
     def _rel_score(r: dict) -> float:
         score = 0.0
         # Kept relationships (full detail) score higher than summaries
-        if r in kept:
+        if id(r) in _kept_ids:
             score += 50
         # Type-aware bonus
-        _type = r.get("type", "")
+        _type = r.get("type", "") or r.get("relationship_type", "")
         if _type in ("kinship", "partnership"):
             score += 20  # Always keep family ties
         elif _type == "spatial":
@@ -1407,7 +1409,7 @@ def _format_prior_entity_context(
     if "status_updated_turn" in current_entry:
         prior["status_updated_turn"] = current_entry["status_updated_turn"]
 
-    # stable_attributes — trimmed for PC only (non-PC keeps all even with arc_aware)
+    # stable_attributes — trimmed to key attrs for both PC and non-PC
     sa = current_entry.get("stable_attributes")
     if sa:
         if is_pc:
@@ -2939,7 +2941,7 @@ def extract_and_merge(
             score = ref.get("confidence", 0.5) * 10  # Base: confidence
             # Bonus: entity name appears in turn text (directly mentioned)
             _name = ref.get("name", "")
-            if _name and len(_name) >= 3 and _name.lower() in _turn_text_lower:
+            if _name and len(_name) >= 3 and re.search(r'\b' + re.escape(_name.lower()) + r'\b', _turn_text_lower):
                 score += 20
             # Bonus: entity was recently updated (likely still active in scene)
             if entry:
