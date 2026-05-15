@@ -1397,7 +1397,7 @@ def _format_prior_entity_context(
     vs = current_entry.get("volatile_state")
     if vs:
         if should_trim and isinstance(vs, dict):
-            _vs_turn_num = current_turn_num or _parse_turn_number(
+            _vs_turn_num = current_turn_num if current_turn_num is not None else _parse_turn_number(
                 current_entry.get("last_updated_turn", "")
             )
             max_snapshots = _PC_MAX_VOLATILE_SNAPSHOTS if is_pc else _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS
@@ -1440,7 +1440,7 @@ def _format_prior_entity_context(
     elif rels:
         # Non-PC: scene-scoped filtering (mentioned + recent, capped)
         _mentioned = mentioned_ids or set()
-        _recency_ref = current_turn_num or _parse_turn_number(
+        _recency_ref = current_turn_num if current_turn_num is not None else _parse_turn_number(
             current_entry.get("last_updated_turn", "")
         )
         prior["relationships"] = _filter_relationships_for_scene(
@@ -1491,7 +1491,9 @@ def format_detail_prompt(
 
     **Non-PC entities**: relationships are filtered by mention relevance and
     recency, then capped at ``_SCENE_MAX_RELATIONSHIPS``.  Volatile state is
-    digested and trimmed the same way as PC.
+    digested and trimmed similarly to PC, but capped at
+    ``_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS`` (a separate constant from PC's
+    ``_PC_MAX_VOLATILE_SNAPSHOTS``, though both currently share the same value).
     """
     _current_turn = _parse_turn_number(turn.get('turn_id', ''))
     prior_json = _format_prior_entity_context(
@@ -1545,7 +1547,7 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
     # volatile_state: digest + keep last N entries per key
     vs = entry.get("volatile_state")
     if vs and isinstance(vs, dict):
-        _vs_turn_num = current_turn_num or _parse_turn_number(entry.get("last_updated_turn", ""))
+        _vs_turn_num = current_turn_num if current_turn_num is not None else _parse_turn_number(entry.get("last_updated_turn", ""))
         if _vs_turn_num:
             digested = _build_volatile_digest(vs, _vs_turn_num)
         else:
@@ -1566,7 +1568,7 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
     # relationships: filter by recency and mention, cap at _SCENE_MAX_RELATIONSHIPS
     rels = entry.get("relationships")
     if rels and isinstance(rels, list):
-        _recency_ref = current_turn_num or _parse_turn_number(entry.get("last_updated_turn", ""))
+        _recency_ref = current_turn_num if current_turn_num is not None else _parse_turn_number(entry.get("last_updated_turn", ""))
         trimmed["relationships"] = _filter_relationships_for_scene(
             rels, mentioned_ids, _recency_ref,
         )
@@ -1985,7 +1987,8 @@ def _within_turn_dedup(entities: list[dict]) -> list[dict]:
     **Short-name guard** (``min(len(a), len(b)) < 5``):
     Only exact match, exact-token match, or token-prefix match is tried.
     Levenshtein and SequenceMatcher are skipped to avoid false merges on
-    short names (e.g. "fire" / "fireplace").
+    short names (e.g. "furs" / "forest" — Levenshtein distance 3 would
+    falsely merge them without the guard).
 
     **Standard checks** (both names >= 5 chars):
     - Character substring with token-prefix guard: the shorter name (>=4 chars)
