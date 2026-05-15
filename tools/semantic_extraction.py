@@ -1144,8 +1144,11 @@ _REL_RECENCY_WINDOW = 15       # Turns within which a relationship is "recent" (
 _REL_TOKEN_BUDGET_FRACTION = 0.2  # Fraction of context_length for relationship block
 
 # Scene-scoped entity detail thresholds
-_SCENE_REL_RECENCY_WINDOW = 20   # Relationships updated within this many turns are kept
-_SCENE_MAX_RELATIONSHIPS = 15    # Max relationships after trimming
+_SCENE_REL_RECENCY_WINDOW = 10   # Relationships updated within this many turns are kept
+_SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
+
+# Entity detail call cap to prevent O(n²) scaling
+_MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
 # Arc-aware compression: max volatile snapshots per key (same as PC)
 _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
@@ -2878,6 +2881,20 @@ def extract_and_merge(
                 _, current_entry = result
         _entity_tasks.append((entity_ref, current_entry))
 
+    # Cap entity detail calls per turn to prevent O(n²) scaling
+    # Priority: new entities first, then existing entities by confidence (descending)
+    _entity_detail_capped_count = 0
+    if len(_entity_tasks) > _MAX_DETAIL_ENTITIES_PER_TURN:
+        _new_tasks = [(ref, entry) for ref, entry in _entity_tasks if ref.get("is_new", True)]
+        _existing_tasks = [(ref, entry) for ref, entry in _entity_tasks if not ref.get("is_new", True)]
+        _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        _remaining_slots = max(0, _MAX_DETAIL_ENTITIES_PER_TURN - len(_new_tasks))
+        _entity_detail_capped_count = max(0, len(_existing_tasks) - _remaining_slots)
+        _entity_tasks = _new_tasks + _existing_tasks[:_remaining_slots]
+        if _entity_detail_capped_count > 0:
+            print(f"  INFO: Capped entity detail calls from {len(_new_tasks) + len(_existing_tasks)} to {len(_entity_tasks)} "
+                  f"(new: {len(_new_tasks)}, existing kept: {_remaining_slots})", file=sys.stderr)
+
     # Build mentioned_entities for relationship / event phases
     mentioned_entities = []
     for entity_ref in qualified:
@@ -3503,6 +3520,7 @@ def extract_and_merge(
         "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
         "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
         "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
+        "entity_detail_capped_count": _entity_detail_capped_count,
     }
     return catalogs, events_list, turn_failed, _log_record
 
