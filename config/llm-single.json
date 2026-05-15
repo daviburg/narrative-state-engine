@@ -1,0 +1,23 @@
+{
+  "provider": "openai",
+  "base_url": "http://192.168.10.169:8000/v1",
+  "base_urls": [
+    "http://192.168.10.169:8000/v1"
+  ],
+  "model": "qwen3-8b-int4-ov",
+  "api_key_env": "",
+  "temperature": 0.3,
+  "max_tokens": 4096,
+  "discovery_max_tokens": 8192,
+  "pc_max_tokens": 8192,
+  "timeout_seconds": 300,
+  "retry_attempts": 3,
+  "batch_delay_ms": 0,
+  "parallel_workers": 1,
+  "context_length": 32768,
+  "entity_refresh_interval": 50,
+  "entity_refresh_batch_size": 10,
+  "checkpoint_interval": 25,
+  "dedup_audit_interval": 50,
+  "skip_response_format": true
+}
