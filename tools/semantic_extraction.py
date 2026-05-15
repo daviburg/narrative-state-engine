@@ -2882,18 +2882,26 @@ def extract_and_merge(
         _entity_tasks.append((entity_ref, current_entry))
 
     # Cap entity detail calls per turn to prevent O(n²) scaling
-    # Priority: new entities first, then existing entities by confidence (descending)
+    # Priority: PC always included, new entities next, then existing by confidence (descending)
+    # Note: is_new defaults to True so entities missing the field (unlikely but possible)
+    # are treated as new — this is conservative since new entities need detail extraction.
     _entity_detail_capped_count = 0
     if len(_entity_tasks) > _MAX_DETAIL_ENTITIES_PER_TURN:
-        _new_tasks = [(ref, entry) for ref, entry in _entity_tasks if ref.get("is_new", True)]
-        _existing_tasks = [(ref, entry) for ref, entry in _entity_tasks if not ref.get("is_new", True)]
+        # Exclude char-player from capping — PC is always processed
+        _pc_tasks = [(ref, entry) for ref, entry in _entity_tasks
+                     if get_entity_id(ref) == "char-player"]
+        _non_pc_tasks = [(ref, entry) for ref, entry in _entity_tasks
+                         if get_entity_id(ref) != "char-player"]
+        _new_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if ref.get("is_new", True)]
+        _existing_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if not ref.get("is_new", True)]
         _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
-        _remaining_slots = max(0, _MAX_DETAIL_ENTITIES_PER_TURN - len(_new_tasks))
+        # PC always included; new entities next; fill remaining with highest-confidence existing
+        _remaining_slots = max(0, _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks) - len(_new_tasks))
         _entity_detail_capped_count = max(0, len(_existing_tasks) - _remaining_slots)
-        _entity_tasks = _new_tasks + _existing_tasks[:_remaining_slots]
+        _entity_tasks = _pc_tasks + _new_tasks + _existing_tasks[:_remaining_slots]
         if _entity_detail_capped_count > 0:
-            print(f"  INFO: Capped entity detail calls from {len(_new_tasks) + len(_existing_tasks)} to {len(_entity_tasks)} "
-                  f"(new: {len(_new_tasks)}, existing kept: {_remaining_slots})", file=sys.stderr)
+            print(f"  INFO: Capped entity detail calls from {len(_pc_tasks) + len(_non_pc_tasks)} to {len(_entity_tasks)} "
+                  f"(pc: {len(_pc_tasks)}, new: {len(_new_tasks)}, existing kept: {_remaining_slots})", file=sys.stderr)
 
     # Build mentioned_entities for relationship / event phases
     mentioned_entities = []
