@@ -46,6 +46,7 @@ from catalog_merger import (
     _filter_entity_aliases,
     _estimate_tokens,
     _find_mentioned_entities,
+    _DISCOVERY_STALENESS_THRESHOLD,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
@@ -1154,6 +1155,12 @@ _SCENE_MAX_RELATIONSHIPS = 5     # Max relationships after trimming
 # Entity detail call cap to prevent O(n²) scaling
 _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
+# Adaptive max_tokens for entity detail extraction.
+# When the catalog has more than this many entities, increase max_tokens to
+# prevent detail_error: truncated on high-entity-count turns.
+_HIGH_ENTITY_COUNT_THRESHOLD = 20
+_HIGH_ENTITY_DETAIL_MAX_TOKENS = 8192
+
 # Arc-aware compression: max volatile snapshots per key
 _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 1
 
@@ -1417,8 +1424,14 @@ def _format_prior_entity_context(
             if trimmed_sa:
                 prior["stable_attributes"] = trimmed_sa
         else:
-            # Non-PC: only send key identifying attributes to save tokens
-            trimmed_sa = {k: v for k, v in sa.items() if k in _NPC_KEY_STABLE_ATTRS}
+            entity_type = current_entry.get("type", "")
+            if entity_type in ("item", "faction"):
+                # Items and factions are small entries; keep all attributes
+                # to avoid losing important detail (they were fully lost in A/B).
+                trimmed_sa = dict(sa)
+            else:
+                # Non-PC characters/locations: only key identifying attributes
+                trimmed_sa = {k: v for k, v in sa.items() if k in _NPC_KEY_STABLE_ATTRS}
             if trimmed_sa:
                 prior["stable_attributes"] = trimmed_sa
 
@@ -2388,6 +2401,7 @@ def _extract_single_entity_detail(
     pc_arcs_data: dict | None,
     config: dict | None = None,
     mentioned_ids: set[str] | None = None,
+    max_tokens: int | None = None,
 ) -> tuple[dict, dict | None, str | None]:
     """Run entity-detail extraction for a single entity.
 
@@ -2395,6 +2409,9 @@ def _extract_single_entity_detail(
     ``(entity_ref, None, error_string)`` on LLM failure, or
     ``(entity_ref, None, None)`` when validation/filtering rejects the result.
     Designed to run inside a ThreadPoolExecutor.
+
+    *max_tokens* overrides the LLM default — pass a higher value for
+    high-entity-count turns to prevent ``detail_error: truncated``.
     """
     entity_id = get_entity_id(entity_ref)
     turn_id = turn["turn_id"]
@@ -2405,6 +2422,7 @@ def _extract_single_entity_detail(
             user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                              arcs_data=entity_arcs, config=config,
                                              mentioned_ids=mentioned_ids),
+            max_tokens=max_tokens,
         )
     except QuotaExhaustedError:
         raise
@@ -2544,6 +2562,8 @@ def _run_discovery_phase(
         context_length=_ctx_len,
         entity_context_budget=_entity_budget,
         turn_text=turn.get("text"),
+        staleness_threshold=_DISCOVERY_STALENESS_THRESHOLD,
+        context_label="discovery",
     )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
@@ -3033,6 +3053,14 @@ def extract_and_merge(
     # --- Execute phases 2-4 ---
     _pw = getattr(llm, "parallel_workers", 1)
 
+    # Adaptive max_tokens for entity detail extraction: when the catalog has
+    # more than _HIGH_ENTITY_COUNT_THRESHOLD entities, use a higher limit to
+    # prevent detail_error: truncated on high-entity turns.
+    _entity_count = sum(len(v) for v in catalogs.values())
+    _detail_max_tokens: int | None = (
+        _HIGH_ENTITY_DETAIL_MAX_TOKENS if _entity_count > _HIGH_ENTITY_COUNT_THRESHOLD else None
+    )
+
     # --- Prompt token instrumentation ---
     # Estimate tokens for each phase from pre-computed prompt inputs.
     _detail_sys_tmpl = load_template("entity-detail")
@@ -3076,7 +3104,7 @@ def extract_and_merge(
                 f = pool.submit(
                     _extract_single_entity_detail,
                     llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
-                    _mentioned_ids,
+                    _mentioned_ids, _detail_max_tokens,
                 )
                 futures_map[f] = ("detail", entity_ref)
 
@@ -3307,6 +3335,7 @@ def extract_and_merge(
                     user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                                      arcs_data=entity_arcs, config=_cfg,
                                                      mentioned_ids=_mentioned_ids),
+                    max_tokens=_detail_max_tokens,
                 )
             except QuotaExhaustedError:
                 raise
@@ -3590,6 +3619,8 @@ def extract_and_merge(
         "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
         "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
         "entity_detail_capped_count": _entity_detail_capped_count,
+        "entity_detail_max_tokens": _detail_max_tokens,
+        "catalog_entity_count": _entity_count,
     }
     return catalogs, events_list, turn_failed, _log_record
 

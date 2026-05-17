@@ -9,10 +9,16 @@ from semantic_extraction import (
     _filter_relationships_for_scene,
     _SCENE_MAX_RELATIONSHIPS,
     _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS,
+    _HIGH_ENTITY_COUNT_THRESHOLD,
+    _HIGH_ENTITY_DETAIL_MAX_TOKENS,
 )
 from catalog_merger import (
     _DEFAULT_ENTITY_BUDGET_FRACTION,
     _DEFAULT_STALENESS_THRESHOLD,
+    _DISCOVERY_STALENESS_THRESHOLD,
+    _CONTEXT_FLOOR_FRACTION,
+    format_known_entities_bounded,
+    _estimate_tokens,
 )
 
 
@@ -189,3 +195,236 @@ class TestRelationshipTypePrioritization:
             })
         filtered = _filter_relationships_for_scene(rels, set(), 105)
         assert len(filtered) <= 5
+class TestHighEntityMaxTokens:
+    """Verify adaptive max_tokens threshold for entity detail extraction."""
+
+    def test_threshold_constant_is_20(self):
+        assert _HIGH_ENTITY_COUNT_THRESHOLD == 20
+
+    def test_high_entity_max_tokens_is_8192(self):
+        assert _HIGH_ENTITY_DETAIL_MAX_TOKENS == 8192
+
+    def test_detail_max_tokens_logic_low_count(self):
+        """When entity count <= 20, max_tokens should remain at default (None)."""
+        entity_count = 15
+        result = _HIGH_ENTITY_DETAIL_MAX_TOKENS if entity_count > _HIGH_ENTITY_COUNT_THRESHOLD else None
+        assert result is None
+
+    def test_detail_max_tokens_logic_high_count(self):
+        """When entity count > 20, max_tokens should be 8192."""
+        entity_count = 25
+        result = _HIGH_ENTITY_DETAIL_MAX_TOKENS if entity_count > _HIGH_ENTITY_COUNT_THRESHOLD else None
+        assert result == 8192
+
+    def test_detail_max_tokens_at_boundary(self):
+        """Entity count exactly at threshold should not trigger high tokens."""
+        entity_count = 20
+        result = _HIGH_ENTITY_DETAIL_MAX_TOKENS if entity_count > _HIGH_ENTITY_COUNT_THRESHOLD else None
+        assert result is None
+
+    def test_detail_max_tokens_one_over_boundary(self):
+        """Entity count one over threshold triggers high tokens."""
+        entity_count = 21
+        result = _HIGH_ENTITY_DETAIL_MAX_TOKENS if entity_count > _HIGH_ENTITY_COUNT_THRESHOLD else None
+        assert result == 8192
+
+
+class TestContextFloor:
+    """Verify the 50% context floor prevents catastrophic entity loss."""
+
+    def test_floor_fraction_is_50_percent(self):
+        assert _CONTEXT_FLOOR_FRACTION == 0.5
+
+    def test_discovery_staleness_threshold_more_permissive(self):
+        """Discovery staleness threshold must be >= default to retain more entities."""
+        assert _DISCOVERY_STALENESS_THRESHOLD >= _DEFAULT_STALENESS_THRESHOLD
+
+    def test_discovery_staleness_threshold_is_50(self):
+        assert _DISCOVERY_STALENESS_THRESHOLD == 50
+
+    def _make_large_catalogs(self, n=30):
+        """Make a catalog with n entities."""
+        entities = []
+        for i in range(n):
+            entities.append({
+                "id": f"char-npc{i:03d}",
+                "name": f"NPC {i}",
+                "type": "character",
+                "identity": "A character with a very long detailed description. " * 5,
+                "last_updated_turn": f"turn-{max(1, 200 - i):03d}",
+            })
+        return {"characters.json": entities}
+
+    def test_floor_prevents_over_compression(self):
+        """When compression would drop below 50%, uncompressed output is returned."""
+        catalogs = self._make_large_catalogs(30)
+
+        # Use a tiny budget to force heavy compression
+        result = format_known_entities_bounded(
+            catalogs,
+            current_turn=300,
+            entity_context_budget=5,  # 5 tokens -- tiny, will trigger floor
+            turn_text="something happened",
+        )
+        # Floor should kick in: result should be >= 50% of full unbounded output
+        from catalog_merger import format_known_entities
+        unbounded = format_known_entities(catalogs)
+        result_tokens = _estimate_tokens(result)
+        unbounded_tokens = _estimate_tokens(unbounded)
+        assert result_tokens >= unbounded_tokens * _CONTEXT_FLOOR_FRACTION * 0.9  # 10% tolerance
+
+    def test_normal_compression_within_floor_passes_through(self):
+        """When compression stays above 50%, normal behavior applies."""
+        catalogs = {
+            "characters.json": [
+                {"id": "char-a", "name": "Alice", "type": "character",
+                 "identity": "A hero.", "last_updated_turn": "turn-299"},
+                {"id": "char-b", "name": "Bob", "type": "character",
+                 "identity": "A merchant.", "last_updated_turn": "turn-295"},
+            ]
+        }
+        # Large budget so no compression needed
+        result = format_known_entities_bounded(
+            catalogs,
+            current_turn=300,
+            entity_context_budget=10000,
+            turn_text="Alice went to see Bob",
+        )
+        assert "char-a" in result
+        assert "char-b" in result
+
+
+class TestItemFactionExemption:
+    """Items and factions must not have their stable attributes compressed."""
+
+    def test_item_keeps_all_stable_attrs(self):
+        entity = {
+            "id": "item-sword001",
+            "name": "Iron Sword",
+            "type": "item",
+            "identity": "A simple iron sword.",
+            "stable_attributes": {
+                "material": {"value": "iron", "inference": False, "confidence": 1.0, "source_turn": "turn-010"},
+                "enchantment": {"value": "fire", "inference": True, "confidence": 0.8, "source_turn": "turn-020"},
+                "weight": {"value": "heavy", "inference": False, "confidence": 1.0, "source_turn": "turn-010"},
+                "origin": {"value": "dwarven forge", "inference": True, "confidence": 0.7, "source_turn": "turn-015"},
+            },
+        }
+        result = json.loads(_format_prior_entity_context(entity))
+        sa = result.get("stable_attributes", {})
+        # All attributes must be present -- items are exempt from NPC filtering
+        assert "material" in sa
+        assert "enchantment" in sa
+        assert "weight" in sa
+        assert "origin" in sa
+
+    def test_faction_keeps_all_stable_attrs(self):
+        entity = {
+            "id": "faction-guild001",
+            "name": "Merchants Guild",
+            "type": "faction",
+            "identity": "A powerful merchants guild.",
+            "stable_attributes": {
+                "alignment": {"value": "neutral", "inference": False, "confidence": 1.0, "source_turn": "turn-005"},
+                "headquarters": {"value": "Capital City", "inference": False, "confidence": 1.0, "source_turn": "turn-005"},
+                "leader": {"value": "Guild Master Vann", "inference": True, "confidence": 0.9, "source_turn": "turn-010"},
+                "secret_agenda": {"value": "control trade routes", "inference": True, "confidence": 0.6, "source_turn": "turn-050"},
+            },
+        }
+        result = json.loads(_format_prior_entity_context(entity))
+        sa = result.get("stable_attributes", {})
+        assert "alignment" in sa
+        assert "headquarters" in sa
+        assert "leader" in sa
+        assert "secret_agenda" in sa
+
+    def test_character_still_filters_non_key_attrs(self):
+        """Non-PC characters still get attribute compression (not exempt)."""
+        entity = {
+            "id": "char-npc001",
+            "name": "Innkeeper",
+            "type": "character",
+            "identity": "An innkeeper.",
+            "stable_attributes": {
+                "role": {"value": "innkeeper", "inference": False, "confidence": 1.0, "source_turn": "turn-005"},
+                "favorite_food": {"value": "stew", "inference": True, "confidence": 0.5, "source_turn": "turn-020"},
+                "birthday": {"value": "spring equinox", "inference": True, "confidence": 0.4, "source_turn": "turn-100"},
+            },
+        }
+        result = json.loads(_format_prior_entity_context(entity))
+        sa = result.get("stable_attributes", {})
+        assert "role" in sa
+        assert "favorite_food" not in sa
+        assert "birthday" not in sa
+
+    def test_item_faction_provenance_still_stripped(self):
+        """Even though items/factions keep all attrs, provenance metadata is stripped."""
+        entity = {
+            "id": "item-ring001",
+            "name": "Magic Ring",
+            "type": "item",
+            "identity": "A glowing ring.",
+            "stable_attributes": {
+                "power": {"value": "invisibility", "inference": True, "confidence": 0.9, "source_turn": "turn-030"},
+            },
+        }
+        result = json.loads(_format_prior_entity_context(entity))
+        sa = result.get("stable_attributes", {})
+        # Value should be unwrapped -- just the string
+        assert sa.get("power") == "invisibility"
+
+
+class TestCompressionLogging:
+    """Verify compression metrics logging includes before/after token counts."""
+
+    def test_compression_log_emitted_to_stderr(self, capsys):
+        """Compression log is emitted to stderr with before/after token counts."""
+        entities = []
+        for i in range(10):
+            entities.append({
+                "id": f"char-npc{i:03d}",
+                "name": f"Character {i}",
+                "type": "character",
+                "identity": "A detailed character with a long description. " * 10,
+                "last_updated_turn": f"turn-{200 - i * 5:03d}",
+            })
+        catalogs = {"characters.json": entities}
+
+        # Very small budget to force compression
+        format_known_entities_bounded(
+            catalogs,
+            current_turn=250,
+            entity_context_budget=20,
+            turn_text="Something happened",
+            context_label="test-compression",
+        )
+        captured = capsys.readouterr()
+        # Should emit a COMPRESS: line to stderr
+        assert "COMPRESS:" in captured.err
+        assert "test-compression" in captured.err
+
+    def test_compression_log_includes_token_counts(self, capsys):
+        """Compression log line contains numeric token counts."""
+        import re
+        entities = []
+        for i in range(5):
+            entities.append({
+                "id": f"char-npc{i:03d}",
+                "name": f"NPC {i}",
+                "type": "character",
+                "identity": "A long detailed backstory. " * 20,
+                "last_updated_turn": f"turn-{200 - i * 10:03d}",
+            })
+        catalogs = {"characters.json": entities}
+
+        format_known_entities_bounded(
+            catalogs,
+            current_turn=250,
+            entity_context_budget=50,
+            turn_text="NPC 0 did something",
+            context_label="test-tokens",
+        )
+        captured = capsys.readouterr()
+        # Look for pattern: "X tokens" in COMPRESS line
+        if "COMPRESS:" in captured.err:
+            assert re.search(r'\d+ tokens', captured.err)
