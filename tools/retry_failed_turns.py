@@ -386,7 +386,7 @@ def main():
         print("  Saved to disk.")
 
     # Update progress file to clear the failed_turns list
-    progress_file = os.path.join(args.session, "derived", "extraction-progress.json")
+    progress_file = os.path.join(args.framework, "extraction-progress.json")
     if os.path.exists(progress_file):
         try:
             with open(progress_file, "r", encoding="utf-8") as f:

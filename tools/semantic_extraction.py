@@ -5354,6 +5354,11 @@ def _extract_segmented(
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     quota_exhausted = False
 
+    # When no_resume is set, ignore any previously-extracted turn set and
+    # do not read the progress file for segment-level resume.
+    if no_resume:
+        already_extracted = None
+
     # Pre-load existing catalogs/events/timeline from disk so that entities
     # from prior extraction batches (e.g. when resuming with --start-turn)
     # survive reconciliation.  They are injected as a synthetic "base"
