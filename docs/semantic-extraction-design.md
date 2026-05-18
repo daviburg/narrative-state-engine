@@ -608,7 +608,7 @@ Rerunning extraction on a turn that was already processed does not create duplic
 
 ### 9.3 Progress tracking (batch mode)
 
-For a 344-turn batch, the script writes progress to `derived/extraction-progress.json`:
+For a 344-turn batch, the script writes progress to `<framework_dir>/extraction-progress.json`:
 
 ```json
 {

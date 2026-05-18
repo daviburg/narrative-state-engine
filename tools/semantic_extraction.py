@@ -5345,14 +5345,19 @@ def _print_retry_stats(llm) -> None:
 def _extract_segmented(
     turn_dicts, session_dir, framework_dir, catalog_dir,
     llm, min_confidence, dry_run, segment_size,
-    *, already_extracted: set | None = None,
+    *, already_extracted: set | None = None, no_resume: bool = False,
 ):
     """Extract in segments with fresh catalogs, then reconcile."""
     segments = []
     total = len(turn_dicts)
-    progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+    progress_file = os.path.join(framework_dir, "extraction-progress.json")
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     quota_exhausted = False
+
+    # When no_resume is set, ignore any previously-extracted turn set and
+    # do not read the progress file for segment-level resume.
+    if no_resume:
+        already_extracted = None
 
     # Pre-load existing catalogs/events/timeline from disk so that entities
     # from prior extraction batches (e.g. when resuming with --start-turn)
@@ -5812,6 +5817,7 @@ def extract_semantic_batch(
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     overrides: dict | None = None,
     segment_size: int = 0,
+    no_resume: bool = False,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -5846,7 +5852,7 @@ def extract_semantic_batch(
     # Build set of turns already successfully extracted (#191) so re-runs
     # skip them instead of overwriting good data from earlier passes.
     _already_extracted: set[str] = set()
-    if os.path.exists(extraction_log_path):
+    if not no_resume and os.path.exists(extraction_log_path):
         try:
             with open(extraction_log_path, "r", encoding="utf-8") as _elf:
                 for _line in _elf:
@@ -5869,7 +5875,7 @@ def extract_semantic_batch(
         _extract_segmented(
             turn_dicts, session_dir, framework_dir, catalog_dir,
             llm, min_confidence, dry_run, segment_size,
-            already_extracted=_already_extracted,
+            already_extracted=_already_extracted, no_resume=no_resume,
         )
         return
 
@@ -5882,11 +5888,11 @@ def extract_semantic_batch(
     _ensure_player_character(catalogs, first_turn)
 
     # Progress tracking
-    progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+    progress_file = os.path.join(framework_dir, "extraction-progress.json")
     start_from = 0
 
     # Resume from last checkpoint if available
-    if os.path.exists(progress_file):
+    if not no_resume and os.path.exists(progress_file):
         try:
             with open(progress_file, "r", encoding="utf-8") as f:
                 progress = json.load(f)
