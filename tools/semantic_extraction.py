@@ -1604,6 +1604,12 @@ _NON_LOCATION_NAMES = {
     "reaction", "pattern", "method", "result",
 } | _BODY_PART_WORDS
 
+# Combined set of stems that must never become orphan stubs (#338).
+# These words are not real catalog entities (body parts, abstract surfaces,
+# group nouns, number-as-names) and can re-enter via event-reference stubs
+# if only the discovery filters guard them.
+_STUB_REJECT_STEMS = _NON_LOCATION_NAMES | _NON_CHARACTER_EXTRAS
+
 
 def _strip_leading_article(name: str) -> str:
     """Strip leading 'the', 'a', 'an' from a name for blocklist matching."""
@@ -1807,6 +1813,9 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
         # Skip generic/unnamed entity references
         stem = _strip_any_prefix(eid)
         if stem in _GENERIC_STEMS:
+            continue
+        # Skip body parts, abstract surfaces, group nouns, number-as-names (#338)
+        if stem in _STUB_REJECT_STEMS:
             continue
 
         # Infer type and name from the ID
@@ -3172,6 +3181,9 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             continue
         stem = _strip_any_prefix(eid)
         if stem in _GENERIC_STEMS:
+            continue
+        # Skip body parts, abstract surfaces, group nouns, number-as-names (#338)
+        if stem in _STUB_REJECT_STEMS:
             continue
 
         inferred_type = _infer_type_from_prefix(eid)
