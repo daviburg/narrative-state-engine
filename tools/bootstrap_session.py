@@ -506,6 +506,12 @@ def build_parser() -> argparse.ArgumentParser:
              "prior context. Turns before N are skipped. "
              "Example: --start-turn 26 --max-turns 50 extracts turns 26-50.",
     )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Force a fresh extraction, ignoring extraction-progress.json and "
+             "extraction-log.jsonl resume state.",
+    )
     return parser
 
 
@@ -777,6 +783,7 @@ def main() -> None:
             turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run,
             overrides=llm_overrides or None,
             segment_size=effective_segment_size,
+            no_resume=args.no_resume,
         )
 
         # Stub backfill pass (#128, #131 — now runs by default)

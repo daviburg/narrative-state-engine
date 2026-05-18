@@ -123,7 +123,7 @@ class TestBatchFailedTurnTracking:
             turns, session_dir, framework_dir=framework_dir,
         )
 
-        progress_file = os.path.join(derived_dir, "extraction-progress.json")
+        progress_file = os.path.join(framework_dir, "extraction-progress.json")
         assert os.path.exists(progress_file)
         with open(progress_file, "r", encoding="utf-8") as f:
             progress = json.load(f)
@@ -162,7 +162,7 @@ class TestBatchFailedTurnTracking:
             turns, session_dir, framework_dir=framework_dir,
         )
 
-        progress_file = os.path.join(derived_dir, "extraction-progress.json")
+        progress_file = os.path.join(framework_dir, "extraction-progress.json")
         assert os.path.exists(progress_file)
         with open(progress_file, "r", encoding="utf-8") as f:
             progress = json.load(f)
@@ -224,7 +224,7 @@ class TestResumeRetry:
         os.makedirs(catalog_dir, exist_ok=True)
 
         # Write a progress file that indicates turn-002 failed but completed to turn-003
-        progress_file = os.path.join(derived_dir, "extraction-progress.json")
+        progress_file = os.path.join(framework_dir, "extraction-progress.json")
         with open(progress_file, "w", encoding="utf-8") as f:
             json.dump({
                 "last_completed_turn": "turn-003",
