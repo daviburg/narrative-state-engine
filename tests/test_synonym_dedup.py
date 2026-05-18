@@ -139,7 +139,7 @@ class TestSynonymExplosionWarningLog:
     """synonym_explosion_warning field in extraction log (#337)."""
 
     def test_warning_set_when_above_threshold(self, monkeypatch):
-        """Log record includes synonym_explosion_warning when >3 new entities of a type."""
+        """Log record includes synonym_explosion_warning when >4 new entities of a type."""
         monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
         se._reset_pc_failure_tracking()
         entities = [
@@ -160,7 +160,7 @@ class TestSynonymExplosionWarningLog:
         assert log["synonym_explosion_warning"]["location"] == 5
 
     def test_warning_absent_when_below_threshold(self, monkeypatch):
-        """Log record has no synonym_explosion_warning when <=3 new entities per type."""
+        """Log record has no synonym_explosion_warning when <=4 new entities per type."""
         monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
         se._reset_pc_failure_tracking()
         entities = [
@@ -178,3 +178,84 @@ class TestSynonymExplosionWarningLog:
         )
 
         assert log["synonym_explosion_warning"] is None
+
+
+class TestDedupGateDistinctEntitiesAndLogging:
+    """Tests for vocabulary-diversity guard and filtered_log (#337 review)."""
+
+    def test_distinct_locations_not_collapsed(self):
+        """4+ genuinely distinct locations must not be collapsed (e.g., council-scene or town map)."""
+        entities = [
+            _make_proposal("town"),
+            _make_proposal("tavern"),
+            _make_proposal("market"),
+            _make_proposal("temple"),
+            _make_proposal("blacksmith"),
+        ]
+        result = _same_turn_dedup_gate(entities, threshold=4)
+        new_locs = [e for e in result if e["is_new"] and e["type"] == "location"]
+        assert len(new_locs) == 5, (
+            "Distinct single-word locations must survive the dedup gate"
+        )
+
+    def test_distinct_npcs_not_collapsed(self):
+        """4+ distinct NPC names (council scene) must not be collapsed."""
+        def _npc(name):
+            return {
+                "name": name, "type": "character", "is_new": True,
+                "source_turn": "turn-010", "proposed_id": f"char-{name.lower().replace(' ', '-')}",
+                "existing_id": None, "confidence": 0.9,
+            }
+        entities = [_npc(n) for n in ("Lord Aric", "Lady Mora", "Elder Sarath", "Captain Dorel")]
+        result = _same_turn_dedup_gate(entities, threshold=3)
+        assert len(result) == 4, "Distinct named NPCs must survive the dedup gate"
+
+    def test_synonym_explosion_still_collapses(self):
+        """14-synonym case must still collapse to 1 with default threshold=4."""
+        entities = [
+            _make_proposal("camouflaged entrance"),
+            _make_proposal("defensible place"),
+            _make_proposal("defensible sanctuary"),
+            _make_proposal("hidden location"),
+            _make_proposal("hidden refuge"),
+            _make_proposal("the hidden sanctuary"),
+            _make_proposal("the protected location"),
+            _make_proposal("sanctuary for the vulnerable"),
+            _make_proposal("safe location"),
+            _make_proposal("safety sanctuary"),
+            _make_proposal("secure location"),
+            _make_proposal("strategic location"),
+            _make_proposal("strategic sanctuary"),
+            _make_proposal("secure strategic sanctuary"),
+        ]
+        result = _same_turn_dedup_gate(entities, threshold=4)
+        new_locs = [e for e in result if e["is_new"] and e["type"] == "location"]
+        assert len(new_locs) == 1
+
+    def test_filtered_log_populated_on_dedup(self):
+        """Dropped entities are appended to filtered_log with reason='same_turn_synonym_dedup'."""
+        entities = [
+            _make_proposal("safe location"),
+            _make_proposal("safety sanctuary"),
+            _make_proposal("secure location"),
+            _make_proposal("strategic location"),
+            _make_proposal("strategic sanctuary"),
+        ]
+        filtered_log: list = []
+        result = _same_turn_dedup_gate(entities, threshold=4, filtered_log=filtered_log)
+        dropped = [e for e in filtered_log if e["reason"] == "same_turn_synonym_dedup"]
+        assert len(dropped) == len(entities) - len(result), (
+            "Each dropped entity must appear in filtered_log"
+        )
+        survivor_ids = {e["survivor_id"] for e in dropped}
+        assert len(survivor_ids) == 1, "All drops should reference the same survivor"
+
+    def test_filtered_log_not_populated_when_no_dedup(self):
+        """filtered_log must remain empty when no dedup fires."""
+        entities = [
+            _make_proposal("the forest"),
+            _make_proposal("the river"),
+        ]
+        filtered_log: list = []
+        _same_turn_dedup_gate(entities, threshold=4, filtered_log=filtered_log)
+        assert filtered_log == []

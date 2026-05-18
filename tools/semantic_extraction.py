@@ -2155,9 +2155,31 @@ def _find_cross_catalog_type_conflict(
     return None
 
 
+_DEDUP_STOP_WORDS = frozenset({"the", "a", "an", "of", "in", "at", "to", "and", "or"})
+
+
+def _names_suggest_distinct_entities(names: list[str]) -> bool:
+    """Return True when names appear to be distinct entities rather than synonyms.
+
+    Computes vocabulary diversity: distinct non-stop-word tokens / total
+    non-stop-word tokens. A ratio >= 0.85 (almost every word is unique)
+    indicates a legitimately entity-rich turn (e.g., a town, a tavern, a
+    market, a temple) rather than synonym explosion.
+    """
+    all_words: list[str] = []
+    for name in names:
+        all_words.extend(
+            w for w in name.lower().split() if w not in _DEDUP_STOP_WORDS
+        )
+    if not all_words:
+        return False
+    return len(set(all_words)) / len(all_words) >= 0.85
+
+
 def _same_turn_dedup_gate(
     entities: list[dict],
-    threshold: int = 3,
+    threshold: int = 4,
+    filtered_log: list | None = None,
 ) -> list[dict]:
     """Consolidate same-turn, same-type entity proposals that likely refer to the same thing (#337).
 
@@ -2166,34 +2188,54 @@ def _same_turn_dedup_gate(
     per type. This catches synonym explosion where the DM uses multiple
     phrases for the same concept.
 
+    A vocabulary-diversity guard skips collapse when names appear to be
+    distinct entities (e.g., 4+ genuinely different locations) rather than
+    synonyms. See ``_names_suggest_distinct_entities``.
+
     Only applies to NEW entities (is_new=True). Existing entity references
     are always kept.
+
+    Dropped proposals are appended to ``filtered_log`` (if provided) with
+    ``reason="same_turn_synonym_dedup"`` so downstream log consumers can
+    audit rejections alongside other discovery filters.
     """
-    groups: dict[tuple[str, str], list[dict]] = {}
-    identity_index: dict[int, int] = {}  # id(entity) -> index in entities list
+    # Build (turn, type) -> list[index] using enumerate to avoid id() fragility.
+    groups: dict[tuple[str, str], list[int]] = {}
     for idx, entity in enumerate(entities):
-        identity_index[id(entity)] = idx
         if not entity.get("is_new", True):
             continue
         key = (entity.get("source_turn", ""), entity.get("type", ""))
-        groups.setdefault(key, []).append(entity)
+        groups.setdefault(key, []).append(idx)
 
     to_remove: set[int] = set()
-    for (turn, etype), group in groups.items():
-        if len(group) <= threshold:
+    for (turn, etype), indices in groups.items():
+        if len(indices) <= threshold:
             continue
-        group.sort(key=lambda e: len(e.get("name", "")), reverse=True)
-        survivor = group[0]
+        group = [entities[i] for i in indices]
+        if _names_suggest_distinct_entities([e.get("name", "") for e in group]):
+            continue
+        group_with_idx = sorted(
+            zip(indices, group),
+            key=lambda pair: len(pair[1].get("name", "")),
+            reverse=True,
+        )
+        survivor_idx, survivor = group_with_idx[0]
         survivor_name = survivor.get("name", "")
-        for entity in group[1:]:
+        survivor_eid = survivor.get("proposed_id") or survivor.get("existing_id", "")
+        for idx, entity in group_with_idx[1:]:
             eid = entity.get("proposed_id") or entity.get("existing_id", "")
-            idx = identity_index.get(id(entity))
-            if idx is not None:
-                to_remove.add(idx)
-                print(f"  DEDUP-GATE: dropping '{entity.get('name')}' ({eid}) "
-                      f"— same turn/type as '{survivor_name}' "
-                      f"({len(group)} {etype} proposals in {turn})",
-                      file=sys.stderr)
+            to_remove.add(idx)
+            print(f"  DEDUP-GATE: dropping '{entity.get('name')}' ({eid}) "
+                  f"— same turn/type as '{survivor_name}' "
+                  f"({len(indices)} {etype} proposals in {turn})",
+                  file=sys.stderr)
+            if filtered_log is not None:
+                filtered_log.append({
+                    "name": entity.get("name", ""),
+                    "id": eid,
+                    "reason": "same_turn_synonym_dedup",
+                    "survivor_id": survivor_eid,
+                })
 
     if not to_remove:
         return entities
