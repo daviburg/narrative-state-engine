@@ -315,6 +315,35 @@ The `crew/bridge/` directory contains a TypeScript HTTP server that bridges Crew
 
 ---
 
+## Architecture Principles
+
+### No Hardcoded Word Lists in Programmatic Filters
+
+Entity filtering MUST NOT use hardcoded lists of specific words (body parts, common nouns, game terms, combat actions, elements, role names, etc.) in Python code. This approach is:
+
+- **Not scalable** — every new edge case requires adding more words (whack-a-mole)
+- **Not semantically grounded** — a flat word list cannot distinguish context-dependent meanings
+- **A maintenance burden** — lists grow indefinitely and interact unpredictably
+
+The LLM extraction templates (`templates/extraction/*.md`) are the correct place to define what constitutes a valid entity. Templates have semantic understanding and can apply nuanced classification rules that word lists cannot.
+
+**Acceptable inline constants:**
+
+- Function words and articles used for tokenization: `a`, `an`, `the`, `of`
+- Pronoun stems used for ID generation: `he`, `she`, `they`, `it`
+
+**NOT acceptable as inline constants:**
+
+- Domain-specific word lists: body parts, combat terms, elements, role names, generic nouns, abstract concepts
+- Any set of >5 domain-specific strings used for entity rejection
+
+**Policy:**
+
+- Existing hardcoded word lists in the codebase are technical debt to be migrated to template-based filtering
+- New PRs that add hardcoded domain-specific word lists for entity filtering MUST be rejected during review
+
+---
+
 ## Design Decisions
 
 ### Why file-based?
