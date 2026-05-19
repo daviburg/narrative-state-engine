@@ -78,3 +78,4 @@ Rules:
   describing the same location), extract ONE entity using the most specific or proper name.
   Do NOT create separate entities for each synonym. When unsure, prefer the name that would
   make the best catalog entry title.
+- Do NOT extract body parts (arms, legs, hands, eyes, head, shoulders, chest, back, feet, neck, face, fingers, etc.) as entities of any type. Body parts are physical attributes of characters, not independent narrative entities.
