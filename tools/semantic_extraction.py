@@ -1980,6 +1980,64 @@ def _is_misclassified_item(entity: dict) -> bool:
     return False
 
 
+def _build_compound_word_index(
+    catalogs: dict,
+    current_entities: list | None = None,
+) -> dict[str, str]:
+    """Build a map of lowercase word → compound entity name for multi-word entities.
+
+    Words that appear in 2+-word entity names are potential compound-term
+    components.  When a single-word entity matches one of these words it is
+    likely a fragment of the compound term and should be rejected (#398).
+
+    Returns a dict mapping lowercase word → the compound entity name it
+    came from (used for diagnostic messages).
+    """
+    index: dict[str, str] = {}
+
+    def _index_name(name: str) -> None:
+        stripped = name.strip()
+        words = stripped.split()
+        if len(words) >= 2:
+            for word in words:
+                w = re.sub(r"[^a-z]", "", word.lower())
+                if len(w) >= 3:
+                    index.setdefault(w, stripped)
+
+    for _filename, entities in catalogs.items():
+        for entity in entities:
+            _index_name(entity.get("name", ""))
+    if current_entities:
+        for entity in current_entities:
+            _index_name(entity.get("name", ""))
+
+    return index
+
+
+def _is_compound_term_fragment(
+    entity: dict,
+    compound_word_index: dict[str, str],
+) -> tuple[bool, str]:
+    """Return (True, compound_name) if entity is a single-word compound-term fragment.
+
+    Checks whether the entity has a single-word name that appears as a
+    component word in a multi-word entity name from the catalog or current
+    turn (#398).  Multi-word entities and entities with no name are never
+    flagged.
+
+    Returns (False, "") when the entity should not be rejected.
+    """
+    name = entity.get("name", "").strip()
+    words = name.split()
+    if len(words) != 1:
+        return False, ""
+    name_lower = name.lower()
+    compound_name = compound_word_index.get(name_lower)
+    if compound_name:
+        return True, compound_name
+    return False, ""
+
+
 def _within_turn_dedup(entities: list[dict]) -> list[dict]:
     """Deduplicate is_new entities discovered in the same turn (#365).
 
@@ -2725,6 +2783,28 @@ def _run_discovery_phase(
             continue
         _cross_catalog_filtered.append(entity_ref)
     qualified = _cross_catalog_filtered
+
+    # Reject compound-term fragments (#398)
+    _compound_word_index = _build_compound_word_index(catalogs, qualified)
+    _compound_filtered = []
+    for entity_ref in qualified:
+        is_frag, compound_name = _is_compound_term_fragment(entity_ref, _compound_word_index)
+        if is_frag:
+            eid = get_entity_id(entity_ref)
+            print(
+                f"  FILTER: rejected '{entity_ref.get('name')}' "
+                f"(fragment of compound term '{compound_name}')",
+                file=sys.stderr,
+            )
+            _discovery_filtered.append({
+                "name": entity_ref.get("name", ""),
+                "id": eid,
+                "reason": "compound_term_fragment",
+                "compound_name": compound_name,
+            })
+            continue
+        _compound_filtered.append(entity_ref)
+    qualified = _compound_filtered
 
     # Within-turn dedup (#365)
     qualified = _within_turn_dedup(qualified)
