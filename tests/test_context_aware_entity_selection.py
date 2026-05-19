@@ -342,7 +342,7 @@ class TestSelectContextAwareEntities:
         assert "char-b" not in priority_ids
 
     def test_staleness_excludes_old_backfill(self):
-        """Backfill entities older than 50 turns are excluded when turn_text present."""
+        """Backfill entities older than 30 turns are excluded when turn_text present."""
         entities = [
             _make_entity("char-a", "Alice", last_updated_turn="turn-100"),
             _make_entity("char-b", "Bob", last_updated_turn="turn-040"),  # 60 turns stale
@@ -355,9 +355,9 @@ class TestSelectContextAwareEntities:
         # Alice is mentioned (priority)
         assert "char-a" in priority_ids
         assert "char-a" in ids
-        # Charlie at turn-060 is 40 turns stale (< 50 threshold), kept
-        assert "char-c" in ids
-        # Bob at turn-040 is 60 turns stale (> 50 threshold), excluded
+        # Charlie at turn-060 is 40 turns stale (> 30 threshold), excluded
+        assert "char-c" not in ids
+        # Bob at turn-040 is 60 turns stale (> 30 threshold), excluded
         assert "char-b" not in ids
 
     def test_staleness_does_not_exclude_priority(self):

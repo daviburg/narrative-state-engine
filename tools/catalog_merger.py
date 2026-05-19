@@ -402,14 +402,14 @@ def _format_entity_id_only(entity: dict) -> str:
 _DEFAULT_RECENCY_WINDOW = 10
 
 # Default fraction of context_length allocated to the entity list
-_DEFAULT_ENTITY_BUDGET_FRACTION = 0.25
+_DEFAULT_ENTITY_BUDGET_FRACTION = 0.15
 
 # Non-priority entities older than this get id-only format instead of brief
 _DEFAULT_BRIEF_STALENESS_THRESHOLD = 20
 
 # Backfill entities older than this many turns are excluded from the prompt
 # (priority entities — mentioned, co-located, one-hop — are always kept)
-_DEFAULT_STALENESS_THRESHOLD = 50
+_DEFAULT_STALENESS_THRESHOLD = 30
 
 # Minimum entity name length to avoid false-positive keyword matches
 _MIN_NAME_LENGTH_FOR_MATCH = 3
