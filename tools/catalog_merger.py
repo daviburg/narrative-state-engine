@@ -22,10 +22,13 @@ Handles:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
 import warnings
+
+_logger = logging.getLogger(__name__)
 
 # Maps entity types to catalog bucket keys (keyed by legacy filenames for
 # backward-compatible dict keys used throughout the pipeline).
@@ -714,9 +717,9 @@ def format_known_entities_bounded(
     there are few entities), this produces the same output as
     ``format_known_entities()``.
 
-    A 50% context floor is enforced: if the compressed result is less than
-    half the token size of the uncompressed output, the uncompressed version
-    is returned instead to prevent catastrophic entity loss.
+    A 50% entity-count floor is enforced: if staleness filtering retains fewer
+    than half of all catalog entities, a budget-capped fallback covering every
+    entity is returned to prevent catastrophic entity loss.
 
     Args:
         catalogs: Dict keyed by catalog filename → list of entity dicts.
@@ -780,6 +783,40 @@ def format_known_entities_bounded(
         staleness_threshold=staleness_threshold,
     )
 
+    # Context floor: if staleness filtering retained fewer than 50% of all
+    # catalog entities, return a budget-capped fallback covering every entity
+    # to prevent catastrophic entity loss.  Only applies when turn_text is
+    # provided (context-aware selection active); without turn_text there is
+    # no staleness filtering and the budget constraint is intentional.
+    # This check is placed before the degradation passes to avoid wasting work
+    # on per-entity token estimation when the floor will fire anyway.
+    _n_all = len(all_entities)
+    _n_surviving = len(ordered)  # entities surviving staleness filtering
+    if (
+        turn_text
+        and _n_all > 0
+        and _n_surviving < _n_all * _CONTEXT_FLOOR_FRACTION
+    ):
+        _logger.debug(
+            "  COMPRESS: floor triggered for %s: "
+            "staleness filtering retained %d/%d entities "
+            "(%d%% < %d%% floor); "
+            "%d tokens → using budget-capped fallback",
+            context_label, _n_surviving, _n_all,
+            int(100 * _n_surviving / _n_all),
+            int(100 * _CONTEXT_FLOOR_FRACTION),
+            _unbounded_tokens,
+        )
+        # Build a budget-capped fallback covering all entities: brief format
+        # first, degraded to id-only if still over budget, but never omitted
+        # so all entity IDs remain visible to the model.
+        _fallback_lines = [_format_entity_brief(e) for e in all_entities]
+        if budget is not None:
+            _fallback_used = _estimate_tokens("\n".join(_fallback_lines)) if _fallback_lines else 0
+            if _fallback_used > budget:
+                _fallback_lines = [_format_entity_id_only(e) for e in all_entities]
+        return "\n".join(_fallback_lines)
+
     # Build lines in context-aware order
     lines: list[str] = []
     for entity in ordered:
@@ -840,40 +877,16 @@ def format_known_entities_bounded(
 
     result = "\n".join(lines)
 
-    # Context floor: if context-aware staleness filtering excluded too many
-    # entities from the selection (more than 50% of the catalog), fall back to
-    # the full uncompressed context to prevent catastrophic entity loss.
-    # Only applies when turn_text is provided (context-aware selection active);
-    # without turn_text, no staleness filtering occurs and the budget constraint
-    # is intentional.
-    _n_all = len(all_entities)
-    _n_selected = len(ordered)  # entities after staleness filtering
+    # Compression metrics logging
     _compressed_tokens = _estimate_tokens(result)
-    if (
-        turn_text
-        and _n_all > 0
-        and _n_selected < _n_all * _CONTEXT_FLOOR_FRACTION
-    ):
-        import sys
-        print(
-            f"  COMPRESS: floor triggered for {context_label}: "
-            f"staleness filtering selected {_n_selected}/{_n_all} entities "
-            f"({100 * _n_selected / _n_all:.0f}% < "
-            f"{100 * _CONTEXT_FLOOR_FRACTION:.0f}% floor); "
-            f"{_unbounded_tokens} tokens → using uncompressed",
-            file=sys.stderr,
-        )
-        return unbounded
-
-    # Compression metrics logging (Fix 5)
     if turn_text and _compressed_tokens < _unbounded_tokens:
-        import sys
-        print(
-            f"  COMPRESS: {context_label}: "
-            f"{_unbounded_tokens} tokens → {_compressed_tokens} tokens "
-            f"({100 * (1 - _compressed_tokens / _unbounded_tokens):.0f}% reduction, "
-            f"{_n_selected}/{_n_all} entities selected)",
-            file=sys.stderr,
+        _logger.debug(
+            "  COMPRESS: %s: %d tokens → %d tokens "
+            "(%d%% reduction, %d/%d entities selected)",
+            context_label,
+            _unbounded_tokens, _compressed_tokens,
+            int(100 * (1 - _compressed_tokens / _unbounded_tokens)),
+            _n_surviving, _n_all,
         )
 
     if omitted > 0:

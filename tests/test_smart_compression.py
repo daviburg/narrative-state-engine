@@ -195,6 +195,8 @@ class TestRelationshipTypePrioritization:
             })
         filtered = _filter_relationships_for_scene(rels, set(), 105)
         assert len(filtered) <= 5
+
+
 class TestHighEntityMaxTokens:
     """Verify adaptive max_tokens threshold for entity detail extraction."""
 
@@ -256,22 +258,19 @@ class TestContextFloor:
         return {"characters.json": entities}
 
     def test_floor_prevents_over_compression(self):
-        """When compression would drop below 50%, uncompressed output is returned."""
+        """When floor triggers, all entity IDs are preserved in the result."""
         catalogs = self._make_large_catalogs(30)
 
-        # Use a tiny budget to force heavy compression
+        # Use a tiny budget to force heavy compression and trigger floor
         result = format_known_entities_bounded(
             catalogs,
             current_turn=300,
             entity_context_budget=5,  # 5 tokens -- tiny, will trigger floor
             turn_text="something happened",
         )
-        # Floor should kick in: result should be >= 50% of full unbounded output
-        from catalog_merger import format_known_entities
-        unbounded = format_known_entities(catalogs)
-        result_tokens = _estimate_tokens(result)
-        unbounded_tokens = _estimate_tokens(unbounded)
-        assert result_tokens >= unbounded_tokens * _CONTEXT_FLOOR_FRACTION * 0.9  # 10% tolerance
+        # Floor must have fired: all entity IDs must appear in the result
+        for i in range(30):
+            assert f"char-npc{i:03d}" in result, f"char-npc{i:03d} missing from floor fallback"
 
     def test_normal_compression_within_floor_passes_through(self):
         """When compression stays above 50%, normal behavior applies."""
@@ -292,6 +291,24 @@ class TestContextFloor:
         )
         assert "char-a" in result
         assert "char-b" in result
+
+    def test_floor_triggers_on_discovery_path(self):
+        """Floor triggers on discovery calls with _DISCOVERY_STALENESS_THRESHOLD."""
+        # Use a large catalog where staleness filtering will exclude many entities
+        # when turn_text mentions only a few.
+        catalogs = self._make_large_catalogs(30)
+
+        result = format_known_entities_bounded(
+            catalogs,
+            current_turn=300,
+            entity_context_budget=5,  # tiny budget to force floor
+            turn_text="something happened",
+            staleness_threshold=_DISCOVERY_STALENESS_THRESHOLD,
+            context_label="discovery",
+        )
+        # Floor must have fired: result should contain all entity IDs
+        for i in range(30):
+            assert f"char-npc{i:03d}" in result
 
 
 class TestItemFactionExemption:
@@ -377,8 +394,9 @@ class TestItemFactionExemption:
 class TestCompressionLogging:
     """Verify compression metrics logging includes before/after token counts."""
 
-    def test_compression_log_emitted_to_stderr(self, capsys):
-        """Compression log is emitted to stderr with before/after token counts."""
+    def test_compression_log_emitted(self, caplog):
+        """Compression log is emitted at DEBUG level with before/after token counts."""
+        import logging
         entities = []
         for i in range(10):
             entities.append({
@@ -391,20 +409,21 @@ class TestCompressionLogging:
         catalogs = {"characters.json": entities}
 
         # Very small budget to force compression
-        format_known_entities_bounded(
-            catalogs,
-            current_turn=250,
-            entity_context_budget=20,
-            turn_text="Something happened",
-            context_label="test-compression",
-        )
-        captured = capsys.readouterr()
-        # Should emit a COMPRESS: line to stderr
-        assert "COMPRESS:" in captured.err
-        assert "test-compression" in captured.err
+        with caplog.at_level(logging.DEBUG, logger="catalog_merger"):
+            format_known_entities_bounded(
+                catalogs,
+                current_turn=250,
+                entity_context_budget=20,
+                turn_text="Something happened",
+                context_label="test-compression",
+            )
+        # Should emit a COMPRESS: record at DEBUG level
+        assert any("COMPRESS:" in r.message for r in caplog.records)
+        assert any("test-compression" in r.message for r in caplog.records)
 
-    def test_compression_log_includes_token_counts(self, capsys):
+    def test_compression_log_includes_token_counts(self, caplog):
         """Compression log line contains numeric token counts."""
+        import logging
         import re
         entities = []
         for i in range(5):
@@ -417,14 +436,15 @@ class TestCompressionLogging:
             })
         catalogs = {"characters.json": entities}
 
-        format_known_entities_bounded(
-            catalogs,
-            current_turn=250,
-            entity_context_budget=50,
-            turn_text="NPC 0 did something",
-            context_label="test-tokens",
-        )
-        captured = capsys.readouterr()
-        # Look for pattern: "X tokens" in COMPRESS line
-        if "COMPRESS:" in captured.err:
-            assert re.search(r'\d+ tokens', captured.err)
+        with caplog.at_level(logging.DEBUG, logger="catalog_merger"):
+            format_known_entities_bounded(
+                catalogs,
+                current_turn=250,
+                entity_context_budget=50,
+                turn_text="NPC 0 did something",
+                context_label="test-tokens",
+            )
+        # Must emit a COMPRESS: record and it must contain token counts
+        compress_messages = [r.message for r in caplog.records if "COMPRESS:" in r.message]
+        assert compress_messages, "Expected at least one COMPRESS: log record"
+        assert re.search(r'\d+ tokens', compress_messages[0])
