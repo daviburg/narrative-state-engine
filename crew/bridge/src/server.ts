@@ -112,7 +112,7 @@ async function handleChatSend(req: http.IncomingMessage, res: http.ServerRespons
     return;
   }
 
-  const response = await bridge.sendPrompt(body.agent, body.prompt);
+  const response = await bridge.sendPrompt(body.agent, body.prompt, body.timeout);
   jsonResponse(res, 200, { response });
 }
 
