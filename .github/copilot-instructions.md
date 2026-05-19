@@ -80,7 +80,7 @@ When a code change alters tool behavior, data flow, schemas, or output format:
 Do not add hardcoded lists of domain-specific words (body parts, game terms, abstract concepts, combat actions, elements, role names, etc.) as programmatic entity filters in Python code.
 
 - Entity classification and rejection logic belongs in LLM extraction templates (`templates/extraction/*.md`), not in Python code.
-- Only function words (articles, prepositions: `a`, `an`, `the`, `of`) and pronoun stems (`he`, `she`, `they`) are acceptable as inline constants.
+- Only function words (articles, prepositions: `a`, `an`, `the`, `of`) and pronoun stems (`he`, `she`, `they`, `it`) are acceptable as inline constants.
 - If a PR adds a set or list of more than 5 domain-specific strings used for entity rejection, reject it during review.
 - Existing hardcoded word lists are technical debt — do not extend them; migrate filtering to templates instead.
 

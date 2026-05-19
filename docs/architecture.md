@@ -329,7 +329,7 @@ The LLM extraction templates (`templates/extraction/*.md`) are the correct place
 
 **Acceptable inline constants:**
 
-- Function words and articles used for tokenization: `a`, `an`, `the`, `of`
+- Function words (articles and prepositions) used for tokenization: `a`, `an`, `the`, `of`
 - Pronoun stems used for ID generation: `he`, `she`, `they`, `it`
 
 **NOT acceptable as inline constants:**
