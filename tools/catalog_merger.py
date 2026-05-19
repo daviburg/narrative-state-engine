@@ -22,10 +22,13 @@ Handles:
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import sys
 import warnings
+
+_logger = logging.getLogger(__name__)
 
 # Maps entity types to catalog bucket keys (keyed by legacy filenames for
 # backward-compatible dict keys used throughout the pipeline).
@@ -411,6 +414,16 @@ _DEFAULT_BRIEF_STALENESS_THRESHOLD = 20
 # (priority entities — mentioned, co-located, one-hop — are always kept)
 _DEFAULT_STALENESS_THRESHOLD = 30
 
+# Discovery uses a more permissive staleness threshold so that entities not
+# recently mentioned still appear in the discovery context. Without this,
+# late-game turns with few new mentions lose awareness of most of the catalog.
+_DISCOVERY_STALENESS_THRESHOLD = 50
+
+# Minimum fraction of uncompressed context tokens that must survive compression.
+# If the compressed result falls below this fraction, fall back to the
+# uncompressed context to prevent catastrophic entity loss.
+_CONTEXT_FLOOR_FRACTION = 0.5
+
 # Minimum entity name length to avoid false-positive keyword matches
 _MIN_NAME_LENGTH_FOR_MATCH = 3
 
@@ -589,6 +602,7 @@ def _select_context_aware_entities(
     turn_text: str | None,
     current_turn: int | None,
     recency_window: int,
+    staleness_threshold: int | None = None,
 ) -> tuple[list[dict], set[str]]:
     """Return entities ordered by contextual relevance and their priority IDs.
 
@@ -648,8 +662,9 @@ def _select_context_aware_entities(
     # Staleness cutoff: backfill entities older than this are excluded
     # Only applies when context-aware selection is active (turn_text provided)
     staleness_cutoff: int | None = None
+    _effective_threshold = staleness_threshold if staleness_threshold is not None else _DEFAULT_STALENESS_THRESHOLD
     if current_turn is not None and turn_text:
-        staleness_cutoff = current_turn - _DEFAULT_STALENESS_THRESHOLD
+        staleness_cutoff = current_turn - _effective_threshold
 
     # Build ordered result: each tier sorted by recency descending
     result: list[dict] = []
@@ -681,6 +696,8 @@ def format_known_entities_bounded(
     entity_context_budget: int | None = None,
     recency_window: int | None = None,
     turn_text: str | None = None,
+    staleness_threshold: int | None = None,
+    context_label: str = "entity-context",
 ) -> str:
     """Format known entities with a configurable token budget.
 
@@ -700,6 +717,10 @@ def format_known_entities_bounded(
     there are few entities), this produces the same output as
     ``format_known_entities()``.
 
+    A 50% entity-count floor is enforced: if staleness filtering retains fewer
+    than half of all catalog entities, a budget-capped fallback covering every
+    entity is returned to prevent catastrophic entity loss.
+
     Args:
         catalogs: Dict keyed by catalog filename → list of entity dicts.
         current_turn: The numeric turn being processed (e.g. 150 for
@@ -714,6 +735,11 @@ def format_known_entities_bounded(
         turn_text: The current turn's text content.  When provided, enables
             context-aware entity selection based on mentions, co-location,
             and relationships.
+        staleness_threshold: Override for the staleness cutoff (in turns).
+            Defaults to ``_DEFAULT_STALENESS_THRESHOLD``.  Pass a higher
+            value for discovery to retain broader catalog context.
+        context_label: Label for compression metrics logging (e.g.
+            ``"discovery"`` or ``"entity-context"``).
 
     Returns:
         Formatted entity list string, possibly with a truncation note.
@@ -748,11 +774,48 @@ def format_known_entities_bounded(
     if not turn_text and _estimate_tokens(unbounded) <= budget:
         return unbounded
 
+    _unbounded_tokens = _estimate_tokens(unbounded)
+
     # Order entities by contextual relevance when turn text is available,
     # otherwise fall back to recency-only partitioning.
     ordered, priority_ids = _select_context_aware_entities(
         all_entities, turn_text, current_turn, recency_window,
+        staleness_threshold=staleness_threshold,
     )
+
+    # Context floor: if staleness filtering retained fewer than 50% of all
+    # catalog entities, return a budget-capped fallback covering every entity
+    # to prevent catastrophic entity loss.  Only applies when turn_text is
+    # provided (context-aware selection active); without turn_text there is
+    # no staleness filtering and the budget constraint is intentional.
+    # This check is placed before the degradation passes to avoid wasting work
+    # on per-entity token estimation when the floor will fire anyway.
+    _n_all = len(all_entities)
+    _n_surviving = len(ordered)  # entities surviving staleness filtering
+    if (
+        turn_text
+        and _n_all > 0
+        and _n_surviving < _n_all * _CONTEXT_FLOOR_FRACTION
+    ):
+        _logger.debug(
+            "  COMPRESS: floor triggered for %s: "
+            "staleness filtering retained %d/%d entities "
+            "(%d%% < %d%% floor); "
+            "%d tokens → using budget-capped fallback",
+            context_label, _n_surviving, _n_all,
+            int(100 * _n_surviving / _n_all),
+            int(100 * _CONTEXT_FLOOR_FRACTION),
+            _unbounded_tokens,
+        )
+        # Build a budget-capped fallback covering all entities: brief format
+        # first, degraded to id-only if still over budget, but never omitted
+        # so all entity IDs remain visible to the model.
+        _fallback_lines = [_format_entity_brief(e) for e in all_entities]
+        if budget is not None:
+            _fallback_used = _estimate_tokens("\n".join(_fallback_lines)) if _fallback_lines else 0
+            if _fallback_used > budget:
+                _fallback_lines = [_format_entity_id_only(e) for e in all_entities]
+        return "\n".join(_fallback_lines)
 
     # Build lines in context-aware order
     lines: list[str] = []
@@ -813,6 +876,18 @@ def format_known_entities_bounded(
             used = _estimate_tokens("\n".join(lines)) if lines else 0
 
     result = "\n".join(lines)
+
+    # Compression metrics logging
+    _compressed_tokens = _estimate_tokens(result)
+    if turn_text and _compressed_tokens < _unbounded_tokens:
+        _logger.debug(
+            "  COMPRESS: %s: %d tokens → %d tokens "
+            "(%d%% reduction, %d/%d entities selected)",
+            context_label,
+            _unbounded_tokens, _compressed_tokens,
+            int(100 * (1 - _compressed_tokens / _unbounded_tokens)),
+            _n_surviving, _n_all,
+        )
 
     if omitted > 0:
         note = (
