@@ -2031,7 +2031,7 @@ def _is_compound_term_fragment(
     words = name.split()
     if len(words) != 1:
         return False, ""
-    name_lower = name.lower()
+    name_lower = re.sub(r"[^a-z]", "", name.lower())
     compound_name = compound_word_index.get(name_lower)
     if compound_name:
         return True, compound_name
