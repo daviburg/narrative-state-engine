@@ -58,6 +58,14 @@ try:
 except ImportError:
     jsonschema = None
 
+try:
+    from wordfreq import word_frequency as _word_frequency
+    _WORDFREQ_AVAILABLE = True
+except ImportError:
+    _WORDFREQ_AVAILABLE = False
+    def _word_frequency(word: str, lang: str) -> float:  # type: ignore[misc]
+        return 0.0
+
 # Default confidence threshold — entities below this are logged but not cataloged
 DEFAULT_MIN_CONFIDENCE = 0.6
 
@@ -1882,6 +1890,54 @@ _GENERIC_STEMS = {
     "his", "hers", "its", "their", "theirs",
 }
 
+# Morphological suffixes that mark common English non-name word forms (#384).
+# Not a domain word list — these are universal linguistic patterns.
+_COMMON_WORD_SUFFIX_RE = re.compile(
+    r"(?:tion|sion|ness|ment|ance|ence|ity|ular|ical|ive|ous|ful|less|ern)$",
+    re.IGNORECASE,
+)
+# Words with English corpus frequency at or above this threshold are common
+# words unlikely to be character names (#384).  Calibrated to accept rare
+# fantasy names (e.g. thorne ≈ 2e-6, kael ≈ 2e-7) while rejecting common
+# English words (echo ≈ 1e-5, field ≈ 2e-4).
+_COMMON_WORD_FREQ_THRESHOLD = 3e-6
+
+
+def _is_plausible_character_name(name: str) -> bool:
+    """Return True if *name* could plausibly be a character name.
+
+    Uses two dynamic filters — no domain-specific word lists (#384):
+
+    1. Morphological suffix patterns that mark common English word forms
+       (abstract nouns in -tion/-ence/-ity, adjectives in -ular/-ical/-ern,
+       etc.).  These suffixes are universal, not story-specific.
+
+    2. English word-frequency check via ``wordfreq``.  Words that appear
+       frequently in general English corpora (freq ≥ 3e-6) are common
+       nouns/adjectives unlikely to be character names.  Rare or invented
+       words (fantasy names like Kael, Lyra, Fenouille) have near-zero
+       frequency and pass through.
+
+    Multi-word stems (e.g. "iron wolf" from char-iron-wolf) always pass —
+    their structure already distinguishes them from single abstract words.
+    Words already screened by ``_GENERIC_STEMS`` are handled upstream.
+    """
+    low = name.lower().strip()
+    # Multi-word names (from hyphenated IDs) pass through — they are already
+    # structurally distinct from common single abstract words.
+    if " " in low or "-" in low:
+        return True
+    if _GENERIC_STEMS and low in _GENERIC_STEMS:
+        return False
+    # Morphological filter: common English word-form suffixes
+    if _COMMON_WORD_SUFFIX_RE.search(low):
+        return False
+    # Frequency filter: common English words are not character names
+    if _word_frequency(low, "en") >= _COMMON_WORD_FREQ_THRESHOLD:
+        return False
+    return True
+
+
 # --- Type classification filters (#303) ---
 # Leading articles stripped before matching against blocklists.
 _LEADING_ARTICLE_RE = re.compile(r"^(?:the|a|an)\s+", re.IGNORECASE)
@@ -2245,6 +2301,9 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
 
         # Infer type and name from the ID
         inferred_type = _infer_type_from_prefix(eid)
+        # Reject implausible character names (abstract words, common nouns) (#384)
+        if inferred_type == "character" and not _is_plausible_character_name(stem):
+            continue
         # Build a human-readable name: strip prefix, replace hyphens, title-case
         inferred_name = stem.replace("-", " ").title()
 
@@ -3794,6 +3853,9 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             continue
 
         inferred_type = _infer_type_from_prefix(eid)
+        # Reject implausible character names (abstract words, common nouns) (#384)
+        if inferred_type == "character" and not _is_plausible_character_name(stem):
+            continue
 
         # Type-specific thresholds
         if inferred_type == "location":
@@ -3973,6 +4035,9 @@ def _name_mention_discovery(catalogs: dict, events_list: list) -> int:
             if word_lower in _GENERIC_STEMS:
                 continue
             if word_lower in known_names:
+                continue
+            # Reject common English words that are not plausible character names (#384)
+            if not _is_plausible_character_name(word_lower):
                 continue
             name_events.setdefault(word_lower, set()).add(event_id)
             if word_lower not in name_canonical:
