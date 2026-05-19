@@ -783,7 +783,7 @@ class LLMClient:
                 val = float(f"0.{right.replace('.', '')}")
                 return f'"confidence": {min(val, 1.0)}'
         except (ValueError, TypeError):
-            return f'"confidence": 0.5'
+            return '"confidence": 0.5'
 
     def generate_text(
         self,

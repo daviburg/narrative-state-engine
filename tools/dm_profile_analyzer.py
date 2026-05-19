@@ -202,13 +202,13 @@ def analyze_dm_turns(
             continue
 
         if not isinstance(result, dict):
-            print(f"  WARNING: Non-dict response for batch, skipping", file=sys.stderr)
+            print("  WARNING: Non-dict response for batch, skipping", file=sys.stderr)
             sequence_broken = True
             continue
 
         observations = result.get("observations", [])
         if not isinstance(observations, list):
-            print(f"  WARNING: observations is not a list, skipping", file=sys.stderr)
+            print("  WARNING: observations is not a list, skipping", file=sys.stderr)
             sequence_broken = True
             continue
 

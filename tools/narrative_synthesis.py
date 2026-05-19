@@ -621,7 +621,7 @@ def _build_infobox(entity_id: str, catalog_data: dict | None,
     elif derived_profile:
         entity_type = derived_profile.get("type", "unknown").replace("_", " ").title()
         lines.append(f"| **Type** | {entity_type} |")
-        lines.append(f"| **Source** | Events only (no catalog entry) |")
+        lines.append("| **Source** | Events only (no catalog entry) |")
         first = derived_profile.get("first_event_turn", "")
         last = derived_profile.get("last_event_turn", "")
         if first:
@@ -815,7 +815,7 @@ def assemble_character_page(entity_id: str, entity_name: str,
 
     # Footer
     lines += ["---",
-              f"*Generated from events data — do not edit manually.*"]
+              "*Generated from events data — do not edit manually.*"]
 
     return "\n".join(lines) + "\n"
 
@@ -872,7 +872,7 @@ def assemble_location_page(entity_id: str, entity_name: str,
         lines.append("")
 
     lines += ["---",
-              f"*Generated from events data — do not edit manually.*"]
+              "*Generated from events data — do not edit manually.*"]
     return "\n".join(lines) + "\n"
 
 
@@ -939,7 +939,7 @@ def assemble_faction_page(entity_id: str, entity_name: str,
                                     linked_entities=linked), ""]
 
     lines += ["---",
-              f"*Generated from events data — do not edit manually.*"]
+              "*Generated from events data — do not edit manually.*"]
     return "\n".join(lines) + "\n"
 
 
@@ -976,7 +976,7 @@ def assemble_item_page(entity_id: str, entity_name: str,
                                     linked_entities=linked), ""]
 
     lines += ["---",
-              f"*Generated from events data — do not edit manually.*"]
+              "*Generated from events data — do not edit manually.*"]
     return "\n".join(lines) + "\n"
 
 

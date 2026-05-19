@@ -411,7 +411,7 @@ def main():
         summary = apply_review_file(
             args.review_file, args.catalog_dir, dry_run=args.dry_run,
         )
-        print(f"\n=== Summary ===")
+        print("\n=== Summary ===")
         print(f"  Merged:         {summary['merged']}")
         print(f"  Kept separate:  {summary['kept_separate']}")
         print(f"  Pending:        {summary['pending']}")
@@ -462,7 +462,7 @@ def main():
         dry_run=args.dry_run,
     )
 
-    print(f"\n=== Summary ===")
+    print("\n=== Summary ===")
     print(f"  Auto-merged:       {summary['auto_merged']}")
     print(f"  Flagged for review: {summary['flagged_for_review']}")
     print(f"  Discarded:         {summary['discarded']}")

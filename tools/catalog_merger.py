@@ -1505,9 +1505,6 @@ def merge_relationships(catalogs: dict, relationships: list, turn_id: str) -> No
 
     V2: consolidates per (source_id, target_id) pair.
     """
-    # Track entities touched so we can dedup once per entity, not per edge.
-    touched_entities: set[int] = set()
-
     for rel in relationships:
         source_id = rel.get("source_id")
         target_id = rel.get("target_id")

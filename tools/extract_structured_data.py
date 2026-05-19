@@ -1006,7 +1006,7 @@ def list_turns(transcript_dir: str) -> list[dict]:
             with open(filepath, "r", encoding="utf-8") as f:
                 content = f.read()
             lines = content.split("\n")
-            text_lines = [l for l in lines if not l.startswith("# turn-")]
+            text_lines = [line for line in lines if not line.startswith("# turn-")]
             text = "\n".join(text_lines).strip()
             turns.append({
                 "turn_id": turn_id,
@@ -1055,7 +1055,7 @@ def main() -> None:
     print(f"Extracting structured data from {len(turns)} turn(s)...")
     data = extract_all(turns)
 
-    print(f"\nFound:")
+    print("\nFound:")
     print(f"  {len(data['session_events'])} mechanical event(s)")
     print(f"  {len(data['timeline'])} temporal marker(s)")
     print(f"  {len(data['season_summaries'])} season summary/summaries")

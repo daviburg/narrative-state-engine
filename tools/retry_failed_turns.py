@@ -277,7 +277,7 @@ def main():
     event_count_before = len(events_list)
 
     print(f"Base catalogs: {entity_count_before} entities, {event_count_before} events")
-    print(f"\nStarting parallel extraction...")
+    print("\nStarting parallel extraction...")
     print("-" * 60)
 
     t_start = time.monotonic()
@@ -366,7 +366,7 @@ def main():
 
     # Merge all successful results into the base catalogs
     if succeeded > 0:
-        print(f"\nMerging results into catalogs...")
+        print("\nMerging results into catalogs...")
         # Sort results by turn number for deterministic merge order
         results.sort(key=lambda r: r[0])
         catalogs, events_list, timeline = merge_parallel_results(
