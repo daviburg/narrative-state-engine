@@ -44,11 +44,21 @@ PLAYER CHARACTER RULE:
 - Do NOT create new entities for "you"/"yourself" references.
 
 Type classification:
-- "character"/"creature": sentient being with will and agency. NOT diseases, forces, events.
+- "character"/"creature": sentient being with will and agency. NOT diseases, forces, events, adjectives, common nouns, or fragments of compound terms (e.g., do not extract "Pattern" from "Pattern Language" as a character).
 - "location": physical place. NOT events or abstract concepts.
 - "item": discrete physical object (weapons, tools, containers, substances, traps, quest objects).
 - "faction": group acting as a unit (tribes, guilds, patrols).
 - "concept": abstract force, disease, method, event, phenomenon. Use when NOT a being/place/object/group.
+- When the DM describes a concept with several synonymous phrases, they refer to ONE entity.
+  Choose the most specific name and set confidence high. Do not extract each synonym separately.
+
+ENTITY NAME VALIDATION:
+- An entity name must refer to a SPECIFIC being, place, object, or group — not a fragment of a compound term.
+- Before creating a new entity, check if the proposed name is a SUBSTRING of an existing entity's name or identity. If so, do NOT create it — the mention is part of the existing entity, not a new one.
+  - Example: If "Quiet Weave" exists as a location, do NOT create separate entities for "Quiet" or "Weave".
+  - Example: If "Triangular Pattern Disruption Field" exists as an item, do NOT create "Pattern", "Disruption", "Field", or "Triangular" as characters.
+- Single common English words (quiet, pattern, echo, song, field, edge, stone, broken, precision, weave, southern, disruption, triangular) are almost NEVER character names in a fantasy setting. If a single common word appears to be a character, verify it is used AS A NAME (capitalized, addressed directly) not as a descriptor.
+- When in doubt about whether a word is a character name or part of a compound term, set confidence below 0.5 so it will be filtered.
 
 Rules:
 - Only extract entities explicitly mentioned in the turn text.
@@ -63,3 +73,8 @@ Rules:
 - Extract from ALL text: narration, descriptions, memories, quest briefings.
 - Environmental locations where action occurs should be extracted.
 - Abstract/distant references count (departed village, sought artifact).
+- SYNONYM CONSOLIDATION: If the DM uses multiple synonyms for the same place, object, or
+  group in one turn (e.g. "safe haven", "hidden refuge", "defensible sanctuary" all
+  describing the same location), extract ONE entity using the most specific or proper name.
+  Do NOT create separate entities for each synonym. When unsure, prefer the name that would
+  make the best catalog entry title.

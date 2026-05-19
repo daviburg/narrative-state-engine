@@ -32,7 +32,16 @@ SPATIAL RELATIONSHIPS:
 - Spatial relationships should use direction "outgoing" from the entity TO the location (e.g., char-elder → loc-village-square with "resides_at")
 - Example: {"source_id": "char-elder", "target_id": "loc-village-square", "current_relationship": "resides_at", "type": "spatial", "direction": "outgoing", "status": "active", "confidence": 0.9, "first_seen_turn": "turn-004", "last_updated_turn": "turn-004"}
 
+KINSHIP RELATIONSHIPS:
+- Use type "kinship" for family relationships: parent-child, spouse/partner, sibling, grandparent, aunt/uncle, cousin.
+- Kinship indicators in text: "mother", "father", "son", "daughter", "brother", "sister", "wife", "husband", "child", "parent", "kin", "blood", "family", "born to", "offspring".
+- When a character refers to another as family ("my daughter", "his father"), ALWAYS create a kinship relationship even if it seems obvious.
+- Kinship relationships are almost always bidirectional: if A is "parent of" B, then B is "child of" A. Create the relationship from the more active character's perspective.
+- Kinship confidence should be high (0.8+) when stated directly ("my son") and moderate (0.6-0.7) when implied ("the elder's bloodline").
+- Example: {"source_id": "char-kael", "target_id": "char-lyrawyn", "current_relationship": "spouse_of", "type": "kinship", "direction": "bidirectional", "status": "active", "confidence": 0.95, "first_seen_turn": "turn-050", "last_updated_turn": "turn-050"}
+
 Rules:
+- Pay special attention to family relationships. In tribal/community settings, kinship ties are critical narrative context. Extract ALL stated or strongly implied family bonds.
 - Only extract relationships supported by the provided turn text.
 - Do NOT invent relationships not evidenced in the text.
 - Include both explicit relationships (stated directly) and implicit ones (strongly implied by context), but mark implicit ones with lower confidence.
