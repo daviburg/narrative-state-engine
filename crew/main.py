@@ -69,7 +69,7 @@ def cmd_vscode(args):
     health_url = args.llm_base_url.rstrip("/").rsplit("/v1", 1)[0] + "/health"
     try:
         req = urllib.request.Request(health_url, method="GET")
-        with urllib.request.urlopen(req, timeout=5) as resp:
+        with urllib.request.urlopen(req, timeout=5) as _:
             pass  # 200 OK is enough
     except (urllib.error.URLError, OSError) as e:
         from urllib.parse import urlparse
@@ -80,7 +80,7 @@ def cmd_vscode(args):
         print(f"Health check failed: {e}\n")
         print("Start llama-server in a persistent terminal:")
         print()
-        print(f"  llama-server -m <MODEL_PATH> -ngl 99 -np 1 -c 32768 \\")
+        print("  llama-server -m <MODEL_PATH> -ngl 99 -np 1 -c 32768 \\")
         print(f"    --port {port} --reasoning-format none --reasoning off -t 1")
         print()
         print(f"Default model: {args.llm}")

@@ -1048,8 +1048,8 @@ def generate_timeline_wiki_page(timeline: list[dict],
     anchor_turn = anchor.get("turn", "turn-001")
 
     lines.append("## Current Position\n")
-    lines.append(f"| | |")
-    lines.append(f"|---|---|")
+    lines.append("| | |")
+    lines.append("|---|---|")
     lines.append(f"| **Current Season** | {season_label} |")
     lines.append(f"| **Estimated Day** | Day {est_day} |")
     lines.append(f"| **Anchor Event** | {anchor_label} ({anchor_turn}) |")

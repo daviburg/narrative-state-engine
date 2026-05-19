@@ -109,7 +109,7 @@ class TestBoundedFormatRecentPrioritization:
         assert "aliases: R" in result
         # Dormant entity should be brief (no identity/aliases) because
         # it's outside the recency window and budget is tight.
-        lines = [l for l in result.strip().split("\n") if l.startswith("char-d")]
+        lines = [line for line in result.strip().split("\n") if line.startswith("char-d")]
         assert len(lines) == 1
         assert "Old NPC" not in lines[0]
         assert "Dormy" not in lines[0]
@@ -307,9 +307,9 @@ class TestRecentTierOverflow:
             assert f"char-{i}" in result
         # The result should have at least some entities in brief format
         # (no identity) to stay within budget
-        brief_lines = [l for l in result.strip().split("\n")
-                       if l and "Very long description" not in l
-                       and l.startswith("char-")]
+        brief_lines = [line for line in result.strip().split("\n")
+                       if line and "Very long description" not in line
+                       and line.startswith("char-")]
         assert len(brief_lines) > 0, "Some recent entities should be degraded to brief"
 
     def test_single_recent_entity_not_degraded(self):
@@ -357,7 +357,7 @@ class TestThreeTierFormatting:
             catalogs, current_turn=100, context_length=100000,
             turn_text="Some scene text", recency_window=10)
         lines = result.strip().split("\n")
-        line_map = {l.split(" | ")[0]: l for l in lines if " | " in l}
+        line_map = {line.split(" | ")[0]: line for line in lines if " | " in line}
         # Recent entity should have full detail (identity + aliases)
         assert "Active hero" in line_map.get("char-r", "")
         assert "aliases:" in line_map.get("char-r", "")
@@ -404,12 +404,12 @@ class TestDegradationWithIdOnly:
             catalogs, current_turn=100, context_length=32768,
             entity_context_budget=300,
             turn_text="Entity0 does something", recency_window=10)
-        lines = [l for l in result.strip().split("\n") if l.startswith("char-")]
+        lines = [line for line in result.strip().split("\n") if line.startswith("char-")]
         # At least some entities should be in id-only format (exactly 1 pipe)
-        id_only = [l for l in lines if l.count(" | ") == 1]
+        id_only = [line for line in lines if line.count(" | ") == 1]
         assert len(id_only) > 0, "Budget pressure should produce id-only lines before omitting"
         # No entity should be omitted before all are degraded to id-only
         # (Entity0 is mentioned → priority → kept as full)
-        e0_line = [l for l in lines if l.startswith("char-0")]
+        e0_line = [line for line in lines if line.startswith("char-0")]
         if e0_line:
             assert "Long description" in e0_line[0]

@@ -1001,27 +1001,22 @@ class TestExtractTurnNumber:
     """_extract_turn_number handles various formats."""
 
     def test_dict_with_turn_key(self):
-        from semantic_extraction import _extract_turn_number
 
         assert _extract_turn_number({"turn": "turn-042"}) == 42
 
     def test_dict_with_source_turn(self):
-        from semantic_extraction import _extract_turn_number
 
         assert _extract_turn_number({"source_turn": "turn-100"}) == 100
 
     def test_string_with_turn_pattern(self):
-        from semantic_extraction import _extract_turn_number
 
         assert _extract_turn_number("something at turn-055 happened") == 55
 
     def test_no_turn_info(self):
-        from semantic_extraction import _extract_turn_number
 
         assert _extract_turn_number({"detail": "no turn"}) is None
 
     def test_integer_value(self):
-        from semantic_extraction import _extract_turn_number
 
         assert _extract_turn_number(42) is None
 
@@ -1030,7 +1025,6 @@ class TestExtractThemes:
     """_extract_themes identifies keyword themes from entries."""
 
     def test_finds_keywords(self):
-        from semantic_extraction import _extract_themes
 
         items = [
             {"detail": "pregnancy confirmed"},
@@ -1041,7 +1035,6 @@ class TestExtractThemes:
         assert "harvest" in themes
 
     def test_caps_at_five(self):
-        from semantic_extraction import _extract_themes
 
         items = [
             "pregnancy text", "birth text", "construction text",
@@ -1051,7 +1044,6 @@ class TestExtractThemes:
         assert len(themes) <= 5
 
     def test_fallback_count(self):
-        from semantic_extraction import _extract_themes
 
         items = [{"detail": "unrecognized content"}]
         themes = _extract_themes(items)

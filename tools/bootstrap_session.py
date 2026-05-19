@@ -125,7 +125,7 @@ def parse_labeled_format(
     # Build a regex that matches any known label at the start of a line.
     # Labels may be wrapped in **, [], or nothing.
     def _label_pattern(labels: list[str]) -> str:
-        escaped = [re.escape(l) for l in labels]
+        escaped = [re.escape(lbl) for lbl in labels]
         return r"(?:\*{0,2})(?:\[)?(?:" + "|".join(escaped) + r")(?:\])?\*{0,2}"
 
     dm_label_pattern = _label_pattern(dm_labels)
@@ -207,7 +207,7 @@ def detect_format(content: str, dm_labels: list[str], player_labels: list[str]) 
 
     # Check for speaker labels
     all_labels = dm_labels + player_labels
-    label_pattern = r"^(?:\*{0,2})(?:\[)?(?:" + "|".join(re.escape(l) for l in all_labels) + r")(?:\])?\*{0,2}\s*:"
+    label_pattern = r"^(?:\*{0,2})(?:\[)?(?:" + "|".join(re.escape(lbl) for lbl in all_labels) + r")(?:\])?\*{0,2}\s*:"
     if re.search(label_pattern, content, re.IGNORECASE | re.MULTILINE):
         return "labeled"
 

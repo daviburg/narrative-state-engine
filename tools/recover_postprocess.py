@@ -203,7 +203,7 @@ def main():
         # Rewrite stale IDs in relationships and events so dangling cleanup
         # redirects references to survivors instead of deleting them.
         _rewrite_stale_ids(catalogs, events_list, merge_map)
-        print(f"  Rewrote stale IDs in relationships and events")
+        print("  Rewrote stale IDs in relationships and events")
 
     # --- Pass 4: Cleanup dangling relationships + dedup relationships (#242) ---
     print("\n=== Pass 4: Cleanup dangling relationships + dedup ===")

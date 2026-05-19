@@ -28,7 +28,6 @@ from catalog_merger import (
     load_events,
     save_catalogs,
     save_events,
-    format_known_entities,
     format_known_entities_bounded,
     find_entity_by_id,
     merge_entity,
@@ -43,7 +42,6 @@ from catalog_merger import (
     _strip_any_prefix,
     _levenshtein,
     CATALOG_KEYS,
-    _filter_entity_aliases,
     _estimate_tokens,
     _find_mentioned_entities,
 )
@@ -2260,7 +2258,7 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
             "id": eid,
             "name": inferred_name,
             "type": inferred_type,
-            "identity": f"Entity referenced in events (stub — auto-created from event data).",
+            "identity": "Entity referenced in events (stub — auto-created from event data).",
             "first_seen_turn": effective_turn,
             "last_updated_turn": turn_id,
             "notes": "Auto-created by event-stub.",
@@ -5437,7 +5435,7 @@ def _extract_segmented(
                 )
             except QuotaExhaustedError as e:
                 print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
-                print(f"  Stopping extraction to preserve quota.", file=sys.stderr)
+                print("  Stopping extraction to preserve quota.", file=sys.stderr)
                 seg_failed_turns.append(turn_id)
                 # Mark remaining turns in this segment as failed
                 for j in range(i + 1, len(segment_turns)):
@@ -5639,7 +5637,7 @@ def _extract_segmented(
         print(f"\n  WARNING: {len(all_failed_turns)} turn(s) had extraction failures:", file=sys.stderr)
         for tid in all_failed_turns:
             print(f"    - {tid}", file=sys.stderr)
-        print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
+        print("  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
     print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events, {len(final_timeline)} temporal signals")
 
@@ -6091,7 +6089,7 @@ def extract_semantic_batch(
             )
         except QuotaExhaustedError as e:
             print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
-            print(f"  Stopping extraction to preserve quota.", file=sys.stderr)
+            print("  Stopping extraction to preserve quota.", file=sys.stderr)
             failed_turns.append(turn_id)
             # Mark remaining turns as failed
             for j in range(i + 1, total):
@@ -6230,7 +6228,7 @@ def extract_semantic_batch(
         print(f"\n  WARNING: {len(failed_turns)} turn(s) had extraction failures:", file=sys.stderr)
         for tid in failed_turns:
             print(f"    - {tid}", file=sys.stderr)
-        print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
+        print("  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
     # Post-batch dedup: merge entities that share the same name/aliases but got separate IDs
     dupes_merged, merge_map = _dedup_catalogs(catalogs)
