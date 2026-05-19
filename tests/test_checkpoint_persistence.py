@@ -332,7 +332,7 @@ class TestResumeLoadsPersisted:
         save_catalogs(catalog_dir, pre_existing)
 
         # Write a progress file indicating turn-002-dm was the last completed
-        progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+        progress_file = os.path.join(framework_dir, "extraction-progress.json")
         with open(progress_file, "w", encoding="utf-8") as f:
             json.dump({
                 "last_completed_turn": "turn-002-dm",
@@ -431,4 +431,70 @@ class TestEndOfLoopCheckpoint:
         )
         assert save_calls[0] == 5, (
             f"Expected 5 entities at end-of-loop save, got {save_calls[0]}"
+        )
+
+
+# ---------------------------------------------------------------------------
+# Non-segmented path: --no-resume ignores progress and extraction log
+# ---------------------------------------------------------------------------
+
+class TestNoResumeIgnoresState:
+    """Verify that no_resume=True skips progress file and extraction log."""
+
+    def test_no_resume_skips_progress_and_log(self, tmp_path):
+        """When no_resume=True, a pre-existing progress file and extraction-log
+        must be ignored: start_from stays 0 and _already_extracted is empty."""
+        session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
+
+        # Write a progress file claiming turn-050 was last completed
+        progress_file = os.path.join(framework_dir, "extraction-progress.json")
+        with open(progress_file, "w", encoding="utf-8") as f:
+            json.dump({
+                "last_completed_turn": "turn-050-dm",
+                "total_turns": 100,
+                "entities_discovered": 10,
+                "completed": False,
+            }, f)
+
+        # Write an extraction-log.jsonl with entries marking turns as done
+        log_path = os.path.join(framework_dir, "extraction-log.jsonl")
+        with open(log_path, "w", encoding="utf-8") as f:
+            for i in range(1, 51):
+                entry = {"turn_id": f"turn-{i:03d}-dm", "discovery_ok": True}
+                f.write(json.dumps(entry) + "\n")
+
+        # Track which turns are actually processed
+        processed_turns = []
+
+        def mock_extract_and_merge(turn, catalogs, events, llm, min_conf, catalog_dir=None, **kwargs):
+            processed_turns.append(turn["turn_id"])
+            return catalogs, events, False, {}
+
+        turns = _make_turns(1, 5)  # turns 1-5
+
+        with patch("semantic_extraction.LLMClient") as mock_llm_cls, \
+             patch("semantic_extraction.extract_and_merge", side_effect=mock_extract_and_merge), \
+             patch("semantic_extraction._ensure_player_character"), \
+             patch("semantic_extraction.find_stale_entities", return_value=[]), \
+             patch("semantic_extraction.save_catalogs"), \
+             patch("semantic_extraction.save_events"), \
+             patch("semantic_extraction.save_timeline"), \
+             patch("semantic_extraction.cleanup_dangling_relationships", return_value={}), \
+             patch("semantic_extraction._post_batch_orphan_sweep", return_value=0), \
+             patch("semantic_extraction._name_mention_discovery", return_value=0), \
+             patch("semantic_extraction.load_catalogs", return_value=_empty_catalogs()), \
+             patch("semantic_extraction.load_events", return_value=[]), \
+             patch("semantic_extraction.load_timeline", return_value=[]):
+            mock_llm_cls.return_value = MagicMock(config={"checkpoint_interval": 25})
+
+            from semantic_extraction import extract_semantic_batch
+            extract_semantic_batch(
+                turns, session_dir, framework_dir=framework_dir,
+                config_path="unused",
+                no_resume=True,
+            )
+
+        # All 5 turns must be processed — none skipped by progress or log
+        assert len(processed_turns) == 5, (
+            f"Expected all 5 turns processed with no_resume=True, got {len(processed_turns)}: {processed_turns}"
         )

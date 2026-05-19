@@ -501,7 +501,7 @@ def main() -> None:
     derived_dir = os.path.join(session_dir, "derived")
     if not os.path.isdir(derived_dir):
         print(
-            f"ERROR: No derived directory found. Run update_state.py first.", file=sys.stderr
+            "ERROR: No derived directory found. Run update_state.py first.", file=sys.stderr
         )
         sys.exit(1)
 

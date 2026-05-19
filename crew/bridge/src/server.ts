@@ -111,8 +111,12 @@ async function handleChatSend(req: http.IncomingMessage, res: http.ServerRespons
     jsonResponse(res, 400, { error: 'Missing or invalid "prompt" field.' });
     return;
   }
+  if (body.timeout !== undefined && (typeof body.timeout !== 'number' || body.timeout <= 0 || !isFinite(body.timeout))) {
+    jsonResponse(res, 400, { error: '"timeout" must be a positive finite number.' });
+    return;
+  }
 
-  const response = await bridge.sendPrompt(body.agent, body.prompt);
+  const response = await bridge.sendPrompt(body.agent, body.prompt, body.timeout);
   jsonResponse(res, 200, { response });
 }
 

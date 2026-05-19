@@ -50,7 +50,7 @@ def test_pc_alias_max_count_enforced():
     assert len(result) == _PC_ALIAS_MAX_COUNT
     # Should keep the last N (most recent)
     assert result[-1] == f"Alias{_PC_ALIAS_MAX_COUNT + 4}"
-    assert result[0] == f"Alias5"
+    assert result[0] == "Alias5"
 
 
 def test_pc_alias_valid_names_preserved():

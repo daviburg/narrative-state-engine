@@ -256,7 +256,7 @@ def main():
         known_tokens = _estimate_tokens(known)
 
         # Count how many entities made it into the context
-        entity_lines = [l for l in known.split("\n") if "|" in l and not l.startswith("(")]
+        entity_lines = [line for line in known.split("\n") if "|" in line and not line.startswith("(")]
         entities_in_context = len(entity_lines)
 
         print(f"\n--- Turn {turn_num:03d} ---", flush=True)

@@ -28,7 +28,6 @@ from catalog_merger import (
     load_events,
     save_catalogs,
     save_events,
-    format_known_entities,
     format_known_entities_bounded,
     find_entity_by_id,
     merge_entity,
@@ -43,7 +42,6 @@ from catalog_merger import (
     _strip_any_prefix,
     _levenshtein,
     CATALOG_KEYS,
-    _filter_entity_aliases,
     _estimate_tokens,
     _find_mentioned_entities,
 )
@@ -2260,7 +2258,7 @@ def _create_orphan_stubs(catalogs: dict, events: list, turn_id: str,
             "id": eid,
             "name": inferred_name,
             "type": inferred_type,
-            "identity": f"Entity referenced in events (stub — auto-created from event data).",
+            "identity": "Entity referenced in events (stub — auto-created from event data).",
             "first_seen_turn": effective_turn,
             "last_updated_turn": turn_id,
             "notes": "Auto-created by event-stub.",
@@ -5345,14 +5343,19 @@ def _print_retry_stats(llm) -> None:
 def _extract_segmented(
     turn_dicts, session_dir, framework_dir, catalog_dir,
     llm, min_confidence, dry_run, segment_size,
-    *, already_extracted: set | None = None,
+    *, already_extracted: set | None = None, no_resume: bool = False,
 ):
     """Extract in segments with fresh catalogs, then reconcile."""
     segments = []
     total = len(turn_dicts)
-    progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+    progress_file = os.path.join(framework_dir, "extraction-progress.json")
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
     quota_exhausted = False
+
+    # When no_resume is set, ignore any previously-extracted turn set and
+    # do not read the progress file for segment-level resume.
+    if no_resume:
+        already_extracted = None
 
     # Pre-load existing catalogs/events/timeline from disk so that entities
     # from prior extraction batches (e.g. when resuming with --start-turn)
@@ -5432,7 +5435,7 @@ def _extract_segmented(
                 )
             except QuotaExhaustedError as e:
                 print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
-                print(f"  Stopping extraction to preserve quota.", file=sys.stderr)
+                print("  Stopping extraction to preserve quota.", file=sys.stderr)
                 seg_failed_turns.append(turn_id)
                 # Mark remaining turns in this segment as failed
                 for j in range(i + 1, len(segment_turns)):
@@ -5634,7 +5637,7 @@ def _extract_segmented(
         print(f"\n  WARNING: {len(all_failed_turns)} turn(s) had extraction failures:", file=sys.stderr)
         for tid in all_failed_turns:
             print(f"    - {tid}", file=sys.stderr)
-        print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
+        print("  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
     print(f"  Segmented extraction complete: {entities_final} entities, {len(final_events)} events, {len(final_timeline)} temporal signals")
 
@@ -5812,6 +5815,7 @@ def extract_semantic_batch(
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     overrides: dict | None = None,
     segment_size: int = 0,
+    no_resume: bool = False,
 ) -> None:
     """Run semantic extraction over all turns in batch mode.
 
@@ -5846,7 +5850,7 @@ def extract_semantic_batch(
     # Build set of turns already successfully extracted (#191) so re-runs
     # skip them instead of overwriting good data from earlier passes.
     _already_extracted: set[str] = set()
-    if os.path.exists(extraction_log_path):
+    if not no_resume and os.path.exists(extraction_log_path):
         try:
             with open(extraction_log_path, "r", encoding="utf-8") as _elf:
                 for _line in _elf:
@@ -5869,7 +5873,7 @@ def extract_semantic_batch(
         _extract_segmented(
             turn_dicts, session_dir, framework_dir, catalog_dir,
             llm, min_confidence, dry_run, segment_size,
-            already_extracted=_already_extracted,
+            already_extracted=_already_extracted, no_resume=no_resume,
         )
         return
 
@@ -5882,11 +5886,11 @@ def extract_semantic_batch(
     _ensure_player_character(catalogs, first_turn)
 
     # Progress tracking
-    progress_file = os.path.join(session_dir, "derived", "extraction-progress.json")
+    progress_file = os.path.join(framework_dir, "extraction-progress.json")
     start_from = 0
 
     # Resume from last checkpoint if available
-    if os.path.exists(progress_file):
+    if not no_resume and os.path.exists(progress_file):
         try:
             with open(progress_file, "r", encoding="utf-8") as f:
                 progress = json.load(f)
@@ -6085,7 +6089,7 @@ def extract_semantic_batch(
             )
         except QuotaExhaustedError as e:
             print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
-            print(f"  Stopping extraction to preserve quota.", file=sys.stderr)
+            print("  Stopping extraction to preserve quota.", file=sys.stderr)
             failed_turns.append(turn_id)
             # Mark remaining turns as failed
             for j in range(i + 1, total):
@@ -6224,7 +6228,7 @@ def extract_semantic_batch(
         print(f"\n  WARNING: {len(failed_turns)} turn(s) had extraction failures:", file=sys.stderr)
         for tid in failed_turns:
             print(f"    - {tid}", file=sys.stderr)
-        print(f"  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
+        print("  These turns should be re-extracted when the LLM is available.", file=sys.stderr)
 
     # Post-batch dedup: merge entities that share the same name/aliases but got separate IDs
     dupes_merged, merge_map = _dedup_catalogs(catalogs)

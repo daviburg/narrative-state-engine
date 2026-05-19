@@ -12,7 +12,6 @@ from semantic_extraction import (
     _DEFAULT_REFRESH_INTERVAL,
     _DEFAULT_REFRESH_BATCH_SIZE,
     _MAX_REFRESH_BATCH_SIZE,
-    _REFRESH_TYPE_SHARES,
     extract_semantic_batch,
     CATALOG_KEYS,
 )
@@ -309,7 +308,7 @@ class TestRefreshEntities:
 
     def test_refresh_preserves_first_seen_turn(self):
         """Refreshed entity should keep its original first_seen_turn."""
-        from unittest.mock import MagicMock, patch, call
+        from unittest.mock import MagicMock, patch
         from semantic_extraction import refresh_entities
 
         elder = _make_entity("char-elder", "Elder", "character", "turn-005", "turn-005")

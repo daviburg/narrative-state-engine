@@ -862,7 +862,16 @@ The pipeline processes each turn through four agents:
 3. **Relationship Mapper** — identify cross-entity relationships
 4. **Event Extractor** — identify narrative events
 
-Progress is checkpointed every `checkpoint_interval` turns (default 25, configurable in `config/llm.json`) and can resume after interruption.
+Progress is checkpointed every `checkpoint_interval` turns (default 25, configurable in `config/llm.json`) and can resume after interruption. The progress file is stored at `<framework_dir>/extraction-progress.json` (e.g. `framework/extraction-progress.json`).
+
+To force a fresh extraction that ignores any saved progress and extraction log state, use the `--no-resume` flag:
+
+```bash
+python tools/bootstrap_session.py --session sessions/session-001 \
+  --file transcript.txt --no-resume
+```
+
+This is useful when prior extraction state is stale or corrupted and you want to re-extract all turns from scratch.
 
 ### Detached Batch Execution (Recommended)
 

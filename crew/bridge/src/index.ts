@@ -13,8 +13,11 @@ export interface BridgeOptions extends VSCodeLaunchOptions {
 }
 
 export interface VSCodeBridge {
-  /** Send a prompt to the specified agent and return the full response text. */
-  sendPrompt(agent: string, prompt: string): Promise<string>;
+  /**
+   * Send a prompt to the specified agent and return the full response text.
+   * @param timeout - Per-call timeout in ms. Falls back to the session default when omitted.
+   */
+  sendPrompt(agent: string, prompt: string, timeout?: number): Promise<string>;
   /** Start a new chat session, resetting conversation context. */
   newChat(): Promise<void>;
   /** Close VS Code and clean up. */
@@ -72,10 +75,10 @@ async function buildBridge(
   const defaultTimeout = options?.defaultTimeout ?? 120_000;
 
   const bridge: VSCodeBridge = {
-    async sendPrompt(agent: string, prompt: string): Promise<string> {
+    async sendPrompt(agent: string, prompt: string, timeout?: number): Promise<string> {
       tracker.recordSend(prompt.length);
       await chat.selectAgent(agent);
-      const response = await chat.sendAndRead(prompt, defaultTimeout);
+      const response = await chat.sendAndRead(prompt, timeout ?? defaultTimeout);
       tracker.recordReceive(response.length);
       return response;
     },

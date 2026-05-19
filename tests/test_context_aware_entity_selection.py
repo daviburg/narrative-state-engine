@@ -574,9 +574,9 @@ class TestBoundedWithTurnText:
             turn_text="Hero entered the room")
         lines = result.strip().split("\n")
         # Find positions
-        hero_pos = next(i for i, l in enumerate(lines) if "char-mentioned" in l)
-        shop_pos = next(i for i, l in enumerate(lines) if "char-coloc" in l)
-        back_pos = next(i for i, l in enumerate(lines) if "char-back" in l)
+        hero_pos = next(i for i, line in enumerate(lines) if "char-mentioned" in line)
+        shop_pos = next(i for i, line in enumerate(lines) if "char-coloc" in line)
+        back_pos = next(i for i, line in enumerate(lines) if "char-back" in line)
         assert hero_pos < shop_pos, "Mentioned should come before co-located"
         assert shop_pos < back_pos, "Co-located should come before backfill"
 

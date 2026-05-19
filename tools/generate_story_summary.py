@@ -188,7 +188,7 @@ def assemble_story_summary_input(
     parts: list[str] = []
 
     # -- Overview context --
-    parts.append(f"## Campaign Scope")
+    parts.append("## Campaign Scope")
     parts.append(f"Turns covered: {first_turn} through {last_turn}")
     parts.append(f"Total events: {len(events)}")
     parts.append(f"Total entities tracked: {len(grouped)}")

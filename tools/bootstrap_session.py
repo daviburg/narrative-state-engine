@@ -125,7 +125,7 @@ def parse_labeled_format(
     # Build a regex that matches any known label at the start of a line.
     # Labels may be wrapped in **, [], or nothing.
     def _label_pattern(labels: list[str]) -> str:
-        escaped = [re.escape(l) for l in labels]
+        escaped = [re.escape(lbl) for lbl in labels]
         return r"(?:\*{0,2})(?:\[)?(?:" + "|".join(escaped) + r")(?:\])?\*{0,2}"
 
     dm_label_pattern = _label_pattern(dm_labels)
@@ -207,7 +207,7 @@ def detect_format(content: str, dm_labels: list[str], player_labels: list[str]) 
 
     # Check for speaker labels
     all_labels = dm_labels + player_labels
-    label_pattern = r"^(?:\*{0,2})(?:\[)?(?:" + "|".join(re.escape(l) for l in all_labels) + r")(?:\])?\*{0,2}\s*:"
+    label_pattern = r"^(?:\*{0,2})(?:\[)?(?:" + "|".join(re.escape(lbl) for lbl in all_labels) + r")(?:\])?\*{0,2}\s*:"
     if re.search(label_pattern, content, re.IGNORECASE | re.MULTILINE):
         return "labeled"
 
@@ -506,6 +506,12 @@ def build_parser() -> argparse.ArgumentParser:
              "prior context. Turns before N are skipped. "
              "Example: --start-turn 26 --max-turns 50 extracts turns 26-50.",
     )
+    parser.add_argument(
+        "--no-resume",
+        action="store_true",
+        help="Force a fresh extraction, ignoring extraction-progress.json and "
+             "extraction-log.jsonl resume state.",
+    )
     return parser
 
 
@@ -777,6 +783,7 @@ def main() -> None:
             turn_dicts, session_dir, framework_dir=args.framework, dry_run=args.dry_run,
             overrides=llm_overrides or None,
             segment_size=effective_segment_size,
+            no_resume=args.no_resume,
         )
 
         # Stub backfill pass (#128, #131 — now runs by default)

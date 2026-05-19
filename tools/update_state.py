@@ -35,7 +35,7 @@ def list_turns(transcript_dir: str) -> list[dict]:
                 content = f.read()
             # Strip the heading line to get the raw text
             lines = content.split("\n")
-            text_lines = [l for l in lines if not l.startswith("# turn-")]
+            text_lines = [line for line in lines if not line.startswith("# turn-")]
             text = "\n".join(text_lines).strip()
             turns.append(
                 {
