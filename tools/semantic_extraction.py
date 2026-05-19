@@ -2155,6 +2155,93 @@ def _find_cross_catalog_type_conflict(
     return None
 
 
+_DEDUP_STOP_WORDS = frozenset({"the", "a", "an", "of", "in", "at", "to", "and", "or"})
+
+
+def _names_suggest_distinct_entities(names: list[str]) -> bool:
+    """Return True when names appear to be distinct entities rather than synonyms.
+
+    Computes vocabulary diversity: distinct non-stop-word tokens / total
+    non-stop-word tokens. A ratio >= 0.85 (almost every word is unique)
+    indicates a legitimately entity-rich turn (e.g., a town, a tavern, a
+    market, a temple) rather than synonym explosion.
+    """
+    all_words: list[str] = []
+    for name in names:
+        all_words.extend(
+            w for w in name.lower().split() if w not in _DEDUP_STOP_WORDS
+        )
+    if not all_words:
+        return False
+    return len(set(all_words)) / len(all_words) >= 0.85
+
+
+def _same_turn_dedup_gate(
+    entities: list[dict],
+    threshold: int = 4,
+    filtered_log: list | None = None,
+) -> list[dict]:
+    """Consolidate same-turn, same-type entity proposals that likely refer to the same thing (#337).
+
+    When more than ``threshold`` new entities of the same type share the same
+    source_turn, keep only the entity with the longest (most specific) name
+    per type. This catches synonym explosion where the DM uses multiple
+    phrases for the same concept.
+
+    A vocabulary-diversity guard skips collapse when names appear to be
+    distinct entities (e.g., 4+ genuinely different locations) rather than
+    synonyms. See ``_names_suggest_distinct_entities``.
+
+    Only applies to NEW entities (is_new=True). Existing entity references
+    are always kept.
+
+    Dropped proposals are appended to ``filtered_log`` (if provided) with
+    ``reason="same_turn_synonym_dedup"`` so downstream log consumers can
+    audit rejections alongside other discovery filters.
+    """
+    # Build (turn, type) -> list[index] using enumerate to avoid id() fragility.
+    groups: dict[tuple[str, str], list[int]] = {}
+    for idx, entity in enumerate(entities):
+        if not entity.get("is_new", True):
+            continue
+        key = (entity.get("source_turn", ""), entity.get("type", ""))
+        groups.setdefault(key, []).append(idx)
+
+    to_remove: set[int] = set()
+    for (turn, etype), indices in groups.items():
+        if len(indices) <= threshold:
+            continue
+        group = [entities[i] for i in indices]
+        if _names_suggest_distinct_entities([e.get("name", "") for e in group]):
+            continue
+        group_with_idx = sorted(
+            zip(indices, group),
+            key=lambda pair: len(pair[1].get("name", "")),
+            reverse=True,
+        )
+        survivor_idx, survivor = group_with_idx[0]
+        survivor_name = survivor.get("name", "")
+        survivor_eid = survivor.get("proposed_id") or survivor.get("existing_id", "")
+        for idx, entity in group_with_idx[1:]:
+            eid = entity.get("proposed_id") or entity.get("existing_id", "")
+            to_remove.add(idx)
+            print(f"  DEDUP-GATE: dropping '{entity.get('name')}' ({eid}) "
+                  f"— same turn/type as '{survivor_name}' "
+                  f"({len(indices)} {etype} proposals in {turn})",
+                  file=sys.stderr)
+            if filtered_log is not None:
+                filtered_log.append({
+                    "name": entity.get("name", ""),
+                    "id": eid,
+                    "reason": "same_turn_synonym_dedup",
+                    "survivor_id": survivor_eid,
+                })
+
+    if not to_remove:
+        return entities
+    return [e for i, e in enumerate(entities) if i not in to_remove]
+
+
 # Meta-labels that should never be accepted as PC aliases (#186)
 _PC_ALIAS_BLOCKLIST = {
     "player character", "pc", "player", "the player",
@@ -2726,6 +2813,23 @@ def _run_discovery_phase(
         _cross_catalog_filtered.append(entity_ref)
     qualified = _cross_catalog_filtered
 
+    # Same-turn dedup gate: consolidate synonym explosion (#337)
+    _dedup_threshold = (
+        _cfg.get("synonym_dedup_threshold", 4) if isinstance(_cfg, dict) else 4
+    )
+    qualified = _same_turn_dedup_gate(
+        qualified, threshold=_dedup_threshold, filtered_log=_discovery_filtered
+    )
+
+    # Log same-turn entity density (#337)
+    _new_by_type: dict[str, int] = {}
+    for _ent in discovered:
+        if _ent.get("is_new", True):
+            _etype = _ent.get("type", "unknown")
+            _new_by_type[_etype] = _new_by_type.get(_etype, 0) + 1
+    if any(v > _dedup_threshold for v in _new_by_type.values()):
+        phase_log["synonym_explosion_warning"] = _new_by_type
+
     # Within-turn dedup (#365)
     qualified = _within_turn_dedup(qualified)
 
@@ -2836,6 +2940,7 @@ def extract_and_merge(
         _pf_phase = prefetched_discovery["phase_log"]
         _phase_log["discovery_ok"] = _pf_phase.get("discovery_ok", True)
         _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
+        _phase_log["synonym_explosion_warning"] = _pf_phase.get("synonym_explosion_warning")
         _disc_sys_tmpl = prefetched_discovery.get("discovery_sys_tmpl")
         _disc_user_prompt = prefetched_discovery.get("discovery_user_prompt")
     else:
@@ -2849,6 +2954,7 @@ def extract_and_merge(
         _discovery_filtered = _discovery_result["discovery_filtered"]
         _phase_log["discovery_ok"] = _discovery_result["phase_log"]["discovery_ok"]
         _phase_log["discovery_error"] = _discovery_result["phase_log"]["discovery_error"]
+        _phase_log["synonym_explosion_warning"] = _discovery_result["phase_log"].get("synonym_explosion_warning")
         _disc_sys_tmpl = _discovery_result.get("discovery_sys_tmpl")
         _disc_user_prompt = _discovery_result.get("discovery_user_prompt")
 
@@ -3527,6 +3633,7 @@ def extract_and_merge(
         "new_temporal_signals": max(0, _temporal_after - _temporal_before),
         "discovery_proposals": _discovery_proposals,
         "discovery_filtered": _discovery_filtered,
+        "synonym_explosion_warning": _phase_log.get("synonym_explosion_warning"),
         "elapsed_ms": _elapsed_ms,
         "discovery_ms": int((_t_after_discovery - _t0) * 1000),
         "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
