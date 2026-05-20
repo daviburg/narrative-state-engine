@@ -43,8 +43,21 @@ PLAYER CHARACTER RULE:
 - Do NOT extract the player character — they are pre-seeded.
 - Do NOT create new entities for "you"/"yourself" references.
 
+## Entity Name Validation
+
+Before finalizing any entity:
+
+1. **Compound-term fragments**: If any entity (known or newly discovered this turn) has a multi-word name — e.g., "Ice Shard", "Quiet Weave", "Triangular Pattern Disruption Field", "Frost Precision" — do NOT extract individual words from that name as separate entities. "ice", "quiet", "weave", "triangular", "pattern", "disruption", "field", "precision" are fragments of those compound terms, not independent entities. Check all multi-word names in the known-entities list before creating single-word entities.
+
+2. **Common descriptive words**: The following types of words are almost never character names in fantasy settings and should not be extracted as characters or creatures:
+   - Descriptive adjectives: quiet, frozen, ancient, broken, triangular, geometric, reinforced, southern, distant, swift
+   - Common abstract nouns: field, pattern, weave, fragment, precision, disruption, method, protocol, structure, technique
+   - Natural elements used generically: ice, frost, flame, stone, dust (when part of a compound term name)
+
+3. **Uncertainty rule**: If you are uncertain whether a single word is a proper name or a descriptor fragment, set confidence below 0.5.
+
 Type classification:
-- "character"/"creature": sentient being with will and agency. NOT diseases, forces, events, adjectives, common nouns, or fragments of compound terms (e.g., do not extract "Pattern" from "Pattern Language" as a character).
+- "character"/"creature": sentient being with will and agency. NOT diseases, forces, events, adjectives, common nouns, or single-word fragments of multi-word entity names.
 - "location": physical place. NOT events or abstract concepts.
 - "item": discrete physical object (weapons, tools, containers, substances, traps, quest objects).
 - "faction": group acting as a unit (tribes, guilds, patrols).
