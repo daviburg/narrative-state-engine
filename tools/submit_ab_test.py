@@ -6,7 +6,7 @@ optionally submits it directly via the orchestrator CLI.
 
 The orchestrator adapter runs bootstrap_session.py for each variant × run
 combination, collects per-run entity counts, and flags anomalies (zero-entity
-runs, >20 % intra-variant divergence) on the dashboard.
+runs, >20 % inter-variant divergence) on the dashboard.
 
 Usage
 -----
@@ -44,8 +44,23 @@ import uuid
 from pathlib import Path
 
 
-_BRANCH_PATTERN = re.compile(r'^[a-zA-Z0-9/_.\-]+$')
 _TASK_ID_PATTERN = re.compile(r'^[a-z0-9][a-z0-9-]{0,62}[a-z0-9]$')
+
+
+def _validate_branch_name(name: str) -> bool:
+    """Validate branch name using git check-ref-format (authoritative).
+
+    Falls back to a permissive regex if git is not available.
+    """
+    try:
+        result = subprocess.run(
+            ["git", "check-ref-format", "--branch", name],
+            capture_output=True,
+        )
+        return result.returncode == 0
+    except FileNotFoundError:
+        # git not available — fall back to permissive pattern
+        return bool(re.match(r'^[^\x00-\x1f ~^:?*\[\\]+$', name))
 
 
 def _make_task_id(pr: int, suffix: str | None = None) -> str:
@@ -70,7 +85,7 @@ def build_task(args: argparse.Namespace) -> dict:
         ("variant_a", args.variant_a),
         ("variant_b", args.variant_b),
     ]:
-        if value and not _BRANCH_PATTERN.match(value):
+        if value and not _validate_branch_name(value):
             raise ValueError(f"Invalid branch name for {field}: {value!r}")
 
     metadata: dict = {
@@ -78,9 +93,9 @@ def build_task(args: argparse.Namespace) -> dict:
         "variant_a_branch": args.variant_a,
         "variant_b_branch": args.variant_b,
     }
-    if args.runs:
+    if args.runs is not None:
         metadata["runs_per_variant"] = args.runs
-    if args.turns:
+    if args.turns is not None:
         metadata["turns"] = args.turns
     if args.repo_a:
         metadata["repo_a"] = str(Path(args.repo_a).resolve())
@@ -132,8 +147,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--runs", type=int, default=None,
                         help="Runs per variant (default: orchestrator config, typically 3)")
     parser.add_argument("--turns", default=None, help="Turn range, e.g. '1-30' or '30'")
-    parser.add_argument("--base-url-a", default=None, help="LLM endpoint URL for variant A")
-    parser.add_argument("--base-url-b", default=None, help="LLM endpoint URL for variant B")
+    parser.add_argument("--base-url-a", default="http://localhost:8080/v1",
+                        help="LLM endpoint URL for variant A (default: http://localhost:8080/v1)")
+    parser.add_argument("--base-url-b", default="http://localhost:8081/v1",
+                        help="LLM endpoint URL for variant B (default: http://localhost:8081/v1)")
     parser.add_argument("--session", default=None, help="Session path (e.g. sessions/session-import)")
     parser.add_argument("--transcript", default=None, help="Path to transcript file")
     parser.add_argument("--output-dir", default=None, help="Directory for per-run output files")
@@ -153,7 +170,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--orchestrator-config", default=None,
                         help="Path to orchestrator config.json (only used with --submit)")
 
-    return parser.parse_args(argv)
+    args = parser.parse_args(argv)
+
+    if args.runs is not None and args.runs < 1:
+        parser.error("--runs must be >= 1")
+
+    return args
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -168,7 +190,12 @@ def main(argv: list[str] | None = None) -> int:
     task_json = json.dumps(task, indent=2)
 
     out_path = Path(args.output) if args.output else Path(f"ab-test-pr{args.pr}.json")
-    out_path.write_text(task_json + "\n", encoding="utf-8")
+    try:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(task_json + "\n", encoding="utf-8")
+    except OSError as exc:
+        print(f"Error writing {out_path}: {exc}", file=sys.stderr)
+        return 1
     print(f"Task definition written to: {out_path}", file=sys.stderr)
     print(task_json)
 
