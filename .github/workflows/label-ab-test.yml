@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       pull-requests: write
+      issues: write
     steps:
       - uses: actions/github-script@v7
         with:
@@ -20,17 +21,31 @@ jobs:
             const { owner, repo } = context.repo;
             const pr_number = context.payload.pull_request.number;
 
+            // Ensure label exists (handles fresh repos)
+            try {
+              await github.rest.issues.getLabel({ owner, repo, name: 'needs-ab-test' });
+            } catch (e) {
+              if (e.status === 404) {
+                await github.rest.issues.createLabel({
+                  owner, repo, name: 'needs-ab-test',
+                  color: 'D93F0B',
+                  description: 'PR requires A/B test before merge'
+                });
+              }
+            }
+
             // Add label
             await github.rest.issues.addLabels({
               owner, repo, issue_number: pr_number,
               labels: ['needs-ab-test']
             });
 
-            // Check if we already commented
-            const comments = await github.rest.issues.listComments({
-              owner, repo, issue_number: pr_number
-            });
-            const botComment = comments.data.find(c =>
+            // Check if we already commented (paginate to avoid missing on busy PRs)
+            const comments = await github.paginate(
+              github.rest.issues.listComments,
+              { owner, repo, issue_number: pr_number, per_page: 100 }
+            );
+            const botComment = comments.find(c =>
               c.body.includes('This PR modifies extraction behavior')
             );
 
