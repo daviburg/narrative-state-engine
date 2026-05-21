@@ -91,3 +91,4 @@ Rules:
   describing the same location), extract ONE entity using the most specific or proper name.
   Do NOT create separate entities for each synonym. When unsure, prefer the name that would
   make the best catalog entry title.
+- Do NOT classify common English words as "character" type. Abstract nouns (echo, pattern, precision, disruption), common adjectives (quiet, broken), directional adjectives (southern, northern, eastern, western), or other non-proper-noun words must be classified as "concept" or omitted — never as "character" or "creature". A character name must be a proper noun that refers to a specific individual.
