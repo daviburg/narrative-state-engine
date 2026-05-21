@@ -60,9 +60,13 @@ except ImportError:
 
 try:
     from wordfreq import word_frequency as _word_frequency
-    _WORDFREQ_AVAILABLE = True
 except ImportError:
-    _WORDFREQ_AVAILABLE = False
+    import logging as _logging
+    _logging.getLogger(__name__).warning(
+        "wordfreq not installed \u2014 stub character filter runs in degraded mode "
+        "(morphological patterns only, no frequency-based rejection)"
+    )
+
     def _word_frequency(word: str, lang: str) -> float:  # type: ignore[misc]
         return 0.0
 
@@ -1930,8 +1934,11 @@ def _is_plausible_character_name(name: str) -> bool:
     if _GENERIC_STEMS and low in _GENERIC_STEMS:
         return False
     # Morphological filter: common English word-form suffixes
+    # Bypass for proper names (capitalized, >6 chars) to avoid rejecting
+    # names like Laurence, Constance, Clement (#415 review)
     if _COMMON_WORD_SUFFIX_RE.search(low):
-        return False
+        if not (name.strip()[:1].isupper() and len(low) > 6):
+            return False
     # Frequency filter: common English words are not character names
     if _word_frequency(low, "en") >= _COMMON_WORD_FREQ_THRESHOLD:
         return False

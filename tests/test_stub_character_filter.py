@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 from semantic_extraction import (
     _is_plausible_character_name,
+    _create_orphan_stubs,
     _post_batch_orphan_sweep,
     _name_mention_discovery,
 )
@@ -105,6 +106,19 @@ class TestIsPlausibleCharacterName:
     def test_accepts_multi_word_name(self):
         """Multi-word stems (e.g. from hyphenated IDs) pass through."""
         assert _is_plausible_character_name("iron wolf") is True
+
+    def test_accepts_proper_name_laurence(self):
+        """Capitalized proper name with -ence suffix bypasses suffix filter."""
+        assert _is_plausible_character_name("Laurence") is True
+
+    def test_accepts_proper_name_constance(self):
+        """Capitalized proper name with -ance suffix bypasses suffix filter."""
+        assert _is_plausible_character_name("Constance") is True
+
+    def test_accepts_proper_name_clement(self):
+        """Capitalized proper name with -ment suffix bypasses suffix filter."""
+        assert _is_plausible_character_name("Clement") is True
+
 
 
 # ---------------------------------------------------------------------------
@@ -227,3 +241,59 @@ class TestNameMentionDiscoveryFilter:
         _name_mention_discovery(catalogs, events)
         chars = catalogs.get("characters.json", [])
         assert any(e["id"] == "char-maelis" for e in chars)
+
+
+# ---------------------------------------------------------------------------
+# Integration: _create_orphan_stubs rejects abstract character stubs
+# ---------------------------------------------------------------------------
+
+class TestCreateOrphanStubsFilter:
+    """_create_orphan_stubs should not create stubs for implausible char names."""
+
+    def test_rejects_char_disruption_stub(self):
+        """Abstract noun 'disruption' should not get a character stub."""
+        catalogs: dict = {}
+        events = [{
+            "id": "event-1",
+            "turn_id": "turn-001",
+            "related_entities": ["char-disruption"],
+        }]
+        _create_orphan_stubs(catalogs, events, "turn-001")
+        chars = catalogs.get("characters.json", [])
+        assert not any(e["id"] == "char-disruption" for e in chars)
+
+    def test_rejects_char_precision_stub(self):
+        """Abstract noun 'precision' should not get a character stub."""
+        catalogs: dict = {}
+        events = [{
+            "id": "event-1",
+            "turn_id": "turn-001",
+            "related_entities": ["char-precision"],
+        }]
+        _create_orphan_stubs(catalogs, events, "turn-001")
+        chars = catalogs.get("characters.json", [])
+        assert not any(e["id"] == "char-precision" for e in chars)
+
+    def test_accepts_valid_character_stub(self):
+        """A legitimate character ID like char-fenouille should be stubbed."""
+        catalogs: dict = {}
+        events = [{
+            "id": "event-1",
+            "turn_id": "turn-001",
+            "related_entities": ["char-fenouille"],
+        }]
+        _create_orphan_stubs(catalogs, events, "turn-001")
+        chars = catalogs.get("characters.json", [])
+        assert any(e["id"] == "char-fenouille" for e in chars)
+
+    def test_non_character_type_unaffected(self):
+        """Location stubs are not subject to the character name filter."""
+        catalogs: dict = {}
+        events = [{
+            "id": "event-1",
+            "turn_id": "turn-001",
+            "related_entities": ["loc-disruption"],
+        }]
+        _create_orphan_stubs(catalogs, events, "turn-001")
+        locs = catalogs.get("locations.json", [])
+        assert any(e["id"] == "loc-disruption" for e in locs)
