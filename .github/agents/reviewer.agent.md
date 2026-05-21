@@ -69,7 +69,7 @@ A review is not complete until the verdict is posted to GitHub:
 
 ## Empirical Copilot Patterns
 
-These are the top issue categories that GitHub Copilot's automated reviewer consistently flags across this project's PRs (~181 comments across 38 PRs). Use this as a mental checklist during every review — if you haven't checked for each of these, you haven't reviewed deeply enough.
+These are the top issue categories that GitHub Copilot's automated reviewer consistently flags across this project's PRs (as of 2026-05-21: ~181 comments across 38 PRs in both public and private repos, measured via `gh api` paginated comment scan). Use this as a mental checklist during every review — if you haven't checked for each of these, you haven't reviewed deeply enough.
 
 ### Tier 1 — Most Frequent (each ~10-20% of all findings)
 
@@ -87,7 +87,7 @@ These are the top issue categories that GitHub Copilot's automated reviewer cons
 
 6. **Shell/cross-platform portability**: UTF-8 BOM before shebang, `echo` with ANSI escapes not portable, `\\` line continuation broken in bash, PowerShell `$LASTEXITCODE` stale after .ps1-to-.ps1 calls. **For every script, ask: "does this work on BOTH platforms this project runs on?"**
 
-7. **Systemd misconfiguration**: `Type=notify` without sd_notify implementation. User units with `After=system-service`. `ProtectHome=read-only` blocking required writes. Ordering that doesn't pull in the dependency. **For systemd units, verify every directive against the actual daemon behavior and unit type.**
+7. **Systemd misconfiguration**: `Type=notify` without sd_notify implementation. User units ordering against system services they can't control (e.g., `After=postgresql.service` in a user unit — user units cannot order against system units). `ProtectHome=read-only` blocking required writes to `~/.config/`. Ordering that doesn't pull in the dependency. **For systemd units, verify every directive against the actual daemon behavior and unit type.**
 
 8. **Missing env var documentation**: Services that need env vars but don't document them, don't validate their presence, or start successfully without them only to crash later. **For every service/script, trace: what env vars does it read? Are they documented? What happens if they're missing?**
 
