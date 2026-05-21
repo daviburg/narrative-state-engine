@@ -67,6 +67,44 @@ A review is not complete until the verdict is posted to GitHub:
 - After requesting changes: run `gh pr review <PR#> --request-changes -b "<reason>"`
 - A local-only review verdict without a corresponding GitHub review action is incomplete.
 
+## Empirical Copilot Patterns
+
+These are the top issue categories that GitHub Copilot's automated reviewer consistently flags across this project's PRs (~181 comments across 38 PRs). Use this as a mental checklist during every review — if you haven't checked for each of these, you haven't reviewed deeply enough.
+
+### Tier 1 — Most Frequent (each ~10-20% of all findings)
+
+1. **Docs-code drift**: README, docstrings, help text, `.example` headers, and design docs that don't match actual behavior. Field names changed but docs not updated. CLI flags renamed but help text stale. Counts/descriptions outdated. **Always cross-reference every doc claim against the actual code.**
+
+2. **Silent error masking**: `except ImportError: pass` that also swallows errors inside the imported module. Overly broad exception handlers. Scripts that print "success" before verifying the operation worked. NSSM/systemctl calls that don't check exit codes. **Trace every error path — if a failure is swallowed, it's blocking.**
+
+3. **Logic bugs from loose matching**: `in` substring matching that triggers false positives (e.g., "ring" in "spring"). Regex too broad (captures beyond intended boundary). Conditional logic unreachable due to earlier return. Filter applied at wrong stage. **For every string match or regex, ask: "what unintended inputs would this also match?"**
+
+4. **Hardcoded/non-portable paths**: Absolute paths baked into templates, unit files, or scripts. `/tmp/` in cross-platform docs. Paths that assume a specific user home directory. **Every path in a deploy file should be parameterized or validated.**
+
+### Tier 2 — Frequent (each ~6-9% of findings)
+
+5. **Schema/field inconsistency**: `source_turn` (singular) vs `source_turns` (array). `id` vs `proposed_id`. Design docs listing fields that don't exist in the schema. **When reviewing schema changes, grep the entire repo for the old field name.**
+
+6. **Shell/cross-platform portability**: UTF-8 BOM before shebang, `echo` with ANSI escapes not portable, `\\` line continuation broken in bash, PowerShell `$LASTEXITCODE` stale after .ps1-to-.ps1 calls. **For every script, ask: "does this work on BOTH platforms this project runs on?"**
+
+7. **Systemd misconfiguration**: `Type=notify` without sd_notify implementation. User units with `After=system-service`. `ProtectHome=read-only` blocking required writes. Ordering that doesn't pull in the dependency. **For systemd units, verify every directive against the actual daemon behavior and unit type.**
+
+8. **Missing env var documentation**: Services that need env vars but don't document them, don't validate their presence, or start successfully without them only to crash later. **For every service/script, trace: what env vars does it read? Are they documented? What happens if they're missing?**
+
+### Tier 3 — Periodic (each ~3-5% of findings)
+
+9. **Dead code / redundant conditions**: Variables defined but never used, flags accepted but ignored, CodeQL-flagged always-true comparisons after refactoring.
+
+10. **Test coverage illusions**: Tests named for one behavior but actually exercising a different code path. Tests that pass via a different rule than the one they claim to validate.
+
+11. **Architecture coupling**: Importing private helpers (`_helper()`) across module boundaries. Hardcoded seed values instead of dynamic derivation. Operations that lose data from other entities during transforms.
+
+12. **Version/dependency drift**: Unpinned tools in CI causing non-deterministic results. Optional deps placed in mandatory requirements files.
+
+### Application Rule
+
+Before approving ANY PR, mentally scan through all 12 patterns above. For deploy/infra PRs, Tier 1 items 1-4 and Tier 2 items 5-8 are mandatory. For Python code PRs, items 1-4 and 9-11 are mandatory. If you cannot confirm you've checked each applicable pattern, do NOT approve.
+
 ## Self-Improvement
 
 After each session, review whether your review checklist is still complete. If you discover new conventions, common mistakes, or review criteria that should be tracked, propose an update to this file via a PR.
