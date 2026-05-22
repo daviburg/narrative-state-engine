@@ -71,8 +71,10 @@ python tools/bootstrap_session.py \
 ## Validation (each run)
 
 ```bash
-# Schema validation (always required):
-python tools/validate.py
+# Schema validation (always required — run for each run directory):
+python tools/validate.py --framework framework-ab-a-run1
+python tools/validate.py --framework framework-ab-b-run1
+# ... repeat for all run directories
 
 # Ground truth validation (full-session runs only — requires full-session fixture schema):
 python tools/validate_extraction.py \
@@ -80,10 +82,10 @@ python tools/validate_extraction.py \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
 ```
 
-> **Note:** `validate_extraction.py` requires the full-session fixture (`extraction-ground-truth-full-session.json`) which has a different schema than the turns-1-30 fixture. For turns 1–30 runs, use `validate.py` for schema checks and manually review against `extraction-ground-truth-turns-1-30.json`.
+> **Note:** `validate_extraction.py` requires the full-session fixture (`extraction-ground-truth-full-session.json`) which has a different schema than the turns-1-30 fixture. For turns 1–30 runs, use `validate.py --framework <dir>` for schema checks and manually review against `extraction-ground-truth-turns-1-30.json`.
 
-- [ ] `validate_extraction.py` exits 0 for all B runs
-- [ ] `validate.py` reports 0 schema violations for all B runs
+- [ ] `validate_extraction.py` exits 0 for all B runs (full-session runs only; skip for `--max-turns 30`)
+- [ ] `validate.py --framework <dir>` reports 0 schema violations for all B runs
 
 ## Metrics Collection
 
@@ -118,7 +120,7 @@ python tools/validate_extraction.py \
 
 ## PR Report
 
-- [ ] A/B Test Results section added to PR body (see template in `docs/ab-test-standard.md` §5.1)
+- [ ] A/B Test Results posted as a PR comment (see template in `docs/ab-test-standard.md` §5.1)
 - [ ] All tables filled with mean ± σ values
 - [ ] Zero BLOCK statuses
 - [ ] All WARN statuses have written justification

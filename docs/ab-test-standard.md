@@ -47,7 +47,7 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 |---|---|---|
 | Wall-clock time per turn | Timestamp delta from extraction log | seconds |
 | Total extraction time | Start-to-finish wall clock | minutes |
-| LLM calls per turn | Count of API calls across all 5 extraction phases (entity-discovery, entity-detail, relationship, event, and plot-thread; optional phases like temporal are excluded from this count) | count |
+| LLM calls per turn | Count of API calls across all 4 core extraction phases (entity-discovery, entity-detail, relationship-mapper, event-extractor; temporal-signals is optional and excluded from default call counts) | count |
 
 ### 2.2 Derived Metrics
 
@@ -80,7 +80,7 @@ Count entities by type in each extraction output:
 | Locations | `catalogs/locations/` | File count |
 | Items | `catalogs/items/` | File count |
 | Factions | `catalogs/factions/` | File count |
-| Events | `catalogs/events/` | File count |
+| Events | `catalogs/events.json` | Array length (`jq length` or `python -c "import json; print(len(json.load(open(...))))"`) |
 
 Report as a table:
 
@@ -98,7 +98,14 @@ Count total relationships across all entity files. Report by relationship type i
 
 ### 3.3 JSON Schema Validity
 
-Run `python tools/validate.py` on each extraction output. Report:
+Run `python tools/validate.py --framework <dir>` on each extraction output. For example:
+
+```bash
+python tools/validate.py --framework framework-ab-a-run1
+python tools/validate.py --framework framework-ab-b-run1
+```
+
+Report:
 
 - Total entities validated
 - Schema violations (count and list)
@@ -292,8 +299,9 @@ Every template-change PR MUST include this section as a PR comment:
 |---|---|---|---|---|
 | Total relationships | | | | |
 
-### Ground Truth Validation (turns 1–30)
+### Ground Truth Validation (full-session runs only)
 
+> **Note:** This section applies only to full-session runs using `validate_extraction.py` with `extraction-ground-truth-full-session.json`. For turns 1–30 runs, use schema validation (`validate.py --framework <dir>`) and manual review against `extraction-ground-truth-turns-1-30.json`.
 | Check | A | B |
 |---|---|---|
 | Independent Characters | | |
@@ -329,8 +337,8 @@ The PR is **mergeable** when:
 
 1. Zero BLOCK statuses across all metrics.
 2. All WARN statuses have written justification explaining why the regression is acceptable.
-3. Ground truth validation (`validate_extraction.py`) exits 0 for variant B.
-4. Schema validation (`validate.py`) reports 0 violations for variant B.
+3. Ground truth validation (`validate_extraction.py`) exits 0 for variant B (full-session runs only).
+4. Schema validation (`validate.py --framework <dir>`) reports 0 violations for variant B.
 
 ---
 
@@ -461,8 +469,11 @@ python tools/bootstrap_session.py `
 After all runs complete:
 
 ```bash
-# Schema validation (always required)
-python tools/validate.py
+# Schema validation (always required — run for each run directory)
+for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
+           framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
+    python tools/validate.py --framework "$run"
+done
 
 # Ground truth validation — only for full-session runs (not --max-turns 30)
 # The full-session fixture is NOT compatible with turns-1-30 extractions.
@@ -482,31 +493,45 @@ python tools/validate_extraction.py \
 #### Entity Counts
 
 ```bash
-# Count entities per type in a catalog directory
-for type in characters locations items factions events; do
-    echo "$type: $(ls framework-ab-a/catalogs/$type/*.json 2>/dev/null | wc -l)"
+# Count entities per type in a catalog directory (per-run)
+for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3; do
+  echo "=== $run ==="
+  for type in characters locations items factions; do
+    echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | wc -l)"
+  done
+  echo "events: $(python -c "import json; print(len(json.load(open('$run/catalogs/events.json'))))" 2>/dev/null || echo 0)"
 done
 ```
 
 PowerShell equivalent:
 
 ```powershell
-foreach ($type in @("characters", "locations", "items", "factions", "events")) {
-    $count = (Get-ChildItem "framework-ab-a/catalogs/$type/*.json" -ErrorAction SilentlyContinue).Count
-    Write-Output "${type}: $count"
+foreach ($run in @("framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3")) {
+    Write-Output "=== $run ==="
+    foreach ($type in @("characters", "locations", "items", "factions")) {
+        $count = (Get-ChildItem "$run/catalogs/$type/*.json" -ErrorAction SilentlyContinue).Count
+        Write-Output "${type}: $count"
+    }
+    $eventsFile = "$run/catalogs/events.json"
+    if (Test-Path $eventsFile) {
+        $events = (Get-Content $eventsFile -Raw | ConvertFrom-Json)
+        Write-Output "events: $($events.Count)"
+    } else { Write-Output "events: 0" }
 }
 ```
 
 #### Relationship Counts
 
 ```powershell
-# Count total relationships across all entity files
-$total = 0
-Get-ChildItem framework-ab-a/catalogs/*/  -Filter *.json -Recurse | ForEach-Object {
-    $json = Get-Content $_ -Raw | ConvertFrom-Json
-    if ($json.relationships) { $total += $json.relationships.Count }
+# Count total relationships across all entity files (per-run)
+foreach ($run in @("framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3")) {
+    $total = 0
+    Get-ChildItem "$run/catalogs/" -Filter *.json -Recurse | ForEach-Object {
+        $json = Get-Content $_ -Raw | ConvertFrom-Json
+        if ($json.relationships) { $total += $json.relationships.Count }
+    }
+    Write-Output "${run} relationships: $total"
 }
-Write-Output "Total relationships: $total"
 ```
 
 #### Wall-Clock Time
