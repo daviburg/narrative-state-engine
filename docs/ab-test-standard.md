@@ -328,7 +328,7 @@ Every template-change PR MUST include this section as a PR comment:
 
 - [ ] No BLOCK on any metric
 - [ ] All WARN items have documented justification
-- [ ] Ground truth validation passes for B
+- [ ] Ground truth validation passes for B (full-session runs only; skip for `--max-turns 30`)
 ````
 
 ### 5.2 Pass/Fail Summary
@@ -466,17 +466,24 @@ python tools/bootstrap_session.py `
 
 ### 6.5 Validation
 
-After all runs complete:
+#### Turns 1–30 runs (default)
+
+Schema validation is always required. After all runs complete:
 
 ```bash
-# Schema validation (always required — run for each run directory)
 for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
            framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
     python tools/validate.py --framework "$run"
 done
+```
 
-# Ground truth validation — only for full-session runs (not --max-turns 30)
-# The full-session fixture is NOT compatible with turns-1-30 extractions.
+For semantic review, compare extraction output against `tests/fixtures/extraction-ground-truth-turns-1-30.json` manually. The turns-1-30 fixture uses entity-level keys (`expected_characters`, `expected_locations`, etc.) and is **not compatible** with `validate_extraction.py`.
+
+#### Full-session runs only
+
+In addition to schema validation above, run ground truth validation using `validate_extraction.py` with the full-session fixture:
+
+```bash
 python tools/validate_extraction.py \
     --catalog-dir framework-ab-a-run1/catalogs \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
@@ -485,8 +492,6 @@ python tools/validate_extraction.py \
     --catalog-dir framework-ab-b-run1/catalogs \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
 ```
-
-> **Note:** If using `--max-turns 30`, use schema validation (`validate.py`) and manual review against `extraction-ground-truth-turns-1-30.json` instead of `validate_extraction.py`.
 
 ### 6.6 Collecting Metrics
 
