@@ -24,7 +24,7 @@ All audits are evidence-based: you review information provided by the coordinato
 - [ ] Tasks are visible on the orchestrator dashboard
 
 ### Squad Loop Compliance
-- [ ] @developer staged changes (did NOT commit directly)
+- [ ] @developer staged changes (did NOT commit directly) — *applies to post-PR-creation pushes; the initial branch push that creates the PR is exempt*
 - [ ] @reviewer performed pre-push review of staged diff
 - [ ] @developer addressed all reviewer findings before push
 - [ ] @reviewer gave explicit "pre-push sign-off granted" before commit+push
