@@ -7,7 +7,7 @@ Full standard: [docs/ab-test-standard.md](ab-test-standard.md).
 
 ## Pre-Flight
 
-- [ ] Both LLM servers reachable (`curl http://localhost:8000/v1/models`, `:8001`)
+- [ ] Both LLM servers reachable (`curl http://localhost:8000/v1/models`, `curl http://localhost:8001/v1/models`)
 - [ ] On `main` branch, pulled latest
 - [ ] `config/llm.json` unchanged between A and B runs
 - [ ] Output directories will be created per-run: `framework-ab-a-run{1,2,3}`, `framework-ab-b-run{1,2,3}`

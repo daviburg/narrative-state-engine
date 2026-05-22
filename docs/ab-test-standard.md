@@ -138,7 +138,7 @@ Two ground truth fixtures exist:
 - **`extraction-ground-truth-full-session.json`** — uses the tool-compatible schema (`expected_independent_characters`, `expected_pc_aliases`, `must_not_merge`, `coreference_groups`, etc.). This is the fixture `validate_extraction.py` expects.
 - **`extraction-ground-truth-turns-1-30.json`** — uses entity-level keys (`expected_characters`, `expected_locations`, etc.) for manual semantic review. This fixture is **NOT compatible** with `validate_extraction.py`.
 
-Run `tools/validate_extraction.py` against each extraction output using the fixture that matches the turn range:
+Choose the validation approach based on the turn range used:
 
 - **Turns 1–30 runs** (`--max-turns 30`): Validate with `extraction-ground-truth-turns-1-30.json` for entity-level manual review. Note: this fixture is **NOT compatible** with `validate_extraction.py` (different schema) — use it for manual spot-checks only.
 - **Full-session runs** (all turns): Validate with `extraction-ground-truth-full-session.json` using `validate_extraction.py`:
@@ -493,22 +493,31 @@ python tools/validate_extraction.py \
 #### Entity Counts
 
 ```bash
-# Count entities per type in a catalog directory (per-run)
-for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3; do
+# Count entities per type in a catalog directory (per-run, both variants)
+for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
+           framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
   echo "=== $run ==="
-  for type in characters locations items factions; do
+  # Characters: exclude char-player.json
+  echo "characters: $(ls $run/catalogs/characters/*.json 2>/dev/null | grep -v 'char-player\.json' | wc -l)"
+  for type in locations items factions; do
     echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | wc -l)"
   done
-  echo "events: $(python -c "import json; print(len(json.load(open('$run/catalogs/events.json'))))" 2>/dev/null || echo 0)"
+  echo "events: $(python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$run/catalogs/events.json" 2>/dev/null || echo 0)"
 done
 ```
 
 PowerShell equivalent:
 
 ```powershell
-foreach ($run in @("framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3")) {
+foreach ($run in @(
+    "framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3",
+    "framework-ab-b-run1", "framework-ab-b-run2", "framework-ab-b-run3")) {
     Write-Output "=== $run ==="
-    foreach ($type in @("characters", "locations", "items", "factions")) {
+    # Characters: exclude char-player.json
+    $charCount = (Get-ChildItem "$run/catalogs/characters/*.json" -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne "char-player.json" }).Count
+    Write-Output "characters: $charCount"
+    foreach ($type in @("locations", "items", "factions")) {
         $count = (Get-ChildItem "$run/catalogs/$type/*.json" -ErrorAction SilentlyContinue).Count
         Write-Output "${type}: $count"
     }
