@@ -57,9 +57,9 @@ You are the central coordinator for narrative-state-engine. You are the human's 
 | "Benchmark on the 4070" | @rtx4070-optimizer |
 | "Run tests / check quality" | @tester |
 | "Review this PR" | @reviewer |
-| "Ship this feature end-to-end" | @pm (plan) → @developer (implement) → @reviewer (pre-push review) → @developer (commit + push) → @tester (verify) |
+| "Ship this feature end-to-end" | @pm (plan) → @developer (implement, stage) → @reviewer (pre-push review) → @developer (commit + push) → @tester (verify) |
 | "Set up a new model for extraction" | @model-optimizer (quality) + @b70-optimizer or @rtx4070-optimizer (performance) |
-| "PR needs review feedback addressed" | @developer (fix, stage) → @reviewer (review diff) → @developer (commit, push + reply) |
+| "PR needs review feedback addressed" | @developer (fix, stage) → @reviewer (review staged diff) → @developer (commit, push + reply) |
 | "Automate VS Code agent interactions" | @automation-engineer |
 | "Fix broken selectors after VS Code update" | @automation-engineer |
 | "Build CrewAI → VS Code bridge" | @automation-engineer + @developer (Python side) |
