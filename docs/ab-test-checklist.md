@@ -10,7 +10,7 @@ Full standard: [docs/ab-test-standard.md](ab-test-standard.md).
 - [ ] Both LLM servers reachable (`curl http://localhost:8000/v1/models`, `:8001`)
 - [ ] On `main` branch, pulled latest
 - [ ] `config/llm.json` unchanged between A and B runs
-- [ ] Output directories created: `framework-ab-a`, `framework-ab-b`
+- [ ] Output directories will be created per-run: `framework-ab-a-run{1,2,3}`, `framework-ab-b-run{1,2,3}`
 
 ## Run A (Baseline — main branch)
 
@@ -71,14 +71,16 @@ python tools/bootstrap_session.py \
 ## Validation (each run)
 
 ```bash
+# Schema validation (always required):
+python tools/validate.py
+
+# Ground truth validation (full-session runs only — requires full-session fixture schema):
 python tools/validate_extraction.py \
     --catalog-dir framework-ab-{a,b}-run{N}/catalogs \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
-
-python tools/validate.py
 ```
 
-> **Note:** Use the full-session fixture (`extraction-ground-truth-full-session.json`), NOT the turns-1-30 fixture. The turns-1-30 fixture has a different schema and is not compatible with `validate_extraction.py`.
+> **Note:** `validate_extraction.py` requires the full-session fixture (`extraction-ground-truth-full-session.json`) which has a different schema than the turns-1-30 fixture. For turns 1–30 runs, use `validate.py` for schema checks and manually review against `extraction-ground-truth-turns-1-30.json`.
 
 - [ ] `validate_extraction.py` exits 0 for all B runs
 - [ ] `validate.py` reports 0 schema violations for all B runs

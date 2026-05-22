@@ -2,7 +2,7 @@
 
 This document defines the required A/B testing gate for any PR that modifies extraction prompt templates (`templates/extraction/*.md`). It was introduced after PR #393 (smart compression) caused 27% entity loss that was not detected until manual testing.
 
-**Scope:** Any PR that adds, removes, or modifies files under `templates/extraction/` MUST include an A/B test report in the PR description before merging.
+**Scope:** Any PR that adds, removes, or modifies files under `templates/extraction/` MUST include an A/B test report posted as a PR comment before merging.
 
 ---
 
@@ -33,8 +33,8 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 
 ### 1.3 Variant Definitions
 
-- **Variant A (baseline):** Templates from `main` branch HEAD. Use `--framework framework-ab-a` output directory.
-- **Variant B (candidate):** Templates from the PR branch. Use `--framework framework-ab-b` output directory.
+- **Variant A (baseline):** Templates from `main` branch HEAD. Use `--framework framework-ab-a-runN` output directory (one per run, e.g. `framework-ab-a-run1`, `framework-ab-a-run2`, etc.).
+- **Variant B (candidate):** Templates from the PR branch. Use `--framework framework-ab-b-runN` output directory (one per run, e.g. `framework-ab-b-run1`, `framework-ab-b-run2`, etc.).
 - Both variants MUST use identical `config/llm.json`, identical model, and identical hardware.
 
 ---
@@ -47,7 +47,7 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 |---|---|---|
 | Wall-clock time per turn | Timestamp delta from extraction log | seconds |
 | Total extraction time | Start-to-finish wall clock | minutes |
-| LLM calls per turn | Count of API calls across all 5 extraction phases | count |
+| LLM calls per turn | Count of API calls across all 5 extraction phases (entity-discovery, entity-detail, relationship, event, and plot-thread; optional phases like temporal are excluded from this count) | count |
 
 ### 2.2 Derived Metrics
 
@@ -131,7 +131,10 @@ Two ground truth fixtures exist:
 - **`extraction-ground-truth-full-session.json`** — uses the tool-compatible schema (`expected_independent_characters`, `expected_pc_aliases`, `must_not_merge`, `coreference_groups`, etc.). This is the fixture `validate_extraction.py` expects.
 - **`extraction-ground-truth-turns-1-30.json`** — uses entity-level keys (`expected_characters`, `expected_locations`, etc.) for manual semantic review. This fixture is **NOT compatible** with `validate_extraction.py`.
 
-Run `tools/validate_extraction.py` against each extraction output using the **full-session** fixture:
+Run `tools/validate_extraction.py` against each extraction output using the fixture that matches the turn range:
+
+- **Turns 1–30 runs** (`--max-turns 30`): Validate with `extraction-ground-truth-turns-1-30.json` for entity-level manual review. Note: this fixture is **NOT compatible** with `validate_extraction.py` (different schema) — use it for manual spot-checks only.
+- **Full-session runs** (all turns): Validate with `extraction-ground-truth-full-session.json` using `validate_extraction.py`:
 
 ```bash
 python tools/validate_extraction.py \
@@ -139,7 +142,7 @@ python tools/validate_extraction.py \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
 ```
 
-> **Note:** Still run extraction on turns 1–30 minimum (via `--max-turns 30`), but validate with the full-session fixture which has the schema `validate_extraction.py` requires.
+> **Note:** `validate_extraction.py` requires the full-session fixture schema (`expected_independent_characters`, `must_not_merge`, etc.). If you ran extraction on turns 1–30 only, use schema validation (`validate.py`) and manual review against the turns-1-30 fixture instead.
 
 The validation tool checks:
 
@@ -249,9 +252,9 @@ For turns beyond the ground truth range (31–345), apply these automated heuris
 
 ## 5. Reporting Format
 
-### 5.1 PR Description Template
+### 5.1 PR Comment Template
 
-Every template-change PR MUST include this section in the PR body:
+Every template-change PR MUST include this section as a PR comment:
 
 ````markdown
 ## A/B Test Results
@@ -435,7 +438,7 @@ python tools/bootstrap_session.py `
     --session sessions/session-import `
     --file sessions/session-import/raw/full-transcript.md `
     --extract `
-    --framework framework-ab-a `
+    --framework framework-ab-a-run1 `
     --max-turns 30 `
     --base-url http://localhost:8000/v1 `
     --overwrite
@@ -445,7 +448,7 @@ python tools/bootstrap_session.py `
     --session sessions/session-import `
     --file sessions/session-import/raw/full-transcript.md `
     --extract `
-    --framework framework-ab-b `
+    --framework framework-ab-b-run1 `
     --max-turns 30 `
     --base-url http://localhost:8001/v1 `
     --overwrite
@@ -458,7 +461,11 @@ python tools/bootstrap_session.py `
 After all runs complete:
 
 ```bash
-# Ground truth validation — each run (use full-session fixture)
+# Schema validation (always required)
+python tools/validate.py
+
+# Ground truth validation — only for full-session runs (not --max-turns 30)
+# The full-session fixture is NOT compatible with turns-1-30 extractions.
 python tools/validate_extraction.py \
     --catalog-dir framework-ab-a-run1/catalogs \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
@@ -466,10 +473,9 @@ python tools/validate_extraction.py \
 python tools/validate_extraction.py \
     --catalog-dir framework-ab-b-run1/catalogs \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
-
-# Schema validation
-python tools/validate.py
 ```
+
+> **Note:** If using `--max-turns 30`, use schema validation (`validate.py`) and manual review against `extraction-ground-truth-turns-1-30.json` instead of `validate_extraction.py`.
 
 ### 6.6 Collecting Metrics
 
