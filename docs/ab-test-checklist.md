@@ -18,21 +18,21 @@ Full standard: [ab-test-standard.md](ab-test-standard.md).
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-a-run1 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-a>/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-a-run2 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-a>/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-a-run3 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-a>/v1
 ```
@@ -47,21 +47,21 @@ git checkout <pr-branch>
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-b-run1 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-b>/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-b-run2 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-b>/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-b-run3 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-b>/v1
 ```

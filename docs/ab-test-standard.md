@@ -367,7 +367,7 @@ git pull
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-a-run1 \
     --max-turns 30 \
     --overwrite \
@@ -377,7 +377,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-a-run2 \
     --max-turns 30 \
     --overwrite \
@@ -387,7 +387,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-a-run3 \
     --max-turns 30 \
     --overwrite \
@@ -397,7 +397,7 @@ python tools/bootstrap_session.py \
 
 > **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants. Substitute `localhost:8080` / `localhost:8081` with your actual server endpoints from `config/llm.json` `base_urls`.
 >
-> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/full-transcript.md` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
 
 ### 6.3 Run Variant B (Candidate)
 
@@ -408,7 +408,7 @@ git checkout <pr-branch>
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-b-run1 \
     --max-turns 30 \
     --overwrite \
@@ -418,7 +418,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-b-run2 \
     --max-turns 30 \
     --overwrite \
@@ -428,7 +428,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-ab-b-run3 \
     --max-turns 30 \
     --overwrite \
@@ -446,7 +446,7 @@ The two B70 GPU servers (ports 8080 and 8081 by default — see `tools/submit_ab
 # Terminal 1 — Variant A on GPU 0 (port 8080)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
-    --file sessions/_import/full-transcript.md `
+    --file sessions/_import/session-import-full-transcript.txt `
     --framework framework-ab-a-run1 `
     --max-turns 30 `
     --base-url http://localhost:8080/v1 `
@@ -456,7 +456,7 @@ python tools/bootstrap_session.py `
 # Terminal 2 — Variant B on GPU 1 (port 8081)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
-    --file sessions/_import/full-transcript.md `
+    --file sessions/_import/session-import-full-transcript.txt `
     --framework framework-ab-b-run1 `
     --max-turns 30 `
     --base-url http://localhost:8081/v1 `
