@@ -47,7 +47,7 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 |---|---|---|
 | Wall-clock time per turn | `elapsed_ms / 1000` from extraction log (per-turn field logged by the extraction pipeline) | seconds |
 | Total extraction time | Start-to-finish wall clock | minutes |
-| LLM calls per turn | Count of API calls across all 5 core extraction phases (entity-discovery, entity-detail, pc-extraction, relationship-mapper, event-extractor; temporal-signals is optional and excluded from default call counts). Note: pc-extraction uses the entity-detail template applied specifically to the player character entity and is tracked as a separate call in the pipeline. | count |
+| LLM calls per turn | Sum of `prompt_metrics.<phase>.calls` across phases recorded in `extraction-log.jsonl` for each turn: `discovery`, `entity_detail`, `relationship_mapper`, `event_extractor`. PC detail is processed as an additional `entity_detail` call (there is no distinct `pc-extraction` phase counter); it is included in the `entity_detail` call count automatically. `temporal_signals` is optional and excluded from default call counts. | count |
 
 ### 2.2 Derived Metrics
 
