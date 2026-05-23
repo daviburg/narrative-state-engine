@@ -71,17 +71,7 @@ An LLM judge evaluates each extraction output against the source transcript on a
 
 ### 2.2 Judge Prompt
 
-Run `tools/dedup_audit.py` with `--judge-eval` mode to generate per-dimension scores:
-
-```bash
-python tools/dedup_audit.py \
-    --framework framework-eval-b-run1 \
-    --judge-eval \
-    --transcript sessions/_import/full-transcript.md \
-    --max-turns 30
-```
-
-If automated judge evaluation is not yet implemented, perform the evaluation manually using the rubric in §2.1. Document the judge model and version used.
+Automated LLM-as-judge evaluation is a planned feature (tracked under §11 / epic #97). Until it is implemented, perform the evaluation manually using the rubric in §2.1. Submit the extraction output and source transcript to the judge model and record per-dimension scores. Document the judge model and version used.
 
 ### 2.3 Semantic Score Aggregation
 
@@ -142,14 +132,15 @@ Dedup quality is both a component of the composite score (§3) **and** an indepe
 Run `tools/dedup_audit.py` on each extraction output:
 
 ```bash
-python tools/dedup_audit.py --framework framework-eval-b-run1
+python tools/dedup_audit.py --catalog-dir framework-eval-b-run1/catalogs
 ```
 
 The tool reports:
 - Count of suspected duplicate pairs (name similarity ≥ threshold)
-- Count of ID-stem duplicates (same stem, different turn suffix)
 - High-confidence auto-merge candidates (≥ 0.9 LLM score)
 - Medium-confidence flagged pairs for human review
+
+> **Note:** ID-stem duplicate detection (same entity stem, different turn suffix) is a planned feature, not yet implemented. Check for such duplicates manually when reviewing the flagged pairs.
 
 ### 4.2 Dedup Blocking Thresholds
 
@@ -419,7 +410,7 @@ python tools/bootstrap_session.py \
 for run in framework-eval-a-run1 framework-eval-a-run2 framework-eval-a-run3 \
            framework-eval-b-run1 framework-eval-b-run2 framework-eval-b-run3; do
     echo "=== $run ==="
-    python tools/dedup_audit.py --framework "$run"
+    python tools/dedup_audit.py --catalog-dir "$run/catalogs"
 done
 ```
 
@@ -464,6 +455,8 @@ This example is based on the May 2026 Qwen3-8B vs Qwen3-30B-A3B evaluation that 
 
 > ⚠️ Model A (8B) fails the dedup gate at 13.5% (threshold: 5%). The 8B model's higher raw entity count (52 vs 47) was entirely explained by phantom duplicates.
 
+> **Note:** "Total entities" here counts only the non-event entity types audited by `dedup_audit.py` (characters, locations, items, factions). The Entity Counts table below includes all types including events (events are not subject to the same cross-turn identity-merge dedup). The per-run raw counts feeding this table were 52 (8B) and 47 (30B) for non-event entities.
+
 ### Semantic Quality (LLM-as-Judge)
 
 Judge model: gpt-4o
@@ -495,19 +488,19 @@ Judge model: gpt-4o
 | Input | A (8B) | B (30B) | Weight |
 |---|---|---|---|
 | Entity count score (normalized) | 10.0 | 9.5 | 20% |
-| Dedup score (normalized) | 0.0 (blocked) | 7.8 | 25% |
+| Dedup score (normalized) | 0.0 (blocked) | 5.8 | 25% |
 | Attribute completeness | 6.8 | 7.6 | 20% |
 | Semantic score | 5.9 | 7.6 | 35% |
-| **Composite** | **4.72** | **7.61** | |
+| **Composite** | **5.43** | **7.53** | |
 
-Improvement: +61.2% composite score for 30B model.
+Improvement: +38.7% composite score for 30B model.
 
 ### Decision
 
 | Condition | Result |
 |---|---|
 | Zero BLOCKs on any metric | A: BLOCK (dedup 13.5%), B: PASS |
-| Composite improvement ≥ 10% | PASS (+61.2%) |
+| Composite improvement ≥ 10% | PASS (+38.7%) |
 | No semantic dimension regression > 1.0 pt | PASS (all B dimensions ≥ A) |
 | Dedup gate ≤ 5% | B: PASS (2.1%), A: BLOCK (13.5%) |
 | Schema validity 100% | PASS (both models) |
