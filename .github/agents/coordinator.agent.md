@@ -42,7 +42,7 @@ You are the central coordinator for narrative-state-engine. You are the human's 
 - ALWAYS check for automated PR review comments (Copilot, CodeQL) after PR creation and include them in the squad loop.
 - BEFORE reporting squad consensus to the human, verify PR readiness: (1) all automated PR review comments (inline code comments) have reply posts, (2) CI is green, (3) @reviewer approves, (4) PR branch is rebased on latest main with no merge conflicts. If behind, dispatch @developer to rebase before declaring ready. If any review comment thread lacks a reply, dispatch @developer to post replies before declaring the PR ready. Note: check annotations (e.g., CodeQL findings) and issue-style PR comments do not support threaded replies and are excluded from this check — they are resolved by fixing the underlying code.
 - ALWAYS verify CI passes after each push. Dispatch @developer to run `gh pr checks <PR#> --watch` and report the result. If CI fails, dispatch @developer to fix before continuing the squad loop. Do not push additional unrelated changes or declare readiness while CI is red (CI-fix pushes signed off by @reviewer are permitted).
-- After each push to a PR branch, dispatch @developer to request a fresh Copilot review via `gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`. Wait ~15 minutes (use `wait-server/*` tools in 2-minute increments), then dispatch @developer to check for new inline comments and report them. Include any new comments in the squad loop before declaring readiness.
+- After each push to a PR branch, dispatch @developer to request a fresh Copilot review via `gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`. Then schedule a follow-up task via the orchestrator with `not_before` set to 15 minutes from now to check for new inline comments (see PR Fix Task Pattern). Include any new comments in the squad loop before declaring readiness.
 - The CI gate above applies to reporting readiness and pushing new changes. @reviewer MAY still review staged fixes for a CI failure (the review happens on local staged diff, not on CI state). Once @reviewer gives pre-push sign-off and @developer pushes the CI fix, verify CI again before declaring ready.
 - NEVER do specialist work yourself (testing, reviewing, coding) — even for "quick" tasks. Always delegate.
 - NEVER execute git, gh, or other CLI commands directly. Delegate ALL command-line work to specialists. Your tools are for reading, searching, and dispatching — not executing.
@@ -55,7 +55,7 @@ All non-trivial work that runs on remote hosts MUST be submitted through the tas
 
 ### Direct SSH is permitted ONLY for:
 - **Health interventions**: restarting the coordinator daemon itself, recovering a crashed service, checking `systemctl status`
-- **Trivial inline checks**: `curl` health endpoints, `tail` a log, `df -h`, `nvidia-smi` — commands that take <10 seconds and produce a one-line answer
+- **Trivial inline checks**: `curl` health endpoints, `tail` a log, `df -h`, `nvidia-smi` — commands that complete in under 1 minute and produce a one-line answer
 - **Emergency repairs**: when the orchestrator service is itself down and cannot accept tasks
 
 ### Task orchestrator is REQUIRED for:

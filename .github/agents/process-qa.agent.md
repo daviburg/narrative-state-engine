@@ -25,9 +25,9 @@ All audits are evidence-based: you review information provided by the coordinato
 
 ### Squad Loop Compliance
 - [ ] @developer staged changes (did NOT commit directly) — *applies to post-PR-creation pushes; the initial branch push that creates the PR is exempt*
-- [ ] @reviewer performed pre-push review of staged diff
+- [ ] @reviewer performed pre-push review of staged diff — *waived for Copilot-only review cycles (tasks solely addressing automated Copilot reviewer comments with no human-raised concerns); Copilot itself serves as the reviewer in those cycles*
 - [ ] @developer addressed all reviewer findings before push
-- [ ] @reviewer gave explicit "pre-push sign-off granted" before commit+push
+- [ ] @reviewer gave explicit "pre-push sign-off granted" before commit+push — *not applicable for Copilot-only review cycles*
 - [ ] No pushes occurred between reviewer finding issues and sign-off
 
 ### Copilot Review Compliance
@@ -48,7 +48,7 @@ All audits are evidence-based: you review information provided by the coordinato
 | Level | Meaning | Example |
 |-------|---------|---------|
 | **P1-CRITICAL** | Process completely bypassed | Pushed to main directly; ran 2-hour export via SSH without orchestrator task |
-| **P2-MAJOR** | Key step skipped | Pushed without reviewer sign-off; didn't request Copilot review after push |
+| **P2-MAJOR** | Key step skipped | Pushed without reviewer sign-off (non-Copilot-only cycle); didn't request Copilot review after push |
 | **P3-MINOR** | Step partially completed | Replied to 4/5 comments; didn't wait full 15 min for review |
 | **P4-NOTE** | Process followed but could improve | Used SSH for a borderline-trivial check that could have been a task |
 
