@@ -76,9 +76,9 @@ Count entities by type in each extraction output:
 
 | Type | Catalog directory | Count method |
 |---|---|---|
-| Characters | `catalogs/characters/` | File count (excluding `char-player.json`, `index.json`, `*.arcs.json`, `*.synthesis.json`) |
+| Characters | `catalogs/characters/` | File count (excluding `char-player.json`, `index.json`, `*.arcs.json`, `*.synthesis.json`). **Note:** `creature`-type entities are stored here too (IDs prefixed `creature-`); their files are included in this count. |
 | Locations | `catalogs/locations/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`) |
-| Items | `catalogs/items/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`) |
+| Items | `catalogs/items/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`). **Note:** `concept`-type entities are stored here too (IDs prefixed `concept-`); their files are included in this count. |
 | Factions | `catalogs/factions/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`) |
 | Events | `catalogs/events.json` | Array length (`jq length` or `python -c "import json; print(len(json.load(open(..., encoding='utf-8-sig'))))"`) |
 
