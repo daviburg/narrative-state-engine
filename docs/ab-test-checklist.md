@@ -1,7 +1,7 @@
 # A/B Test Checklist for Template Changes
 
 Embed this checklist in `.prompt.md` files for PRs that modify `templates/extraction/*.md`.
-Full standard: [docs/ab-test-standard.md](docs/ab-test-standard.md).
+Full standard: [ab-test-standard.md](ab-test-standard.md).
 
 ---
 

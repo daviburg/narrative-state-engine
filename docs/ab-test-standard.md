@@ -47,7 +47,7 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 |---|---|---|
 | Wall-clock time per turn | `elapsed_ms / 1000` from extraction log (per-turn field logged by the extraction pipeline) | seconds |
 | Total extraction time | Start-to-finish wall clock | minutes |
-| LLM calls per turn | Sum of `prompt_metrics.<phase>.calls` across phases recorded in `extraction-log.jsonl` for each turn: `discovery`, `entity_detail`, `relationship_mapper`, `event_extractor`. PC detail is processed as an additional `entity_detail` call (there is no distinct `pc-extraction` phase counter); it is included in the `entity_detail` call count automatically. Note: `temporal_signals` extraction calls are **not** recorded in `prompt_metrics` and are excluded from this count; if your change affects temporal extraction, track those calls separately via the extraction log's `temporal_signals` entries. | count |
+| LLM calls per turn | Sum of `prompt_metrics.<phase>.calls` across phases recorded in `extraction-log.jsonl` for each turn: `discovery`, `entity_detail`, `relationship_mapper`, `event_extractor`. PC detail is processed as an additional `entity_detail` call (there is no distinct `pc-extraction` phase counter); it is included in the `entity_detail` call count automatically. Note: `temporal_signals` extraction calls are **not** recorded in `prompt_metrics` and are excluded from this count; if your change affects temporal extraction, track those calls separately via the extraction log's `temporal_ms` / `new_temporal_signals` fields and the timeline file. | count |
 
 ### 2.2 Derived Metrics
 
@@ -238,7 +238,7 @@ Check for phantom/duplicate entities:
 
 1. **Name overlap:** No two entities of the same type should share >50% of name tokens.
 2. **ID stem overlap:** No two entity IDs should share the same stem after removing turn suffixes (e.g., `char-shaman-turn-082` and `char-shaman`).
-3. Run `python tools/dedup_audit.py` if available, or manually inspect.
+3. Run `python tools/dedup_audit.py --framework <framework-dir>` to detect duplicates automatically.
 
 Report count of suspected duplicates per variant.
 
@@ -253,7 +253,7 @@ For turns beyond the ground truth range (31–345), apply these manual heuristic
 1. **Monotonic growth:** Entity count should not decrease between extraction checkpoints.
 2. **No empty identity:** Every entity should have a non-empty `identity` field (the `identity` top-level string holds the stable description).
 3. **Turn coverage:** Every DM turn in the range should produce at least one discovery or update (check extraction log).
-4. **Relationship reciprocity:** If A→B relationship exists, B should have a corresponding entry (check via `relationship-index.json`).
+4. **Relationship reciprocity:** If A→B relationship exists, `relationship-index.json` should contain an inferred reverse edge from B→A (note: this checks the index's inferred edges, not necessarily a mirrored relationship entry in B's catalog file).
 
 ---
 
@@ -371,6 +371,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-a-run1 \
     --max-turns 30 \
     --overwrite \
+    --no-resume \
     --base-url http://localhost:8080/v1
 
 # Run 2:
@@ -380,6 +381,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-a-run2 \
     --max-turns 30 \
     --overwrite \
+    --no-resume \
     --base-url http://localhost:8080/v1
 
 # Run 3:
@@ -389,12 +391,15 @@ python tools/bootstrap_session.py \
     --framework framework-ab-a-run3 \
     --max-turns 30 \
     --overwrite \
+    --no-resume \
     --base-url http://localhost:8080/v1
 ```
 
 > **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants. Substitute `localhost:8080` / `localhost:8081` with your actual server endpoints from `config/llm.json` `base_urls`.
 >
 > **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/full-transcript.md` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
+
+### 6.3 Run Variant B (Candidate)
 
 ```bash
 git checkout <pr-branch>
@@ -407,6 +412,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-b-run1 \
     --max-turns 30 \
     --overwrite \
+    --no-resume \
     --base-url http://localhost:8081/v1
 
 # Run 2:
@@ -416,6 +422,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-b-run2 \
     --max-turns 30 \
     --overwrite \
+    --no-resume \
     --base-url http://localhost:8081/v1
 
 # Run 3:
@@ -425,6 +432,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-b-run3 \
     --max-turns 30 \
     --overwrite \
+    --no-resume \
     --base-url http://localhost:8081/v1
 ```
 
@@ -442,7 +450,8 @@ python tools/bootstrap_session.py `
     --framework framework-ab-a-run1 `
     --max-turns 30 `
     --base-url http://localhost:8080/v1 `
-    --overwrite
+    --overwrite `
+    --no-resume
 
 # Terminal 2 — Variant B on GPU 1 (port 8081)
 python tools/bootstrap_session.py `
@@ -451,7 +460,8 @@ python tools/bootstrap_session.py `
     --framework framework-ab-b-run1 `
     --max-turns 30 `
     --base-url http://localhost:8081/v1 `
-    --overwrite
+    --overwrite `
+    --no-resume
 ```
 
 > **Note:** When running parallel A/B, each variant must use a separate `--base-url` to avoid round-robin mixing. Do NOT rely on the default round-robin in `config/llm.json` — it would mix responses across A/B runs.
