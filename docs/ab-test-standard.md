@@ -76,10 +76,10 @@ Count entities by type in each extraction output:
 
 | Type | Catalog directory | Count method |
 |---|---|---|
-| Characters | `catalogs/characters/` | File count (excluding `char-player.json` and `index.json`) |
-| Locations | `catalogs/locations/` | File count (excluding `index.json`) |
-| Items | `catalogs/items/` | File count (excluding `index.json`) |
-| Factions | `catalogs/factions/` | File count (excluding `index.json`) |
+| Characters | `catalogs/characters/` | File count (excluding `char-player.json`, `index.json`, `*.arcs.json`, `*.synthesis.json`) |
+| Locations | `catalogs/locations/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`) |
+| Items | `catalogs/items/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`) |
+| Factions | `catalogs/factions/` | File count (excluding `index.json`, `*.arcs.json`, `*.synthesis.json`) |
 | Events | `catalogs/events.json` | Array length (`jq length` or `python -c "import json; print(len(json.load(open(..., encoding='utf-8-sig'))))"`) |
 
 Report as a table:
@@ -238,7 +238,7 @@ Check for phantom/duplicate entities:
 
 1. **Name overlap:** No two entities of the same type should share >50% of name tokens.
 2. **ID stem overlap:** No two entity IDs should share the same stem after removing turn suffixes (e.g., `char-shaman-turn-082` and `char-shaman`).
-3. Run `python tools/dedup_audit.py --framework <framework-dir>` to detect duplicates automatically.
+3. Run `python tools/dedup_audit.py --catalog-dir <framework-dir>/catalogs` to detect duplicates automatically.
 
 Report count of suspected duplicates per variant.
 
@@ -312,8 +312,8 @@ Every template-change PR MUST include this section as a PR comment:
 | Staleness | | |
 | Dangling Relationships | | |
 | Duplicate Relationships | | |
-| Locations | | |
-| Factions | | |
+| Locations (late-game) | | |
+| Factions (late-game) | | |
 
 ### Semantic Quality
 
@@ -504,10 +504,10 @@ python tools/validate_extraction.py \
 for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
            framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
   echo "=== $run ==="
-  # Characters: exclude char-player.json and index.json
-  echo "characters: $(ls $run/catalogs/characters/*.json 2>/dev/null | grep -v 'char-player\.json' | grep -v 'index\.json' | wc -l)"
+  # Characters: exclude char-player.json, index.json, and sidecar files
+  echo "characters: $(ls $run/catalogs/characters/*.json 2>/dev/null | grep -v 'char-player\.json' | grep -v 'index\.json' | grep -v '\.arcs\.json' | grep -v '\.synthesis\.json' | wc -l)"
   for type in locations items factions; do
-    echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | grep -v 'index\.json' | wc -l)"
+    echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | grep -v 'index\.json' | grep -v '\.arcs\.json' | grep -v '\.synthesis\.json' | wc -l)"
   done
   _evcount=$(python -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8-sig"))))' \
     "$run/catalogs/events.json" 2>/dev/null || echo 0)
@@ -522,13 +522,13 @@ foreach ($run in @(
     "framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3",
     "framework-ab-b-run1", "framework-ab-b-run2", "framework-ab-b-run3")) {
     Write-Output "=== $run ==="
-    # Characters: exclude char-player.json and index.json
+    # Characters: exclude char-player.json, index.json, and sidecar files
     $charCount = (Get-ChildItem "$run/catalogs/characters/*.json" -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ne "char-player.json" -and $_.Name -ne "index.json" }).Count
+        Where-Object { $_.Name -ne "char-player.json" -and $_.Name -ne "index.json" -and $_.Name -notlike "*.arcs.json" -and $_.Name -notlike "*.synthesis.json" }).Count
     Write-Output "characters: $charCount"
     foreach ($type in @("locations", "items", "factions")) {
         $count = (Get-ChildItem "$run/catalogs/$type/*.json" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -ne "index.json" }).Count
+            Where-Object { $_.Name -ne "index.json" -and $_.Name -notlike "*.arcs.json" -and $_.Name -notlike "*.synthesis.json" }).Count
         Write-Output "${type}: $count"
     }
     $eventsFile = "$run/catalogs/events.json"
