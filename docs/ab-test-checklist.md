@@ -1,7 +1,7 @@
 # A/B Test Checklist for Template Changes
 
 Embed this checklist in `.prompt.md` files for PRs that modify `templates/extraction/*.md`.
-Full standard: [docs/ab-test-standard.md](docs/ab-test-standard.md).
+Full standard: [docs/ab-test-standard.md](ab-test-standard.md).
 
 ---
 
@@ -19,21 +19,21 @@ Full standard: [docs/ab-test-standard.md](docs/ab-test-standard.md).
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/_import/full-transcript.md \
-    --framework framework-ab-a-run1 --max-turns 30 --overwrite \
+    --framework framework-ab-a-run1 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-a>/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/_import/full-transcript.md \
-    --framework framework-ab-a-run2 --max-turns 30 --overwrite \
+    --framework framework-ab-a-run2 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-a>/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/_import/full-transcript.md \
-    --framework framework-ab-a-run3 --max-turns 30 --overwrite \
+    --framework framework-ab-a-run3 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-a>/v1
 ```
 
@@ -48,21 +48,21 @@ git checkout <pr-branch>
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/_import/full-transcript.md \
-    --framework framework-ab-b-run1 --max-turns 30 --overwrite \
+    --framework framework-ab-b-run1 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-b>/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/_import/full-transcript.md \
-    --framework framework-ab-b-run2 --max-turns 30 --overwrite \
+    --framework framework-ab-b-run2 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-b>/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/_import/full-transcript.md \
-    --framework framework-ab-b-run3 --max-turns 30 --overwrite \
+    --framework framework-ab-b-run3 --max-turns 30 --overwrite --no-resume \
     --base-url http://<server-b>/v1
 ```
 
