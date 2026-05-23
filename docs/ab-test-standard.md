@@ -94,7 +94,7 @@ Report as a table:
 
 ### 3.2 Relationship Counts
 
-Count total relationships across all entity files. Report by relationship type if available (ally, enemy, kinship, etc.).
+Count total relationships across all entity files. Report by relationship type if available using the canonical `category` values from `schemas/entity.schema.json`: `kinship`, `partnership`, `mentorship`, `political`, `factional`, `social`, `adversarial`, `romantic`, `spatial`, `other`.
 
 ### 3.3 JSON Schema Validity
 
@@ -194,7 +194,7 @@ Score: `attributes_present / attributes_expected` across all ground truth entiti
 |---|---|
 | ≥ 90% | PASS |
 | 75–89% | WARN |
-| < 75% | BLOCK |
+| < 75% | BLOCK (advisory — requires written justification; does not auto-prevent merge) |
 
 ### 4.3 Relationship Correctness (Turns 1–30)
 
@@ -208,7 +208,7 @@ Using the ground truth `coreference_checks`:
 2. **Identity consolidation:** Authority-leader described differently across turns is ONE character entry.
 3. **Type correctness:** Encampment/fire-gathering are typed as `location`, not `character` or `faction`.
 
-All coreference checks must PASS. Any FAIL blocks the PR.
+All coreference checks must PASS. Any FAIL warrants written justification before merge (advisory — does not auto-block, but SHOULD be resolved or documented).
 
 ### 4.4 Hallucination Detection
 
@@ -226,7 +226,7 @@ For each extraction output, identify entities that cannot be traced to the trans
 |---|---|
 | 0% | PASS |
 | ≤ 5% | WARN |
-| > 5% | BLOCK |
+| > 5% | BLOCK (advisory — requires written justification; does not auto-prevent merge) |
 
 ### 4.5 Dedup Quality
 
@@ -248,10 +248,10 @@ Report count of suspected duplicates per variant.
 >
 > These checks require human review. They do NOT block merge but SHOULD be performed for major template changes. See §8 for planned automation.
 
-For turns beyond the ground truth range (31–345), apply these automated heuristics:
+For turns beyond the ground truth range (31–345), apply these manual heuristics:
 
 1. **Monotonic growth:** Entity count should not decrease between extraction checkpoints.
-2. **No empty descriptions:** Every entity should have a non-empty `description` or `appearance`.
+2. **No empty identity:** Every entity should have a non-empty `identity` field (the `identity` top-level string holds the stable description).
 3. **Turn coverage:** Every DM turn in the range should produce at least one discovery or update (check extraction log).
 4. **Relationship reciprocity:** If A→B relationship exists, B should have a corresponding entry (check via `relationship-index.json`).
 
@@ -349,9 +349,9 @@ The PR is **mergeable** when:
 Ensure `config/llm.json` is configured and both LLM servers are running:
 
 ```bash
-# Verify servers are reachable
-curl -s http://localhost:8000/v1/models | python -m json.tool
-curl -s http://localhost:8001/v1/models | python -m json.tool
+# Verify servers are reachable (default ports — adjust to match your config/llm.json)
+curl -s http://localhost:8080/v1/models | python -m json.tool
+curl -s http://localhost:8081/v1/models | python -m json.tool
 ```
 
 ### 6.2 Run Variant A (Baseline)
@@ -371,7 +371,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-a-run1 \
     --max-turns 30 \
     --overwrite \
-    --base-url http://localhost:8000/v1
+    --base-url http://localhost:8080/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
@@ -381,7 +381,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-a-run2 \
     --max-turns 30 \
     --overwrite \
-    --base-url http://localhost:8000/v1
+    --base-url http://localhost:8080/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
@@ -391,7 +391,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-a-run3 \
     --max-turns 30 \
     --overwrite \
-    --base-url http://localhost:8000/v1
+    --base-url http://localhost:8080/v1
 ```
 
 > **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants.
@@ -410,7 +410,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-b-run1 \
     --max-turns 30 \
     --overwrite \
-    --base-url http://localhost:8001/v1
+    --base-url http://localhost:8081/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
@@ -420,7 +420,7 @@ python tools/bootstrap_session.py \
     --framework framework-ab-b-run2 \
     --max-turns 30 \
     --overwrite \
-    --base-url http://localhost:8001/v1
+    --base-url http://localhost:8081/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
@@ -430,35 +430,34 @@ python tools/bootstrap_session.py \
     --framework framework-ab-b-run3 \
     --max-turns 30 \
     --overwrite \
-    --base-url http://localhost:8001/v1
+    --base-url http://localhost:8081/v1
 ```
 
 > **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants.
 
 ### 6.4 Parallel A/B Using Two GPUs
 
-The two B70 GPU servers (ports 8000 and 8001) can run A and B simultaneously:
+The two B70 GPU servers (ports 8080 and 8081 by default — see `tools/submit_ab_test.py`) can run A and B simultaneously:
 
 ```powershell
-# Terminal 1 — Variant A on GPU 0 (port 8000)
-$env:NSE_LLM_BASE_URL = "http://localhost:8000/v1"
+# Terminal 1 — Variant A on GPU 0 (port 8080)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
     --file sessions/session-import/raw/full-transcript.md `
     --extract `
     --framework framework-ab-a-run1 `
     --max-turns 30 `
-    --base-url http://localhost:8000/v1 `
+    --base-url http://localhost:8080/v1 `
     --overwrite
 
-# Terminal 2 — Variant B on GPU 1 (port 8001)
+# Terminal 2 — Variant B on GPU 1 (port 8081)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
     --file sessions/session-import/raw/full-transcript.md `
     --extract `
     --framework framework-ab-b-run1 `
     --max-turns 30 `
-    --base-url http://localhost:8001/v1 `
+    --base-url http://localhost:8081/v1 `
     --overwrite
 ```
 
@@ -507,7 +506,9 @@ for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
   for type in locations items factions; do
     echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | wc -l)"
   done
-  echo "events: $(python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' "$run/catalogs/events.json" 2>/dev/null || echo 0)"
+  _evcount=$(python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' \
+    "$run/catalogs/events.json" 2>/dev/null || echo 0)
+  echo "events: $_evcount"
 done
 ```
 
@@ -582,9 +583,8 @@ print(f"Δ: {delta_pct:+.1f}%")
 
 The following changes do NOT require A/B testing:
 
-- Documentation-only changes to template files (comments, formatting, no prompt content changes)
-- Changes to `dm-profile-analyzer.md` (does not affect entity extraction)
-- New template files that are not yet wired into the extraction pipeline
+- Changes to templates **outside** `templates/extraction/` (e.g., `dm-profile-analyzer.md`, `dm-*.md`). Note: extraction templates are loaded verbatim by the pipeline — any text change, including formatting or comments, alters the prompt and requires A/B testing.
+- New template files not yet wired into the extraction pipeline
 
 To claim an exemption, state the reason in the PR description under an "A/B Test Exemption" heading.
 

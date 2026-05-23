@@ -7,7 +7,7 @@ Full standard: [docs/ab-test-standard.md](ab-test-standard.md).
 
 ## Pre-Flight
 
-- [ ] Both LLM servers reachable (`curl http://localhost:8000/v1/models`, `curl http://localhost:8001/v1/models`)
+- [ ] Both LLM servers reachable (`curl http://localhost:8080/v1/models`, `curl http://localhost:8081/v1/models`) — adjust ports to match `config/llm.json`
 - [ ] On `main` branch, pulled latest
 - [ ] `config/llm.json` unchanged between A and B runs
 - [ ] Output directories will be created per-run: `framework-ab-a-run{1,2,3}`, `framework-ab-b-run{1,2,3}`
@@ -20,21 +20,21 @@ python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/session-import/raw/full-transcript.md \
     --extract --framework framework-ab-a-run1 --max-turns 30 --overwrite \
-    --base-url http://localhost:8000/v1
+    --base-url http://localhost:8080/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/session-import/raw/full-transcript.md \
     --extract --framework framework-ab-a-run2 --max-turns 30 --overwrite \
-    --base-url http://localhost:8000/v1
+    --base-url http://localhost:8080/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/session-import/raw/full-transcript.md \
     --extract --framework framework-ab-a-run3 --max-turns 30 --overwrite \
-    --base-url http://localhost:8000/v1
+    --base-url http://localhost:8080/v1
 ```
 
 - [ ] Run A completed ×3 (minimum). Outputs in `framework-ab-a-run{1,2,3}/catalogs`
@@ -49,21 +49,21 @@ python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/session-import/raw/full-transcript.md \
     --extract --framework framework-ab-b-run1 --max-turns 30 --overwrite \
-    --base-url http://localhost:8001/v1
+    --base-url http://localhost:8081/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/session-import/raw/full-transcript.md \
     --extract --framework framework-ab-b-run2 --max-turns 30 --overwrite \
-    --base-url http://localhost:8001/v1
+    --base-url http://localhost:8081/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
     --file sessions/session-import/raw/full-transcript.md \
     --extract --framework framework-ab-b-run3 --max-turns 30 --overwrite \
-    --base-url http://localhost:8001/v1
+    --base-url http://localhost:8081/v1
 ```
 
 - [ ] Run B completed ×3 (minimum). Outputs in `framework-ab-b-run{1,2,3}/catalogs`
@@ -129,8 +129,7 @@ python tools/validate_extraction.py \
 ## Exemptions
 
 No A/B test required for:
-- Comment/formatting-only changes to templates
-- Changes to `dm-profile-analyzer.md`
+- Changes to templates **outside** `templates/extraction/` (e.g., `dm-profile-analyzer.md`, `dm-*.md`). Extraction templates are loaded verbatim — any text change alters the prompt.
 - New template files not yet wired into extraction pipeline
 
 State exemption reason under "A/B Test Exemption" heading in PR description.
