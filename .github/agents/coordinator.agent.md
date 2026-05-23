@@ -120,7 +120,7 @@ When dispatching tasks to address automated Copilot review comments on a PR, use
    - If review is not ready yet: return failure with explicit error (orchestrator retries with backoff)
    - If review posted "no new comments": return success — PR is clean
    - If review posted 1+ new comments: restart at step 1 (new fix cycle)
-6. **Iteration Cap**: If the cycle exceeds 3 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
+6. **Iteration Cap**: If the cycle exceeds 15 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
 
 Each fix-pr task targets the local dev coordinator host and should include the PR number, repo, and branch in metadata.
 
