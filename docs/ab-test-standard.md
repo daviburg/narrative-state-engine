@@ -302,6 +302,7 @@ Every template-change PR MUST include this section as a PR comment:
 ### Ground Truth Validation (full-session runs only)
 
 > **Note:** This section applies only to full-session runs using `validate_extraction.py` with `extraction-ground-truth-full-session.json`. For turns 1–30 runs, use schema validation (`validate.py --framework <dir>`) and manual review against `extraction-ground-truth-turns-1-30.json`.
+
 | Check | A | B |
 |---|---|---|
 | Independent Characters | | |
@@ -536,6 +537,24 @@ foreach ($run in @(
 ```
 
 #### Relationship Counts
+
+```bash
+# Count total relationships across all entity files (per-run, both variants)
+for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
+           framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
+  echo "=== $run ==="
+  python -c "
+import json, os, sys, glob
+total = 0
+for f in glob.glob('$run/catalogs/**/*.json', recursive=True):
+    d = json.load(open(f))
+    total += len(d.get('relationships', []))
+print(f'relationships: {total}')
+"
+done
+```
+
+PowerShell equivalent:
 
 ```powershell
 # Count total relationships across all entity files (per-run, both variants)
