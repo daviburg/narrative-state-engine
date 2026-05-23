@@ -7,7 +7,7 @@ Full standard: [docs/ab-test-standard.md](ab-test-standard.md).
 
 ## Pre-Flight
 
-- [ ] Both LLM servers reachable (`curl http://localhost:8080/v1/models`, `curl http://localhost:8081/v1/models`) — adjust ports to match `config/llm.json`
+- [ ] Both LLM servers reachable (`curl http://<server-a>/v1/models`, `curl http://<server-b>/v1/models`) — substitute actual endpoints from `config/llm.json` `base_urls`
 - [ ] On `main` branch, pulled latest
 - [ ] `config/llm.json` unchanged between A and B runs
 - [ ] Output directories will be created per-run: `framework-ab-a-run{1,2,3}`, `framework-ab-b-run{1,2,3}`
@@ -18,23 +18,23 @@ Full standard: [docs/ab-test-standard.md](ab-test-standard.md).
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract --framework framework-ab-a-run1 --max-turns 30 --overwrite \
-    --base-url http://localhost:8080/v1
+    --file sessions/_import/full-transcript.md \
+    --framework framework-ab-a-run1 --max-turns 30 --overwrite \
+    --base-url http://<server-a>/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract --framework framework-ab-a-run2 --max-turns 30 --overwrite \
-    --base-url http://localhost:8080/v1
+    --file sessions/_import/full-transcript.md \
+    --framework framework-ab-a-run2 --max-turns 30 --overwrite \
+    --base-url http://<server-a>/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract --framework framework-ab-a-run3 --max-turns 30 --overwrite \
-    --base-url http://localhost:8080/v1
+    --file sessions/_import/full-transcript.md \
+    --framework framework-ab-a-run3 --max-turns 30 --overwrite \
+    --base-url http://<server-a>/v1
 ```
 
 - [ ] Run A completed ×3 (minimum). Outputs in `framework-ab-a-run{1,2,3}/catalogs`
@@ -47,23 +47,23 @@ git checkout <pr-branch>
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract --framework framework-ab-b-run1 --max-turns 30 --overwrite \
-    --base-url http://localhost:8081/v1
+    --file sessions/_import/full-transcript.md \
+    --framework framework-ab-b-run1 --max-turns 30 --overwrite \
+    --base-url http://<server-b>/v1
 
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract --framework framework-ab-b-run2 --max-turns 30 --overwrite \
-    --base-url http://localhost:8081/v1
+    --file sessions/_import/full-transcript.md \
+    --framework framework-ab-b-run2 --max-turns 30 --overwrite \
+    --base-url http://<server-b>/v1
 
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract --framework framework-ab-b-run3 --max-turns 30 --overwrite \
-    --base-url http://localhost:8081/v1
+    --file sessions/_import/full-transcript.md \
+    --framework framework-ab-b-run3 --max-turns 30 --overwrite \
+    --base-url http://<server-b>/v1
 ```
 
 - [ ] Run B completed ×3 (minimum). Outputs in `framework-ab-b-run{1,2,3}/catalogs`
@@ -78,7 +78,7 @@ python tools/validate.py --framework framework-ab-b-run1
 
 # Ground truth validation (full-session runs only — requires full-session fixture schema):
 python tools/validate_extraction.py \
-    --catalog-dir framework-ab-{a,b}-run{N}/catalogs \
+    --catalog-dir framework-ab-<a|b>-run<N>/catalogs \
     --ground-truth tests/fixtures/extraction-ground-truth-full-session.json
 ```
 
@@ -106,14 +106,14 @@ python tools/validate_extraction.py \
 | Relationship count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
 | Performance regression | Δ ≤ +10% time | +10–20% time | > +20% time |
 | Performance improvement | Always PASS | — | — |
-| Schema validity | 100% | ≥ 95% | < 95% |
+| Schema validity | 100% | — | < 100% |
 | Ground truth validation | 0 FAILs | — | Any FAIL |
 
 ## Manual Review (Recommended)
 
 > ⚠️ These checks require human review. They do NOT block merge but SHOULD be performed for major template changes.
 
-| Metric | PASS | WARN | BLOCK |
+| Metric | PASS | WARN | NEEDS REVIEW |
 |---|---|---|---|
 | Attribute completeness | ≥ 90% | 75–89% | < 75% |
 | Hallucination rate | 0% | ≤ 5% | > 5% |

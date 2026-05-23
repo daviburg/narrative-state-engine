@@ -45,9 +45,9 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 
 | Metric | Source | Unit |
 |---|---|---|
-| Wall-clock time per turn | Timestamp delta from extraction log | seconds |
+| Wall-clock time per turn | `elapsed_ms / 1000` from extraction log (per-turn field logged by the extraction pipeline) | seconds |
 | Total extraction time | Start-to-finish wall clock | minutes |
-| LLM calls per turn | Count of API calls across all 4 core extraction phases (entity-discovery, entity-detail, relationship-mapper, event-extractor; temporal-signals is optional and excluded from default call counts) | count |
+| LLM calls per turn | Count of API calls across all 5 core extraction phases (entity-discovery, entity-detail, pc-extraction, relationship-mapper, event-extractor; temporal-signals is optional and excluded from default call counts). Note: pc-extraction uses the entity-detail template applied specifically to the player character entity and is tracked as a separate call in the pipeline. | count |
 
 ### 2.2 Derived Metrics
 
@@ -76,10 +76,10 @@ Count entities by type in each extraction output:
 
 | Type | Catalog directory | Count method |
 |---|---|---|
-| Characters | `catalogs/characters/` | File count (excluding `char-player.json`) |
-| Locations | `catalogs/locations/` | File count |
-| Items | `catalogs/items/` | File count |
-| Factions | `catalogs/factions/` | File count |
+| Characters | `catalogs/characters/` | File count (excluding `char-player.json` and `index.json`) |
+| Locations | `catalogs/locations/` | File count (excluding `index.json`) |
+| Items | `catalogs/items/` | File count (excluding `index.json`) |
+| Factions | `catalogs/factions/` | File count (excluding `index.json`) |
 | Events | `catalogs/events.json` | Array length (`jq length` or `python -c "import json; print(len(json.load(open(...))))"`) |
 
 Report as a table:
@@ -94,7 +94,7 @@ Report as a table:
 
 ### 3.2 Relationship Counts
 
-Count total relationships across all entity files. Report by relationship type if available using the canonical `category` values from `schemas/entity.schema.json`: `kinship`, `partnership`, `mentorship`, `political`, `factional`, `social`, `adversarial`, `romantic`, `spatial`, `other`.
+Count total relationships across all entity files. Report by relationship `type` if available using the canonical `type` enum values from `schemas/entity.schema.json`: `kinship`, `partnership`, `mentorship`, `political`, `factional`, `social`, `adversarial`, `romantic`, `spatial`, `other`.
 
 ### 3.3 JSON Schema Validity
 
@@ -121,7 +121,7 @@ Report:
 | Single type count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
 | Relationship count **loss** | Δ ≤ 10% loss | 10–20% loss | > 20% loss |
 | Relationship count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
-| Schema validity | 100% | ≥ 95% | < 95% |
+| Schema validity | 100% | — | < 100% |
 | Performance regression | Δ ≤ +10% time | +10–20% time | > +20% time |
 | Performance improvement | Always PASS | — | — |
 
@@ -194,7 +194,7 @@ Score: `attributes_present / attributes_expected` across all ground truth entiti
 |---|---|
 | ≥ 90% | PASS |
 | 75–89% | WARN |
-| < 75% | BLOCK (advisory — requires written justification; does not auto-prevent merge) |
+| < 75% | NEEDS REVIEW (advisory — requires written justification; does not auto-prevent merge) |
 
 ### 4.3 Relationship Correctness (Turns 1–30)
 
@@ -226,7 +226,7 @@ For each extraction output, identify entities that cannot be traced to the trans
 |---|---|
 | 0% | PASS |
 | ≤ 5% | WARN |
-| > 5% | BLOCK (advisory — requires written justification; does not auto-prevent merge) |
+| > 5% | NEEDS REVIEW (advisory — requires written justification; does not auto-prevent merge) |
 
 ### 4.5 Dedup Quality
 
@@ -367,8 +367,7 @@ git pull
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract \
+    --file sessions/_import/full-transcript.md \
     --framework framework-ab-a-run1 \
     --max-turns 30 \
     --overwrite \
@@ -377,8 +376,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract \
+    --file sessions/_import/full-transcript.md \
     --framework framework-ab-a-run2 \
     --max-turns 30 \
     --overwrite \
@@ -387,17 +385,16 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract \
+    --file sessions/_import/full-transcript.md \
     --framework framework-ab-a-run3 \
     --max-turns 30 \
     --overwrite \
     --base-url http://localhost:8080/v1
 ```
 
-> **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants.
-
-### 6.3 Run Variant B (PR Branch)
+> **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants. Substitute `localhost:8080` / `localhost:8081` with your actual server endpoints from `config/llm.json` `base_urls`.
+>
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/full-transcript.md` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
 
 ```bash
 git checkout <pr-branch>
@@ -406,8 +403,7 @@ git checkout <pr-branch>
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract \
+    --file sessions/_import/full-transcript.md \
     --framework framework-ab-b-run1 \
     --max-turns 30 \
     --overwrite \
@@ -416,8 +412,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract \
+    --file sessions/_import/full-transcript.md \
     --framework framework-ab-b-run2 \
     --max-turns 30 \
     --overwrite \
@@ -426,8 +421,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/session-import/raw/full-transcript.md \
-    --extract \
+    --file sessions/_import/full-transcript.md \
     --framework framework-ab-b-run3 \
     --max-turns 30 \
     --overwrite \
@@ -444,8 +438,7 @@ The two B70 GPU servers (ports 8080 and 8081 by default — see `tools/submit_ab
 # Terminal 1 — Variant A on GPU 0 (port 8080)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
-    --file sessions/session-import/raw/full-transcript.md `
-    --extract `
+    --file sessions/_import/full-transcript.md `
     --framework framework-ab-a-run1 `
     --max-turns 30 `
     --base-url http://localhost:8080/v1 `
@@ -454,8 +447,7 @@ python tools/bootstrap_session.py `
 # Terminal 2 — Variant B on GPU 1 (port 8081)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
-    --file sessions/session-import/raw/full-transcript.md `
-    --extract `
+    --file sessions/_import/full-transcript.md `
     --framework framework-ab-b-run1 `
     --max-turns 30 `
     --base-url http://localhost:8081/v1 `
@@ -502,10 +494,10 @@ python tools/validate_extraction.py \
 for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
            framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
   echo "=== $run ==="
-  # Characters: exclude char-player.json
-  echo "characters: $(ls $run/catalogs/characters/*.json 2>/dev/null | grep -v 'char-player\.json' | wc -l)"
+  # Characters: exclude char-player.json and index.json
+  echo "characters: $(ls $run/catalogs/characters/*.json 2>/dev/null | grep -v 'char-player\.json' | grep -v 'index\.json' | wc -l)"
   for type in locations items factions; do
-    echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | wc -l)"
+    echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | grep -v 'index\.json' | wc -l)"
   done
   _evcount=$(python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' \
     "$run/catalogs/events.json" 2>/dev/null || echo 0)
@@ -520,12 +512,13 @@ foreach ($run in @(
     "framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3",
     "framework-ab-b-run1", "framework-ab-b-run2", "framework-ab-b-run3")) {
     Write-Output "=== $run ==="
-    # Characters: exclude char-player.json
+    # Characters: exclude char-player.json and index.json
     $charCount = (Get-ChildItem "$run/catalogs/characters/*.json" -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -ne "char-player.json" }).Count
+        Where-Object { $_.Name -ne "char-player.json" -and $_.Name -ne "index.json" }).Count
     Write-Output "characters: $charCount"
     foreach ($type in @("locations", "items", "factions")) {
-        $count = (Get-ChildItem "$run/catalogs/$type/*.json" -ErrorAction SilentlyContinue).Count
+        $count = (Get-ChildItem "$run/catalogs/$type/*.json" -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne "index.json" }).Count
         Write-Output "${type}: $count"
     }
     $eventsFile = "$run/catalogs/events.json"
@@ -544,11 +537,12 @@ for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
            framework-ab-b-run1 framework-ab-b-run2 framework-ab-b-run3; do
   echo "=== $run ==="
   python -c "
-import json, os, sys, glob
+import json, glob
 total = 0
 for f in glob.glob('$run/catalogs/**/*.json', recursive=True):
     d = json.load(open(f))
-    total += len(d.get('relationships', []))
+    if isinstance(d, dict):
+        total += len(d.get('relationships', []))
 print(f'relationships: {total}')
 "
 done
@@ -562,10 +556,14 @@ foreach ($run in @(
     "framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3",
     "framework-ab-b-run1", "framework-ab-b-run2", "framework-ab-b-run3")) {
     $total = 0
-    Get-ChildItem "$run/catalogs/" -Filter *.json -Recurse | ForEach-Object {
-        $json = Get-Content $_ -Raw | ConvertFrom-Json
-        if ($json.relationships) { $total += $json.relationships.Count }
-    }
+    Get-ChildItem "$run/catalogs/" -Filter *.json -Recurse |
+        Where-Object { $_.Name -ne "index.json" -and $_.Name -ne "events.json" } |
+        ForEach-Object {
+            $json = Get-Content $_ -Raw | ConvertFrom-Json
+            if ($json -is [PSCustomObject] -and $json.relationships) {
+                $total += $json.relationships.Count
+            }
+        }
     Write-Output "${run} relationships: $total"
 }
 ```
