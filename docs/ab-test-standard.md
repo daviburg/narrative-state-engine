@@ -47,7 +47,7 @@ Report **mean ± standard deviation** for all metrics. If any metric's standard 
 |---|---|---|
 | Wall-clock time per turn | `elapsed_ms / 1000` from extraction log (per-turn field logged by the extraction pipeline) | seconds |
 | Total extraction time | Start-to-finish wall clock | minutes |
-| LLM calls per turn | Sum of `prompt_metrics.<phase>.calls` across phases recorded in `extraction-log.jsonl` for each turn: `discovery`, `entity_detail`, `relationship_mapper`, `event_extractor`. PC detail is processed as an additional `entity_detail` call (there is no distinct `pc-extraction` phase counter); it is included in the `entity_detail` call count automatically. `temporal_signals` is optional and excluded from default call counts. | count |
+| LLM calls per turn | Sum of `prompt_metrics.<phase>.calls` across phases recorded in `extraction-log.jsonl` for each turn: `discovery`, `entity_detail`, `relationship_mapper`, `event_extractor`. PC detail is processed as an additional `entity_detail` call (there is no distinct `pc-extraction` phase counter); it is included in the `entity_detail` call count automatically. Note: `temporal_signals` extraction calls are **not** recorded in `prompt_metrics` and are excluded from this count; if your change affects temporal extraction, track those calls separately via the extraction log's `temporal_signals` entries. | count |
 
 ### 2.2 Derived Metrics
 
@@ -80,7 +80,7 @@ Count entities by type in each extraction output:
 | Locations | `catalogs/locations/` | File count (excluding `index.json`) |
 | Items | `catalogs/items/` | File count (excluding `index.json`) |
 | Factions | `catalogs/factions/` | File count (excluding `index.json`) |
-| Events | `catalogs/events.json` | Array length (`jq length` or `python -c "import json; print(len(json.load(open(...))))"`) |
+| Events | `catalogs/events.json` | Array length (`jq length` or `python -c "import json; print(len(json.load(open(..., encoding='utf-8-sig'))))"`) |
 
 Report as a table:
 
@@ -499,7 +499,7 @@ for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
   for type in locations items factions; do
     echo "$type: $(ls $run/catalogs/$type/*.json 2>/dev/null | grep -v 'index\.json' | wc -l)"
   done
-  _evcount=$(python -c 'import json,sys; print(len(json.load(open(sys.argv[1]))))' \
+  _evcount=$(python -c 'import json,sys; print(len(json.load(open(sys.argv[1], encoding="utf-8-sig"))))' \
     "$run/catalogs/events.json" 2>/dev/null || echo 0)
   echo "events: $_evcount"
 done
@@ -540,7 +540,7 @@ for run in framework-ab-a-run1 framework-ab-a-run2 framework-ab-a-run3 \
 import json, glob
 total = 0
 for f in glob.glob('$run/catalogs/**/*.json', recursive=True):
-    d = json.load(open(f))
+    d = json.load(open(f, encoding="utf-8-sig"))
     if isinstance(d, dict):
         total += len(d.get('relationships', []))
 print(f'relationships: {total}')
