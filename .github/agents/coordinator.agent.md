@@ -55,7 +55,7 @@ All non-trivial work that runs on remote hosts MUST be submitted through the tas
 
 ### Direct SSH is permitted ONLY for:
 - **Health interventions**: restarting the coordinator daemon itself, recovering a crashed service, checking `systemctl status`
-- **Trivial inline checks**: `curl` health endpoints, `tail` a log, `df -h`, `nvidia-smi` — commands that complete in under 1 minute and produce a one-line answer
+- **Trivial inline checks**: `curl` health endpoints, `tail` a log, `df -h`, `nvidia-smi` — commands that complete in under 1 minute and produce brief, self-contained output (no artifact files or dashboard visibility needed)
 - **Emergency repairs**: when the orchestrator service is itself down and cannot accept tasks
 
 ### Task orchestrator is REQUIRED for:
@@ -112,9 +112,9 @@ When monitoring long-running processes (extraction runs, benchmarks):
 When dispatching tasks to address automated Copilot review comments on a PR, use this autonomous cycle. The @reviewer pre-push step is waived for these cycles (Copilot is the reviewer).
 
 1. **Fix**: Read unresolved Copilot comments, fix each issue, commit, push to PR branch
-2. **Reply**: Post `[@developer]` reply to each addressed comment with commit SHA
+2. **Reply**: Post `**[@developer]**` reply to each addressed comment with commit SHA
 3. **CI Gate**: Verify CI passes after push. If CI fails, fix and push again before proceeding
-4. **Request Review**: Call the Copilot review API to trigger a fresh review
+4. **Request Review**: @developer calls the Copilot review API (`gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`) to trigger a fresh review
 5. **Schedule Follow-Up**: Submit a new orchestrator task with `not_before` set to 15 minutes from now. That follow-up task will:
    - Check if the Copilot review has posted results
    - If review is not ready yet: return failure with explicit error (orchestrator retries with backoff)
