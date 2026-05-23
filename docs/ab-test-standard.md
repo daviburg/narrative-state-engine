@@ -537,8 +537,10 @@ foreach ($run in @(
 #### Relationship Counts
 
 ```powershell
-# Count total relationships across all entity files (per-run)
-foreach ($run in @("framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3")) {
+# Count total relationships across all entity files (per-run, both variants)
+foreach ($run in @(
+    "framework-ab-a-run1", "framework-ab-a-run2", "framework-ab-a-run3",
+    "framework-ab-b-run1", "framework-ab-b-run2", "framework-ab-b-run3")) {
     $total = 0
     Get-ChildItem "$run/catalogs/" -Filter *.json -Recurse | ForEach-Object {
         $json = Get-Content $_ -Raw | ConvertFrom-Json
