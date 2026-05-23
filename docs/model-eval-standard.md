@@ -136,9 +136,10 @@ python tools/dedup_audit.py --catalog-dir framework-eval-b-run1/catalogs
 ```
 
 The tool reports:
-- Count of suspected duplicate pairs (name similarity ≥ threshold)
-- High-confidence auto-merge candidates (≥ 0.9 LLM score)
-- Medium-confidence flagged pairs for human review
+- Number of heuristic candidate pairs found (edit distance ≤ 3, substring match, or same-turn + similar name)
+- Auto-merged count (LLM confidence ≥ 0.9)
+- Flagged for review count (LLM confidence 0.6–0.9)
+- Discarded count (LLM scored as distinct, or confidence < 0.6)
 
 > **Note:** ID-stem duplicate detection (same entity stem, different turn suffix) is a planned feature, not yet implemented. Check for such duplicates manually when reviewing the flagged pairs.
 
@@ -356,11 +357,13 @@ curl -s http://localhost:11434/v1/models | python -m json.tool
 
 ### 8.2 Run Model A (Baseline)
 
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. These paths are not committed to the repository (the `sessions/` directory is gitignored); see `docs/usage.md` for instructions on setting up a local session before running evaluations.
+
 ```bash
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-eval-a-run1 \
     --max-turns 30 \
     --overwrite \
@@ -370,7 +373,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-eval-a-run2 \
     --max-turns 30 \
     --overwrite \
@@ -380,7 +383,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-eval-a-run3 \
     --max-turns 30 \
     --overwrite \
@@ -394,7 +397,7 @@ python tools/bootstrap_session.py \
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/full-transcript.md \
+    --file sessions/_import/session-import-full-transcript.txt \
     --framework framework-eval-b-run1 \
     --max-turns 30 \
     --overwrite \
