@@ -102,7 +102,7 @@ All input values are normalized to a 0–10 scale before applying weights.
 | Input | Normalization |
 |---|---|
 | `entity_count_score` | `min(10, (entity_count / expected_entity_count) × 10)` — capped at 10 to prevent inflated counts from dominating |
-| `dedup_score` | `max(0, 10 - (suspected_duplicate_pct × 200))` — 0% duplicates = 10, 5% duplicates = 0 |
+| `dedup_score` | `max(0, 10 - (suspected_duplicate_rate × 200))` — `suspected_duplicate_rate` is a 0.0–1.0 fraction (e.g. 0.00 = 0% duplicates → score 10; 0.05 = 5% duplicates → score 0) |
 | `attribute_completeness` | `(attributes_present / attributes_expected) × 10` — sum `expected_attributes` list lengths across all entries in all entity categories of the ground truth fixture to get `attributes_expected`; count how many of those attributes are non-empty in the extracted entities to get `attributes_present` |
 | `semantic_score` | Raw LLM-as-judge weighted score (already on 0–10 scale) |
 
@@ -151,7 +151,9 @@ The tool reports:
 | 2–5% | WARN — document pairs; verify they are genuinely distinct; acceptable if justified |
 | > 5% | **BLOCK** — model cannot be adopted; dedup failures will corrupt entity counts and composite scores |
 
-`suspected_duplicate_pct = suspected_duplicate_pairs / total_entities`
+`suspected_duplicate_rate = suspected_duplicate_pairs / total_entities`
+
+`suspected_duplicate_rate` is a 0.0–1.0 fraction (not a 0–100 percentage). For example, 3 suspected pairs out of 100 entities → `suspected_duplicate_rate = 0.03`.
 
 where `suspected_duplicate_pairs = auto_merged + flagged_for_review` from the `dedup_audit.py` output (auto-merged pairs are confirmed duplicates; flagged-for-review pairs are suspected duplicates pending manual confirmation; discarded pairs are not counted).
 
