@@ -103,7 +103,7 @@ All input values are normalized to a 0–10 scale before applying weights.
 |---|---|
 | `entity_count_score` | `min(10, (entity_count / expected_entity_count) × 10)` — capped at 10 to prevent inflated counts from dominating |
 | `dedup_score` | `max(0, 10 - (suspected_duplicate_pct × 200))` — 0% duplicates = 10, 5% duplicates = 0 |
-| `attribute_completeness` | `(attributes_present / attributes_expected) × 10` — from ground truth fixture |
+| `attribute_completeness` | `(attributes_present / attributes_expected) × 10` — sum `expected_attributes` list lengths across all entries in all entity categories of the ground truth fixture to get `attributes_expected`; count how many of those attributes are non-empty in the extracted entities to get `attributes_present` |
 | `semantic_score` | Raw LLM-as-judge weighted score (already on 0–10 scale) |
 
 ### 3.3 Weight Justification
@@ -152,6 +152,8 @@ The tool reports:
 | > 5% | **BLOCK** — model cannot be adopted; dedup failures will corrupt entity counts and composite scores |
 
 `suspected_duplicate_pct = suspected_duplicate_pairs / total_entities`
+
+where `suspected_duplicate_pairs = auto_merged + flagged_for_review` from the `dedup_audit.py` output (auto-merged pairs are confirmed duplicates; flagged-for-review pairs are suspected duplicates pending manual confirmation; discarded pairs are not counted).
 
 A **BLOCK on dedup** prevents adoption regardless of composite score. This is the lesson from the 8B evaluation: a model that cannot reliably deduplicate produces misleading metrics across all downstream analysis.
 
@@ -357,7 +359,7 @@ curl -s http://localhost:11434/v1/models | python -m json.tool
 
 ### 8.2 Run Model A (Baseline)
 
-> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. These paths are not committed to the repository (the `sessions/` directory is gitignored); see `docs/usage.md` for instructions on setting up a local session before running evaluations.
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. The `sessions/session-import` and `sessions/_import/` paths are listed in `.gitignore` and are not committed to the repository; see `docs/usage.md` for instructions on setting up a local session before running evaluations.
 
 ```bash
 # Run 1:
@@ -368,6 +370,7 @@ python tools/bootstrap_session.py \
     --max-turns 30 \
     --overwrite \
     --no-resume \
+    --model <baseline-model-name> \
     --base-url http://localhost:8080/v1
 
 # Run 2:
@@ -378,6 +381,7 @@ python tools/bootstrap_session.py \
     --max-turns 30 \
     --overwrite \
     --no-resume \
+    --model <baseline-model-name> \
     --base-url http://localhost:8080/v1
 
 # Run 3:
@@ -388,6 +392,7 @@ python tools/bootstrap_session.py \
     --max-turns 30 \
     --overwrite \
     --no-resume \
+    --model <baseline-model-name> \
     --base-url http://localhost:8080/v1
 ```
 
@@ -402,6 +407,7 @@ python tools/bootstrap_session.py \
     --max-turns 30 \
     --overwrite \
     --no-resume \
+    --model <candidate-model-name> \
     --base-url http://localhost:8081/v1
 
 # Runs 2 and 3: same pattern with framework-eval-b-run2, framework-eval-b-run3
