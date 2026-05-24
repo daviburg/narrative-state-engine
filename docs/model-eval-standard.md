@@ -39,7 +39,7 @@ Report **mean ± standard deviation** for all metrics when running multiple runs
 
 - **Model A (baseline):** The model currently in production `config/llm.json`. Use `--framework framework-eval-a-runN` output directories.
 - **Model B (candidate):** The new model under evaluation. Use `--framework framework-eval-b-runN` output directories.
-- Both models MUST use identical templates from `main` HEAD, identical `config/llm.json` (except for the `model` and `base_url` fields), and identical hardware where possible.
+- Both models MUST use identical templates from `main` HEAD, an identical `config/llm.json` (with per-run model and endpoint differences supplied via `--model` and `--base-url` CLI overrides rather than by editing the config — this ensures `base_url`, `base_urls`, and all other settings are held constant between runs), and identical hardware where possible.
 
 ---
 
@@ -350,12 +350,17 @@ If APPROVED with WARNs: [documented justifications for each WARN]
 
 ### 8.1 Environment Setup
 
-Configure `config/llm.json` so both model servers are reachable. For a local Ollama comparison:
+Configure `config/llm.json` so both model servers are reachable. The run commands in §8.2 and §8.3 assume **two OpenAI-compatible servers** listening on `:8080/v1` (Model A) and `:8081/v1` (Model B) — for example, two `llama.cpp --server` or `vllm` instances, or two Ollama instances started with `OLLAMA_HOST=0.0.0.0:8080` / `:8081`. Verify both endpoints before running:
 
 ```bash
-# Verify server is reachable
-curl -s http://localhost:11434/v1/models | python -m json.tool
+# Verify Model A server (port 8080)
+curl -s http://localhost:8080/v1/models | python -m json.tool
+
+# Verify Model B server (port 8081)
+curl -s http://localhost:8081/v1/models | python -m json.tool
 ```
+
+> **Alternative — single Ollama instance:** If both models are served by one Ollama process on `:11434`, omit `--base-url` from all commands (or pass `--base-url http://localhost:11434/v1`) and rely solely on `--model` to switch between them. The `--base-url` and `--model` overrides are independent.
 
 ### 8.2 Run Model A (Baseline)
 
