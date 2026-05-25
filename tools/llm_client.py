@@ -105,6 +105,11 @@ class LLMClient:
 
         if overrides:
             self.config.update(overrides)
+            # When base_url is explicitly overridden, drop base_urls so the
+            # caller's single-endpoint intent is honoured instead of the
+            # multi-endpoint round-robin list from the config file.
+            if "base_url" in overrides:
+                self.config.pop("base_urls", None)
 
         try:
             from openai import OpenAI
