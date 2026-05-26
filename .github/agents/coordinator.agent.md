@@ -67,14 +67,20 @@ All non-trivial work that runs on remote hosts MUST be submitted through the tas
 - Any work that should appear on the dashboard for visibility
 
 ### Task Submission Method
-Submit tasks using the Python API locally — do NOT SSH into arclight to run raw SQL inserts:
+Submit tasks using the Python API locally — do NOT SSH into arclight to run raw SQL inserts.
+The orchestrator API (`saas/`) lives in **narrative-state-engine-private**, not in this public repo.
+
+From the private repo working directory (`narrative-state-engine-private`):
 ```python
+import os
 from saas.orchestrator.api import OrchestratorAPI
 from saas.orchestrator.models import DatabaseConfig, TaskDefinition
 
-async with OrchestratorAPI(db_config=DatabaseConfig(password="...")) as api:
+async with OrchestratorAPI(db_config=DatabaseConfig(password=os.environ["NSE_ORCH_PASSWORD"])) as api:
     await api.submit_task(TaskDefinition(id="...", name="...", ...))
 ```
+> **Never embed credentials in PRs, chat messages, or prompt files.** Use `NSE_ORCH_PASSWORD` (or the appropriate env var) and keep secrets in your shell environment or a secrets manager.
+
 This connects directly to arclight:5432 over LAN. `TaskDefinition` provides Pydantic validation (ID format, not_before normalization, etc.). Delegate task submission to @developer — it is NOT @b70-optimizer's job unless the task is specifically about B70 hardware administration.
 
 ### Enforcement
