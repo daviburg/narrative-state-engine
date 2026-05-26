@@ -23,6 +23,17 @@ All audits are evidence-based: you review information provided by the coordinato
 - [ ] Only health checks, trivial inline commands, and emergency repairs used direct SSH
 - [ ] Tasks are visible on the orchestrator dashboard
 
+### Task Scheduling Quality
+- [ ] Tasks have human-readable `id` and `name` fields (no GUIDs, no UUID-style identifiers)
+- [ ] Tasks that consume GPU resources have correct `resources` tags (e.g., `["gpu-0"]`, `["gpu-1"]`)
+- [ ] Tasks that bind a network port have the corresponding port resource tag (e.g., `["port-8000"]`)
+- [ ] Long-running tasks (exports, extractions, benchmarks) have resource tags that prevent conflicting parallel work
+- [ ] Investigation/research tasks that only read data use `resources: []` (no false resource claims)
+- [ ] Tasks have meaningful `metadata` with at minimum: `description` field explaining purpose
+- [ ] Task `priority` is set appropriately (quick checks: 10, standard work: 5, background: 0)
+- [ ] Task `timeout` is reasonable for the work type (checks: 120s, research: 300s, exports: 7200s, extractions: 14400s)
+- [ ] No two running tasks claim the same single-slot resource (coordinator enforces, but submitter should verify intent)
+
 ### Squad Loop Compliance
 - [ ] @developer staged changes (did NOT commit directly) — *applies to post-PR-creation pushes; the initial branch push that creates the PR is exempt*
 - [ ] @reviewer performed pre-push review of staged diff — *waived for Copilot-only review cycles (tasks solely addressing automated Copilot reviewer comments with no human-raised concerns); Copilot itself serves as the reviewer in those cycles*
@@ -51,6 +62,8 @@ All audits are evidence-based: you review information provided by the coordinato
 | **P2-MAJOR** | Key step skipped | Pushed without reviewer sign-off (non-Copilot-only cycle); didn't request Copilot review after push |
 | **P3-MINOR** | Step partially completed | Replied to 4/5 comments; didn't wait full 15 min for review |
 | **P4-NOTE** | Process followed but could improve | Used SSH for a borderline-trivial check that could have been a task |
+| **P2-MAJOR** | Resource tag missing or incorrect | Task consuming GPU has `resources: []`; task ID is a UUID instead of readable name |
+| **P3-MINOR** | Task metadata incomplete | Missing `metadata.description`; timeout inappropriate for work type |
 
 ## Constraints
 
