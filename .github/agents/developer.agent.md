@@ -20,6 +20,7 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 - DO NOT add entities, locations, or plot details not in the transcript (Rule 7)
 - DO NOT skip documentation updates when changing tool behavior (Rule 8)
 - ONLY implement what the prompt or issue specifies — no unsolicited refactoring
+- **NEVER use `git add .`, `git add -A`, or `git add --all`** — always stage explicit file paths. Before committing, run `git status` and verify ONLY intended files are staged. If the staged file count exceeds what the task requires, STOP and unstage unexpected files with `git reset`. A commit touching more files than the task specifies is a P1-CRITICAL process violation.
 
 ## Approach
 
