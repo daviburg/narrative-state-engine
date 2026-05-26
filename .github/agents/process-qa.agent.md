@@ -24,13 +24,13 @@ All audits are evidence-based: you review information provided by the coordinato
 - [ ] Tasks are visible on the orchestrator dashboard
 
 ### Task Scheduling Quality
-- [ ] Tasks have human-readable `id` and `name` fields (no GUIDs, no UUID-style identifiers)
-- [ ] Tasks that consume GPU resources have correct `resources` tags (e.g., `["gpu-0"]`, `["gpu-1"]`)
+- [ ] Tasks have human-readable `id` and `name` fields (descriptive prefix required; bare UUIDs/GUIDs without a meaningful prefix are not acceptable)
+- [ ] Tasks that consume GPU resources have correct `resources` tags when the orchestrator supports resource slots (e.g., `["gpu-0"]`, `["gpu-1"]`)
 - [ ] Tasks that bind a network port have the corresponding port resource tag (e.g., `["port-8000"]`)
 - [ ] Long-running tasks (exports, extractions, benchmarks) have resource tags that prevent conflicting parallel work
 - [ ] Investigation/research tasks that only read data use `resources: []` (no false resource claims)
-- [ ] Tasks have meaningful `metadata` with at minimum: `description` field explaining purpose
-- [ ] Task `priority` is set appropriately (quick checks: 10, standard work: 5, background: 0)
+- [ ] Tasks have meaningful `metadata` with a `description` field explaining purpose (when submitted manually or by coordinator; auto-generated tasks from tooling are exempt)
+- [ ] Task `priority` is set appropriately when specified (quick checks: 10, standard work: 5, background/default: 0)
 - [ ] Task `timeout` is reasonable for the work type (checks: 120s, research: 300s, exports: 7200s, extractions: 14400s)
 - [ ] No two running tasks claim the same single-slot resource (coordinator enforces, but submitter should verify intent)
 
