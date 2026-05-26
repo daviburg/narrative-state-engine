@@ -1,0 +1,36 @@
+{
+  "id": "faction-villagers",
+  "name": "villagers",
+  "type": "faction",
+  "identity": "A group of locals who have captured the player and are currently undergoing a tense interrogation by an elder. Their hostility has begun to dissipate as they observe the player's ritualistic offering.",
+  "current_status": "Watching the elder's gesture with silent curiosity as tension dissipates; one member is actively loosening the player's restraints.",
+  "status_updated_turn": "turn-027",
+  "stable_attributes": {
+    "role": {
+      "value": "hostile captors",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-017"
+    },
+    "equipment": {
+      "value": [
+        "crude weapons"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    }
+  },
+  "volatile_state": {
+    "condition": "cautious and curious",
+    "equipment": [
+      "crude weapons"
+    ],
+    "location": "village-square",
+    "current_activity": "loosening the player's restraints and observing the player with curiosity",
+    "last_updated_turn": "turn-027"
+  },
+  "first_seen_turn": "turn-017",
+  "last_updated_turn": "turn-027",
+  "notes": "The faction includes at least two individuals: one acting as a captor/enforcer and others as general onlookers."
+}

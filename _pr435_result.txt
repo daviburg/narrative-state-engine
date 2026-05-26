@@ -1,0 +1,38 @@
+PR #435: fix: add task scheduling quality checklist to process-qa agent
+State: open
+Author: daviburg
+
+Total review comments: 10
+
+Top-level comments: 6
+Comments with replies: 4
+UNRESOLVED (no reply): 2
+
+======================================================================
+Comment ID: 3306291787
+Author: Copilot
+File: .github/agents/process-qa.agent.md
+Line: 31
+Created: 2026-05-26T19:19:45Z
+Body:
+**[@reviewer]** The checklist statement "omitting `resources` is equivalent to an empty list" reads like a claim about orchestrator semantics, but this repo’s documented `TaskDefinition` example omits `resources` entirely (docs/ab-testing.md) and there’s no in-repo spec confirming equivalence. Suggest rewording to be conditional/policy-based (e.g., “for audit purposes, treat omitted `resources` as empty *when the orchestrator defaults it that way* / when resource slots are configured”), so `@process-qa` doesn’t assert behavior that may vary by orchestrator.
+
+
+======================================================================
+Comment ID: 3306291819
+Author: Copilot
+File: .github/agents/process-qa.agent.md
+Line: 66
+Created: 2026-05-26T19:19:46Z
+Body:
+**[@reviewer]** The Severity Levels table now has duplicate rows for the same levels (**P2-MAJOR** and **P3-MINOR**) with different “Meaning” values, which makes the table ambiguous (one level maps to multiple meanings). Consider keeping one row per severity level and adding additional examples within the existing row’s Example cell (or broadening the Meaning text), and ensure the new resource-tag example keeps the same scoping language as the checklist (e.g., only a violation when resource slots are configured / supported).
+
+
+======================================================================
+
+Recent reviews (last 5):
+  daviburg - COMMENTED - 2026-05-26T18:35:19Z
+  copilot-pull-request-reviewer[bot] - COMMENTED - 2026-05-26T18:39:04Z
+  daviburg - COMMENTED - 2026-05-26T19:17:07Z
+  daviburg - COMMENTED - 2026-05-26T19:17:16Z
+  copilot-pull-request-reviewer[bot] - COMMENTED - 2026-05-26T19:19:46Z

@@ -1,0 +1,29 @@
+{
+  "id": "item-warlock-attire",
+  "name": "warlock attire",
+  "type": "item",
+  "identity": "A set of clothing worn by the player character, identified as warlock attire. It is distinctive enough to be noticed by the elder, who uses it to assess the player's background.",
+  "current_status": "Being worn by the player character while kneeling in the frozen earth. The elder is currently inspecting it closely as part of his assessment of the player.",
+  "status_updated_turn": "turn-019",
+  "stable_attributes": {
+    "wearer": {
+      "value": "player character",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    },
+    "style": {
+      "value": "warlock attire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    }
+  },
+  "volatile_state": {
+    "condition": "worn",
+    "location": "on player character",
+    "last_updated_turn": "turn-019"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-019"
+}

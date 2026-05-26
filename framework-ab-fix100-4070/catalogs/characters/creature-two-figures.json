@@ -1,0 +1,46 @@
+{
+  "id": "creature-two-figures",
+  "name": "Two figures",
+  "type": "creature",
+  "identity": "Two human-sized individuals emerging from the forest shadows, likely captors or raiders. They are equipped with crude spears and wear furs and leather, moving with practiced stealth.",
+  "current_status": "Emerging from the shadows of the pines and approaching the player. One figure gestures with a spear and speaks in a low, guttural language, indicating the player is their captive.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "species": {
+      "value": "human-sized",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-007"
+    },
+    "equipment": {
+      "value": [
+        "crude wood-hafted spears",
+        "furs",
+        "leather"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "behavior": {
+      "value": "practiced stealth",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and approaching",
+    "equipment": [
+      "crude wood-hafted spears",
+      "furs",
+      "leather"
+    ],
+    "location": "loc-forest",
+    "current_activity": "Emerging from shadows and confronting the player as captives",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": "Language is unknown to the player. Intent is clear (captive) but specific faction or origin is not yet revealed."
+}

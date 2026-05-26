@@ -1,0 +1,31 @@
+{
+  "id": "item-net-like-contraption",
+  "name": "net-like contraption",
+  "type": "item",
+  "identity": "A heavy, net-like trap woven from thick, icy vines, hidden within the forest canopy and triggered by a tripwire.",
+  "current_status": "The net is no longer restricting the player character's movement; it remains around them but is loose enough to allow free action.",
+  "status_updated_turn": "turn-027",
+  "stable_attributes": {
+    "composition": {
+      "value": "thick, icy vines",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "mechanism": {
+      "value": "tripwire trigger",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    }
+  },
+  "volatile_state": {
+    "condition": "inactive/released",
+    "equipment": [],
+    "location": "loc-woods",
+    "current_activity": "resting around the player character without restriction",
+    "last_updated_turn": "turn-027"
+  },
+  "first_seen_turn": "turn-005",
+  "last_updated_turn": "turn-027"
+}

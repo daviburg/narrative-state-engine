@@ -1,0 +1,32 @@
+{
+  "id": "item-icy-vines",
+  "name": "icy vines",
+  "type": "item",
+  "identity": "A constricting natural trap made of ice and plant matter, currently entangling the player character in the forest.",
+  "current_status": "Constricting the player character, causing pain in their shoulder while the player has stopped struggling.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "material": {
+      "value": "ice and plant matter",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-007"
+    },
+    "state": {
+      "value": "constricting",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and constricting",
+    "equipment": [],
+    "location": "forest",
+    "current_activity": "holding the player character captive",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": "The vines are described as 'icy' and 'constricting'. The text implies they are a natural trap or hazard rather than a crafted item."
+}

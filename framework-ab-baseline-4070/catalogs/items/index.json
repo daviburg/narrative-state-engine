@@ -1,0 +1,83 @@
+[
+  {
+    "id": "item-icy-vines",
+    "name": "icy vines",
+    "type": "item",
+    "status_summary": "Constricting the player character, causing pain in their shoulder.",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-crude-wood-hafted-spears",
+    "name": "crude, wood-hafted spears",
+    "type": "item",
+    "status_summary": "Being carried by two stealthy figures who have emerged from the shadows and are ",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-furs",
+    "name": "furs",
+    "type": "item",
+    "status_summary": "Worn by one of the two captors as they approach the player with a spear, obscuri",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-leather",
+    "name": "leather",
+    "type": "item",
+    "status_summary": "Worn by the captors as part of their furs and leather attire while they approach",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-bonfire",
+    "name": "bonfire",
+    "type": "item",
+    "status_summary": "Roaring brightly in the center of a camp, providing light and warmth as the play",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-warlock-attire",
+    "name": "warlock attire",
+    "type": "item",
+    "status_summary": "Being worn by the player character while kneeling in the frozen earth. The elder",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-wooden-bowl",
+    "name": "wooden bowl",
+    "type": "item",
+    "status_summary": "Placed before the elder by a younger woman; the elder plunges his hand into it t",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-dark-fibrous-material",
+    "name": "dark, fibrous material",
+    "type": "item",
+    "status_summary": "Held out by the elder to the player character after being pulled from a steaming",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-clear-steaming-broth",
+    "name": "clear, steaming broth",
+    "type": "item",
+    "status_summary": "Being offered to the player character by a younger woman as a form of care or su",
+    "first_seen_turn": "turn-029",
+    "last_updated_turn": "turn-029",
+    "active_relationship_count": 0
+  }
+]

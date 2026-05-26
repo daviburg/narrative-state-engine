@@ -1,0 +1,31 @@
+{
+  "id": "item-icy-vines",
+  "name": "icy vines",
+  "type": "item",
+  "identity": "A net made of icy vines used to restrain the player character.",
+  "current_status": "Being untangled from around the player character by a former captor.",
+  "status_updated_turn": "turn-029",
+  "stable_attributes": {
+    "material": {
+      "value": "icy vines",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-029"
+    },
+    "function": {
+      "value": "restraint net",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-029"
+    }
+  },
+  "volatile_state": {
+    "condition": "partially removed",
+    "equipment": [],
+    "location": "loc-village",
+    "current_activity": "being untangled from the player character",
+    "last_updated_turn": "turn-029"
+  },
+  "first_seen_turn": "turn-029",
+  "last_updated_turn": "turn-029"
+}

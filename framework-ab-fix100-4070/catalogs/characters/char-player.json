@@ -1,0 +1,245 @@
+{
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "identity": "The player character (referred to as 'you' in DM narration).",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-030",
+  "current_status": "Sitting near the fire, drinking broth that restored 2 HP.",
+  "volatile_state": {
+    "condition": "Restored 2 HP; sitting by the fire",
+    "equipment": [
+      "icy vine net",
+      "coarse rope",
+      "dark fibrous material"
+    ],
+    "location": "loc-encampment",
+    "current_activity": "Drinking broth near the fire",
+    "last_updated_turn": "turn-030"
+  },
+  "stable_attributes": {
+    "aliases": {
+      "value": [],
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": null
+    },
+    "race": {
+      "value": "Elf",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "class": {
+      "value": "Warlock",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    }
+  },
+  "status_updated_turn": "turn-030",
+  "relationships": [
+    {
+      "target_id": "loc-snow-laden-woods",
+      "current_relationship": "traveling_through",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-005",
+      "last_updated_turn": "turn-005"
+    },
+    {
+      "target_id": "item-net-like-contraption",
+      "current_relationship": "released from",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-005",
+      "last_updated_turn": "turn-027",
+      "history": [
+        {
+          "turn": "turn-005",
+          "description": "ensnared_by"
+        }
+      ]
+    },
+    {
+      "target_id": "creature-two-figures",
+      "current_relationship": "captive of",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-007",
+      "last_updated_turn": "turn-007"
+    },
+    {
+      "target_id": "item-crude-wood-hafted-spears",
+      "current_relationship": "armed_with",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-007",
+      "last_updated_turn": "turn-007"
+    },
+    {
+      "target_id": "char-broader-figure",
+      "current_relationship": "captured by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-011",
+      "last_updated_turn": "turn-011"
+    },
+    {
+      "target_id": "char-companion",
+      "current_relationship": "captured by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-011",
+      "last_updated_turn": "turn-011"
+    },
+    {
+      "target_id": "loc-frigid-woods",
+      "current_relationship": "traveling_through",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-011",
+      "last_updated_turn": "turn-011"
+    },
+    {
+      "target_id": "loc-camp",
+      "current_relationship": "traveling_to",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "loc-dwelling",
+      "current_relationship": "traveling_to",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "loc-lean-tos",
+      "current_relationship": "traveling_to",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "item-bonfire",
+      "current_relationship": "traveling_to",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "loc-encampment",
+      "current_relationship": "located_at",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-015",
+      "last_updated_turn": "turn-015"
+    },
+    {
+      "target_id": "faction-captors",
+      "current_relationship": "being released by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-015",
+      "last_updated_turn": "turn-025",
+      "history": [
+        {
+          "turn": "turn-015",
+          "description": "captive of"
+        }
+      ]
+    },
+    {
+      "target_id": "char-older-figure",
+      "current_relationship": "being confronted by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-015",
+      "last_updated_turn": "turn-015"
+    },
+    {
+      "target_id": "char-elder",
+      "current_relationship": "being offered",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-017",
+      "last_updated_turn": "turn-023",
+      "history": [
+        {
+          "turn": "turn-017",
+          "description": "being confronted by"
+        },
+        {
+          "turn": "turn-019",
+          "description": "being examined by"
+        }
+      ]
+    },
+    {
+      "target_id": "faction-villagers",
+      "current_relationship": "being confronted by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-017",
+      "last_updated_turn": "turn-017"
+    },
+    {
+      "target_id": "item-dark-fibrous-material",
+      "current_relationship": "being offered",
+      "type": "social",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-023"
+    },
+    {
+      "target_id": "loc-bonfire",
+      "current_relationship": "located_at",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-019",
+      "last_updated_turn": "turn-019"
+    }
+  ]
+}

@@ -1,0 +1,50 @@
+{
+  "id": "char-elder",
+  "name": "The elder",
+  "type": "character",
+  "identity": "A grizzled authority figure within the village, possessing a commanding presence and knowledge of the local guttural tongue. He appears to be the one in charge of the captives.",
+  "current_status": "Waiting for the player to apply the offered material to their face to test its effect or gain approval.",
+  "status_updated_turn": "turn-024",
+  "stable_attributes": {
+    "role": {
+      "value": "village elder",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-017"
+    },
+    "appearance": {
+      "value": "grizzled man, eyes like chips of flint, deep lines on face, calloused hands",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    },
+    "language": {
+      "value": "guttural tongue",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    }
+  },
+  "volatile_state": {
+    "condition": "waiting",
+    "equipment": [],
+    "location": "village",
+    "current_activity": "waiting for the player to apply the material to their face",
+    "last_updated_turn": "turn-024"
+  },
+  "first_seen_turn": "turn-017",
+  "last_updated_turn": "turn-024",
+  "notes": "The elder is testing the player's reaction to a substance. The player is currently bound and struggling.",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "offering",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-023",
+      "last_updated_turn": "turn-023"
+    }
+  ]
+}

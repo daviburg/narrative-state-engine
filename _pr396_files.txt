@@ -1,0 +1,4 @@
+docs/architecture.md
+tests/test_smart_compression.py
+tools/catalog_merger.py
+tools/semantic_extraction.py

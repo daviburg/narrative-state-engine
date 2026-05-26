@@ -1,0 +1,29 @@
+[
+  {
+    "id": "loc-forest",
+    "name": "forest",
+    "type": "location",
+    "status_summary": "The player character is lying limp within icy vines in this forest. Two armed fi",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-camp",
+    "name": "camp",
+    "type": "location",
+    "status_summary": "Visible in the distance with smoke curling into the night sky; surrounded by fig",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-lean-tos",
+    "name": "lean-tos",
+    "type": "location",
+    "status_summary": "Visible in the distance as the player and their captors approach; smoke curls fr",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  }
+]

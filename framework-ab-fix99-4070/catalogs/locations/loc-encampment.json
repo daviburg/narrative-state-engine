@@ -1,0 +1,45 @@
+{
+  "id": "loc-encampment",
+  "name": "encampment",
+  "type": "location",
+  "identity": "A rough human encampment situated in a harsh arctic environment, characterized by flickering bonfire light and figures draped in hides and furs.",
+  "current_status": "Illuminated by a flickering bonfire, with several human figures milling about. Two robust captors are actively pushing the player character toward an older, commanding figure standing by the fire.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "environment": {
+      "value": "harsh arctic",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "inhabitants": {
+      "value": "humans",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "atmosphere": {
+      "value": "wild, wary",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "equipment": [
+      "bonfire",
+      "hides",
+      "crude furs",
+      "spears",
+      "animal bones (decorations)",
+      "rudimentary tools"
+    ],
+    "location": "loc-encampment",
+    "current_activity": "illuminated by bonfire; captors moving player toward elder figure",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015",
+  "notes": "The specific name or affiliation of the encampment is not yet revealed."
+}

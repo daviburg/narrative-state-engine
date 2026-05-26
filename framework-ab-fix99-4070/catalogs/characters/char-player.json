@@ -1,0 +1,174 @@
+{
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "identity": "The player character (referred to as 'you' in DM narration).",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-025",
+  "current_status": "Having received approval from the elder, the player character is now partially freed from their restraints; hands and feet are loose, though they remain entangled in the net.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "race": {
+      "value": "elf",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "class": {
+      "value": "warlock",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    },
+    "aliases": {
+      "value": [],
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": "turn-001"
+    }
+  },
+  "volatile_state": {
+    "condition": "partially freed, hands and feet loose, entangled in net, cautious",
+    "equipment": [
+      "net (restrained)",
+      "warlock attire",
+      "dark fibrous material"
+    ],
+    "location": "loc-encampment",
+    "current_activity": "observing captors loosen ropes and villagers murmur",
+    "last_updated_turn": "turn-025"
+  },
+  "notes": "Player is still bound by a net despite being freed from ropes.",
+  "relationships": [
+    {
+      "target_id": "loc-camp-dwelling",
+      "current_relationship": "approaching",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "loc-lean-tos",
+      "current_relationship": "approaching",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "item-bonfire",
+      "current_relationship": "approaching",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "faction-cloaked-figures",
+      "current_relationship": "captured_by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "loc-encampment",
+      "current_relationship": "inside",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-015",
+      "last_updated_turn": "turn-015"
+    },
+    {
+      "target_id": "faction-captors",
+      "current_relationship": "released_by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-015",
+      "last_updated_turn": "turn-025",
+      "history": [
+        {
+          "turn": "turn-021",
+          "description": "captured_by"
+        }
+      ]
+    },
+    {
+      "target_id": "char-older-figure",
+      "current_relationship": "being_presented_to",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-015",
+      "last_updated_turn": "turn-015"
+    },
+    {
+      "target_id": "char-elder",
+      "current_relationship": "seeking_approval_from",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-017",
+      "last_updated_turn": "turn-024",
+      "history": [
+        {
+          "turn": "turn-017",
+          "description": "being_presented_to"
+        },
+        {
+          "turn": "turn-017",
+          "description": "addressing"
+        },
+        {
+          "turn": "turn-021",
+          "description": "being_presented_to"
+        },
+        {
+          "turn": "turn-021",
+          "description": "being_addressed_by"
+        }
+      ]
+    },
+    {
+      "target_id": "faction-villagers",
+      "current_relationship": "held_by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-017",
+      "last_updated_turn": "turn-017"
+    },
+    {
+      "target_id": "item-dark-fibrous-material",
+      "current_relationship": "holding",
+      "type": "other",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-025",
+      "history": [
+        {
+          "turn": "turn-021",
+          "description": "offered"
+        }
+      ]
+    }
+  ]
+}

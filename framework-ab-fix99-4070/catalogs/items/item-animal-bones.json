@@ -1,0 +1,29 @@
+{
+  "id": "item-animal-bones",
+  "name": "animal bones",
+  "type": "item",
+  "identity": "Animal bones used as decorations, likely worn by the captors or displayed within the encampment.",
+  "current_status": "Strung as decorations on one of the figures by the bonfire.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "material": {
+      "value": "animal bones",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "usage": {
+      "value": "decorations",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "strung as decoration",
+    "location": "loc-encampment",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015"
+}

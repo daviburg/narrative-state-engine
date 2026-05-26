@@ -1,0 +1,29 @@
+{
+  "id": "item-rudimentary-tools",
+  "name": "rudimentary tools",
+  "type": "item",
+  "identity": "A collection of basic implements found scattered within the encampment, likely used for survival tasks in the harsh arctic environment.",
+  "current_status": "Scattered about the encampment floor near the bonfire, visible among other debris.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "description": {
+      "value": "rudimentary",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "location_context": {
+      "value": "encampment floor",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "scattered",
+    "location": "loc-encampment",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015"
+}

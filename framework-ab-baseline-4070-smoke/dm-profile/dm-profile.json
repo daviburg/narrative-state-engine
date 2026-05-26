@@ -1,0 +1,16 @@
+{
+  "last_updated_turn": "turn-001",
+  "structure_patterns": [
+    "Narrative flows as a continuous block of text without explicit paragraph breaks, blending environmental description, internal thought, and action."
+  ],
+  "hint_patterns": [
+    "Embeds a clear objective and narrative hook within the character's memory recovery, guiding the player toward the central plot."
+  ],
+  "adversarial_level": "low",
+  "formatting_preferences": [
+    "Uses bold headers for turn identification and standard paragraph structure for the narrative body."
+  ],
+  "notes": "Profile not yet established.",
+  "confidence": 0.59,
+  "tone": "Atmospheric and immersive; uses sensory details (cold, fog, throbbing pain) and internal monologue to establish mood."
+}

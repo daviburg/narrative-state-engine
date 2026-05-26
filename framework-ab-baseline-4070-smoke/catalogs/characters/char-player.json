@@ -1,0 +1,18 @@
+{
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "identity": "The player character (referred to as 'you' in DM narration).",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-001",
+  "current_status": "Recovering from a fall in the snow, steadying themselves, and recalling a mission to save the Midwinter celebration by following fresh footprints into the trees.",
+  "status_updated_turn": "turn-001",
+  "volatile_state": {
+    "condition": "injured (head throbbing), disoriented, cold",
+    "equipment": [],
+    "location": "snowy path near village",
+    "current_activity": "recovering from a fall and recalling mission details",
+    "last_updated_turn": "turn-001"
+  },
+  "notes": "The player character has not yet been given a proper name or specific species/race details in this turn."
+}

@@ -1,0 +1,81 @@
+{
+  "id": "faction-captors",
+  "name": "captors",
+  "type": "faction",
+  "identity": "A group of human captors leading the player character into a rough encampment. They are robust and lean, adapted to the harsh arctic environment, and appear to be of a tribe or band living in the wilderness.",
+  "current_status": "One of their number is loosening the ropes binding the player's wrists and ankles upon the elder's command, while the others murmur with cautious curiosity as the tension dissipates.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "appearance": {
+      "value": "robust and lean, draped in hides and crude furs",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "equipment": {
+      "value": "spears",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "culture": {
+      "value": "wilderness tribe",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "relaxing bonds on the player",
+    "location": "loc-encampment",
+    "current_activity": "loosening the ropes binding the player's wrists and ankles",
+    "last_updated_turn": "turn-025"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-025",
+  "notes": "The faction includes at least two distinct individuals: a guard who acts on the elder's command and a younger woman who serves impassively. The elder appears to be the primary authority figure directing their actions.",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "captured by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-021",
+      "history": [
+        {
+          "turn": "turn-021",
+          "description": "attempting to release"
+        }
+      ]
+    },
+    {
+      "target_id": "char-elder",
+      "current_relationship": "serving",
+      "type": "political",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-021"
+    },
+    {
+      "target_id": "item-dark-fibrous-material",
+      "current_relationship": "offering",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-021"
+    }
+  ]
+}

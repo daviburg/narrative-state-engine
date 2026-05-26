@@ -1,0 +1,52 @@
+{
+  "id": "creature-human",
+  "name": "human",
+  "type": "creature",
+  "identity": "A group of humans living in a rough encampment in a harsh arctic environment, characterized by their hardened features and survivalist lifestyle.",
+  "current_status": "Mill about a rough encampment in the firelight, displaying a wild and wary demeanor. Two specific figures are acting as captors, leading the player character toward an older, commanding figure by the fire.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "appearance": {
+      "value": "draped in hides and crude furs, faces etched with wild and wary looks, features hardened by arctic environment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "equipment": {
+      "value": [
+        "spears",
+        "hides",
+        "crude furs"
+      ],
+      "inference": false,
+      "confidence": 0.9,
+      "source_turn": "turn-015"
+    },
+    "environment": {
+      "value": "harsh arctic environment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "wary and alert",
+    "equipment": [
+      "spears",
+      "hides",
+      "crude furs"
+    ],
+    "location": "loc-encampment",
+    "current_activity": "Mill about the camp; two figures are acting as captors leading a prisoner toward an older leader.",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015",
+  "notes": "The group is currently acting as captors. Specific individuals include two robust/lean captors and one older, commanding figure."
+}

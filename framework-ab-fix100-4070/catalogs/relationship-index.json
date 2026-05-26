@@ -1,0 +1,717 @@
+{
+  "generated_turn": "turn-030",
+  "entries": {
+    "char-broader-figure": {
+      "entity_name": "broader figure",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-broader-figure",
+          "target_name": "broader figure",
+          "current_relationship": "captured by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-011",
+          "last_updated_turn": "turn-011"
+        }
+      ]
+    },
+    "char-companion": {
+      "entity_name": "companion",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-companion",
+          "target_name": "companion",
+          "current_relationship": "captured by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-011",
+          "last_updated_turn": "turn-011"
+        }
+      ]
+    },
+    "char-elder": {
+      "entity_name": "elder",
+      "entity_type": "character",
+      "forward": [
+        {
+          "source_id": "char-elder",
+          "source_name": "elder",
+          "target_id": "char-player",
+          "target_name": "Player Character",
+          "current_relationship": "granting freedom to",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-027"
+        },
+        {
+          "source_id": "char-elder",
+          "source_name": "elder",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "dark, fibrous material",
+          "current_relationship": "holding",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-023"
+        },
+        {
+          "source_id": "char-elder",
+          "source_name": "elder",
+          "target_id": "faction-captors",
+          "target_name": "captors",
+          "current_relationship": "commanding",
+          "type": "political",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-025"
+        }
+      ],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-elder",
+          "target_name": "elder",
+          "current_relationship": "being offered",
+          "type": "social",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-023"
+        },
+        {
+          "source_id": "faction-captors",
+          "source_name": "captors",
+          "target_id": "char-elder",
+          "target_name": "elder",
+          "current_relationship": "serving",
+          "type": "political",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-021"
+        }
+      ]
+    },
+    "char-older-figure": {
+      "entity_name": "older figure",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-older-figure",
+          "target_name": "older figure",
+          "current_relationship": "being confronted by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        }
+      ]
+    },
+    "char-player": {
+      "entity_name": "Player Character",
+      "entity_type": "character",
+      "forward": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-snow-laden-woods",
+          "target_name": "snow-laden woods",
+          "current_relationship": "traveling_through",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-005",
+          "last_updated_turn": "turn-005"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-net-like-contraption",
+          "target_name": "net-like contraption",
+          "current_relationship": "released from",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-005",
+          "last_updated_turn": "turn-027"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "creature-two-figures",
+          "target_name": "Two figures",
+          "current_relationship": "captive of",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-007",
+          "last_updated_turn": "turn-007"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-crude-wood-hafted-spears",
+          "target_name": "crude, wood-hafted spears",
+          "current_relationship": "armed_with",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-007",
+          "last_updated_turn": "turn-007"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-broader-figure",
+          "target_name": "broader figure",
+          "current_relationship": "captured by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-011",
+          "last_updated_turn": "turn-011"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-companion",
+          "target_name": "companion",
+          "current_relationship": "captured by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-011",
+          "last_updated_turn": "turn-011"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-frigid-woods",
+          "target_name": "frigid woods",
+          "current_relationship": "traveling_through",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-011",
+          "last_updated_turn": "turn-011"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-camp",
+          "target_name": "camp",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-dwelling",
+          "target_name": "dwelling",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-lean-tos",
+          "target_name": "lean-tos",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-bonfire",
+          "target_name": "bonfire",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-encampment",
+          "target_name": "encampment",
+          "current_relationship": "located_at",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-captors",
+          "target_name": "captors",
+          "current_relationship": "being released by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-025"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-older-figure",
+          "target_name": "older figure",
+          "current_relationship": "being confronted by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-elder",
+          "target_name": "elder",
+          "current_relationship": "being offered",
+          "type": "social",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-023"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-villagers",
+          "target_name": "villagers",
+          "current_relationship": "being confronted by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-017"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "dark, fibrous material",
+          "current_relationship": "being offered",
+          "type": "social",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-019",
+          "last_updated_turn": "turn-023"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-bonfire",
+          "target_name": "fire",
+          "current_relationship": "located_at",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-019",
+          "last_updated_turn": "turn-019"
+        }
+      ],
+      "reverse": [
+        {
+          "source_id": "char-elder",
+          "source_name": "elder",
+          "target_id": "char-player",
+          "target_name": "Player Character",
+          "current_relationship": "granting freedom to",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-027"
+        },
+        {
+          "source_id": "faction-captors",
+          "source_name": "captors",
+          "target_id": "char-player",
+          "target_name": "Player Character",
+          "current_relationship": "captured by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-021"
+        }
+      ]
+    },
+    "creature-two-figures": {
+      "entity_name": "Two figures",
+      "entity_type": "creature",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "creature-two-figures",
+          "target_name": "Two figures",
+          "current_relationship": "captive of",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-007",
+          "last_updated_turn": "turn-007"
+        }
+      ]
+    },
+    "faction-captors": {
+      "entity_name": "captors",
+      "entity_type": "faction",
+      "forward": [
+        {
+          "source_id": "faction-captors",
+          "source_name": "captors",
+          "target_id": "char-player",
+          "target_name": "Player Character",
+          "current_relationship": "captured by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-021"
+        },
+        {
+          "source_id": "faction-captors",
+          "source_name": "captors",
+          "target_id": "char-elder",
+          "target_name": "elder",
+          "current_relationship": "serving",
+          "type": "political",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-021"
+        },
+        {
+          "source_id": "faction-captors",
+          "source_name": "captors",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "dark, fibrous material",
+          "current_relationship": "offering",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-021"
+        }
+      ],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-captors",
+          "target_name": "captors",
+          "current_relationship": "being released by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-025"
+        },
+        {
+          "source_id": "char-elder",
+          "source_name": "elder",
+          "target_id": "faction-captors",
+          "target_name": "captors",
+          "current_relationship": "commanding",
+          "type": "political",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-025"
+        }
+      ]
+    },
+    "faction-villagers": {
+      "entity_name": "villagers",
+      "entity_type": "faction",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-villagers",
+          "target_name": "villagers",
+          "current_relationship": "being confronted by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-017"
+        }
+      ]
+    },
+    "item-bonfire": {
+      "entity_name": "bonfire",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-bonfire",
+          "target_name": "bonfire",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "item-crude-wood-hafted-spears": {
+      "entity_name": "crude, wood-hafted spears",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-crude-wood-hafted-spears",
+          "target_name": "crude, wood-hafted spears",
+          "current_relationship": "armed_with",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-007",
+          "last_updated_turn": "turn-007"
+        }
+      ]
+    },
+    "item-dark-fibrous-material": {
+      "entity_name": "dark, fibrous material",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "dark, fibrous material",
+          "current_relationship": "being offered",
+          "type": "social",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-019",
+          "last_updated_turn": "turn-023"
+        },
+        {
+          "source_id": "char-elder",
+          "source_name": "elder",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "dark, fibrous material",
+          "current_relationship": "holding",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-023"
+        },
+        {
+          "source_id": "faction-captors",
+          "source_name": "captors",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "dark, fibrous material",
+          "current_relationship": "offering",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-021"
+        }
+      ]
+    },
+    "item-net-like-contraption": {
+      "entity_name": "net-like contraption",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-net-like-contraption",
+          "target_name": "net-like contraption",
+          "current_relationship": "released from",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-005",
+          "last_updated_turn": "turn-027"
+        }
+      ]
+    },
+    "loc-bonfire": {
+      "entity_name": "fire",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-bonfire",
+          "target_name": "fire",
+          "current_relationship": "located_at",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-019",
+          "last_updated_turn": "turn-019"
+        }
+      ]
+    },
+    "loc-camp": {
+      "entity_name": "camp",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-camp",
+          "target_name": "camp",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "loc-dwelling": {
+      "entity_name": "dwelling",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-dwelling",
+          "target_name": "dwelling",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "loc-encampment": {
+      "entity_name": "encampment",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-encampment",
+          "target_name": "encampment",
+          "current_relationship": "located_at",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        }
+      ]
+    },
+    "loc-frigid-woods": {
+      "entity_name": "frigid woods",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-frigid-woods",
+          "target_name": "frigid woods",
+          "current_relationship": "traveling_through",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-011",
+          "last_updated_turn": "turn-011"
+        }
+      ]
+    },
+    "loc-lean-tos": {
+      "entity_name": "lean-tos",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-lean-tos",
+          "target_name": "lean-tos",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "loc-snow-laden-woods": {
+      "entity_name": "snow-laden woods",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-snow-laden-woods",
+          "target_name": "snow-laden woods",
+          "current_relationship": "traveling_through",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-005",
+          "last_updated_turn": "turn-005"
+        }
+      ]
+    }
+  }
+}

@@ -1,0 +1,38 @@
+[
+  {
+    "id": "char-player",
+    "name": "Player Character",
+    "type": "character",
+    "status_summary": "Sitting near the fire to drink broth, having just restored 2 HP.",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-030",
+    "active_relationship_count": 8
+  },
+  {
+    "id": "char-elder",
+    "name": "The elder",
+    "type": "character",
+    "status_summary": "Listening to the player's attempts at communication with a dismissive expression",
+    "first_seen_turn": "turn-017",
+    "last_updated_turn": "turn-017",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-former-captors",
+    "name": "former captors",
+    "type": "character",
+    "status_summary": "One of the former captors is actively working to untangle icy vines from the pla",
+    "first_seen_turn": "turn-029",
+    "last_updated_turn": "turn-029",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-younger-woman",
+    "name": "younger woman",
+    "type": "character",
+    "status_summary": "Returning with a bowl of clear, steaming broth to offer to the player character ",
+    "first_seen_turn": "turn-029",
+    "last_updated_turn": "turn-029",
+    "active_relationship_count": 0
+  }
+]

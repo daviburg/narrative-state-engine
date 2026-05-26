@@ -1,0 +1,24 @@
+{
+  "id": "loc-village-hall",
+  "name": "village hall",
+  "type": "location",
+  "identity": "The village hall is the community center where the Midwinter celebration was planned and where the player character recently received a promise of reward before losing their memory.",
+  "current_status": "The player character is currently outside in the snow, recalling the worried faces seen inside the village hall and the promise of a reward received there.",
+  "status_updated_turn": "turn-001",
+  "stable_attributes": {
+    "role": {
+      "value": "community center",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-001"
+    }
+  },
+  "volatile_state": {
+    "condition": "inactive",
+    "location": "loc-village-hall",
+    "last_updated_turn": "turn-001"
+  },
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-001",
+  "notes": "Entity is referenced by the player's memory as a past location; no current physical presence described."
+}

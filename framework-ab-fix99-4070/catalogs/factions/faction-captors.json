@@ -1,0 +1,54 @@
+{
+  "id": "faction-captors",
+  "name": "captors",
+  "type": "faction",
+  "identity": "A group of human figures leading the player character into an encampment. They are described as robust and lean, adapted to the harsh arctic environment, with well-maintained spears and decorations made from animal bones.",
+  "current_status": "One member is actively loosening the ropes binding the player's wrists and ankles at the elder's command, while the group observes the ritual exchange with cautious curiosity as tension dissipates.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "appearance": {
+      "value": "robust and lean, draped in hides and crude furs, faces etched with a wild, wary look",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "equipment": {
+      "value": "spears",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "role": {
+      "value": "captors",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "environment_adaptation": {
+      "value": "hardened by the harsh arctic environment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and wary",
+    "equipment": [
+      "spears",
+      "hides",
+      "crude furs"
+    ],
+    "location": "loc-encampment",
+    "current_activity": "loosening ropes binding player's wrists and ankles at the elder's command",
+    "last_updated_turn": "turn-025"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-025",
+  "notes": "One member is described as 'clumsy' in their attempt to untie the bonds. The group seems to be serving the elder's will."
+}

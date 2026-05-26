@@ -1,0 +1,32 @@
+{
+  "id": "loc-camp",
+  "name": "camp",
+  "type": "location",
+  "identity": "A temporary encampment located in a dense forest clearing, characterized by crude snow-covered lean-tos and a central roaring bonfire.",
+  "current_status": "Visible in the distance with smoke curling into the night sky; surrounded by figures cloaked in furs and a central bonfire.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "structure": {
+      "value": "crude, snow-covered lean-tos",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "features": {
+      "value": "roaring bonfire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "active with smoke rising",
+    "equipment": [],
+    "location": "loc-camp",
+    "current_activity": "surrounded by figures cloaked in furs near a bonfire",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": ""
+}

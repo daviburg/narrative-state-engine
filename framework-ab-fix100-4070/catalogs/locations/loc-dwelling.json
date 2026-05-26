@@ -1,0 +1,35 @@
+{
+  "id": "loc-dwelling",
+  "name": "dwelling",
+  "type": "location",
+  "identity": "A temporary encampment or settlement in the dense forest, consisting of crude snow-covered lean-tos and a central bonfire.",
+  "current_status": "Visible in the distance with flickering light and smoke; surrounded by figures in furs as the player party approaches.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "structure": {
+      "value": [
+        "crude lean-tos",
+        "bonfire"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "occupancy": {
+      "value": "occupied by figures in furs",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "active with smoke and fire",
+    "equipment": [],
+    "location": "loc-dwelling",
+    "current_activity": "flickering light and smoke rising from lean-tos and bonfire",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": "The entity is currently being approached by the player party under guard."
+}

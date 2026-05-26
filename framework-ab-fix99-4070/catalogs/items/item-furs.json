@@ -1,0 +1,32 @@
+{
+  "id": "item-furs",
+  "name": "furs",
+  "type": "item",
+  "identity": "Crude furs worn as facial coverings or clothing by the two human-sized figures emerging from the forest shadows.",
+  "current_status": "Worn by one of the two captors who has emerged from the shadows, obscuring their face as they approach the player with a spear.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "description": {
+      "value": "crude",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "usage": {
+      "value": "facial covering, clothing",
+      "inference": false,
+      "confidence": 0.9,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "being worn",
+    "equipment": [],
+    "location": "loc-forest",
+    "current_activity": "being worn by a captor",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": ""
+}

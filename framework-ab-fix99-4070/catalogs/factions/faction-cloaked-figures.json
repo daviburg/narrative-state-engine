@@ -1,0 +1,49 @@
+{
+  "id": "faction-cloaked-figures",
+  "name": "figures cloaked in furs",
+  "type": "faction",
+  "identity": "A group of individuals wearing furs who are escorting the player character through a dense forest to a campsite. They move with efficiency and practiced silence, suggesting they are skilled trackers or guards.",
+  "current_status": "Flanking the player character and urging them forward with renewed urgency as they approach a campsite with lean-tos and a bonfire.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "appearance": {
+      "value": [
+        "cloaked in furs"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "behavior": {
+      "value": [
+        "silent",
+        "efficient movements",
+        "practiced"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "role": {
+      "value": [
+        "captors",
+        "escorts"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and moving with purpose",
+    "equipment": [
+      "furs"
+    ],
+    "location": "loc-dense-forest",
+    "current_activity": "urging the player character forward toward a campsite",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": "The figures are described as 'two figures' initially, then 'more figures' are seen at the camp. The distinction between the two escorting the player and the others at the camp is not yet clear."
+}

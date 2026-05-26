@@ -1,0 +1,32 @@
+{
+  "id": "item-wooden-bowl",
+  "name": "wooden bowl",
+  "type": "item",
+  "identity": "A steaming wooden bowl carried by a younger woman, used by the elder to hold dark, fibrous material for examination.",
+  "current_status": "Placed before the elder by a younger woman; the elder plunges his hand into it to retrieve dark, fibrous material.",
+  "status_updated_turn": "turn-019",
+  "stable_attributes": {
+    "material": {
+      "value": "wood",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    },
+    "contents": {
+      "value": "dark, fibrous material",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    }
+  },
+  "volatile_state": {
+    "condition": "steaming",
+    "equipment": [],
+    "location": "loc-elder-area",
+    "current_activity": "being held by the elder",
+    "last_updated_turn": "turn-019"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-019",
+  "notes": "The bowl is currently in the possession of the elder, having been brought by a younger woman."
+}

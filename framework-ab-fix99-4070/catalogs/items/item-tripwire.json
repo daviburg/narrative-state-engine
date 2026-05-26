@@ -1,0 +1,40 @@
+{
+  "id": "item-tripwire",
+  "name": "tripwire",
+  "type": "item",
+  "identity": "A hidden trap mechanism disguised by fresh snow, consisting of a tripwire connected to a net-like contraption woven from thick, icy vines.",
+  "current_status": "Triggered by the player character, dropping from the boughs above to ensnare them in a frosty mesh while delivering a bludgeoning blow to the shoulder.",
+  "status_updated_turn": "turn-005",
+  "stable_attributes": {
+    "composition": {
+      "value": "tripwire, net-like contraption, thick icy vines",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "disguise": {
+      "value": "dusting of fresh snow",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "location": {
+      "value": "hushed, snow-laden woods, boughs above",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and triggered",
+    "equipment": [
+      "thick icy vines",
+      "net-like contraption"
+    ],
+    "location": "loc-woods",
+    "current_activity": "ensnaring the player character",
+    "last_updated_turn": "turn-005"
+  },
+  "first_seen_turn": "turn-005",
+  "last_updated_turn": "turn-005"
+}

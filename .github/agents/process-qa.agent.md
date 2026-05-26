@@ -28,7 +28,7 @@ All audits are evidence-based: you review information provided by the coordinato
 - [ ] Tasks that consume GPU resources have correct `resources` tags when the orchestrator supports resource slots (e.g., `["gpu-0"]`, `["gpu-1"]`)
 - [ ] Tasks that bind a network port have the corresponding port resource tag when resource slots are configured (e.g., `["port-8000"]`)
 - [ ] Long-running tasks (exports, extractions, benchmarks) have resource tags that prevent conflicting parallel work when resource slots are configured
-- [ ] Investigation/research tasks that only read data use `"resources": []` or omit the field entirely (no false resource claims); omitting `resources` is equivalent to an empty list
+- [ ] Investigation/research tasks that only read data use `"resources": []` or omit the field entirely (no false resource claims); for audit purposes, treat omitted resources as empty when resource slots are configured
 - [ ] Tasks have meaningful `metadata` with a `description` field explaining purpose (when submitted manually or by coordinator; auto-generated tasks from tooling are exempt)
 - [ ] Task `priority` is set appropriately when specified (quick checks: 10, standard work: 5, background/default: 0)
 - [ ] Task `timeout` is reasonable for the work type (checks: 120s, research: 300s, exports: 7200s, extractions: 14400s)
@@ -59,11 +59,9 @@ All audits are evidence-based: you review information provided by the coordinato
 | Level | Meaning | Example |
 |-------|---------|---------|
 | **P1-CRITICAL** | Process completely bypassed | Pushed to main directly; ran 2-hour export via SSH without orchestrator task |
-| **P2-MAJOR** | Key step skipped | Pushed without reviewer sign-off (non-Copilot-only cycle); didn't request Copilot review after push |
-| **P3-MINOR** | Step partially completed | Replied to 4/5 comments; didn't wait full 15 min for review |
+| **P2-MAJOR** | Key step skipped | Pushed without reviewer sign-off (non-Copilot-only cycle); didn't request Copilot review after push; task consuming GPU has `"resources": []`; task ID is a bare UUID/GUID without a meaningful prefix |
+| **P3-MINOR** | Step partially completed | Replied to 4/5 comments; didn't wait full 15 min for review; missing `metadata.description`; timeout inappropriate for work type |
 | **P4-NOTE** | Process followed but could improve | Used SSH for a borderline-trivial check that could have been a task |
-| **P2-MAJOR** | Resource tag missing or incorrect | Task consuming GPU has `"resources": []`; task ID is a bare UUID/GUID without a meaningful prefix |
-| **P3-MINOR** | Task metadata incomplete | Missing `metadata.description`; timeout inappropriate for work type |
 
 ## Constraints
 

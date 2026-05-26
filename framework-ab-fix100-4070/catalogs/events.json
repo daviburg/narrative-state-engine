@@ -1,0 +1,239 @@
+[
+  {
+    "id": "evt-001",
+    "source_turns": [
+      "turn-001"
+    ],
+    "type": "encounter",
+    "description": "The player awakens in the snow, recovering from a fall and realizing they are off the path, following fresh footprints leading into the trees.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-002",
+    "source_turns": [
+      "turn-004"
+    ],
+    "type": "other",
+    "description": "The player lost 2 HP while moving carefully along the tracks.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-003",
+    "source_turns": [
+      "turn-005"
+    ],
+    "type": "trap",
+    "description": "A hidden tripwire disguised by snow caught the player's ankle, triggering a net made of icy vines that dropped from above and pinned the player.",
+    "related_entities": [
+      "char-player",
+      "item-hidden-trap",
+      "item-net-like-contraption"
+    ]
+  },
+  {
+    "id": "evt-004",
+    "source_turns": [
+      "turn-006"
+    ],
+    "type": "decision",
+    "description": "The player chose to surrender.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-005",
+    "source_turns": [
+      "turn-007"
+    ],
+    "type": "capture",
+    "description": "Two figures emerge from the shadows carrying spears and identify the player as their captive.",
+    "related_entities": [
+      "char-player",
+      "creature-two-figures"
+    ]
+  },
+  {
+    "id": "evt-006",
+    "source_turns": [
+      "turn-009"
+    ],
+    "type": "capture",
+    "description": "The two figures tightened a net around the player, bound their wrists and ankles with coarse rope, and hoisted them to their feet to be led deeper into the forest.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-007",
+    "source_turns": [
+      "turn-013"
+    ],
+    "type": "arrival",
+    "description": "The player and their captors arrive at a camp featuring crude lean-tos and a roaring bonfire, surrounded by figures in furs.",
+    "related_entities": [
+      "char-player",
+      "loc-camp",
+      "loc-lean-tos",
+      "item-bonfire"
+    ]
+  },
+  {
+    "id": "evt-008",
+    "source_turns": [
+      "turn-015"
+    ],
+    "type": "encounter",
+    "description": "The player is brought before an older, commanding figure at a rough encampment, surrounded by wary captors.",
+    "related_entities": [
+      "char-player",
+      "faction-captors",
+      "char-older-figure",
+      "loc-encampment"
+    ]
+  },
+  {
+    "id": "evt-009",
+    "source_turns": [
+      "turn-017"
+    ],
+    "type": "communication",
+    "description": "The player attempts to speak in common and elven, but the villagers and elder respond with blank stares and dismissive grunts, indicating a language barrier.",
+    "related_entities": [
+      "char-player",
+      "char-elder",
+      "faction-villagers"
+    ]
+  },
+  {
+    "id": "evt-010",
+    "source_turns": [
+      "turn-019"
+    ],
+    "type": "examination",
+    "description": "The elder probed the bindings on the player's wrists and closely inspected their warlock attire and elven features.",
+    "related_entities": [
+      "char-elder",
+      "char-player",
+      "item-warlock-attire"
+    ]
+  },
+  {
+    "id": "evt-011",
+    "source_turns": [
+      "turn-019"
+    ],
+    "type": "offering",
+    "description": "The elder pulled dark fibrous material from a bowl and held it out to the player.",
+    "related_entities": [
+      "char-elder",
+      "char-player",
+      "item-dark-fibrous-material"
+    ]
+  },
+  {
+    "id": "evt-012",
+    "source_turns": [
+      "turn-021"
+    ],
+    "type": "examination",
+    "description": "The elder examines the player's reaction while holding out dark fibrous material, and a guard clumsily loosens one of the player's bound wrists slightly.",
+    "related_entities": [
+      "char-elder",
+      "char-player",
+      "faction-captors",
+      "item-dark-fibrous-material"
+    ]
+  },
+  {
+    "id": "evt-013",
+    "source_turns": [
+      "turn-023"
+    ],
+    "type": "examination",
+    "description": "The player attempts to grasp the dark fibrous material held by the elder but struggles due to stiff fingers and bindings, resulting in only brushing against the damp, sticky substance.",
+    "related_entities": [
+      "char-player",
+      "char-elder",
+      "item-dark-fibrous-material"
+    ]
+  },
+  {
+    "id": "evt-014",
+    "source_turns": [
+      "turn-025"
+    ],
+    "type": "release",
+    "description": "The elder signaled the captors to loosen the ropes, freeing the player's hands and feet, though they remain entangled in the net.",
+    "related_entities": [
+      "char-player",
+      "char-elder",
+      "faction-captors"
+    ]
+  },
+  {
+    "id": "evt-015",
+    "source_turns": [
+      "turn-027"
+    ],
+    "type": "decision",
+    "description": "The elder signals approval by tapping his forehead and nodding, allowing the player to proceed with the ritual material despite their injury.",
+    "related_entities": [
+      "char-elder",
+      "char-player",
+      "item-net-like-contraption"
+    ]
+  },
+  {
+    "id": "evt-016",
+    "source_turns": [
+      "turn-027"
+    ],
+    "type": "release",
+    "description": "The net around the player no longer restricts their movement, freeing them to act.",
+    "related_entities": [
+      "char-player",
+      "item-net-like-contraption"
+    ]
+  },
+  {
+    "id": "evt-017",
+    "source_turns": [
+      "turn-029"
+    ],
+    "type": "healing",
+    "description": "The player applies dark fibrous material to their forehead, and a woman offers a bowl of clear, steaming broth.",
+    "related_entities": [
+      "char-player",
+      "item-icy-vines",
+      "item-clear-steaming-broth"
+    ]
+  },
+  {
+    "id": "evt-018",
+    "source_turns": [
+      "turn-029"
+    ],
+    "type": "release",
+    "description": "A former captor untangles the icy vines of the net from around the player, freeing them completely.",
+    "related_entities": [
+      "char-player",
+      "item-icy-vines"
+    ]
+  },
+  {
+    "id": "evt-019",
+    "source_turns": [
+      "turn-030"
+    ],
+    "type": "healing",
+    "description": "The player drank the broth, restoring 2 HP.",
+    "related_entities": [
+      "char-player"
+    ]
+  }
+]

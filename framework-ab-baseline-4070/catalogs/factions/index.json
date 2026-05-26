@@ -1,0 +1,20 @@
+[
+  {
+    "id": "faction-figures",
+    "name": "figures",
+    "type": "faction",
+    "status_summary": "Urgently escorting the player character through a denser, colder part of the for",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "faction-villagers",
+    "name": "villagers",
+    "type": "faction",
+    "status_summary": "Rippling with a collective sigh of relief as the player is freed from icy vines;",
+    "first_seen_turn": "turn-017",
+    "last_updated_turn": "turn-029",
+    "active_relationship_count": 0
+  }
+]

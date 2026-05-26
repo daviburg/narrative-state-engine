@@ -1,0 +1,26 @@
+{
+  "id": "char-former-captors",
+  "name": "former captors",
+  "type": "character",
+  "identity": "A group of individuals who previously held the player character captive, now acting as freed villagers.",
+  "current_status": "One of the former captors is actively working to untangle icy vines from the player character's body to free them completely.",
+  "status_updated_turn": "turn-029",
+  "stable_attributes": {
+    "role": {
+      "value": "former captors",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-029"
+    }
+  },
+  "volatile_state": {
+    "condition": "freeing the player character from icy vines",
+    "equipment": [],
+    "location": "loc-village-gathering",
+    "current_activity": "untangling icy vines from the player character",
+    "last_updated_turn": "turn-029"
+  },
+  "first_seen_turn": "turn-029",
+  "last_updated_turn": "turn-029",
+  "notes": "The group is referred to collectively as 'former captors'. Specific individual names or identities are not yet revealed."
+}

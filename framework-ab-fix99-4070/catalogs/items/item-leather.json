@@ -1,0 +1,32 @@
+{
+  "id": "item-leather",
+  "name": "leather",
+  "type": "item",
+  "identity": "Crude leather used by two human-sized figures to obscure their faces while they move with stealth through the forest.",
+  "current_status": "Worn by one of two captors emerging from the shadows, used to obscure their face while they approach the player with a spear.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "material": {
+      "value": "leather",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "usage": {
+      "value": "face covering",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "worn by captor",
+    "equipment": [],
+    "location": "loc-forest",
+    "current_activity": "being worn by a captor approaching the player",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": "The text mentions 'furs and leather' together; it is unclear if the leather is a separate item or part of the furs. Inferred as a distinct face covering based on the phrasing 'faces obscured by furs and leather'."
+}

@@ -1,0 +1,34 @@
+{
+  "id": "item-leather",
+  "name": "leather",
+  "type": "item",
+  "identity": "Crude leather gear worn by the two human-sized figures emerging from the forest shadows.",
+  "current_status": "Worn by the captors as part of their furs and leather attire while they approach the player with spears.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "material": {
+      "value": "leather",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "usage": {
+      "value": "worn by captors",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "worn",
+    "equipment": [
+      "furs and leather"
+    ],
+    "location": "loc-forest",
+    "current_activity": "being worn by approaching captors",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": "The text mentions 'furs and leather' as a combined description of the captors' attire. It is unclear if 'leather' refers to a specific distinct item or is part of the general description. No specific item name or function beyond 'worn' is provided."
+}

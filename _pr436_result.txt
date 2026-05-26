@@ -1,0 +1,53 @@
+PR #436: docs: add task submission method to coordinator agent definition
+State: open
+Author: daviburg
+Merged: None
+
+Total reviews: 1
+  copilot-pull-request-reviewer[bot] - COMMENTED - 2026-05-26T19:44:28Z
+
+Total review comments: 2
+
+Top-level comments: 2
+Comments with replies: 0
+UNRESOLVED (no reply): 2
+
+======================================================================
+Comment ID: 3306417760
+Author: Copilot
+File: .github/agents/coordinator.agent.md
+Line: 73
+Created: 2026-05-26T19:44:27Z
+Body:
+**[@reviewer]** The example imports `saas.orchestrator.*`, but there is no `saas/` package in this repo and `requirements*.txt` don’t list an external dependency that would provide it. As written, this guidance isn’t actionable and will mislead coordinators; either point to the actual in-repo submission mechanism (or documented install/source for the orchestrator client), or update the text to describe the supported CLI/workflow instead of non-existent Python imports.
+
+======================================================================
+Comment ID: 3306417810
+Author: Copilot
+File: .github/agents/coordinator.agent.md
+Line: 76
+Created: 2026-05-26T19:44:28Z
+Body:
+**[@reviewer]** The snippet models passing a DB password inline (`DatabaseConfig(password="...")`). Even as a placeholder, this encourages embedding secrets in code/agent messages; prefer referencing an environment variable or a local config file and add a brief note to never paste credentials into PRs/chat logs.
+
+
+======================================================================
+ALL top-level comments (for full context):
+======================================================================
+
+[UNRESOLVED] Comment ID: 3306417760
+Author: Copilot
+File: .github/agents/coordinator.agent.md
+Line: 73
+Created: 2026-05-26T19:44:27Z
+Body:
+**[@reviewer]** The example imports `saas.orchestrator.*`, but there is no `saas/` package in this repo and `requirements*.txt` don’t list an external dependency that would provide it. As written, this guidance isn’t actionable and will mislead coordinators; either point to the actual in-repo submission mechanism (or documented install/source for the orchestrator client), or update the text to describe the supported CLI/workflow instead of non-existent Python imports.
+
+
+[UNRESOLVED] Comment ID: 3306417810
+Author: Copilot
+File: .github/agents/coordinator.agent.md
+Line: 76
+Created: 2026-05-26T19:44:28Z
+Body:
+**[@reviewer]** The snippet models passing a DB password inline (`DatabaseConfig(password="...")`). Even as a placeholder, this encourages embedding secrets in code/agent messages; prefer referencing an environment variable or a local config file and add a brief note to never paste credentials into PRs/chat logs.

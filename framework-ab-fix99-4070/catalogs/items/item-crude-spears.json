@@ -1,0 +1,38 @@
+{
+  "id": "item-crude-spears",
+  "name": "crude, wood-hafted spears",
+  "type": "item",
+  "identity": "Simple weapons crafted from wood and used by the captors to threaten and control the player.",
+  "current_status": "Being carried by two human-sized figures who have emerged from the forest shadows to capture the player.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "material": {
+      "value": "wood",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "haft_type": {
+      "value": "wood-hafted",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "origin": {
+      "value": "crude",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and threatening",
+    "equipment": [],
+    "location": "loc-forest",
+    "current_activity": "being carried by captors",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": "The spears are currently in the possession of the captors, not the player."
+}

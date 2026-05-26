@@ -1,0 +1,260 @@
+{
+  "generated_turn": "turn-030",
+  "entries": {
+    "char-elder": {
+      "entity_name": "The elder",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-elder",
+          "target_name": "The elder",
+          "current_relationship": "addressing",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-017"
+        }
+      ]
+    },
+    "char-former-captors": {
+      "entity_name": "former captors",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-former-captors",
+          "target_name": "former captors",
+          "current_relationship": "freed_by",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-029",
+          "last_updated_turn": "turn-029"
+        }
+      ]
+    },
+    "char-player": {
+      "entity_name": "Player Character",
+      "entity_type": "character",
+      "forward": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-camp",
+          "target_name": "camp",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-lean-tos",
+          "target_name": "lean-tos",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-bonfire",
+          "target_name": "bonfire",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-figures",
+          "target_name": "figures",
+          "current_relationship": "captured_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-elder",
+          "target_name": "The elder",
+          "current_relationship": "addressing",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-017"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-villagers",
+          "target_name": "villagers",
+          "current_relationship": "released_by",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-029"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-former-captors",
+          "target_name": "former captors",
+          "current_relationship": "freed_by",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-029",
+          "last_updated_turn": "turn-029"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-younger-woman",
+          "target_name": "younger woman",
+          "current_relationship": "offered_food_by",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-029",
+          "last_updated_turn": "turn-029"
+        }
+      ],
+      "reverse": []
+    },
+    "char-younger-woman": {
+      "entity_name": "younger woman",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-younger-woman",
+          "target_name": "younger woman",
+          "current_relationship": "offered_food_by",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-029",
+          "last_updated_turn": "turn-029"
+        }
+      ]
+    },
+    "faction-figures": {
+      "entity_name": "figures",
+      "entity_type": "faction",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-figures",
+          "target_name": "figures",
+          "current_relationship": "captured_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "faction-villagers": {
+      "entity_name": "villagers",
+      "entity_type": "faction",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-villagers",
+          "target_name": "villagers",
+          "current_relationship": "released_by",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-029"
+        }
+      ]
+    },
+    "item-bonfire": {
+      "entity_name": "bonfire",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-bonfire",
+          "target_name": "bonfire",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "loc-camp": {
+      "entity_name": "camp",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-camp",
+          "target_name": "camp",
+          "current_relationship": "traveling_to",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "loc-lean-tos": {
+      "entity_name": "lean-tos",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-lean-tos",
+          "target_name": "lean-tos",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    }
+  }
+}

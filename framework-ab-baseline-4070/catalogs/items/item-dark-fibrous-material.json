@@ -1,0 +1,25 @@
+{
+  "id": "item-dark-fibrous-material",
+  "name": "dark, fibrous material",
+  "type": "item",
+  "identity": "A handful of dark, fibrous material extracted from a steaming wooden bowl by the elder, presented to the player character.",
+  "current_status": "Held out by the elder to the player character after being pulled from a steaming bowl.",
+  "status_updated_turn": "turn-019",
+  "stable_attributes": {
+    "appearance": {
+      "value": "dark, fibrous",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    }
+  },
+  "volatile_state": {
+    "condition": "held out by the elder",
+    "equipment": [],
+    "location": "loc-elder",
+    "current_activity": "being offered to the player character",
+    "last_updated_turn": "turn-019"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-019"
+}

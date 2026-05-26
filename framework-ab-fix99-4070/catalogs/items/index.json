@@ -1,0 +1,92 @@
+[
+  {
+    "id": "item-tripwire",
+    "name": "tripwire",
+    "type": "item",
+    "status_summary": "Triggered by the player character, dropping from the boughs above to ensnare the",
+    "first_seen_turn": "turn-005",
+    "last_updated_turn": "turn-005",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-net",
+    "name": "net",
+    "type": "item",
+    "status_summary": "The net is partially loosened; the player character's hands and feet are free, b",
+    "first_seen_turn": "turn-005",
+    "last_updated_turn": "turn-025",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-icy-vines",
+    "name": "icy vines",
+    "type": "item",
+    "status_summary": "Constricting the player character, causing pain in their shoulder while the play",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-crude-spears",
+    "name": "crude, wood-hafted spears",
+    "type": "item",
+    "status_summary": "Being carried by two human-sized figures who have emerged from the forest shadow",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-furs",
+    "name": "furs",
+    "type": "item",
+    "status_summary": "Worn by one of the two captors who has emerged from the shadows, obscuring their",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-leather",
+    "name": "leather",
+    "type": "item",
+    "status_summary": "Worn by one of two captors emerging from the shadows, used to obscure their face",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-bonfire",
+    "name": "bonfire",
+    "type": "item",
+    "status_summary": "Roaring brightly in the center of a campsite, providing light and heat as the pl",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-animal-bones",
+    "name": "animal bones",
+    "type": "item",
+    "status_summary": "Strung as decorations on one of the figures by the bonfire.",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-rudimentary-tools",
+    "name": "rudimentary tools",
+    "type": "item",
+    "status_summary": "Scattered about the encampment floor near the bonfire, visible among other debri",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-dark-fibrous-material",
+    "name": "Dark Fibrous Material",
+    "type": "item",
+    "status_summary": "The player character has grasped the material, is smelling it, and has been gran",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-025",
+    "active_relationship_count": 0
+  }
+]

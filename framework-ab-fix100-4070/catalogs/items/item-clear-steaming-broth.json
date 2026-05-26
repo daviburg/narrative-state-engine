@@ -1,0 +1,32 @@
+{
+  "id": "item-clear-steaming-broth",
+  "name": "clear, steaming broth",
+  "type": "item",
+  "identity": "A clear, steaming broth served in a bowl by a younger woman to the player character.",
+  "current_status": "Being offered to the player character by a younger woman after the player is freed from the net.",
+  "status_updated_turn": "turn-029",
+  "stable_attributes": {
+    "description": {
+      "value": "clear, steaming broth",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-029"
+    },
+    "container": {
+      "value": "bowl",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-029"
+    }
+  },
+  "volatile_state": {
+    "condition": "steaming",
+    "equipment": [],
+    "location": "held by younger woman",
+    "current_activity": "being offered to the player character",
+    "last_updated_turn": "turn-029"
+  },
+  "first_seen_turn": "turn-029",
+  "last_updated_turn": "turn-029",
+  "notes": ""
+}

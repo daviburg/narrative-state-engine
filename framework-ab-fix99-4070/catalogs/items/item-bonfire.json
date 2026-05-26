@@ -1,0 +1,29 @@
+{
+  "id": "item-bonfire",
+  "name": "bonfire",
+  "type": "item",
+  "identity": "A large, roaring fire located at a campsite within the forest, surrounded by crude lean-tos and figures cloaked in furs.",
+  "current_status": "Roaring brightly in the center of a campsite, providing light and heat as the player and their captors approach.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "location": {
+      "value": "forest campsite",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "description": {
+      "value": "crude, snow-covered lean-tos and a roaring bonfire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "roaring",
+    "location": "loc-forest-campsite",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013"
+}

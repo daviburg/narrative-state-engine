@@ -1,0 +1,35 @@
+{
+  "id": "loc-woods",
+  "name": "snow-laden woods",
+  "type": "location",
+  "identity": "A dense, hushed forest covered in fresh snow where tracks are visible and hidden traps can be concealed.",
+  "current_status": "The player character is trapped inside the woods, pinned under a heavy net made of icy vines after stepping on a tripwire.",
+  "status_updated_turn": "turn-005",
+  "stable_attributes": {
+    "description": {
+      "value": "hushed, snow-laden woods",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "hazards": {
+      "value": [
+        "hidden tripwire disguised by snow",
+        "net-like contraption woven from thick icy vines"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    }
+  },
+  "volatile_state": {
+    "condition": "player character is trapped and pinned",
+    "equipment": [],
+    "location": "loc-woods",
+    "current_activity": "player character is ensnared in a net of icy vines after triggering a tripwire",
+    "last_updated_turn": "turn-005"
+  },
+  "first_seen_turn": "turn-005",
+  "last_updated_turn": "turn-005",
+  "notes": "Entity represents the location where the PC is currently trapped."
+}

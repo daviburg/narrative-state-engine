@@ -1,0 +1,9 @@
+ducing empty context.
+    warnings.warn("No entity catalogs found. Producing empty context.")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1730 passed, 1 warning in 20.89s
+
+---STDERR---
+
+EXIT:0

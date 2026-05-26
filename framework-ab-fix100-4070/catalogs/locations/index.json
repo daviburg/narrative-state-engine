@@ -1,0 +1,74 @@
+[
+  {
+    "id": "loc-village-hall",
+    "name": "village hall",
+    "type": "location",
+    "status_summary": "The player character is currently outside in the snow, recovering from a fall an",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-001",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-snow-laden-woods",
+    "name": "snow-laden woods",
+    "type": "location",
+    "status_summary": "The player character is trapped inside this location, pinned under a net of icy ",
+    "first_seen_turn": "turn-005",
+    "last_updated_turn": "turn-005",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-frigid-woods",
+    "name": "frigid woods",
+    "type": "location",
+    "status_summary": "The player is being marched deeper into this area by captors, with the environme",
+    "first_seen_turn": "turn-011",
+    "last_updated_turn": "turn-011",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-camp",
+    "name": "camp",
+    "type": "location",
+    "status_summary": "Visible in the distance with smoke rising into the night sky; surrounded by figu",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-dwelling",
+    "name": "dwelling",
+    "type": "location",
+    "status_summary": "Visible in the distance with flickering light and smoke; surrounded by figures i",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-lean-tos",
+    "name": "lean-tos",
+    "type": "location",
+    "status_summary": "Visible in the distance through thinning trees, emitting smoke and illuminated b",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-encampment",
+    "name": "encampment",
+    "type": "location",
+    "status_summary": "Illuminated by a flickering bonfire, with several figures milling about. The pla",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "loc-bonfire",
+    "name": "fire",
+    "type": "location",
+    "status_summary": "The elder gestures toward it while holding out dark, fibrous material for the pl",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019",
+    "active_relationship_count": 0
+  }
+]

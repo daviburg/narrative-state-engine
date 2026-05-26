@@ -1,0 +1,119 @@
+{
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "identity": "The player character (referred to as 'you' in DM narration).",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-030",
+  "current_status": "Sitting near the fire to drink broth, having just restored 2 HP.",
+  "volatile_state": {
+    "condition": "Restored 2 HP; sitting by the fire.",
+    "equipment": [],
+    "location": "loc-encampment",
+    "current_activity": "Drinking broth near the fire.",
+    "last_updated_turn": "turn-030"
+  },
+  "stable_attributes": {
+    "aliases": {
+      "value": [],
+      "inference": false,
+      "confidence": 0.0,
+      "source_turn": null
+    },
+    "class": {
+      "value": "Warlock",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    }
+  },
+  "status_updated_turn": "turn-030",
+  "relationships": [
+    {
+      "target_id": "loc-camp",
+      "current_relationship": "traveling_to",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "loc-lean-tos",
+      "current_relationship": "approaching",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "item-bonfire",
+      "current_relationship": "approaching",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.85,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "faction-figures",
+      "current_relationship": "captured_by",
+      "type": "adversarial",
+      "status": "active",
+      "direction": "incoming",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-013",
+      "last_updated_turn": "turn-013"
+    },
+    {
+      "target_id": "char-elder",
+      "current_relationship": "addressing",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-017",
+      "last_updated_turn": "turn-017"
+    },
+    {
+      "target_id": "faction-villagers",
+      "current_relationship": "released_by",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-017",
+      "last_updated_turn": "turn-029",
+      "history": [
+        {
+          "turn": "turn-017",
+          "description": "captured_by"
+        }
+      ]
+    },
+    {
+      "target_id": "char-former-captors",
+      "current_relationship": "freed_by",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-029",
+      "last_updated_turn": "turn-029"
+    },
+    {
+      "target_id": "char-younger-woman",
+      "current_relationship": "offered_food_by",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-029",
+      "last_updated_turn": "turn-029"
+    }
+  ]
+}

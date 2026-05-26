@@ -1,0 +1,40 @@
+{
+  "id": "char-broader-figure",
+  "name": "broader figure",
+  "type": "character",
+  "identity": "A large, imposing figure acting as a captor, part of a group transporting the player character through the woods.",
+  "current_status": "Walking to the player's left, narrowing his eyes at the player's attempt to speak, and exchanging terse words with his companion.",
+  "status_updated_turn": "turn-011",
+  "stable_attributes": {
+    "appearance": {
+      "value": "broader figure",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-011"
+    },
+    "role": {
+      "value": "captor",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-011"
+    },
+    "language": {
+      "value": "unknown to player",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-011"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert, suspicious",
+    "equipment": [
+      "spear"
+    ],
+    "location": "frigid woods",
+    "current_activity": "walking with companion, escorting player character",
+    "last_updated_turn": "turn-011"
+  },
+  "first_seen_turn": "turn-011",
+  "last_updated_turn": "turn-011",
+  "notes": "Companion carries a spear and presses it into the player's back. Group seems to not understand the player's language."
+}

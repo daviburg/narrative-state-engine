@@ -1,0 +1,345 @@
+﻿--- PR #76 | tools/semantic_extraction.py: ---
+The comma-splitting coercion only operates on `proposed_id`, but schema validation failures in this pipeline are on the entity object's required `id` field (see `schemas/entity.schema.json` requiring/patterning `id`). If the LLM returns a comma-separated `id` (as described in Issue #73), this change wonΓÇÖt prevent the entity from being dropped. Consider applying the same comma-split selection to `entity_data["id"]` (and/or handling both keys), since `_coerce_entity_fields()` runs on the detail-
+
+--- PR #76 | tests/test_coerce_entity.py:131 ---
+These new tests validate comma-splitting behavior on `proposed_id`, but `_coerce_entity_fields()` is used to sanitize the detail-extraction entity object that is validated against `entity.schema.json`, which uses the `id` field (not `proposed_id`). If the real failure mode is a comma-separated `id`, these tests wonΓÇÖt catch regressions. Add/adjust coverage to exercise comma-splitting on the `id` field (and keep/duplicate `proposed_id` coverage only if that case can occur in practice).
+```sugges
+
+--- PR #76 | templates/extraction/entity-discovery.md: ---
+Grammar nit: "a artifact" should be "an artifact".
+```suggestion
+- Abstract or distant references count: if the text mentions a village the PC departed from, an artifact they are seeking, or a council that sent them on a mission, extract those as entities with the appropriate type.
+```
+
+--- PR #62 | tools/semantic_extraction.py: ---
+Substring containment uses raw `in` matching (`name_a in name_b`) which will merge unrelated entities when one name is a substring inside a larger word (e.g., "ring" vs "spring"). Consider tightening this rule (e.g., require whole-token containment, enforce a minimum length, or use word-boundary/normalized-token matching) to avoid false-positive merges.
+
+--- PR #62 | tools/semantic_extraction.py: ---
+The dedup log lines say "merging X into Y", but the actual survivor is chosen later based on earliest `first_seen_turn`, which may be neither `name_a` nor `name_b`. This makes the logs misleading; consider logging after survivor selection (or log as "marking as duplicates" and include survivor ID/filename).
+
+--- PR #62 | tests/test_dedup_fuzzy.py: ---
+`test_id_stem_merge` currently passes even if the ID-stem rule is broken because the names also match by substring ("pointy stick" is contained in "broken pointy stick"), so the merge would happen via Rule 1 before Rule 3. To actually test the ID-stem behavior, use names that avoid substring/token-overlap matches (or otherwise ensure only the ID-stem rule can trigger).
+```suggestion
+            _make_entity("item-crude-spear", "Ashbrand", "turn-003"),
+            _make_entity("item-crude-spear-b
+
+--- PR #62 | tests/test_dedup_fuzzy.py: ---
+`test_substring_merge_spear` is named as if it validates substring matching, but the provided names are not substrings; the merge is triggered by the token-overlap rule. Renaming the test (or adjusting inputs to truly be a substring case) would make the intent clearer.
+
+--- PR #62 | tools/semantic_extraction.py: ---
+## CodeQL / Redundant comparison
+
+Test is always true, because of [this condition](1).
+
+[Show more details](https://github.com/daviburg/narrative-state-engine/security/code-scanning/7)
+
+--- PR #62 | tools/semantic_extraction.py: ---
+## CodeQL / Redundant comparison
+
+Test is always true, because of [this condition](1).
+
+[Show more details](https://github.com/daviburg/narrative-state-engine/security/code-scanning/8)
+
+--- PR #62 | tools/semantic_extraction.py: ---
+## CodeQL / Redundant comparison
+
+Test is always true, because of [this condition](1).
+
+[Show more details](https://github.com/daviburg/narrative-state-engine/security/code-scanning/9)
+
+--- PR #62 | tools/semantic_extraction.py: ---
+## CodeQL / Redundant comparison
+
+Test is always true, because of [this condition](1).
+
+[Show more details](https://github.com/daviburg/narrative-state-engine/security/code-scanning/10)
+
+--- PR #61 | tools/semantic_extraction.py:58 ---
+_filter_pc_attributes() only removes disallowed keys from the freshly extracted `entity_data`, but it does not purge disallowed keys already present in the existing `char-player` catalog entry (merge_entity only adds/overwrites keys). This means historical action-sprawl attributes will persist indefinitely, and even if the model omits them going forward the safety net wonΓÇÖt clean them up. Consider applying the filter to the stored catalog entry (e.g., sanitize `pc_entry`/`current_entry` before
+
+--- PR #61 | templates/extraction/entity-detail.md:26 ---
+The rules now say char-player should only keep a stable allowed key set, but earlier in this template it still instructs to ΓÇ£Preserve all existing attributes from the current entryΓÇ¥. Those two directives conflict (especially if the current entry already contains transient/action keys) and may cause the model to keep emitting them. Update the earlier preservation rule (or add an explicit exception) so itΓÇÖs consistent with the allowed-keys restriction for char-player.
+
+--- PR #60 | tools/semantic_extraction.py:422 ---
+In `_dedup_catalogs`, duplicates are merged via `dedup_merge_entity`, but that helper only merges description/attributes/name/notes and does not merge the `relationships` arrays. When a duplicate entity is removed, any relationships discovered on that removed entity will be dropped rather than preserved on the survivor. Consider explicitly merging/deduplicating relationship entries from the removed entity into the survivor (and then applying the ID rewrite pass) so dedup doesnΓÇÖt lose relations
+
+--- PR #60 | tests/fixtures/extraction-ground-truth-turns-1-30.json:5 ---
+The fixtureΓÇÖs `$schema` points to `../extraction-ground-truth.schema.json`, but there is no `tests/extraction-ground-truth.schema.json` (and no `extraction-ground-truth.schema.json` elsewhere in the repo). Either add the referenced schema file, or update/remove the `$schema` URI to avoid a broken reference for editors/tooling.
+
+--- PR #54 | tools/catalog_merger.py:144 ---
+`fix_id_prefix()` currently only strips prefixes present in `TYPE_TO_PREFIX`. If the model emits abbreviated IDs like `fac-...` (called out in the previous implementation), this function will return `faction-fac-...`, which still fails `validate_id_prefix()` and may later cause entities to be skipped. Consider explicitly handling common abbreviations (e.g., `fac-` -> `faction-`) and/or stripping any leading `<letters>-` prefix before applying the expected one.
+
+--- PR #54 | tools/semantic_extraction.py: ---
+`PLAYER_CHARACTER_SEED` hard-codes `first_seen_turn`/`last_updated_turn` to `turn-001`. If extraction is run on a partial import or a session whose earliest available turn isnΓÇÖt `turn-001`, this seeds incorrect provenance into the catalogs. It would be safer to set these fields dynamically based on the earliest processed turn (batch) / current `turn_id` (single), and update `last_updated_turn` as soon as the first successful PC detail extraction occurs.
+```suggestion
+}
+
+
+def _infer_player_char
+
+--- PR #54 | tools/semantic_extraction.py:283 ---
+The ΓÇ£always run detail extraction for the player characterΓÇ¥ block wonΓÇÖt execute when entity discovery returns an empty list or when all discovered entities are below the confidence threshold, because `extract_and_merge()` returns early before reaching step 2b. If the goal is to track the PC every turn, consider restructuring so the PC detail extraction happens even when `discovered`/`qualified` is empty (and optionally still run event extraction in that case).
+
+--- PR #54 | tools/semantic_extraction.py: ---
+`_dedup_catalogs()` imports and calls `catalog_merger._update_existing_entity`, which is a private helper (leading underscore). This creates tight coupling between modules and makes future refactors riskier. Consider moving the dedup logic into `catalog_merger.py` or exposing a public merge helper (e.g., `merge_entity_data(current, update)`) so `semantic_extraction.py` doesnΓÇÖt rely on internal functions.
+
+--- PR #47 | .githooks/pre-commit: ---
+The regex only matches a directory literally named `sessions/test-` (because the group alternative is `test-` followed immediately by `/`). It will *not* match `sessions/test-001/ΓÇª`, so commits from `sessions/test-*/` wonΓÇÖt be blocked as intended. Update the pattern to match `test-` plus a suffix up to the next slash (e.g., `^sessions/(session-import|test-[^/]+)/`).
+```suggestion
+private_sessions=$(git diff --cached --name-only | grep -E '^sessions/(session-import|test-[^/]+)/')
+```
+
+--- PR #47 | .githooks/pre-commit: ---
+The ΓÇ£empty templateΓÇ¥ check treats a staged catalog whose whitespace-stripped content is just `[` as acceptable. `[` is invalid JSON and would allow committing a corrupted catalog file without being blocked. Consider only allowing the known-empty template (`[]`) and optionally also verifying valid JSON before allowing the commit.
+```suggestion
+            if [ "$trimmed" != "[]" ]; then
+```
+
+--- PR #47 | .githooks/pre-commit: ---
+`RED='\033[0;31m'` / `NC='\033[0m'` wonΓÇÖt reliably render colors because `echo` is not required to interpret backslash escapes in POSIX sh. Use `printf` for these messages (or omit color codes) so the hook output is consistent across shells.
+
+--- PR #46 | README.md: ---
+Docs list Python 3.9+ as a prerequisite, but the codebase uses PEP 604 union types (e.g., `str | None`) which require Python 3.10+. This should be updated to avoid users hitting syntax errors on 3.9.
+
+--- PR #46 | docs/usage.md: ---
+Docs list Python 3.9+ as a prerequisite, but the repo uses PEP 604 union types (`X | None`) in tools which require Python 3.10+. Updating the documented minimum version will prevent users from running into immediate syntax errors.
+
+--- PR #46 | docs/usage.md: ---
+The Ollama `config/llm.json` example sets `api_key_env` to `OLLAMA_API_KEY`, but `LLMClient` treats any non-empty `api_key_env` as required and will error if the env var is unset. For local Ollama, the docs should omit `api_key_env` or set it to `null` to match the actual behavior and avoid a confusing setup failure.
+```suggestion
+     "base_url": "http://localhost:11434/v1"
+```
+
+--- PR #46 | docs/architecture.md: ---
+The Tool Scripts table says `tools/update_state.py` "Update catalogs, objectives, evidence, and summaries", but `update_state.py` only regenerates session-local derived scaffolds/turn-summary and runs regex-based structured extraction; it does not update framework catalogs/objectives/evidence. Please adjust this description to match the actual outputs so readers donΓÇÖt expect framework updates from `update_state.py`.
+```suggestion
+| `tools/update_state.py` | Regenerate session-local derived sca
+
+--- PR #46 | .github/copilot-instructions.md: ---
+Workflow step 4 suggests running `python tools/ingest_turn.py --extract` after manually appending/creating turn files, but `ingest_turn.py` requires `--session`, `--speaker`, and `--text/--file` and will also try to create a new turn file (failing or duplicating work). The workflow should instead instruct passing `--extract` at ingest time, or running semantic extraction via the appropriate extraction entry point for an already-written turn.
+```suggestion
+4. If LLM is configured, do **not** run 
+
+--- PR #44 | docs/semantic-extraction-design.md: ---
+Provenance field names here donΓÇÖt match the repoΓÇÖs schemas/rules. `schemas/entity.schema.json` tracks provenance via `first_seen_turn` / `last_updated_turn` (not `source_turn`), and `schemas/event.schema.json` requires `source_turns` (array). Suggest updating the document to use the schema field names (and reserve `source_turns` for evidence/event-like records), so Phase 2 implementation doesnΓÇÖt bake in incompatible keys.
+```suggestion
+4. **Provenance is mandatory.** Every extracted fact m
+
+--- PR #44 | docs/semantic-extraction-design.md: ---
+Problem statement says ΓÇ£six entity catalog filesΓÇ¥, but `framework/catalogs/` currently has 7 JSON arrays (characters/locations/factions/items/anomalies/events/plot-threads), and only 4 are entity-schema catalogs. Please clarify which catalogs Phase 2 is expected to populate, and use the actual count/names to avoid confusing implementation scope.
+```suggestion
+After importing a 344-turn session transcript, the four entity-schema catalog files in `framework/catalogs/` ΓÇö `characters.json`, `l
+
+--- PR #44 | docs/semantic-extraction-design.md: ---
+Entity Discovery output contract is internally inconsistent: the table says the output is `{ name, type, is_new, existing_id?, description, confidence }`, but the next paragraph and the invocation diagram imply Discovery also proposes/returns an `id` (and later prompts require `source_turn`). Please make the Discovery response shape explicit (e.g., include `proposed_id` for new entities and the provenance field), so downstream validators/mergers can be designed correctly.
+```suggestion
+| **Outpu
+
+--- PR #44 | docs/semantic-extraction-design.md: ---
+Relationship Mapper section conflicts with `entity.schema.json`: relationship objects in `relationships[]` donΓÇÖt include `source_id`, but the designΓÇÖs mapper output includes `source_id` and later dedupes on `(source_id, target_id, relationship)`. Please choose one contract: either (a) mapper outputs edge objects with `source_id` and the merger converts them into per-entity `relationships[]` entries, or (b) mapper outputs per-entity relationship entries matching the schema (no `source_id`).
+`
+
+--- PR #44 | docs/semantic-extraction-design.md: ---
+This describes adding `openai>=1.0.0` to `requirements.txt` while also calling it an ΓÇ£optional dependencyΓÇ¥. In this repo, CI installs `requirements.txt`, so that would make `openai` required for all CI runs. If itΓÇÖs meant to be optional, consider documenting a separate requirements file / extra (e.g., `requirements-llm.txt`) and keep the base requirements minimal.
+```suggestion
+A single new optional dependency: `openai>=1.0.0` (the official Python SDK, which supports custom `base_url` for 
+
+--- PR #44 | docs/semantic-extraction-design.md: ---
+The OpenAI/Azure retention and the per-call cost figures are likely to become outdated quickly. Consider marking these as examples (ΓÇ£as of <date>ΓÇ¥) and/or linking to provider policy/pricing docs, so the design doc doesnΓÇÖt inadvertently encode stale compliance assumptions.
+```suggestion
+| Provider | Data leaves machine? | Data retention / policy notes (examples only; verify current provider docs) |
+|---|---|---|
+| **Ollama (local)** | No | N/A ΓÇö all processing on localhost |
+| **Azure Ope
+
+--- PR #38 | tools/validate.py:159 ---
+In `--strict` mode, `check_completeness()` always appends an "Evidence coverage" message whenever `dm_turns > 0` and `evidence.json` is non-empty. Because these messages are counted as warnings, strict mode will exit with code 2 even when evidence extraction is healthy. Consider printing coverage as informational output (not counted as a warning), or only emitting a warning when coverage is below an explicit threshold.
+
+--- PR #38 | tools/validate.py: ---
+`validate_dir()` runs strict completeness checks even when schema validation fails (the strict block is outside the `if errors: ... else:`). This can produce additional warnings for files that are already invalid, and it diverges from the PR description that completeness runs after schema validation. Consider moving the strict completeness block inside the schema-pass branch so strict checks only run on files that passed schema validation.
+```suggestion
+                # Strict-mode completeness
+
+--- PR #38 | tools/validate.py: ---
+`_find_todo_strings()` builds paths like `".player_state.location"` because it unconditionally prefixes keys with `.` even when `path` is empty. This makes warning messages harder to read. Consider starting the path with the first key (no leading dot) and only adding `.` when `path` is non-empty.
+```suggestion
+            child_path = key if not path else f"{path}.{key}"
+            warnings.extend(_find_todo_strings(value, child_path))
+```
+
+--- PR #37 | tools/extract_structured_data.py: ---
+Season summary section extraction regexes are likely to truncate multi-line content: the lookahead `(?=\n\*{0,2}[A-Z]|\Z)` stops on any next line that begins with a capital letter, which is common in normal paragraphs. This will often capture only the first line of a section. Consider changing the terminator to look specifically for the next recognized section header (e.g. Regional/Faction/Economic/Environmental) or parsing by scanning line-by-line for headers and accumulating lines until the ne
+
+--- PR #37 | tools/extract_structured_data.py:342 ---
+`raw_text` for a detected season summary is currently set to the first 500 chars of the entire turn (`text[:_RAW_TEXT_LIMIT]`), not the season-summary block itself. If the DM turn contains other narrative before/after the summary, this wonΓÇÖt preserve the claimed ΓÇ£full text of the season summary blockΓÇ¥ provenance. Consider extracting the actual block span (e.g., from the summary header through the last recognized section) and storing that substring (truncated if needed).
+
+--- PR #37 | tools/update_state.py: ---
+The `try/except ImportError: pass` here will silently skip structured-data extraction not only when the module is missing, but also if an ImportError is raised inside `extract_structured_data.py` (e.g., a typo in an import). Since extraction is a first-class feature of this PR, consider either removing the try/except, or narrowing it to `ModuleNotFoundError` for `extract_structured_data` and printing a clear warning when extraction is skipped.
+```suggestion
+    except ModuleNotFoundError as exc:
+
+--- PR #37 | tools/ingest_turn.py: ---
+The `try/except ImportError: pass` here can mask real failures (e.g., an ImportError thrown from inside `extract_structured_data.py`) and make ingest appear successful while silently dropping structured extraction. Consider narrowing to `ModuleNotFoundError` for the top-level module and/or emitting a warning when extraction is skipped.
+```suggestion
+    except ModuleNotFoundError as exc:
+        if exc.name == "extract_structured_data":
+            print(
+                "WARNING: Structured ext
+
+--- PR #37 | tools/bootstrap_session.py: ---
+Same issue as elsewhere: `except ImportError: pass` will silently skip extraction even if thereΓÇÖs an ImportError inside the extraction module, which makes failures hard to notice during bootstrap runs. Consider narrowing the exception to `ModuleNotFoundError` and logging a warning when structured extraction canΓÇÖt run.
+
+--- PR #37 | sessions/session-001/derived/turn-summary.md: ---
+This derived turn summary no longer follows the repo guideline that each turn should be summarized as 3ΓÇô8 bullet points; it currently contains only a quoted preview of the DM text and no summary bullets. Consider restoring bullet-point summaries per turn (or adjusting the generator so the preview is additive, not a replacement).
+```suggestion
+- The party arrives at Thornhaven as dusk settles over the valley.
+- Thornhaven appears smaller than expected.
+- The village consists of roughly a dozen 
+
+--- PR #37 | tools/extract_structured_data.py: ---
+`YEAR_PATTERN_NEW` is defined but never used, which makes the temporal extraction logic harder to maintain and suggests an incomplete feature (detecting ΓÇ£a new year beginsΓÇªΓÇ¥ language). Either remove the unused pattern or incorporate it into `extract_temporal_markers` / `_detect_year` so it has an effect.
+```suggestion
+
+```
+
+--- PR #36 | schemas/entity.schema.json:22 ---
+The new `id` prefix regex doesnΓÇÖt ensure consistency with the `type` field (e.g., an entity could have `id: char-foo` but `type: location`). Consider adding `if/then` validation (or similar) to enforce that the `id` prefix matches the declared `type` to prevent mismatched catalogs.
+
+--- PR #36 | schemas/event.schema.json: ---
+`Event` uses `source_turn` (singular), but the existing provenance pattern in the repo uses `source_turns` arrays (e.g., `schemas/evidence.schema.json`). Consider renaming to `source_turns` (array with `minItems: 1`) or supporting both, to keep provenance fields consistent across schemas.
+
+--- PR #36 | docs/Extraction-Lessons.md:166 ---
+The Relationship section documents the expanded relationship shape, but the earlier Entity field list still describes `relationships` as `{ target_id, relationship, confidence? }`, which is now incomplete. Please update the Entity field list to match the current `schemas/entity.schema.json` relationship fields (including `type`, `direction`, and turn tracking) to avoid contradictory guidance in this spec.
+
+--- PR #35 | .github/copilot-instructions.md:136 ---
+The guidance here is specifically motivated by PowerShell behavior, but the examples use POSIX paths (`/tmp/...`) and `rm`. On Windows/PowerShell, `/tmp` may not exist and `rm` is only an alias; consider using `$env:TEMP` (or `New-TemporaryFile`) and `Remove-Item`, or provide separate PowerShell vs bash examples so readers donΓÇÖt copy/paste a non-working path.
+
+--- PR #35 | .github/copilot-instructions.md: ---
+This description implies any PowerShell interpolation will corrupt backticks, but the backtick escape behavior applies to *double-quoted* strings; single-quoted strings are literal and wonΓÇÖt treat `` ` `` as an escape. Tightening the wording (e.g., ΓÇ£in double-quoted strings / when routed through PowerShell parsingΓÇ¥) would make the warning more precise while keeping the rule intact.
+```suggestion
+PowerShell uses the backtick `` ` `` as its escape character during PowerShell parsing, especia
+
+--- PR #35 | .github/copilot-instructions.md: ---
+The bullet says to ΓÇ£delete the file after the command succeedsΓÇ¥, but the example shows unconditional cleanup as a separate line. To match the guidance (and preserve the body file for debugging on failure), consider showing conditional cleanup (`if ($LASTEXITCODE -eq 0) { ... }` in PowerShell, or `&& rm ...` in sh) or explicitly note the second line is only run after success.
+
+--- PR #35 | .github/copilot-instructions.md:177 ---
+Same cross-platform issue in the issue-creation example: `/tmp/...` is not a safe default on Windows/PowerShell. Suggest using `$env:TEMP`/`New-TemporaryFile` (PowerShell) or `mktemp` (POSIX) to avoid instructions that fail when followed literally.
+
+--- PR #31 | tools/update_state.py:100 ---
+In --full mode this writes an entry for every DM turn into derived/turn-summary.md, which can become extremely large for bulk imports and conflicts with the repo guidance to keep turn summaries concise (see .github/copilot-instructions.md:49). Consider generating a separate bulk-import summary file (or chunking/limiting output) so turn-summary.md remains lightweight for ongoing play.
+
+--- PR #31 | tools/bootstrap_session.py: ---
+The session_dir auto-prefix check is based on simple string startswith and will incorrectly double-prefix common relative paths like "./sessions/foo" or ".\\sessions\\foo" (and will also prefix absolute paths). Consider normalizing with os.path.normpath and checking the first path component (or explicitly handling absolute paths) so paths already under sessions/ arenΓÇÖt rewritten to sessions/sessions/ΓÇª
+```suggestion
+    # Normalize first so equivalent relative paths like "./sessions/foo" and
+
+
+--- PR #31 | tools/bootstrap_session.py: ---
+The new --normalize-quotes help text implies smart quotes and em-dashes will be converted to ASCII equivalents, but the tool still generates per-turn file headers with a Unicode em-dash ("# turn-001 ΓÇö DM"). Either clarify in the help text that only the imported transcript content is normalized, or thread the flag through so generated headers use ASCII too when normalization is enabled.
+```suggestion
+        help="Convert smart quotes and em-dashes in imported transcript content "
+             
+
+--- PR #30 | .github/issue-bodies/issue-markers.md: ---
+The referenced lessons doc path appears incorrect (`docs/# Lessons Learned & Extraction Specifica.md`). Update this reference to the actual file name (`docs/Extraction-Lessons.md`, optionally with a section anchor) so the link is not broken.
+```suggestion
+From `docs/Extraction-Lessons.md`:
+```
+
+--- PR #30 | .github/issue-bodies/issue-summary-coverage.md: ---
+The reproduction command uses `--session-id` and then calls `python tools/update_state.py test`, but the actual CLIs require `--session <path>` (see tools/bootstrap_session.py and tools/update_state.py). Update the reproduction steps to use `--session sessions/<id>` and pass `--session` to update_state.py so the steps are runnable.
+```suggestion
+python tools/bootstrap_session.py --file sessions/_import/ImportSession.txt --format labeled --dm-label "DM" --player-label "Fenouille Moonwind" --sessi
+
+--- PR #30 | .github/issue-bodies/issue-relationships.md: ---
+This suggests extending `entity.schema.json` with a `relationships` field, but `schemas/entity.schema.json` already defines `relationships` (array of {target_id, relationship, confidence}). Adjust the fix suggestion to match the existing schema (e.g., add extraction tooling / extend relationship object semantics if needed).
+```suggestion
+- Use the existing `relationships` field already defined in `entity.schema.json`; do not add a duplicate top-level field
+- Add relationship extraction to the im
+
+--- PR #30 | docs/Extraction-Lessons.md: ---
+The data model here uses `first_seen_event` / `last_seen_event` terminology, but the repoΓÇÖs canonical schema uses `first_seen_turn` / `last_updated_turn` (see schemas/entity.schema.json). Consider aligning terminology with the existing schema or explicitly defining how ΓÇ£eventΓÇ¥ IDs map to turn IDs to avoid implementers building to the wrong field names.
+
+--- PR #30 | .github/issue-bodies/issue-validation-completeness.md: ---
+The example command `$ python tools/validate.py session-id` doesnΓÇÖt match the current CLI; validate.py expects `--session <session_dir>` (or `--framework/--all/--file`). Update the snippet to something like `python tools/validate.py --session sessions/<id>` so readers can reproduce the output.
+```suggestion
+$ python tools/validate.py --session sessions/<id>
+```
+
+--- PR #30 | .github/issue-bodies/issue-encoding.md: ---
+The fix section implies bootstrap_session.py isnΓÇÖt reading/writing UTF-8, but the current implementation already defaults to `--encoding utf-8` and writes turn files with `encoding="utf-8"`. To avoid misleading readers, consider rephrasing this as ΓÇ£verify encoding / try `--encoding` / investigate double-encodingΓÇ¥ rather than stating the tool uses a different encoding by default.
+```suggestion
+- Verify the source transcript's actual encoding and confirm the import is being performed with th
+
+--- PR #18 | README.md: ---
+The bootstrap example uses `\\` line continuations (e.g., `python tools/bootstrap_session.py \\`). In bash, a double backslash at end-of-line does not escape the newline, so copy/paste will fail. Use a single trailing `\` for line continuation (as in the `ingest_turn.py` example above).
+```suggestion
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+```
+
+--- PR #18 | docs/usage.md: ---
+This bootstrap command example uses `\\` as a line continuation. In bash, a double backslash at end-of-line wonΓÇÖt continue the command, so the snippet is not copy/pasteable. Replace with a single trailing `\` on continued lines.
+```suggestion
+python tools/bootstrap_session.py \
+  --session sessions/session-001 \
+```
+
+--- PR #14 | .github/workflows/ci.yml: ---
+The `for` loop can mask `py_compile` failures because the compile command is in an `&&` list (`python -m py_compile "$f" && echo ...`). With GitHub Actions' default `bash -e`, failures inside `cmd1 && cmd2` don't necessarily fail the step, and the loop may exit 0 if a later file succeeds. Consider running `python -m py_compile "$f"` as a standalone command (then echo on the next line) or compiling all files in one invocation so the step reliably fails on the first syntax error.
+```suggestion
+   
+
+--- PR #14 | .github/workflows/ci.yml: ---
+`pip-audit` is installed without a version pin, which can make the CI gate non-deterministic (a new `pip-audit` release could start failing builds due to behavior/output changes). Consider pinning `pip-audit` to a known-good version (e.g., via a dev requirements file or an explicit `pip install pip-audit==...`).
+```suggestion
+        run: pip install pip-audit==2.7.3
+```
+
+--- PR #11 | tools/analyze_next_move.py:163 ---
+`--mode` is accepted on the CLI and passed through, but `mode` is never used when generating the prompt-candidates scaffold. This makes `--mode roleplay_consistent`/`all_options` effectively a no-op unless the user manually edits the file; consider using `mode` to set the generated candidatesΓÇÖ `recommendation_mode` (or remove the flag/parameter if itΓÇÖs not meant to influence generation).
+
+--- PR #11 | tools/analyze_next_move.py: ---
+This message instructs users to ΓÇ£pass --force to regenerateΓÇ¥, but the script exposes `--no-regen` (and no `--force`). Update the wording so it references the actual flag users should use.
+```suggestion
+        print(
+            f"  Kept existing prompt candidates: {len(existing)} candidate(s). "
+            "(regeneration is disabled because you passed --no-regen)"
+        )
+```
+
+--- PR #11 | tools/bootstrap_session.py: ---
+The separator-stripping regex removes any line starting with `---` anywhere in the captured turn text. That can delete legitimate transcript content (e.g., a DM using `---` in text). Consider restricting this to lines that are exactly a separator (e.g., `^---\s*$`) and only at expected boundaries.
+```suggestion
+        # Strip only standalone decorative separators at captured turn boundaries.
+        # Do not remove interior transcript lines that merely start with `---`.
+        text = re.sub(r"
+
+--- PR #11 | tools/bootstrap_session.py: ---
+`_label_pattern` is defined but never used, which adds dead code and makes the parsing logic harder to follow. Either remove it or use it to build `speaker_re`/`dm_re` so thereΓÇÖs a single source of truth for the label pattern.
+```suggestion
+    dm_label_pattern = _label_pattern(dm_labels)
+    player_label_pattern = _label_pattern(player_labels)
+    any_label_pattern = r"(?:" + dm_label_pattern + r"|" + player_label_pattern + r")"
+
+    # Match any speaker label at the start of a line
+    speake
+
+--- PR #11 | tools/bootstrap_session.py: ---
+`write_full_transcript` overwrites `raw/full-transcript.md` when `--overwrite` is set, which can destroy the canonical raw transcript for an existing session. Given the repo discipline around raw transcript immutability, consider disallowing overwrite for existing raw transcripts (or require an extra explicit confirmation / write a backup copy).
+
+--- PR #11 | templates/content/character-sheet.md:13 ---
+The markdown table header uses `||` which renders as an extra empty column in many Markdown parsers. Use single-pipe table syntax (e.g., `| Field | Required | Notes |`) for consistent rendering.
+
+--- PR #11 | templates/content/location-sheet.md:13 ---
+The markdown table header uses `||` which renders as an extra empty column in many Markdown parsers. Use single-pipe table syntax (e.g., `| Field | Required | Notes |`) for consistent rendering.
+
+--- PR #11 | templates/content/faction-sheet.md:13 ---
+The markdown table header uses `||` which renders as an extra empty column in many Markdown parsers. Use single-pipe table syntax (e.g., `| Field | Required | Notes |`) for consistent rendering.
+
+--- PR #11 | templates/content/storyline-sheet.md:13 ---
+The markdown table header uses `||` which renders as an extra empty column in many Markdown parsers. Use single-pipe table syntax (e.g., `| Field | Required | Notes |`) for consistent rendering.
+
+--- PR #11 | docs/idea-discussion.md:5 ---
+This PR adds a very large root-level file that reads like internal brainstorming/transcript rather than framework documentation. Since itΓÇÖs not mentioned in the PR description and the filename contains a space (which can be awkward for tooling), consider moving it under `docs/` (or another archival folder) and renaming to a dash/underscore-separated filename.
+

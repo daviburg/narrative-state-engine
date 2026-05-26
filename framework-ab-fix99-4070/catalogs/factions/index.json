@@ -1,0 +1,29 @@
+[
+  {
+    "id": "faction-cloaked-figures",
+    "name": "figures cloaked in furs",
+    "type": "faction",
+    "status_summary": "Flanking the player character and urging them forward with renewed urgency as th",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "faction-captors",
+    "name": "captors",
+    "type": "faction",
+    "status_summary": "One member is actively loosening the ropes binding the player's wrists and ankle",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-025",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "faction-villagers",
+    "name": "villagers",
+    "type": "faction",
+    "status_summary": "Releasing the player character from their restraints; one member loosens the rop",
+    "first_seen_turn": "turn-017",
+    "last_updated_turn": "turn-025",
+    "active_relationship_count": 0
+  }
+]

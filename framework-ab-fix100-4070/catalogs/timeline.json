@@ -1,0 +1,32 @@
+[
+  {
+    "source_turn": "turn-001",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-001"
+  },
+  {
+    "source_turn": "turn-003",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-002"
+  },
+  {
+    "source_turn": "turn-007",
+    "type": "season_transition",
+    "season": "mid_winter",
+    "signals": [
+      "base season: winter"
+    ],
+    "confidence": 0.5,
+    "id": "time-003"
+  }
+]

@@ -1,0 +1,37 @@
+{
+  "id": "char-older-figure",
+  "name": "older figure",
+  "type": "character",
+  "identity": "An older, commanding member of a human encampment in the arctic, distinguished by a more authoritative presence than the other captors.",
+  "current_status": "Turning to face the player character with a sharp, appraising gaze while other captors push the player towards him.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "species": {
+      "value": "human",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "role": {
+      "value": "commanding figure",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-015"
+    },
+    "appearance": {
+      "value": "older",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert",
+    "equipment": [],
+    "location": "loc-encampment",
+    "current_activity": "turning to face the player character",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015"
+}

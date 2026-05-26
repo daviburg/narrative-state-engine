@@ -1,0 +1,45 @@
+{
+  "id": "item-net",
+  "name": "net",
+  "type": "item",
+  "identity": "A heavy, net-like trap woven from thick, icy vines, designed to ensnare intruders in the woods. It has been loosened by the elder's captors, leaving the player character partially entangled.",
+  "current_status": "The net is partially loosened; the player character's hands and feet are free, but they remain entangled in the net.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "composition": {
+      "value": "thick, icy vines",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "function": {
+      "value": "trap",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "material_texture": {
+      "value": "dark, fibrous",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-025"
+    },
+    "aliases": {
+      "value": [
+        "net-like contraption"
+      ],
+      "inference": false,
+      "source_turn": "turn-025"
+    }
+  },
+  "volatile_state": {
+    "condition": "partially loosened",
+    "equipment": [],
+    "location": "loc-woods",
+    "current_activity": "holding the player character partially entangled (hands and feet free)",
+    "last_updated_turn": "turn-025"
+  },
+  "first_seen_turn": "turn-005",
+  "last_updated_turn": "turn-025",
+  "notes": "The net's state has changed from fully active to partially loosened due to the elder's intervention."
+}

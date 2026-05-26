@@ -1,0 +1,29 @@
+{
+  "id": "item-bonfire",
+  "name": "bonfire",
+  "type": "item",
+  "identity": "A roaring bonfire located at a campsite or dwelling in the clearing, surrounded by crude snow-covered lean-tos and figures cloaked in furs.",
+  "current_status": "Roaring brightly in the clearing, providing light and heat as the player and their captors approach the camp.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "location": {
+      "value": "clearing",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-013"
+    },
+    "state": {
+      "value": "roaring",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "roaring",
+    "location": "clearing",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013"
+}

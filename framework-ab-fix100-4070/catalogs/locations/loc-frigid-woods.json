@@ -1,0 +1,23 @@
+{
+  "id": "loc-frigid-woods",
+  "name": "frigid woods",
+  "type": "location",
+  "identity": "A dense, cold forest area characterized by frigid temperatures and deep woods, currently serving as a path for captives.",
+  "current_status": "The player is being marched deeper into this area by captors, with the environment described as frigid.",
+  "status_updated_turn": "turn-011",
+  "stable_attributes": {
+    "description": {
+      "value": "frigid woods",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-011"
+    }
+  },
+  "volatile_state": {
+    "condition": "frigid",
+    "location": "loc-frigid-woods",
+    "last_updated_turn": "turn-011"
+  },
+  "first_seen_turn": "turn-011",
+  "last_updated_turn": "turn-011"
+}

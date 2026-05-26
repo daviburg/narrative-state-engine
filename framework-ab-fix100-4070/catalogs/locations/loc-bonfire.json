@@ -1,0 +1,31 @@
+{
+  "id": "loc-bonfire",
+  "name": "fire",
+  "type": "location",
+  "identity": "A bonfire located within the longhouse where the elder and his guards are conducting an interrogation and ritual.",
+  "current_status": "The elder gestures toward it while holding out dark, fibrous material for the player to examine.",
+  "status_updated_turn": "turn-019",
+  "stable_attributes": {
+    "appearance": {
+      "value": "bonfire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    },
+    "location_context": {
+      "value": "inside the longhouse",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-019"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "location": "loc-longhouse",
+    "current_activity": "serving as the focal point for the elder's ritual and examination of the player.",
+    "last_updated_turn": "turn-019"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-019",
+  "notes": "Entity referred to as 'fire' in text; context implies it is a bonfire within the longhouse."
+}

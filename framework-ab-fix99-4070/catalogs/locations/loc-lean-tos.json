@@ -1,0 +1,35 @@
+{
+  "id": "loc-lean-tos",
+  "name": "lean-tos",
+  "type": "location",
+  "identity": "A temporary encampment or dwelling consisting of several crude, snow-covered lean-tos surrounded by a roaring bonfire and figures cloaked in furs.",
+  "current_status": "Visible in the distance as the party approaches; smoke curls from it, and figures in furs are gathered around a bonfire.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "structure": {
+      "value": "crude, snow-covered lean-tos",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "features": {
+      "value": [
+        "roaring bonfire",
+        "surrounded by figures cloaked in furs"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "active with smoke and fire",
+    "equipment": [],
+    "location": "loc-lean-tos",
+    "current_activity": "serving as a campsite or dwelling with figures gathered around a bonfire",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": ""
+}

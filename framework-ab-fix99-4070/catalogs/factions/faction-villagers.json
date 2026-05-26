@@ -1,0 +1,36 @@
+{
+  "id": "faction-villagers",
+  "name": "villagers",
+  "type": "faction",
+  "identity": "A group of hostile locals who have captured the player character. They are armed with crude weapons and appear to speak a guttural language unintelligible to the player.",
+  "current_status": "Releasing the player character from their restraints; one member loosens the ropes while others murmur with cautious curiosity as tension dissipates.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "allegiance": {
+      "value": "local community",
+      "inference": true,
+      "confidence": 0.8,
+      "source_turn": "turn-017"
+    },
+    "equipment": {
+      "value": [
+        "crude weapons"
+      ],
+      "inference": false,
+      "confidence": 0.9,
+      "source_turn": "turn-017"
+    }
+  },
+  "volatile_state": {
+    "condition": "shifting from hostile to curious",
+    "equipment": [
+      "crude weapons"
+    ],
+    "location": "unknown",
+    "current_activity": "loosening the player's bonds and observing them with cautious curiosity",
+    "last_updated_turn": "turn-025"
+  },
+  "first_seen_turn": "turn-017",
+  "last_updated_turn": "turn-025",
+  "notes": "One member previously identified as an 'original captor' is now actively releasing the player."
+}

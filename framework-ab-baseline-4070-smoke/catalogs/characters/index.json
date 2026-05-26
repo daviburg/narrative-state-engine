@@ -1,0 +1,11 @@
+[
+  {
+    "id": "char-player",
+    "name": "Player Character",
+    "type": "character",
+    "status_summary": "Recovering from a fall in the snow, steadying themselves, and recalling a missio",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-001",
+    "active_relationship_count": 0
+  }
+]

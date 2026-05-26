@@ -1,0 +1,32 @@
+{
+  "id": "item-icy-vines",
+  "name": "icy vines",
+  "type": "item",
+  "identity": "A constricting net of icy vines that has trapped the player character in the forest.",
+  "current_status": "Constricting the player character, causing pain in their shoulder.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "nature": {
+      "value": "icy vines",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "state": {
+      "value": "constricting",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "active and constricting",
+    "equipment": [],
+    "location": "forest",
+    "current_activity": "holding the player character captive",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007",
+  "notes": "The vines are currently trapping the player. The player has ceased struggling."
+}

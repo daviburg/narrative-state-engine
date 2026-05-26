@@ -1,0 +1,31 @@
+{
+  "id": "item-animal-bones",
+  "name": "animal bones",
+  "type": "item",
+  "identity": "Animal bones used as decorations by the encampment figures.",
+  "current_status": "Strung as decorations on a figure by the bonfire.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "appearance": {
+      "value": "strung as decorations",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "material": {
+      "value": "animal bones",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "displayed as decoration",
+    "equipment": [],
+    "location": "encampment bonfire area",
+    "current_activity": "hanging as decoration",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015"
+}

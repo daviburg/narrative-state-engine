@@ -1,0 +1,38 @@
+{
+  "id": "item-rudimentary-tools",
+  "name": "rudimentary tools",
+  "type": "item",
+  "identity": "Simple, well-maintained tools found scattered around the encampment, likely used by the captors for survival in the arctic environment.",
+  "current_status": "Scattered about the encampment near the bonfire, visible alongside animal bones and decorations.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "description": {
+      "value": "rudimentary",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "condition": {
+      "value": "well-maintained and sharp",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "location_context": {
+      "value": "encampment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "scattered",
+    "equipment": [],
+    "location": "loc-encampment",
+    "current_activity": "lying scattered about the ground",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015",
+  "notes": "None"
+}

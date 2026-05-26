@@ -1,0 +1,32 @@
+{
+  "id": "char-companion",
+  "name": "companion",
+  "type": "character",
+  "identity": "A broad-shouldered figure accompanying the player character's captors, acting as one of the guards escorting the player through the woods.",
+  "current_status": "Walking to the left of the player character, narrowing his eyes at the player's attempt to speak, and exchanging a terse word with his spear-wielding companion.",
+  "status_updated_turn": "turn-011",
+  "stable_attributes": {
+    "appearance": {
+      "value": "broader figure",
+      "inference": false,
+      "confidence": 0.9,
+      "source_turn": "turn-011"
+    },
+    "role": {
+      "value": "captor/guard",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-011"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and suspicious",
+    "equipment": [],
+    "location": "frigid woods",
+    "current_activity": "walking with the player character and exchanging words with a companion",
+    "last_updated_turn": "turn-011"
+  },
+  "first_seen_turn": "turn-011",
+  "last_updated_turn": "turn-011",
+  "notes": "Identity of this companion and the other captor remains unknown."
+}

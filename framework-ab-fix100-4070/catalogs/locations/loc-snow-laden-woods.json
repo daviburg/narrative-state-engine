@@ -1,0 +1,36 @@
+{
+  "id": "loc-snow-laden-woods",
+  "name": "snow-laden woods",
+  "type": "location",
+  "identity": "A hushed, snow-covered forest area where tracks lead through pristine white snow, offering concealment for traps and ambushes.",
+  "current_status": "The player character is trapped inside this location, pinned under a net of icy vines after stepping on a tripwire disguised by fresh snow.",
+  "status_updated_turn": "turn-005",
+  "stable_attributes": {
+    "description": {
+      "value": "hushed, snow-laden woods",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    },
+    "features": {
+      "value": [
+        "pristine white snow",
+        "icy vines",
+        "tripwire disguised by snow"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-005"
+    }
+  },
+  "volatile_state": {
+    "condition": "active ambush site with trapped intruder",
+    "equipment": [],
+    "location": "loc-snow-laden-woods",
+    "current_activity": "Player character is pinned by a net of icy vines after triggering a tripwire.",
+    "last_updated_turn": "turn-005"
+  },
+  "first_seen_turn": "turn-005",
+  "last_updated_turn": "turn-005",
+  "notes": "Entity contains a trapped PC; check for associated trap entity if one exists in the catalog."
+}

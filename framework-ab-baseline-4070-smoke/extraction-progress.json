@@ -1,0 +1,9 @@
+{
+  "last_completed_turn": "turn-001",
+  "total_turns": 1,
+  "entities_discovered": 1,
+  "completed": true,
+  "failed_turns": [
+    "turn-001"
+  ]
+}

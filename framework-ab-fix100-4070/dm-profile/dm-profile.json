@@ -1,0 +1,22 @@
+{
+  "last_updated_turn": "turn-029",
+  "structure_patterns": [
+    "Consistently uses a single, dense paragraph per turn to describe the scene, NPC actions, and player status without breaking into dialogue blocks.",
+    "Maintains consistent second-person perspective ('You') throughout all descriptions and actions.",
+    "Narrative flows in continuous prose paragraphs rather than using bullet points or distinct headers for actions.",
+    "Narrative is continuous and dense; the DM avoids bullet points or explicit scene breaks, instead weaving action, NPC reactions, and environmental details into a single flowing paragraph."
+  ],
+  "hint_patterns": [
+    "Embeds significant narrative clues within environmental descriptions that allow players to infer the nature of the captors and the location.",
+    "Provides environmental context clues (elven eyes piercing gloom) that suggest player capabilities before the trap triggers, hinting at potential detection methods.",
+    "Uses non-verbal cues and environmental details to convey meaning and advance the plot without explicit exposition; relies on player observation of NPC behavior."
+  ],
+  "adversarial_level": "moderate",
+  "formatting_preferences": [
+    "Consistent use of second-person perspective ('You') with no bolding, italics, or special emphasis markers in the provided text.",
+    "Uses standard prose with no bolding, italics, or bullet points; relies on sentence structure for emphasis."
+  ],
+  "notes": "Profile not yet established.",
+  "confidence": 0.77,
+  "tone": "Atmospheric and immersive; uses sensory details (cold, sound, touch) to ground the narrative immediately."
+}

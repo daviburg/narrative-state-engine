@@ -1,0 +1,38 @@
+{
+  "id": "faction-figures",
+  "name": "figures",
+  "type": "faction",
+  "identity": "A group of captors and guards escorting the player character through a dense forest. They are described as efficient and practiced in their movements, wearing furs, and maintaining a tight grip on the player.",
+  "current_status": "Urgently escorting the player character through a denser, colder part of the forest toward a visible camp with lean-tos and a bonfire.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "role": {
+      "value": "captors/guards",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-013"
+    },
+    "appearance": {
+      "value": "cloaked in furs",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "behavior": {
+      "value": "silent, efficient, practiced movements",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "alert and moving with urgency",
+    "equipment": [],
+    "location": "loc-dense-forest",
+    "current_activity": "urging the player forward toward a camp",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": "The specific faction name or origin is not yet revealed; currently referred to only as 'figures' or 'captors'."
+}

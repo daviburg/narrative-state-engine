@@ -1,0 +1,190 @@
+[
+  {
+    "id": "evt-001",
+    "source_turns": [
+      "turn-001"
+    ],
+    "type": "other",
+    "description": "The player regains consciousness after falling in the snow, recalling a mission to save the Midwinter celebration by following fresh footprints into the trees.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-002",
+    "source_turns": [
+      "turn-004"
+    ],
+    "type": "other",
+    "description": "The player lost 2 HP while navigating the tracks.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-003",
+    "source_turns": [
+      "turn-005"
+    ],
+    "type": "trap",
+    "description": "A hidden tripwire disguised by snow caught the player's ankle, triggering a net of icy vines that dropped from above and pinned the player to the ground with a bludgeoning blow.",
+    "related_entities": [
+      "char-player",
+      "item-tripwire",
+      "item-net",
+      "loc-woods"
+    ]
+  },
+  {
+    "id": "evt-004",
+    "source_turns": [
+      "turn-006"
+    ],
+    "type": "decision",
+    "description": "The player surrendered.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-005",
+    "source_turns": [
+      "turn-007"
+    ],
+    "type": "capture",
+    "description": "Two armed figures emerge from the shadows and identify the player as a captive, ending the struggle against the icy vines.",
+    "related_entities": [
+      "char-player",
+      "item-icy-vines",
+      "item-crude-spears"
+    ]
+  },
+  {
+    "id": "evt-006",
+    "source_turns": [
+      "turn-009"
+    ],
+    "type": "capture",
+    "description": "Two figures tighten a net around the player, bind their wrists and ankles with coarse rope, and hoist them to their feet to be led deeper into the forest.",
+    "related_entities": [
+      "char-player"
+    ]
+  },
+  {
+    "id": "evt-007",
+    "source_turns": [
+      "turn-013"
+    ],
+    "type": "arrival",
+    "description": "The player and their captors arrive at a camp featuring lean-tos and a bonfire, surrounded by cloaked figures.",
+    "related_entities": [
+      "char-player",
+      "loc-camp-dwelling",
+      "loc-lean-tos",
+      "item-bonfire",
+      "faction-cloaked-figures"
+    ]
+  },
+  {
+    "id": "evt-008",
+    "source_turns": [
+      "turn-015"
+    ],
+    "type": "encounter",
+    "description": "The player is led into a rough human encampment and brought before an older, commanding figure who appraises them with a sharp gaze.",
+    "related_entities": [
+      "char-player",
+      "loc-encampment",
+      "faction-captors",
+      "char-older-figure"
+    ]
+  },
+  {
+    "id": "evt-009",
+    "source_turns": [
+      "turn-017"
+    ],
+    "type": "communication",
+    "description": "The player attempts to speak in common and elven tongues, but the elder and villagers respond with blank stares and dismissive grunts.",
+    "related_entities": [
+      "char-player",
+      "char-elder",
+      "faction-villagers"
+    ]
+  },
+  {
+    "id": "evt-010",
+    "source_turns": [
+      "turn-019"
+    ],
+    "type": "examination",
+    "description": "The elder probed the bindings on the player's wrists and closely inspected their warlock attire and elven features.",
+    "related_entities": [
+      "char-player",
+      "char-elder"
+    ]
+  },
+  {
+    "id": "evt-011",
+    "source_turns": [
+      "turn-019"
+    ],
+    "type": "offering",
+    "description": "The elder retrieved dark fibrous material from a bowl and held it out to the player.",
+    "related_entities": [
+      "char-player",
+      "char-elder",
+      "item-dark-fibrous-material"
+    ]
+  },
+  {
+    "id": "evt-012",
+    "source_turns": [
+      "turn-021"
+    ],
+    "type": "examination",
+    "description": "The elder holds out dark fibrous material and waits for the player to take it, while a guard clumsily loosens one of the player's bound wrists.",
+    "related_entities": [
+      "char-player",
+      "faction-captors",
+      "item-dark-fibrous-material"
+    ]
+  },
+  {
+    "id": "evt-013",
+    "source_turns": [
+      "turn-021"
+    ],
+    "type": "communication",
+    "description": "The younger woman looks at the player with curiosity and caution, offering no explanation for the player's predicament.",
+    "related_entities": [
+      "char-player",
+      "faction-captors"
+    ]
+  },
+  {
+    "id": "evt-014",
+    "source_turns": [
+      "turn-023"
+    ],
+    "type": "examination",
+    "description": "The player attempts to grasp the dark fibrous material offered by the elder but struggles due to stiff fingers and bindings, resulting in only brushing against the substance.",
+    "related_entities": [
+      "char-player",
+      "char-elder"
+    ]
+  },
+  {
+    "id": "evt-015",
+    "source_turns": [
+      "turn-025"
+    ],
+    "type": "release",
+    "description": "The elder gestures to a captor who loosens the ropes binding the player's wrists and ankles, though the player remains entangled in the net.",
+    "related_entities": [
+      "char-player",
+      "faction-captors",
+      "item-net"
+    ]
+  }
+]

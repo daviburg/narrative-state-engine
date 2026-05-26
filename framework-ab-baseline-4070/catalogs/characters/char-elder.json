@@ -1,0 +1,38 @@
+{
+  "id": "char-elder",
+  "name": "The elder",
+  "type": "character",
+  "identity": "A grizzled authority figure within the village, possessing a commanding presence and knowledge of the local guttural tongue.",
+  "current_status": "Listening to the player's attempts at communication with a dismissive expression, preparing to issue a command.",
+  "status_updated_turn": "turn-017",
+  "stable_attributes": {
+    "appearance": {
+      "value": "grizzled man, eyes like chips of flint, deep lines on face",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    },
+    "role": {
+      "value": "village elder",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-017"
+    },
+    "language": {
+      "value": "guttural tongue",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    }
+  },
+  "volatile_state": {
+    "condition": "dismissive, frowning",
+    "equipment": [],
+    "location": "village",
+    "current_activity": "cocking head and listening to the player's failed attempts at communication",
+    "last_updated_turn": "turn-017"
+  },
+  "first_seen_turn": "turn-017",
+  "last_updated_turn": "turn-017",
+  "notes": "Player failed to communicate in common, elven, or the elder's guttural tongue."
+}

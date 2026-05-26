@@ -1,0 +1,23 @@
+{
+  "id": "item-warlock-attire",
+  "name": "warlock attire",
+  "type": "item",
+  "identity": "The distinctive clothing worn by the player character, identified as warlock attire by the elder.",
+  "current_status": "Being inspected by the elder, who is examining the bindings on the player's wrists and the attire itself.",
+  "status_updated_turn": "turn-019",
+  "stable_attributes": {
+    "role": {
+      "value": "warlock attire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    }
+  },
+  "volatile_state": {
+    "condition": "being inspected",
+    "location": "loc-council-fire",
+    "last_updated_turn": "turn-019"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-019"
+}

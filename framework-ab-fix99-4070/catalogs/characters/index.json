@@ -1,0 +1,38 @@
+[
+  {
+    "id": "char-player",
+    "name": "Player Character",
+    "type": "character",
+    "status_summary": "Having received approval from the elder, the player character is now partially f",
+    "first_seen_turn": "turn-001",
+    "last_updated_turn": "turn-025",
+    "active_relationship_count": 10
+  },
+  {
+    "id": "creature-human",
+    "name": "human",
+    "type": "creature",
+    "status_summary": "Mill about a rough encampment in the firelight, displaying a wild and wary demea",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-older-figure",
+    "name": "older figure",
+    "type": "character",
+    "status_summary": "Standing by the bonfire, turning to face the player character with a sharp and a",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "char-elder",
+    "name": "The elder",
+    "type": "character",
+    "status_summary": "Waiting for the player to apply the offered material to their face to test its e",
+    "first_seen_turn": "turn-017",
+    "last_updated_turn": "turn-024",
+    "active_relationship_count": 1
+  }
+]

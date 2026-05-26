@@ -1,0 +1,39 @@
+{
+  "id": "item-dark-fibrous-material",
+  "name": "Dark Fibrous Material",
+  "type": "item",
+  "identity": "A dark, fibrous material offered by the elder to the player character. It appears to be a significant object intended for the player to take, possibly a tool, weapon, or component of a ritual.",
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-025",
+  "notes": "Player has accepted the item.",
+  "current_status": "The player character has grasped the material, is smelling it, and has been granted freedom from the ropes binding their wrists and ankles while still entangled in a net.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "description": {
+      "value": "dark, fibrous material",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-021"
+    },
+    "purpose": {
+      "value": "intended for player character to take",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-021"
+    },
+    "sensory_details": {
+      "value": "earthy scent mixed with pungent, slightly bitter, medicinal smell; coarse texture",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-025"
+    }
+  },
+  "volatile_state": {
+    "condition": "held in player character's hand",
+    "location": "loc-village",
+    "last_updated_turn": "turn-025",
+    "equipment": [
+      "item-dark-fibrous-material"
+    ]
+  }
+}

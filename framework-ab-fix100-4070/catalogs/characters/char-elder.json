@@ -1,0 +1,76 @@
+{
+  "id": "char-elder",
+  "name": "elder",
+  "type": "character",
+  "identity": "A grizzled authority figure within the village, possessing a commanding presence and knowledge of a guttural local tongue.",
+  "current_status": "Approves the player's ritual action by tapping his forehead and nodding, signaling the player is free to act.",
+  "status_updated_turn": "turn-027",
+  "stable_attributes": {
+    "appearance": {
+      "value": "grizzled man, eyes like chips of flint, deep lines on face, calloused hand, gnarled hand, rugged face",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-021"
+    },
+    "role": {
+      "value": "elder",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    },
+    "language": {
+      "value": "guttural tongue",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    }
+  },
+  "volatile_state": {
+    "condition": "stoic, approving",
+    "location": "village",
+    "current_activity": "granting approval and releasing the player from the net",
+    "last_updated_turn": "turn-027",
+    "equipment": []
+  },
+  "first_seen_turn": "turn-017",
+  "last_updated_turn": "turn-027",
+  "relationships": [
+    {
+      "target_id": "char-player",
+      "current_relationship": "granting freedom to",
+      "type": "social",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-027",
+      "history": [
+        {
+          "turn": "turn-023",
+          "description": "holding out material to"
+        }
+      ]
+    },
+    {
+      "target_id": "item-dark-fibrous-material",
+      "current_relationship": "holding",
+      "type": "spatial",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.95,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-023"
+    },
+    {
+      "target_id": "faction-captors",
+      "current_relationship": "commanding",
+      "type": "political",
+      "status": "active",
+      "direction": "outgoing",
+      "confidence": 0.9,
+      "first_seen_turn": "turn-021",
+      "last_updated_turn": "turn-025"
+    }
+  ],
+  "notes": "Player is considering using the material as poultice or for ritual; elder's approval pending."
+}

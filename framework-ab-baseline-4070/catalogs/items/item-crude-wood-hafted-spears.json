@@ -1,0 +1,36 @@
+{
+  "id": "item-crude-wood-hafted-spears",
+  "name": "crude, wood-hafted spears",
+  "type": "item",
+  "identity": "Simple weapons consisting of crude spears with wooden shafts, carried by the two human-sized figures emerging from the forest shadows.",
+  "current_status": "Being carried by two stealthy figures who have emerged from the shadows and are gesturing towards the player character, indicating they are captives.",
+  "status_updated_turn": "turn-007",
+  "stable_attributes": {
+    "description": {
+      "value": "crude, wood-hafted spears",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-007"
+    },
+    "material": {
+      "value": [
+        "wood",
+        "unknown tip material"
+      ],
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-007"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "equipment": [
+      "item-crude-wood-hafted-spears"
+    ],
+    "location": "loc-forest",
+    "current_activity": "being carried by two figures approaching the player character",
+    "last_updated_turn": "turn-007"
+  },
+  "first_seen_turn": "turn-007",
+  "last_updated_turn": "turn-007"
+}

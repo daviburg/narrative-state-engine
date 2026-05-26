@@ -1,0 +1,83 @@
+[
+  {
+    "id": "item-net-like-contraption",
+    "name": "net-like contraption",
+    "type": "item",
+    "status_summary": "The net is no longer restricting the player character's movement; it remains aro",
+    "first_seen_turn": "turn-005",
+    "last_updated_turn": "turn-027",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-crude-wood-hafted-spears",
+    "name": "crude, wood-hafted spears",
+    "type": "item",
+    "status_summary": "Being carried by two figures who have emerged from the shadows and are approachi",
+    "first_seen_turn": "turn-007",
+    "last_updated_turn": "turn-007",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-bonfire",
+    "name": "bonfire",
+    "type": "item",
+    "status_summary": "Roaring brightly in the clearing, providing light and heat as the player and the",
+    "first_seen_turn": "turn-013",
+    "last_updated_turn": "turn-013",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-animal-bones",
+    "name": "animal bones",
+    "type": "item",
+    "status_summary": "Strung as decorations on a figure by the bonfire.",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-rudimentary-tools",
+    "name": "rudimentary tools",
+    "type": "item",
+    "status_summary": "Scattered about the encampment near the bonfire, visible alongside animal bones ",
+    "first_seen_turn": "turn-015",
+    "last_updated_turn": "turn-015",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-warlock-attire",
+    "name": "warlock attire",
+    "type": "item",
+    "status_summary": "Being inspected by the elder, who is examining the bindings on the player's wris",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-019",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-dark-fibrous-material",
+    "name": "dark, fibrous material",
+    "type": "item",
+    "status_summary": "Held in the player character's partially freed hand. The material has a coarse t",
+    "first_seen_turn": "turn-019",
+    "last_updated_turn": "turn-025",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-icy-vines",
+    "name": "icy vines",
+    "type": "item",
+    "status_summary": "Being untangled from around the player character by a former captor.",
+    "first_seen_turn": "turn-029",
+    "last_updated_turn": "turn-029",
+    "active_relationship_count": 0
+  },
+  {
+    "id": "item-clear-steaming-broth",
+    "name": "clear, steaming broth",
+    "type": "item",
+    "status_summary": "Being offered to the player character by a younger woman after the player is fre",
+    "first_seen_turn": "turn-029",
+    "last_updated_turn": "turn-029",
+    "active_relationship_count": 0
+  }
+]

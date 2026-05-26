@@ -1,0 +1,59 @@
+{
+  "id": "loc-encampment",
+  "name": "encampment",
+  "type": "location",
+  "identity": "A rough human encampment situated in a harsh arctic environment, characterized by flickering bonfires, figures draped in hides and furs, and a general atmosphere of wild wariness.",
+  "current_status": "Illuminated by a flickering bonfire, with several figures milling about. The player character is being led into the site by two captors and is being pushed toward an older, commanding figure by the fire.",
+  "status_updated_turn": "turn-015",
+  "stable_attributes": {
+    "inhabitants": {
+      "value": [
+        "humans",
+        "figures draped in hides and crude furs",
+        "two captors (robust and lean)",
+        "one older commanding figure"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "environment": {
+      "value": "harsh arctic environment",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "features": {
+      "value": [
+        "flickering bonfire",
+        "animal bones strung as decorations",
+        "rudimentary tools scattered about"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    },
+    "atmosphere": {
+      "value": "wild, wary, musky scent of unwashed bodies and woodsmoke",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-015"
+    }
+  },
+  "volatile_state": {
+    "condition": "active, illuminated by bonfire",
+    "equipment": [
+      "spears",
+      "hides",
+      "crude furs",
+      "animal bones (decorations)",
+      "rudimentary tools"
+    ],
+    "location": "loc-encampment",
+    "current_activity": "mill about; player character is being led into the site and pushed toward an elder figure",
+    "last_updated_turn": "turn-015"
+  },
+  "first_seen_turn": "turn-015",
+  "last_updated_turn": "turn-015",
+  "notes": ""
+}

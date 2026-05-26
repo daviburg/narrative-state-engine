@@ -1,0 +1,30 @@
+{
+  "id": "loc-village-hall",
+  "name": "village hall",
+  "type": "location",
+  "identity": "The community center of the village where the Midwinter celebration was planned and where the player character received their assignment.",
+  "current_status": "The player character is currently outside in the snow, recovering from a fall and recalling memories of the village hall, including the worried faces seen there and the assignment received inside.",
+  "status_updated_turn": "turn-001",
+  "stable_attributes": {
+    "role": {
+      "value": "community center",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-001"
+    },
+    "significance": {
+      "value": "site of Midwinter celebration planning and player assignment",
+      "inference": true,
+      "confidence": 0.95,
+      "source_turn": "turn-001"
+    }
+  },
+  "volatile_state": {
+    "condition": "not currently occupied by the player character",
+    "location": "loc-village-hall",
+    "last_updated_turn": "turn-001"
+  },
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-001",
+  "notes": "Player character is currently away from this location, recalling it."
+}

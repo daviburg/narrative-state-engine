@@ -1,0 +1,35 @@
+{
+  "id": "loc-lean-tos",
+  "name": "lean-tos",
+  "type": "location",
+  "identity": "A cluster of crude, snow-covered lean-tos situated in a clearing within a dense forest, surrounded by a roaring bonfire and several figures cloaked in furs.",
+  "current_status": "Visible in the distance as the player and their captors approach; smoke curls from the area, indicating activity within the encampment.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "description": {
+      "value": "crude, snow-covered lean-tos",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "features": {
+      "value": [
+        "roaring bonfire",
+        "surrounded by figures in furs"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "snow-covered, active with smoke and fire",
+    "equipment": [],
+    "location": "loc-lean-tos",
+    "current_activity": "being approached by the player and captors",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": ""
+}

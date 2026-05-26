@@ -1,0 +1,40 @@
+{
+  "id": "faction-villagers",
+  "name": "villagers",
+  "type": "faction",
+  "identity": "A group of locals who initially captured the player character but have now shifted to a neutral or cooperative stance, gathering to witness a ritualistic healing process.",
+  "current_status": "Rippling with a collective sigh of relief as the player is freed from icy vines; one former captor is actively removing the net, while a younger woman offers the player a steaming broth.",
+  "status_updated_turn": "turn-029",
+  "stable_attributes": {
+    "allegiance": {
+      "value": "local community",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-017"
+    },
+    "weaponry": {
+      "value": "crude weapons",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    },
+    "language": {
+      "value": "guttural tongue",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-017"
+    }
+  },
+  "volatile_state": {
+    "condition": "relieved and cooperative",
+    "equipment": [
+      "crude weapons"
+    ],
+    "location": "village",
+    "current_activity": "witnessing the player's healing ritual and assisting in removing the binding vines",
+    "last_updated_turn": "turn-029"
+  },
+  "first_seen_turn": "turn-017",
+  "last_updated_turn": "turn-029",
+  "notes": "The faction's attitude has shifted from hostile captors to cooperative observers/participants in the elder's ritual."
+}

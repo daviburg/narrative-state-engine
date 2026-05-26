@@ -1,0 +1,33 @@
+{
+  "id": "char-younger-woman",
+  "name": "younger woman",
+  "type": "character",
+  "identity": "A villager who assisted the player character, previously acting as a captor before helping to free them from icy vines.",
+  "current_status": "Returning with a bowl of clear, steaming broth to offer to the player character after helping free them from the net.",
+  "status_updated_turn": "turn-029",
+  "stable_attributes": {
+    "role": {
+      "value": "villager",
+      "inference": true,
+      "confidence": 0.9,
+      "source_turn": "turn-029"
+    },
+    "aliases": {
+      "value": [
+        "former captor"
+      ],
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-029"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "equipment": [],
+    "location": "loc-village-gathering",
+    "current_activity": "offering broth to the player character",
+    "last_updated_turn": "turn-029"
+  },
+  "first_seen_turn": "turn-029",
+  "last_updated_turn": "turn-029"
+}

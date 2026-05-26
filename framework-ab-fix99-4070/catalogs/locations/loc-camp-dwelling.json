@@ -1,0 +1,32 @@
+{
+  "id": "loc-camp-dwelling",
+  "name": "camp or dwelling",
+  "type": "location",
+  "identity": "A temporary encampment or dwelling situated in a dense forest, characterized by crude snow-covered lean-tos and a central bonfire.",
+  "current_status": "Visible ahead through thinning trees, emitting blue smoke and illuminated by a roaring bonfire, surrounded by figures in furs.",
+  "status_updated_turn": "turn-013",
+  "stable_attributes": {
+    "structure": {
+      "value": "crude snow-covered lean-tos",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    },
+    "features": {
+      "value": "roaring bonfire",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-013"
+    }
+  },
+  "volatile_state": {
+    "condition": "active",
+    "equipment": [],
+    "location": "loc-camp-dwelling",
+    "current_activity": "smoke curling into the night sky, figures cloaked in furs gathered around a bonfire",
+    "last_updated_turn": "turn-013"
+  },
+  "first_seen_turn": "turn-013",
+  "last_updated_turn": "turn-013",
+  "notes": ""
+}

@@ -1,0 +1,40 @@
+{
+  "id": "item-dark-fibrous-material",
+  "name": "dark, fibrous material",
+  "type": "item",
+  "identity": "A handful of dark, fibrous material extracted from a steaming wooden bowl by the elder, presented to the player character as an offering or test.",
+  "current_status": "Held in the player character's partially freed hand. The material has a coarse texture, an earthy scent mixed with something pungent and slightly bitter/medicinal. The elder has signaled for the player's restraints to be loosened.",
+  "status_updated_turn": "turn-025",
+  "stable_attributes": {
+    "appearance": {
+      "value": "dark, fibrous",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-019"
+    },
+    "texture": {
+      "value": "damp, sticky, coarse",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-025"
+    },
+    "smell": {
+      "value": "earthy, pungent, slightly bitter, medicinal",
+      "inference": false,
+      "confidence": 1.0,
+      "source_turn": "turn-025"
+    }
+  },
+  "volatile_state": {
+    "condition": "held by player character",
+    "equipment": [
+      "item-dark-fibrous-material"
+    ],
+    "location": "loc-elder",
+    "current_activity": "being smelled and examined by the player character",
+    "last_updated_turn": "turn-025"
+  },
+  "first_seen_turn": "turn-019",
+  "last_updated_turn": "turn-025",
+  "notes": "Unknown purpose or nature of the material; context suggests it may be a potion, offering, or test item."
+}

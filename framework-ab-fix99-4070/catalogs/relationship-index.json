@@ -1,0 +1,348 @@
+{
+  "generated_turn": "turn-025",
+  "entries": {
+    "char-elder": {
+      "entity_name": "The elder",
+      "entity_type": "character",
+      "forward": [
+        {
+          "source_id": "char-elder",
+          "source_name": "The elder",
+          "target_id": "char-player",
+          "target_name": "Player Character",
+          "current_relationship": "offering",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-023",
+          "last_updated_turn": "turn-023"
+        }
+      ],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-elder",
+          "target_name": "The elder",
+          "current_relationship": "seeking_approval_from",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-024"
+        }
+      ]
+    },
+    "char-older-figure": {
+      "entity_name": "older figure",
+      "entity_type": "character",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-older-figure",
+          "target_name": "older figure",
+          "current_relationship": "being_presented_to",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        }
+      ]
+    },
+    "char-player": {
+      "entity_name": "Player Character",
+      "entity_type": "character",
+      "forward": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-camp-dwelling",
+          "target_name": "camp or dwelling",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-lean-tos",
+          "target_name": "lean-tos",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-bonfire",
+          "target_name": "bonfire",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-cloaked-figures",
+          "target_name": "figures cloaked in furs",
+          "current_relationship": "captured_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-encampment",
+          "target_name": "encampment",
+          "current_relationship": "inside",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-captors",
+          "target_name": "captors",
+          "current_relationship": "released_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-025"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-older-figure",
+          "target_name": "older figure",
+          "current_relationship": "being_presented_to",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "char-elder",
+          "target_name": "The elder",
+          "current_relationship": "seeking_approval_from",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-024"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-villagers",
+          "target_name": "villagers",
+          "current_relationship": "held_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-017"
+        },
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "Dark Fibrous Material",
+          "current_relationship": "holding",
+          "type": "other",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-025"
+        }
+      ],
+      "reverse": [
+        {
+          "source_id": "char-elder",
+          "source_name": "The elder",
+          "target_id": "char-player",
+          "target_name": "Player Character",
+          "current_relationship": "offering",
+          "type": "social",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-023",
+          "last_updated_turn": "turn-023"
+        }
+      ]
+    },
+    "faction-captors": {
+      "entity_name": "captors",
+      "entity_type": "faction",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-captors",
+          "target_name": "captors",
+          "current_relationship": "released_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-025"
+        }
+      ]
+    },
+    "faction-cloaked-figures": {
+      "entity_name": "figures cloaked in furs",
+      "entity_type": "faction",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-cloaked-figures",
+          "target_name": "figures cloaked in furs",
+          "current_relationship": "captured_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "faction-villagers": {
+      "entity_name": "villagers",
+      "entity_type": "faction",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "faction-villagers",
+          "target_name": "villagers",
+          "current_relationship": "held_by",
+          "type": "adversarial",
+          "status": "active",
+          "direction": "incoming",
+          "first_seen_turn": "turn-017",
+          "last_updated_turn": "turn-017"
+        }
+      ]
+    },
+    "item-bonfire": {
+      "entity_name": "bonfire",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-bonfire",
+          "target_name": "bonfire",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "item-dark-fibrous-material": {
+      "entity_name": "Dark Fibrous Material",
+      "entity_type": "item",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "item-dark-fibrous-material",
+          "target_name": "Dark Fibrous Material",
+          "current_relationship": "holding",
+          "type": "other",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-021",
+          "last_updated_turn": "turn-025"
+        }
+      ]
+    },
+    "loc-camp-dwelling": {
+      "entity_name": "camp or dwelling",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-camp-dwelling",
+          "target_name": "camp or dwelling",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    },
+    "loc-encampment": {
+      "entity_name": "encampment",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-encampment",
+          "target_name": "encampment",
+          "current_relationship": "inside",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-015",
+          "last_updated_turn": "turn-015"
+        }
+      ]
+    },
+    "loc-lean-tos": {
+      "entity_name": "lean-tos",
+      "entity_type": "location",
+      "forward": [],
+      "reverse": [
+        {
+          "source_id": "char-player",
+          "source_name": "Player Character",
+          "target_id": "loc-lean-tos",
+          "target_name": "lean-tos",
+          "current_relationship": "approaching",
+          "type": "spatial",
+          "status": "active",
+          "direction": "outgoing",
+          "first_seen_turn": "turn-013",
+          "last_updated_turn": "turn-013"
+        }
+      ]
+    }
+  }
+}
