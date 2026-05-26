@@ -66,6 +66,17 @@ All non-trivial work that runs on remote hosts MUST be submitted through the tas
 - Any process that runs >1 minute or produces artifacts others need to see
 - Any work that should appear on the dashboard for visibility
 
+### Task Submission Method
+Submit tasks using the Python API locally — do NOT SSH into arclight to run raw SQL inserts:
+```python
+from saas.orchestrator.api import OrchestratorAPI
+from saas.orchestrator.models import DatabaseConfig, TaskDefinition
+
+async with OrchestratorAPI(db_config=DatabaseConfig(password="...")) as api:
+    await api.submit_task(TaskDefinition(id="...", name="...", ...))
+```
+This connects directly to arclight:5432 over LAN. `TaskDefinition` provides Pydantic validation (ID format, not_before normalization, etc.). Delegate task submission to @developer — it is NOT @b70-optimizer's job unless the task is specifically about B70 hardware administration.
+
 ### Enforcement
 If you (coordinator) catch yourself about to dispatch an agent to run a >1 minute process via raw SSH/nohup, STOP and reframe as a task submission instead. The @process-qa agent audits compliance.
 
@@ -89,6 +100,7 @@ If you (coordinator) catch yourself about to dispatch an agent to run a >1 minut
 | "Restart/stop/start LLM servers on arclight" | @b70-optimizer |
 | "Shut down / reboot arclight" | @b70-optimizer |
 | "Check server health / SSH admin tasks" | @b70-optimizer |
+| "Submit orchestrator task" | @developer (local Python API, not SSH) |
 | "Restart/stop/start LLM servers on RTX box" | @rtx4070-optimizer |
 | "Why is extraction slow / token budget" | @token-economist |
 | "Tune prompt for fewer tokens" | @token-economist + @model-optimizer (quality check) |
