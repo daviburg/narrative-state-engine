@@ -39,7 +39,7 @@
 ### Baseline (Variant A — current pipeline, no changes)
 
 - Current templates + current dedup logic, unmodified
-- Run on turns 1-30 (per ab-test-standard.md mini-set)
+- Run on turns 1-30 (per `docs/ab-test-standard.md` mini-set)
 - 3 runs at temp=0.3
 
 ### Treatment (Variant B — all 3 interventions applied)
@@ -50,10 +50,10 @@
 ### Metrics
 
 - **Entity count**: Total unique entity count should remain stable (within PASS threshold: <5% reduction from baseline) — the goal is fewer *duplicates*, not fewer entities overall
-- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/$SESSION/framework/catalogs/` (path depends on A/B variant working directory), count suspected duplicates — goal: ≤50% of baseline's suspected duplicates
+- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir <framework-dir>/catalogs` (run separately for each A/B variant output dir), count suspected duplicates (`auto_merged + flagged_for_review` from summary) — goal: ≤50% of baseline's suspected duplicates
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
-- **Manual spot-check**: 10 random entities, count false merges (should be 0-1)
-- **Quality regression**: entity coverage must not drop >5% vs baseline (Entity coverage = count of distinct narrative entities / count from ground-truth fixture (`tests/test-data/` or manual annotation of same turns))
+- **Manual spot-check**: 10 random entities, count false merges (must be 0)
+- **Quality regression**: entity coverage must not drop >5% vs baseline (Entity coverage = count of distinct narrative entities matched against `tests/fixtures/extraction-ground-truth-turns-1-30.json`)
 
 ### Success Criteria
 
@@ -67,7 +67,7 @@
 1. Implement cross-catalog dedup gate in `tools/semantic_extraction.py` (behind feature flag)
 2. Update `templates/extraction/entity-discovery.md` template with coreference examples
 3. Change the default `dedup_audit_interval` from 50 to 25 in `config/llm.json`
-4. Run A/B test per `ab-test-standard.md`
+4. Run A/B test per `docs/ab-test-standard.md`
 5. If successful, remove feature flag and merge
 
 ## Blocking Dependencies
