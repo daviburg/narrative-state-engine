@@ -40,24 +40,24 @@
 
 - Current templates + current dedup logic
 - Run on turns 1-30 (per ab-test-standard.md mini-set)
-- 3 runs at temp=0.2
+- 3 runs at temp=0.3
 
 ### Treatment (Variant B)
 
 - All 3 interventions applied simultaneously
-- Same turns 1-30, 3 runs at temp=0.2
+- Same turns 1-30, 3 runs at temp=0.3
 
 ### Metrics
 
-- **Entity count**: expect 10-20% fewer entities (duplicates removed)
-- **Dedup audit score**: run dedup_audit.py, count suspected duplicates (lower = better)
+- **Entity count**: expect 5-15% fewer entities (WARN threshold: >5%, BLOCK threshold: >15%)
+- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/concord/framework/catalogs/`, count suspected duplicates (lower = better)
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
 - **Manual spot-check**: 10 random entities, count false merges (should be 0-1)
 - **Quality regression**: entity coverage must not drop >5% vs baseline
 
 ### Success Criteria
 
-- Dedup audit finds ≤50% of baseline merge candidates
+- Dedup audit finds ≤50% of baseline suspected duplicates
 - Zero false merges in spot-check
 - Entity coverage within 5% of baseline
 - Wall-clock time within 120% of baseline (dedup gate adds overhead)
