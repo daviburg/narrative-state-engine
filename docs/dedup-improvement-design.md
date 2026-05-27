@@ -49,8 +49,8 @@
 
 ### Metrics
 
-- **Entity count**: entity count remains within the PASS threshold (<5% reduction from baseline)
-- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/$SESSION/framework/catalogs/` (path depends on A/B variant working directory), count suspected duplicates — goal: ≤50% of baseline suspected duplicates
+- **Entity count**: Total unique entity count should remain stable (within PASS threshold: <5% reduction from baseline) — the goal is fewer *duplicates*, not fewer entities overall
+- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/$SESSION/framework/catalogs/` (path depends on A/B variant working directory), count suspected duplicates — goal: ≤50% of baseline's suspected duplicates
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
 - **Manual spot-check**: 10 random entities, count false merges (should be 0-1)
 - **Quality regression**: entity coverage must not drop >5% vs baseline (Entity coverage = count of distinct narrative entities / count from ground-truth fixture (`tests/test-data/` or manual annotation of same turns))
