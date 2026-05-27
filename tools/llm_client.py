@@ -105,10 +105,12 @@ class LLMClient:
 
         if overrides:
             self.config.update(overrides)
-            # When base_url is explicitly overridden, drop base_urls so the
-            # caller's single-endpoint intent is honoured instead of the
-            # multi-endpoint round-robin list from the config file.
-            if "base_url" in overrides:
+            # When base_url is explicitly overridden WITHOUT base_urls, drop
+            # base_urls so the caller's single-endpoint intent is honoured
+            # instead of the multi-endpoint round-robin list from the config
+            # file.  When overrides also contain base_urls (e.g. internal
+            # fallback init passing a full merged config), preserve them.
+            if "base_url" in overrides and "base_urls" not in overrides:
                 self.config.pop("base_urls", None)
 
         try:
