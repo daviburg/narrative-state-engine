@@ -116,6 +116,7 @@ Completed:
 Remaining work:
 - CLI `--provider` override for per-run provider selection
 - Quality validation of `qwen2.5:7b` as a faster alternative to 14B
+- **Quality Evaluation Pipeline** (epic #97): Automated LLM-as-judge scoring, composite quality metric, and dedup blocking gate for model-vs-model comparisons. The methodology is defined in `docs/model-eval-standard.md` (#430). Complements `docs/ab-test-standard.md` (template changes) by providing an equivalent standard for model selection decisions.
 
 Design implications for earlier phases:
 - Keep context loading modular (catalog-first) so smaller local models can handle targeted tasks
