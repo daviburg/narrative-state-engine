@@ -77,11 +77,15 @@ from saas.orchestrator.api import OrchestratorAPI
 from saas.orchestrator.models import DatabaseConfig, TaskDefinition
 
 async with OrchestratorAPI(db_config=DatabaseConfig(password=os.environ["NSE_ORCH_PASSWORD"])) as api:
-    await api.submit_task(TaskDefinition(id="...", name="...", ...))
+    await api.submit_task(TaskDefinition(
+        id="eval-run-42",
+        name="Run benchmark",
+        # add remaining TaskDefinition fields here
+    ))
 ```
 > **Never embed credentials in PRs, chat messages, or prompt files.** Use `NSE_ORCH_PASSWORD` (or the appropriate env var) and keep secrets in your shell environment or a secrets manager.
 
-This connects directly to arclight:5432 over LAN. `TaskDefinition` provides Pydantic validation (ID format, not_before normalization, etc.). Delegate task submission to @developer — it is NOT @b70-optimizer's job unless the task is specifically about B70 hardware administration.
+This connects to the orchestrator database over LAN. `TaskDefinition` provides Pydantic validation (ID format, not_before normalization, etc.). Delegate task submission to @developer — it is NOT @b70-optimizer's job unless the task is specifically about B70 hardware administration.
 
 ### Enforcement
 If you (coordinator) catch yourself about to dispatch an agent to run a >1 minute process via raw SSH/nohup, STOP and reframe as a task submission instead. The @process-qa agent audits compliance.
