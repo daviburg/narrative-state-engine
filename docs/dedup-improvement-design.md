@@ -49,11 +49,11 @@
 
 ### Metrics
 
-- **Entity count**: expect 5-15% fewer entities (WARN threshold: >5%, BLOCK threshold: >15%)
-- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/<session>/framework/catalogs/`, count suspected duplicates (lower = better)
+- **Entity count**: entity count remains within the PASS threshold (<5% reduction from baseline)
+- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/$SESSION/framework/catalogs/` (path depends on A/B variant working directory), count suspected duplicates — goal: ≤50% of baseline suspected duplicates
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
 - **Manual spot-check**: 10 random entities, count false merges (should be 0-1)
-- **Quality regression**: entity coverage must not drop >5% vs baseline (entity coverage = count of distinct narrative entities identified ÷ count from manual ground-truth annotation of same turns)
+- **Quality regression**: entity coverage must not drop >5% vs baseline (Entity coverage = count of distinct narrative entities / count from ground-truth fixture (`tests/test-data/` or manual annotation of same turns))
 
 ### Success Criteria
 
@@ -65,7 +65,7 @@
 ## Implementation Sequence
 
 1. Implement cross-catalog dedup gate in `tools/semantic_extraction.py` (behind feature flag)
-2. Update `entity-discovery.md` template with coreference examples
+2. Update `templates/extraction/entity-discovery.md` template with coreference examples
 3. Change the default `dedup_audit_interval` from 50 to 25 in `config/llm.json`
 4. Run A/B test per `ab-test-standard.md`
 5. If successful, remove feature flag and merge
