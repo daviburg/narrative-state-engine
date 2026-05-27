@@ -72,16 +72,21 @@ The orchestrator API (`saas/`) lives in **narrative-state-engine-private**, not 
 
 From the private repo working directory (`narrative-state-engine-private`):
 ```python
+import asyncio
 import os
 from saas.orchestrator.api import OrchestratorAPI
 from saas.orchestrator.models import DatabaseConfig, TaskDefinition
 
-async with OrchestratorAPI(db_config=DatabaseConfig(password=os.environ["NSE_ORCH_PASSWORD"])) as api:
-    await api.submit_task(TaskDefinition(
-        id="eval-run-42",
-        name="Run benchmark",
-        # add remaining TaskDefinition fields here
-    ))
+async def main():
+    config = DatabaseConfig(password=os.environ["NSE_ORCH_PASSWORD"])
+    async with OrchestratorAPI(db_config=config) as api:
+        await api.submit_task(TaskDefinition(
+            id="eval-run-42",
+            name="Run benchmark",
+            # add remaining TaskDefinition fields here
+        ))
+
+asyncio.run(main())
 ```
 > **Never embed credentials in PRs, chat messages, or prompt files.** Use `NSE_ORCH_PASSWORD` (or the appropriate env var) and keep secrets in your shell environment or a secrets manager.
 
