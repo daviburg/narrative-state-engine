@@ -39,3 +39,54 @@ framework-local/
 tools/framework-test/
 framework-test/
 test-data/
+
+# Scratch/diagnostic scripts (underscore-prefixed)
+_*.py
+_*.txt
+_*.sh
+_*.sql
+_*.json
+_*.log
+_*.pid
+
+# CI output files
+ci-*.json
+ci-*.txt
+checks*.json
+
+# Temp data / debug output
+output.json
+output.txt
+results.json
+status.json
+comments.json
+simple_output.txt
+extraction_output.txt
+
+# PR and diff data
+*.diff
+pr_*.json
+pr[0-9]*.json
+
+# Test output
+pytest-*.txt
+test_output.txt
+test_results.txt
+test_additions.txt
+
+# Temp helper scripts
+add_tests*.py
+fix_*.py
+find_*.py
+
+# Working/scoring directories (orchestrator, A/B, eval)
+score-*/
+framework-ab-*/
+framework-eval-*/
+
+# Misc temp files
+*.bak
+*.tmp
+error.log
+setup_pg.sh
+*.task-prompt.md
