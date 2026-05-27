@@ -479,6 +479,9 @@ dispatch across both endpoints:
 
 - `base_url` is kept for backward compatibility and used by Ollama paths;
   `base_urls` takes precedence for the OpenAI client pool.
+- When a runtime `base_url` override is provided (e.g., via `--base-url` on the
+  CLI), it suppresses the `base_urls` multi-endpoint list entirely. The single
+  override URL takes precedence, forcing single-endpoint routing.
 - With `parallel_workers: 4` and 2 endpoints, each GPU receives ~2 concurrent
   requests on average, activating the server-side dynamic batching for higher
   aggregate throughput.

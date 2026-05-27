@@ -601,3 +601,61 @@ class TestFallbackProvider:
                     client.extract_json(
                         system_prompt="sys", user_prompt="user"
                     )
+
+
+# ---------------------------------------------------------------------------
+# base_url override suppresses base_urls (#434)
+# ---------------------------------------------------------------------------
+
+
+class TestBaseUrlOverrideSuppressesBaseUrls:
+    """Verify that a runtime base_url override drops base_urls multi-endpoint."""
+
+    def test_override_base_url_clears_base_urls(self, tmp_path):
+        """When base_url is passed as an override, base_urls is removed."""
+        cfg = _write_config(tmp_path, overrides={
+            "base_urls": [
+                "http://server-a:8000/v1",
+                "http://server-b:8001/v1",
+            ],
+        })
+        client = LLMClient(
+            config_path=cfg,
+            overrides={"base_url": "http://override:9000/v1"},
+        )
+        # Should use only the single override endpoint
+        assert client._base_urls == ["http://override:9000/v1"]
+        assert len(client._clients) == 1
+
+    def test_no_override_preserves_base_urls(self, tmp_path):
+        """Without a base_url override, base_urls multi-endpoint is used."""
+        cfg = _write_config(tmp_path, overrides={
+            "base_urls": [
+                "http://server-a:8000/v1",
+                "http://server-b:8001/v1",
+            ],
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._base_urls == [
+            "http://server-a:8000/v1",
+            "http://server-b:8001/v1",
+        ]
+        assert len(client._clients) == 2
+
+    def test_override_other_key_keeps_base_urls(self, tmp_path):
+        """Overriding a non-base_url key does not drop base_urls."""
+        cfg = _write_config(tmp_path, overrides={
+            "base_urls": [
+                "http://server-a:8000/v1",
+                "http://server-b:8001/v1",
+            ],
+        })
+        client = LLMClient(
+            config_path=cfg,
+            overrides={"model": "different-model"},
+        )
+        assert client._base_urls == [
+            "http://server-a:8000/v1",
+            "http://server-b:8001/v1",
+        ]
+        assert len(client._clients) == 2
