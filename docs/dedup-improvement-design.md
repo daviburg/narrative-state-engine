@@ -36,24 +36,24 @@
 
 ## A/B Test Design
 
-### Baseline (Variant A)
+### Baseline (Variant A — current pipeline, no changes)
 
-- Current templates + current dedup logic
+- Current templates + current dedup logic, unmodified
 - Run on turns 1-30 (per ab-test-standard.md mini-set)
 - 3 runs at temp=0.3
 
-### Treatment (Variant B)
+### Treatment (Variant B — all 3 interventions applied)
 
-- All 3 interventions applied simultaneously
+- All 3 interventions applied simultaneously: cross-catalog dedup gate, strengthened coreference examples, reduced dedup interval (50 → 25)
 - Same turns 1-30, 3 runs at temp=0.3
 
 ### Metrics
 
 - **Entity count**: expect 5-15% fewer entities (WARN threshold: >5%, BLOCK threshold: >15%)
-- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/concord/framework/catalogs/`, count suspected duplicates (lower = better)
+- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir sessions/<session>/framework/catalogs/`, count suspected duplicates (lower = better)
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
 - **Manual spot-check**: 10 random entities, count false merges (should be 0-1)
-- **Quality regression**: entity coverage must not drop >5% vs baseline
+- **Quality regression**: entity coverage must not drop >5% vs baseline (entity coverage = count of distinct narrative entities identified ÷ count from manual ground-truth annotation of same turns)
 
 ### Success Criteria
 
@@ -67,7 +67,7 @@
 1. Implement cross-catalog dedup gate in `tools/semantic_extraction.py` (behind feature flag)
 2. Update `entity-discovery.md` template with coreference examples
 3. Change the default `dedup_audit_interval` from 50 to 25 in `config/llm.json`
-4. Run A/B test per `docs/ab-test-standard.md`
+4. Run A/B test per `ab-test-standard.md`
 5. If successful, remove feature flag and merge
 
 ## Blocking Dependencies
