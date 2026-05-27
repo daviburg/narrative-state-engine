@@ -4,13 +4,13 @@
 
 - The 30-turn Qwen3.6-35B-A3B evaluation scored **6/10 on deduplication** (lowest dimension)
 - Duplicates arise from: coreference failures (same entity with different surface forms), cross-catalog blind spots (entity vs location overlap), and late dedup (duplicates already have detail extraction invested)
-- Related issues: #337 (14 duplicate locations), #421 (same-turn dedup), #420 (body-part filter misses)
+- Related issues: #337 (14 duplicate locations), #421 (same-turn dedup causes ~30% character regression), #420 (body-part filter causes faction/event regressions)
 
 ## Proposed Changes (3 interventions)
 
 ### 1. Cross-Catalog Pre-Detail Dedup Gate
 
-- **Where**: Between phase 1 (entity-discovery) and phase 2 (entity-detail) in `semantic_extraction.py`
+- **Where**: Between phase 1 (entity-discovery) and phase 2 (entity-detail) in `tools/semantic_extraction.py`
 - **What**: After discovery produces candidate entities for a turn, run a dedup check against ALL existing catalog entries (entities AND locations) BEFORE requesting detail extraction
 - **Why**: Currently dedup runs AFTER detail extraction — wasting LLM calls on duplicates and making merge harder
 - **Mechanism**: Fuzzy name match (token overlap) + type compatibility check + optional LLM confirmation for borderline cases
@@ -50,7 +50,7 @@
 ### Metrics
 
 - **Entity count**: expect 10-20% fewer entities (duplicates removed)
-- **Dedup audit score**: run dedup_audit.py, count merge candidates found (lower = better)
+- **Dedup audit score**: run dedup_audit.py, count suspected duplicates (lower = better)
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
 - **Manual spot-check**: 10 random entities, count false merges (should be 0-1)
 - **Quality regression**: entity coverage must not drop >5% vs baseline
@@ -64,9 +64,9 @@
 
 ## Implementation Sequence
 
-1. Implement cross-catalog dedup gate in `semantic_extraction.py` (behind feature flag)
+1. Implement cross-catalog dedup gate in `tools/semantic_extraction.py` (behind feature flag)
 2. Update `entity-discovery.md` template with coreference examples
-3. Make dedup interval configurable in `config/llm.json` (default 25)
+3. Change the default `dedup_audit_interval` from 50 to 25 in `config/llm.json`
 4. Run A/B test per `docs/ab-test-standard.md`
 5. If successful, remove feature flag and merge
 
@@ -78,7 +78,7 @@
 ## Related Issues
 
 - #337 — discovery creates 14 duplicate locations
-- #421 — same-turn dedup causes duplicate ID
-- #420 — body-part filter causes missed merges
+- #421 — same-turn dedup causes ~30% character regression
+- #420 — body-part filter causes faction/event regressions
 - #386 — wiki data quality issues phase 1
 - #413 — migrate hardcoded word lists to data templates
