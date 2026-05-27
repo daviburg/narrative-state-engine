@@ -49,11 +49,11 @@
 
 ### Metrics
 
-- **Entity count**: Total unique entity count should remain stable (within PASS threshold: <5% reduction from baseline) — the goal is fewer *duplicates*, not fewer entities overall
-- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir <framework-dir>/catalogs` (run separately for each A/B variant output dir), count suspected duplicates (`auto_merged + flagged_for_review` from summary) — goal: ≤50% of baseline's suspected duplicates
+- **Entity count**: Total unique entity count should remain stable (within PASS threshold: Δ ≤ 5% loss from baseline) — the goal is fewer *duplicates*, not fewer entities overall
+- **Dedup audit score**: `python tools/dedup_audit.py --catalog-dir framework-ab-{a,b}-runN/catalogs` (run separately for each A/B variant output dir, e.g. `framework-ab-a-run1/catalogs`, `framework-ab-b-run1/catalogs`), count suspected duplicates (`auto_merged + flagged_for_review` from summary) — goal: ≤50% of baseline's suspected duplicates
 - **LLM calls per turn**: expect 15-25% fewer (detail calls saved)
 - **Manual spot-check**: 10 random entities, count false merges (must be 0)
-- **Quality regression**: entity coverage must not drop >5% vs baseline (Entity coverage = count of distinct narrative entities matched against `tests/fixtures/extraction-ground-truth-turns-1-30.json`)
+- **Quality regression**: entity coverage must not drop >5% vs baseline (Entity coverage = total catalog entity count across all types — characters, locations, items, factions, events — measured via catalog file counts per `docs/ab-test-standard.md` §3.1; `tests/fixtures/extraction-ground-truth-turns-1-30.json` is for manual spot-check review only and is not machine-counted)
 
 ### Success Criteria
 
