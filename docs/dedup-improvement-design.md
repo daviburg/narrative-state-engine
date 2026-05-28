@@ -26,6 +26,13 @@
   - Descriptor shifts: "the hooded figure" → "Zara" (identity revealed)
 - **Why**: The model produces duplicates when surface forms change between turns; explicit examples in the template teach it to use `existing_id` instead of creating new entries
 - **Expected impact**: 20-40% fewer duplicate discoveries at source
+- **Status**: ✅ Implemented in PR #443. Six coreference patterns are now documented in the template's rules section:
+  - Title/rank changes (e.g. "the guard" → "Captain Harland")
+  - Identity reveals (e.g. "the hooded figure" → "Zara")
+  - Location aliases (e.g. "the tavern" → "The Rusty Nail" → "the inn")
+  - Group vs. subset (e.g. "the kobolds" faction → "three kobold scouts")
+  - Shortened names (e.g. "the elder shaman" → "the elder" → "the shaman")
+  - Definite descriptions referring to a previously catalogued place
 
 ### 3. Reduce Periodic Dedup Interval (50 → 25 turns)
 

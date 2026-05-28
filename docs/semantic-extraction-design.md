@@ -496,6 +496,19 @@ The agent returns:
 
 The Entity Detail Extractor then adds "The Shaman" as an alias and optionally proposes renaming the display `name` field to "The Shaman" (the script layer handles renaming while preserving the stable `id`).
 
+The discovery template in `templates/extraction/entity-discovery.md` provides explicit coreference guidance covering the most common RPG surface-form variation patterns:
+
+| Pattern | Example |
+|---|---|
+| Title/rank change | "the guard" in turn 5 → "Captain Harland" in turn 12 |
+| Identity reveal | "the hooded figure" → "Zara" once unmasked |
+| Location alias | "the tavern" → "The Rusty Nail" → "the inn" |
+| Group vs. subset | "the kobolds" (faction) → "three kobold scouts" |
+| Shortened name | "the elder shaman" → "the elder" → "the shaman" |
+| Definite description | "the cave" in turn 20 referring to the cave from turn 15 |
+
+In all cases the agent sets `is_new: false` and supplies the `existing_id` from the known-entities list instead of creating a duplicate entry. This guidance was added in PR #443 as part of the deduplication improvement plan (see `docs/dedup-improvement-design.md`).
+
 ---
 
 ## 8. Module Structure
