@@ -1,3 +1,0 @@
-# turn-073 — DM
-
-You settle back down beside him, the warmth from your own bowl of stew a pleasant counterpoint to the morning chill. He eats slowly, deliberately, his movements economical even in the act of consumption. As you gaze at him, a warmth spreads through you, not just from the fire, but from the quiet connection you feel. You meet his eyes, letting your own affection show in their depth. He pauses, a piece of bread halfway to his mouth, and for a fleeting moment, his dark eyes soften, losing their usual guarded intensity. A faint, almost bashful color touches his high cheekbones, and he quickly averts his gaze, focusing intensely on his stew, though a subtle shift in his posture suggests he's more aware of your proximity than before.

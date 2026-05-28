@@ -1,3 +1,0 @@
-# turn-031 — DM
-
-You dip your head in a gesture of sincere gratitude, accepting the warm wooden bowl from the young woman. The steam rising from the broth carries a subtle, savory aroma, promising comfort. Finding a spot near the crackling fire, you settle down, the heat beginning to seep into your chilled limbs, chasing away some of the biting cold. You slowly sip the broth; it's simple but surprisingly rich, warming you from the inside out and easing some of the tension from your shoulders. As you drink, a faint sense of strength begins to return. The villagers around the fire continue their quiet work, but their stares are now less hostile, more openly curious.

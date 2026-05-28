@@ -1,3 +1,0 @@
-# turn-262 — DM
-
-The short-hafted hammer-axe feels solid in your grasp, a reassuring weight. You turn it over, testing its balance, the smooth, worn wood cool against your palm. It is not a weapon of brute force, but a tool honed for precision. You practice a few subtle movements: a swift, upward block, a short, controlled swing, a deft motion to catch an unseen snag. It moves close to your body, an extension of your intent, without the wide, aggressive arcs of a true battle-axe. This is for certainty in the unknown, a silent promise of utility and defense against the myriad unforeseen challenges the path ahead may hold. The cold dawn light begins to paint the eastern sky, signaling the time of departure.

@@ -1,3 +1,0 @@
-# turn-023 — DM
-
-Your partially freed wrist allows for limited movement, but your fingers are still stiff from the cold and the awkward angle of your bindings. You try to grasp the dark, fibrous material the elder holds out, but your movements are clumsy. The elder watches your struggle with an unreadable expression, his hand remaining steady. You manage to brush against the substance - it's damp and somewhat sticky, with a faint, earthy smell, but in your current state, you cannot tell if it is meant for consumption, for some ritualistic marking, or something else entirely. The elder makes a low sound in his throat, a hint of impatience perhaps, and nudges the bowl slightly closer to your fumbling hand.

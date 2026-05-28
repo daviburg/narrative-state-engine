@@ -53,14 +53,14 @@ Choose the backend based on model availability and workload. Advise other agents
 
 ## Server Administration
 
-- **Host**: arclight (192.168.10.169)
+- **Host**: arclight (`$ARCLIGHT_HOST`)
 - **SSH accounts**: `nse-agent` (no sudo), `david` (sudo, requires `-t` for TTY)
 - **LLM server binary**: `/home/nse-agent/llama-b9127-vulkan/llama-b9127/llama-server`
 - **Model path**: `/home/nse-agent/models/Qwen3.5-9B-Q4_K_M.gguf`
 - **Ports**: 8000 (Vulkan0), 8001 (Vulkan1)
 - **Launch flags**: `-m <model> --port <port> -np 1 --reasoning off --reasoning-format none -c 32768 --host 0.0.0.0 -ngl 999 --split-mode none --device Vulkan{0,1}`
 - **Shutdown**: `ssh -t david@arclight "sudo shutdown now"` (requires interactive password)
-- **Health check**: `Invoke-RestMethod -Uri "http://192.168.10.169:{8000,8001}/health"`
+- **Health check**: `Invoke-RestMethod -Uri "http://${ARCLIGHT_HOST}:{8000,8001}/health"`
 
 ## Output Format
 

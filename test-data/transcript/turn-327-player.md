@@ -1,3 +1,0 @@
-# turn-327 — PLAYER
-
-"Woman to match his fire, I muse thoughtfully, you are precisely right Kael. You know these lands and these people since your birth, better than I ever could. Please, go find such woman, or maybe a few, and bring them back here to our settlement. Not just so we may find one to continue's Gorok's mountain of strength, but also so I may form something else uniquely new and powerful. I once read about a tribe of all female warriors whom none could match how fierce they are. Their cool in battle, their strategic mind, their unity, that would be a powerful asset to our tribe. What say you?"

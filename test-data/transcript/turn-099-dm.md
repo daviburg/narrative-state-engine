@@ -1,3 +1,0 @@
-# turn-099 — DM
-
-As his body relaxes further under your touch, his eyes still closed in weary contentment, you lean in. Gently, you press your lips to his, a soft, brief peck that is over almost as soon as it begins. His eyes flutter open, dark and surprised, but not displeased. A slow blush rises on his cheeks, and for a moment, he is utterly still, caught in the unexpected intimacy. He does not pull away, but a soft, almost imperceptible tremor passes through him before he quietly clears his throat, opening his eyes fully and looking at you with a mix of surprise and a dawning, tender understanding.

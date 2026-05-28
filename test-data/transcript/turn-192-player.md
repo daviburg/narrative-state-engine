@@ -1,3 +1,0 @@
-# turn-192 — PLAYER
-
-The trail fades. Observation has taught me enough. At dawn I kneel at the eastern boundary and place my hand upon the snow where the sterile energy lingers. I feed a careful thread of the silent star's power into the fading arcane residue -- not to command it, but to ask it a question. If it reacts, I will know the world watches back. If it remains inert, then in three days' time I will lead a small expedition eastward -- two hunters and one apprentice -- to follow the trail toward the mountains and uncover its source. The time for preparation ends. The time for discovery begins. Whatever answers, this moment marks the first true crossing of our tribe beyond isolation.
