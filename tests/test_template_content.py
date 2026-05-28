@@ -28,3 +28,22 @@ class TestEntityDiscoveryTemplate:
     def test_compound_term_warning(self):
         content = _load_template("entity-discovery.md")
         assert "compound term" in content.lower() or "SUBSTRING" in content
+
+    def test_coreference_examples_present(self):
+        """Coreference examples must stay in the template to guide dedup behaviour."""
+        content = _load_template("entity-discovery.md")
+        assert "Coreference examples" in content, (
+            "entity-discovery.md is missing the 'Coreference examples' section"
+        )
+
+    def test_coreference_identity_reveal_example(self):
+        content = _load_template("entity-discovery.md")
+        assert "Identity reveals" in content or "identity reveal" in content.lower(), (
+            "entity-discovery.md is missing the identity-reveal coreference example"
+        )
+
+    def test_coreference_location_alias_example(self):
+        content = _load_template("entity-discovery.md")
+        assert "Location aliases" in content or "location alias" in content.lower(), (
+            "entity-discovery.md is missing the location-alias coreference example"
+        )

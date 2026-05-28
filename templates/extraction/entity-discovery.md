@@ -80,6 +80,13 @@ Rules:
 - Omit generic background elements unless they act as a faction.
 - Confidence below 0.5 = too vague to catalog.
 - Coreference: match mentions to known entities by name, alias, role, or ID stem. Set is_new=false with existing_id.
+- **Coreference examples** — common RPG patterns where the SAME entity appears with different surface forms across turns. In each case, use existing_id to match:
+  - Title/rank changes: "the guard" in turn 5 → "Captain Harland" in turn 12 = same person. Use existing_id.
+  - Identity reveals: "the hooded figure" → "Zara" when identity is revealed = same character. Use existing_id only; the entity-detail phase updates the catalog name/identity.
+  - Location aliases: "the tavern" → "The Rusty Nail" → "the inn" = same place. Use existing_id of the first occurrence.
+  - Group vs. subset: "the kobolds" (faction) → "three kobold scouts" (subset) = reference to existing faction, NOT a new entity.
+  - Shortened names: "the elder shaman" → "the elder" → "the shaman" in later turns = same character. Use existing_id.
+  - Definite descriptions: "the cave" in turn 20 likely refers to the same cave from turn 15 if context hasn't shifted location. Check known entities before creating a new one.
 - NEVER create entities for pronouns (he/she/they/it). Resolve to known entity or skip.
 - Items: match shorter names to known items (e.g., "the spear" → existing "crude wood-hafted spear").
 - proposed_id and existing_id are mutually exclusive.
