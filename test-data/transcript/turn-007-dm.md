@@ -1,3 +1,0 @@
-# turn-007 — DM
-
-You cease struggling against the icy vines, letting your body go limp within the constricting net. The pain in your shoulder, though dulled by the cold, remains a stark reminder of your predicament. The forest remains eerily silent for a moment, and then, the crunch of snow heralds movement. Two figures emerge from the shadows of the pines, their forms indistinct in the dim light but clearly human-sized. They move with a practiced stealth, carrying crude, wood-hafted spears, their faces obscured by furs and leather. One of them gestures with his spear towards you, then speaks in a low, guttural language you don't understand, but the intent is clear: you are their captive.

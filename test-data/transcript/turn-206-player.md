@@ -1,3 +1,0 @@
-# turn-206 — PLAYER
-
-The boundary retreats. The mountain answers in cycles, not words. I do not attempt another surge of power. Instead, I recreate what it understands. Using my staff, I carve a precise hexagon into the snow mirroring the melt pattern we observed. At each point, I place a small shard of ice. At the center, I set the wrapped fragment. Then I wait for the next distant pulse. When the mountain beats, I release a measured pulse of pact energy -- not stronger, not weaker -- matching its rhythm as closely as I can. Not a call. A reply. If the construct observes patterns, let it see intention through symmetry rather than voice.
