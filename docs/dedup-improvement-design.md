@@ -12,7 +12,7 @@
 
 - **Where**: Between phase 1 (entity-discovery) and phase 2 (entity-detail) in `tools/semantic_extraction.py`
 - **What**: After discovery produces candidate entities for a turn, run a dedup check against ALL existing catalog entries (entities AND locations) BEFORE requesting detail extraction
-- **Why**: Currently dedup runs AFTER detail extraction — wasting LLM calls on duplicates and making merge harder
+- **Why**: While within-turn dedup (`_within_turn_dedup`) already runs before detail extraction for same-turn `is_new` string-similarity cases, cross-catalog dedup (against existing catalog entries from prior turns) and periodic/post-batch dedup both run AFTER detail extraction — wasting LLM calls on cross-turn duplicates and making merge harder
 - **Mechanism**: Fuzzy name match (token overlap) + type compatibility check + optional LLM confirmation for borderline cases
 - **Expected impact**: Prevent 30-50% of duplicates from ever getting detailed, saving tokens and improving quality
 
