@@ -82,7 +82,7 @@ Rules:
 - Coreference: match mentions to known entities by name, alias, role, or ID stem. Set is_new=false with existing_id.
 - **Coreference examples** — common RPG patterns where the SAME entity appears with different surface forms across turns. In each case, use existing_id to match:
   - Title/rank changes: "the guard" in turn 5 → "Captain Harland" in turn 12 = same person. Use existing_id.
-  - Identity reveals: "the hooded figure" → "Zara" when identity is revealed = same character. Use existing_id; update description with revealed name.
+  - Identity reveals: "the hooded figure" → "Zara" when identity is revealed = same character. Use existing_id only; the entity-detail phase updates the catalog name/identity.
   - Location aliases: "the tavern" → "The Rusty Nail" → "the inn" = same place. Use existing_id of the first occurrence.
   - Group vs. subset: "the kobolds" (faction) → "three kobold scouts" (subset) = reference to existing faction, NOT a new entity.
   - Shortened names: "the elder shaman" → "the elder" → "the shaman" in later turns = same character. Use existing_id.
