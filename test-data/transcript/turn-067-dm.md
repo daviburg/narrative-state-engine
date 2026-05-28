@@ -1,3 +1,0 @@
-# turn-067 — DM
-
-You help the women carry the last of the water-filled buckets back to the main camp, your hands stiff from the cold but satisfied by the completed task. The morning air is now filled with the general sounds of the encampment stirring fully to life. As you look around, your gaze falls on last night's hunter. He is standing near the main bonfire, sharpening his spear with a silent, focused intensity. His back is to you initially, but as you approach, he turns, perhaps sensing your presence. You offer him a soft, warm smile. A flicker of recognition crosses his stoic face, and the corners of his mouth twitch almost imperceptibly, a hint of a reciprocal smile that quickly vanishes as he returns his attention to his weapon.

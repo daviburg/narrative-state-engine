@@ -183,7 +183,7 @@ a `"fallback"` block inside `config/llm.json`:
 ```json
 {
   "provider": "openai",
-  "base_url": "http://192.168.10.169:8000/v1",
+  "base_url": "http://localhost:8000/v1",
   "model": "qwen3-8b-int4-ov",
   "timeout_seconds": 600,
   "retry_attempts": 3,
