@@ -52,6 +52,6 @@ jobs:
             if (!botComment) {
               await github.rest.issues.createComment({
                 owner, repo, issue_number: pr_number,
-                body: `## ⚠️ A/B Test Required\n\nThis PR modifies extraction behavior (files in \`templates/extraction/\` or extraction tools). Per [A/B test standard](docs/ab-testing.md), extraction quality changes require empirical validation before merge.\n\n**Required before merge:**\n- [ ] A/B test results posted as a PR comment\n- [ ] ≥3 paired runs with both variants\n- [ ] Entity count comparison with acceptable variance\n\nSee the [A/B testing guide](docs/ab-testing.md) for details.`
+                body: `## ⚠️ A/B Test Required\n\nThis PR modifies extraction behavior (files in \`templates/extraction/\` or extraction tools). Per the [A/B test standard](https://github.com/daviburg/narrative-state-engine/blob/main/docs/ab-test-standard.md), extraction quality changes require empirical validation before merge.\n\n**Required before merge:**\n- [ ] A/B test results posted as a PR comment\n- [ ] ≥3 paired runs per variant (only if temperature > 0; 1 run suffices at temp 0)\n- [ ] Entity count comparison with acceptable variance\n\nSee the [A/B test checklist](https://github.com/daviburg/narrative-state-engine/blob/main/docs/ab-test-checklist.md) for details.`
               });
             }
