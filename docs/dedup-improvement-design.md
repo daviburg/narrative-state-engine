@@ -73,6 +73,92 @@
 
 1. Implement cross-catalog dedup gate in `tools/semantic_extraction.py` (behind feature flag)
 2. Update `templates/extraction/entity-discovery.md` template with coreference examples
+3. ~~Change the default `dedup_audit_interval` from 50 to 25~~ — closed without merging
+4. Run A/B test per `docs/ab-test-standard.md`
+5. Evaluate combined results with template fix as new baseline
+
+## A/B Test Results (100 turns, temp=0, Qwen3.6-35B-A3B-UD-Q4_K_M)
+
+### Baseline (Variant A — eval-qwen36-100t-temp0-clean)
+
+| Metric | Value |
+|--------|-------|
+| Characters | 14 |
+| Locations | 6 |
+| Items | 6 |
+| Factions | 2 |
+| Events | 45 |
+| Dedup candidates (post-hoc) | 2 (both correctly discarded) |
+| In-flight merges | 1 (item-carving-tool + item-tool) |
+| Failures | 0/100 |
+| Runtime | 1h 31m |
+
+### Intervention #2 — Coreference Template Examples ✅ MERGED (PR #443)
+
+| Metric | Baseline | Intervention #2 | Delta |
+|--------|----------|-----------------|-------|
+| Characters | 14 | 13 | -1 (removed vague duplicates) |
+| Locations | 6 | 5 | -1 (consolidated aliases) |
+| Items | 6 | 8 | +2 (more specific names) |
+| Factions | 2 | 2 | 0 |
+| Events | 45 | 51 | +6 (+13%) |
+| Dedup candidates | 2 | 1 | -1 (cleaner) |
+| Runtime | 1h31m | 1h08m | -23min |
+
+**Key wins:** Fixed the elder/older-figure dedup failure, removed vague entities
+(special-someone, unknown-captors), improved item/location naming specificity.
+
+### Combined Eval Results (template fix on main as baseline)
+
+After merging the coreference template fix (PR #443), interventions #1 and #3 were
+re-evaluated against the new baseline to determine incremental value.
+
+| Metric | Main (template fix) | + Gate (#1) | + Interval-25 (#3) |
+|--------|---------------------|-------------|---------------------|
+| Characters | 13 | 10 (-3) | 12 (-1) |
+| Locations | 5 | 7 (+2) | 6 (+1) |
+| Items | 8-9 | 10 (+2) | 8 (-1) |
+| Factions | 2-3 | 3 (0) | 3 (+1) |
+| Events | 47-48 | 50 (+3) | 51 (+3) |
+| Duration | ~1h47m | ~1h52m | ~1h45m |
+
+**Findings:**
+
+- **Cross-catalog gate (#1)**: Removes 3 characters (13→10) vs the template-fixed
+  baseline — likely over-deduplicating now that the coreference template fix handles
+  the root cause. Net +1 total entities but character loss is a regression signal.
+- **Interval reduction (#3)**: Negligible impact — -1 character, net zero total
+  entities, +4min runtime overhead. No meaningful benefit.
+
+## Decision
+
+Both interventions #1 and #3 **closed without merging** (branches deleted).
+
+The coreference template fix (PR #443, merged) was the dominant improvement. The
+cross-catalog gate risks over-deduplication when combined with the template fix. The
+interval reduction provides no meaningful benefit.
+
+## Final Status
+
+**Dedup improvement work COMPLETE.** Only the template fix (intervention #2, PR #443)
+was merged. The remaining interventions demonstrated no incremental value on top of
+the template fix and were abandoned.
+
+## Related Issues
+
+- #337 — discovery creates 14 duplicate locations
+- #421 — same-turn dedup causes ~30% character regression
+- #420 — body-part filter causes faction/event regressions
+- #386 — wiki data quality issues phase 1
+- #413 — migrate hardcoded word lists to data templates
+- Zero false merges in spot-check
+- Entity coverage within 5% of baseline
+- Wall-clock time within 120% of baseline (dedup gate adds overhead)
+
+## Implementation Sequence
+
+1. Implement cross-catalog dedup gate in `tools/semantic_extraction.py` (behind feature flag)
+2. Update `templates/extraction/entity-discovery.md` template with coreference examples
 3. Change the default `dedup_audit_interval` from 50 to 25 in `config/llm.json`
 4. Run A/B test per `docs/ab-test-standard.md`
 5. If successful, remove feature flag and merge
