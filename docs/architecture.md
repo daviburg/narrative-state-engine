@@ -348,6 +348,24 @@ The LLM extraction templates (`templates/extraction/*.md`) are the correct place
 
 ---
 
+### Source-Quality First (Prompt and Model Before Heuristics)
+
+When extraction quality is inadequate — missing entities, duplicates, or noise — the first remedy is a **prompt-template change or model selection**, not a new post-processing pass. The post-processing heuristics in the extraction pipeline (orphan thresholds, stale-item sweep, staleness trimming, mention blocklists) are useful safety nets, but each new one is:
+
+- **Fragile** — magic thresholds and sweep windows are calibrated to one model/campaign and silently degrade when either changes
+- **Risky** — aggressive filters and sweeps can remove valid entities (over-deduplication, premature pruning)
+- **Compounding** — heuristics interact unpredictably, making the pipeline harder to reason about
+
+**Policy:**
+
+- Fix quality at the source (template or model) whenever feasible; add a post-processing heuristic only when a source fix is not.
+- A new threshold or sweep parameter MUST be justified, documented here, and validated via an A/B entity-retention diff (#448). Recalibrate when the model changes.
+- Evidence: in the deduplication experiment the coreference-template fix (#443) delivered the dominant gain, while the Python heuristics (cross-catalog gate, interval tuning) added no measurable benefit and risked over-deduplication. The smart-compression regression (#394) and stale-sweep regression (#441) are further cautionary cases.
+
+This principle extends *No Hardcoded Word Lists* from word lists to thresholds and sweep parameters (see #413, #447).
+
+---
+
 ## Design Decisions
 
 ### Why file-based?

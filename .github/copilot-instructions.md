@@ -84,6 +84,17 @@ Do not add hardcoded lists of domain-specific words (body parts, game terms, abs
 - If a PR adds a set or list of more than 5 domain-specific strings used for entity rejection, reject it during review.
 - Existing hardcoded word lists are technical debt — do not extend them; migrate filtering to templates instead.
 
+### 10. Source-Quality First
+
+When an extraction-quality problem appears (missing entities, duplicates, noise), first evaluate whether a **prompt-template change or model selection** can fix it at the source. Only add a post-processing heuristic (filter, sweep, or threshold) when a source fix is infeasible.
+
+- New magic thresholds and sweep parameters are technical debt — they must be justified, documented in `docs/architecture.md`, validated via an A/B entity-retention diff (#448), and recalibrated when the model changes.
+- A heuristic that depends on tuned constants is fragile: it silently degrades when the model, prompt, or campaign changes, and aggressive filters/sweeps can remove valid entities.
+- Evidence: the deduplication experiment showed the coreference-template fix (#443) was the dominant win, while the Python heuristics (cross-catalog gate, interval tuning) added nothing and risked over-deduplication. The smart-compression regression (#394) and stale-sweep regression (#441) are further cautionary cases.
+- This extends Rule 9 (no hardcoded word lists) from word lists to thresholds and sweep parameters. It overlaps with the Rule 9 tech-debt migration (#413) — consolidate where duplicative.
+
+Reference: #447; part of the strategic redirection epic.
+
 ---
 
 ## File Conventions
