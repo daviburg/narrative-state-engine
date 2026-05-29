@@ -118,12 +118,18 @@ def compute_retention_diff(
         dir_a: Variant A directory (framework dir or catalogs dir).
         dir_b: Variant B directory (framework dir or catalogs dir).
         removal_threshold: Maximum number of total removed IDs tolerated before
-            the report is flagged. Defaults to 0 (any removal flags the run).
+            the report is flagged. Must be >= 0. Defaults to 0 (any removal
+            flags the run).
 
     Returns:
         A report dict with ``by_type``, ``totals``, ``removal_threshold``,
         ``flagged``, and ``flagged_types`` keys.
     """
+    if removal_threshold < 0:
+        raise ValueError(
+            f"removal_threshold must be >= 0, got {removal_threshold!r}"
+        )
+
     ids_a = _collect_ids(_resolve_catalog_dir(dir_a))
     ids_b = _collect_ids(_resolve_catalog_dir(dir_b))
 
