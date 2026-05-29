@@ -3994,13 +3994,14 @@ def _sweep_stale_items(
     min_event_refs: int = _STALE_ITEM_MIN_REFS,
     staleness_turns: int = _STALE_ITEM_WINDOW,
 ) -> list[str]:
-    """Remove items with fewer than *min_event_refs* event references after a staleness window.
+    """Remove items that lack sufficient evidence of narrative relevance.
 
-    An item is considered stale if:
-    1. It has fewer than min_event_refs event references (in related_entities across all events)
-    2. At least staleness_turns have passed since its first_seen_turn
-    3. It's of type "item" (don't touch characters, locations, factions)
+    An item survives (is NOT removed) if ANY of these conditions hold:
+    1. It is recent — fewer than staleness_turns since first_seen_turn or last_updated_turn
+    2. It has at least min_event_refs event references (in related_entities across all events)
+    3. It is a relationship target — referenced by another entity's relationships array
 
+    Only items in items.json are swept (characters, locations, factions are exempt).
     Returns list of removed entity IDs.
     """
     current_num = _parse_turn_number(current_turn)
@@ -4018,6 +4019,15 @@ def _sweep_stale_items(
                 eid = _normalize_entity_id(eid, known_ids)
                 ref_counts[eid] = ref_counts.get(eid, 0) + 1
 
+    # Collect entity IDs that are targets of any relationship
+    relationship_targets: set[str] = set()
+    for catalog_entries in catalogs.values():
+        for entity in catalog_entries:
+            for rel in entity.get("relationships", []):
+                target = rel.get("target_id", "")
+                if target:
+                    relationship_targets.add(target)
+
     items = catalogs.get("items.json", [])
     removed_ids: list[str] = []
     kept: list[dict] = []
@@ -4025,23 +4035,35 @@ def _sweep_stale_items(
     for entity in items:
         eid = entity.get("id", "")
         first_seen = _parse_turn_number(entity.get("first_seen_turn"))
+        last_updated = _parse_turn_number(entity.get("last_updated_turn")) or first_seen
         ref_count = ref_counts.get(eid, 0)
 
-        if (
-            first_seen is not None
-            and (current_num - first_seen) >= staleness_turns
-            and ref_count < min_event_refs
-        ):
-            name = entity.get("name", eid)
-            first_turn = entity.get("first_seen_turn", "?")
-            print(
-                f"  [STALE-ITEM] Removing {eid} ({name}): "
-                f"{ref_count} event refs, first_seen {first_turn}",
-                file=sys.stderr,
-            )
-            removed_ids.append(eid)
-        else:
+        # Survival signal 1: too new (either first seen or last updated recently)
+        age = current_num - first_seen if first_seen is not None else 0
+        recency = current_num - last_updated if last_updated is not None else age
+        if age < staleness_turns or recency < staleness_turns:
             kept.append(entity)
+            continue
+
+        # Survival signal 2: has enough event references
+        if ref_count >= min_event_refs:
+            kept.append(entity)
+            continue
+
+        # Survival signal 3: referenced by other entities' relationships
+        if eid in relationship_targets:
+            kept.append(entity)
+            continue
+
+        # Item is stale — remove it
+        name = entity.get("name", eid)
+        first_turn = entity.get("first_seen_turn", "?")
+        print(
+            f"  [STALE-ITEM] Removing {eid} ({name}): "
+            f"{ref_count} event refs, first_seen {first_turn}",
+            file=sys.stderr,
+        )
+        removed_ids.append(eid)
 
     if removed_ids:
         catalogs["items.json"] = kept

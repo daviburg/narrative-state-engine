@@ -465,32 +465,76 @@ class TestSweepStaleItems:
 
         catalogs = self._base_catalogs()
         # Add a stale item (only 1 event ref, seen at turn-005, current is turn-040)
+        # No other entity references it via relationships, so it is not protected.
         catalogs["items.json"].append(
             {"id": "item-stale-thing", "name": "Stale Thing", "type": "item",
              "first_seen_turn": "turn-005", "relationships": []}
         )
-        # Add a character that references the stale item
+        # Add a character (no relationship to stale item yet — will be added
+        # after sweep to simulate a dangling reference left by external edits)
         catalogs["characters.json"].append(
             {"id": "char-hero", "name": "Hero", "type": "character",
-             "first_seen_turn": "turn-001", "relationships": [
-                 {"target_id": "item-stale-thing", "type": "social", "description": "owns"}
-             ]}
+             "first_seen_turn": "turn-001", "relationships": []}
         )
         events = [
             {"id": "evt-1", "related_entities": ["item-stale-thing"], "turn_id": "turn-005"},
         ]
 
-        # Step 1: sweep removes the stale item
+        # Step 1: sweep removes the stale item (not relationship-protected)
         removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
         assert "item-stale-thing" in removed
 
-        # Step 2: cleanup catches the orphaned relationship
+        # Step 2: simulate a dangling relationship (e.g. from a prior merge)
+        hero = [e for e in catalogs["characters.json"] if e["id"] == "char-hero"][0]
+        hero["relationships"].append(
+            {"target_id": "item-stale-thing", "type": "social", "description": "owns"}
+        )
+
+        # Step 3: cleanup catches the orphaned relationship
         dangling = cleanup_dangling_relationships(catalogs)
         assert "char-hero" in dangling
         assert "item-stale-thing" in dangling["char-hero"]
         # The relationship should now be gone
-        hero = [e for e in catalogs["characters.json"] if e["id"] == "char-hero"][0]
         assert len(hero["relationships"]) == 0
+
+    def test_sweep_protects_relationship_targets(self):
+        """Items referenced by other entities' relationships survive the sweep."""
+        catalogs = self._base_catalogs()
+        # Add an item that would otherwise be stale
+        catalogs["items.json"].append(
+            {"id": "item-protected", "name": "Protected Thing", "type": "item",
+             "first_seen_turn": "turn-005", "relationships": []}
+        )
+        # A character references it — this protects it
+        catalogs["characters.json"].append(
+            {"id": "char-hero", "name": "Hero", "type": "character",
+             "first_seen_turn": "turn-001", "relationships": [
+                 {"target_id": "item-protected", "type": "social", "description": "owns"}
+             ]}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["item-protected"], "turn_id": "turn-005"},
+        ]
+
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert "item-protected" not in removed
+        assert any(e["id"] == "item-protected" for e in catalogs["items.json"])
+
+    def test_sweep_recency_protection(self):
+        """Items with recent last_updated_turn survive even if first_seen is old."""
+        catalogs = self._base_catalogs()
+        catalogs["items.json"].append(
+            {"id": "item-refreshed", "name": "Refreshed Thing", "type": "item",
+             "first_seen_turn": "turn-005", "last_updated_turn": "turn-035",
+             "relationships": []}
+        )
+        events = [
+            {"id": "evt-1", "related_entities": ["item-refreshed"], "turn_id": "turn-005"},
+        ]
+
+        removed = _sweep_stale_items(catalogs, events, "turn-040", min_event_refs=2, staleness_turns=25)
+        assert "item-refreshed" not in removed
+        assert any(e["id"] == "item-refreshed" for e in catalogs["items.json"])
 
 
 # ---------------------------------------------------------------------------
