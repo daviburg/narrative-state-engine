@@ -22,14 +22,16 @@ This document defines the required A/B testing gate for any PR that modifies ext
 
 ### 1.2 Runs Per Variant
 
-Temperature 0.3 introduces non-determinism. To produce statistically meaningful results:
+**The default A/B testing standard is temperature 0 (deterministic), for which 1 run per variant is sufficient.** At temperature 0 the extraction output is effectively deterministic — reproducible enough that 1 run is the standard, so a single run per variant captures the full signal and no averaging is required.
 
-| Variant | Minimum runs | Recommended runs |
+| Sampling mode | Minimum runs per variant | Recommended runs per variant |
 |---|---|---|
-| A (baseline/main) | 3 | 5 |
-| B (PR branch) | 3 | 5 |
+| **Temperature 0 (deterministic) — default** | 1 | 1 |
+| Temperature > 0 (non-deterministic sampling) | 3 | 5 |
 
-Report **mean ± standard deviation** for all metrics. If any metric's standard deviation exceeds 15% of its mean, increase to 5 runs.
+The **≥3-runs-per-variant** requirement applies **only** when a test is run at temperature > 0 (non-deterministic sampling). In that case, report **mean ± standard deviation** for all metrics, and if any metric's standard deviation exceeds 15% of its mean, increase to 5 runs. At temperature 0, report the single-run values directly (no standard deviation).
+
+> **Rationale:** Variability is not re-introduced without justification. Current policy is temperature 0 until the high-quality outcomes available from the B70 hardware are exhausted; only then would non-deterministic sampling (and the ≥3-runs averaging requirement) be warranted.
 
 ### 1.3 Variant Definitions
 
@@ -270,9 +272,11 @@ Every template-change PR MUST include this section as a PR comment:
 - Model: [model name and quantization]
 - Hardware: [GPU(s) used]
 - Turns: [range]
-- Runs per variant: [N]
+- Runs per variant: [N] (1 at the temperature 0 default; ≥3 only at temperature > 0 — see §1.2)
 - Temperature: [value]
 - Config: `config/llm.json` (unchanged between A/B)
+
+> The `mean ± σ` columns below apply to temperature > 0 runs. At the temperature 0 default, report the single-run value directly (σ omitted).
 
 ### Performance
 
@@ -357,6 +361,8 @@ curl -s http://localhost:8081/v1/models | python -m json.tool
 
 ### 6.2 Run Variant A (Baseline)
 
+> **Note:** The multi-run (run1/run2/run3) commands below illustrate the temperature > 0 workflow, which requires ≥3 runs per variant (see §1.2). Under the **temperature 0 default**, only `run1` is needed per variant — skip `run2`/`run3`.
+
 ```bash
 # From the repo root, on main branch
 git stash  # if needed
@@ -400,6 +406,8 @@ python tools/bootstrap_session.py \
 > **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
 
 ### 6.3 Run Variant B (Candidate)
+
+> **Note:** As in §6.2, the multi-run (run1/run2/run3) commands below illustrate the temperature > 0 workflow, which requires ≥3 runs per variant (see §1.2). Under the **temperature 0 default**, only `run1` is needed per variant — skip `run2`/`run3`.
 
 ```bash
 git checkout <pr-branch>

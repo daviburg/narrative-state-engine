@@ -9,7 +9,7 @@ A/B testing is required for any PR that modifies extraction behavior:
 
 ## Requirements
 
-1. **Minimum 3 paired runs** per variant (both A and B valid in same run)
+1. **Runs per variant:** 1 run suffices at the temperature 0 default (deterministic); **minimum 3 paired runs** per variant only at temperature > 0 (see ab-test-standard.md §1.2)
 2. **Same model, same turns, same hardware** for both variants
 3. **Results posted as PR comment** with entity count comparison
 
@@ -77,7 +77,7 @@ python tools/submit_ab_test.py \
 --variant-b BRANCH    Branch name for variant B / candidate (required)
 --repo-a PATH         Filesystem path to the variant A repo checkout
 --repo-b PATH         Filesystem path to the variant B repo checkout
---runs INT            Runs per variant (default: orchestrator config, typically 3)
+--runs INT            Runs per variant (default: orchestrator config, typically 3; use 1 at temperature 0)
 --turns RANGE         Turn range to process, e.g. "1-30" or "30"
 --base-url-a URL      LLM endpoint for variant A (default: http://localhost:8080/v1)
 --base-url-b URL      LLM endpoint for variant B (default: http://localhost:8081/v1)
