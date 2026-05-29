@@ -171,14 +171,14 @@ class TestComputeRetentionDiff:
     def test_events_diff(self, tmp_path):
         dir_a = tmp_path / "a"
         dir_b = tmp_path / "b"
-        _write_catalog(str(dir_a), [], event_ids=["event-001", "event-002"])
-        _write_catalog(str(dir_b), [], event_ids=["event-001", "event-003"])
+        _write_catalog(str(dir_a), [], event_ids=["evt-001", "evt-002"])
+        _write_catalog(str(dir_b), [], event_ids=["evt-001", "evt-003"])
 
         report = compute_retention_diff(str(dir_a), str(dir_b))
         events = report["by_type"]["events"]
-        assert events["retained"] == ["event-001"]
-        assert events["removed"] == ["event-002"]
-        assert events["added"] == ["event-003"]
+        assert events["retained"] == ["evt-001"]
+        assert events["removed"] == ["evt-002"]
+        assert events["added"] == ["evt-003"]
 
     def test_accepts_catalogs_dir_directly(self, tmp_path):
         # Pass the catalogs/ directory itself rather than the framework dir.
@@ -213,6 +213,17 @@ class TestFormatMarkdown:
         report = compute_retention_diff(str(dir_a), str(dir_b))
         md = format_markdown(report)
         assert "No retention regression" in md
+
+    def test_within_threshold_lists_removed_ids(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_catalog(str(dir_a), ["char-alice", "char-bob"])
+        _write_catalog(str(dir_b), ["char-alice"])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b), removal_threshold=5)
+        md = format_markdown(report)
+        assert "No retention regression" in md
+        assert "char-bob" in md
 
 
 class TestMainCli:

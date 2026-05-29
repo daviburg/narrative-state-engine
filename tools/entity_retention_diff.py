@@ -214,6 +214,10 @@ def format_markdown(report: dict) -> str:
             f"No retention regression "
             f"({totals['removed']} removed, threshold {report['removal_threshold']})."
         )
+        for entity_type in ENTITY_TYPES:
+            removed = report["by_type"][entity_type]["removed"]
+            if removed:
+                lines.append(f"- Removed {entity_type}: {', '.join(removed)}")
 
     return "\n".join(lines)
 
