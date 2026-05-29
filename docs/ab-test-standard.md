@@ -111,7 +111,33 @@ Report:
 - Schema violations (count and list)
 - 100% validity is required for PASS.
 
-### 3.4 Quantitative Regression Thresholds
+### 3.4 Entity Retention Diff
+
+Aggregate entity counts (§3.1) can **mask deletion bugs**: a variant that drops 5 distinct entities while adding 5 new ones shows a net delta of 0, hiding the loss. This is exactly how PR #393 (#394, 27% loss) and the stale-sweep over-removal (#441) went undetected. A per-entity retention diff compares entity **IDs** between variant A and variant B so removals are surfaced explicitly.
+
+Run `tools/entity_retention_diff.py`, comparing one representative variant-A run against one representative variant-B run (use the same run number for both, e.g. `run1`):
+
+```bash
+python tools/entity_retention_diff.py \
+    --variant-a framework-ab-a-run1 \
+    --variant-b framework-ab-b-run1
+```
+
+The tool accepts either a framework directory (containing a `catalogs/` subdir) or a `catalogs/` directory directly. For each entity type (characters, locations, items, factions, events) it reports:
+
+- **retained** — IDs present in both A and B (A ∩ B)
+- **removed** — IDs present in A but missing from B (A − B)
+- **added** — IDs present in B but missing from A (B − A)
+
+It emits a Markdown summary table (default) or JSON (`--json`), and **flags** the run when the total number of removed IDs exceeds the configurable `--threshold` (default `0`, i.e. any removal flags). Pass `--strict` to make the tool exit non-zero when flagged (useful for CI gating):
+
+```bash
+python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-b-run1 --threshold 0 --strict
+```
+
+**This diff is a required output** — include the Markdown table in the PR comment (see §5.1) and list any removed entity IDs. Removed IDs are not automatically a BLOCK (B may legitimately consolidate duplicates), but each removed ID MUST be explained in the PR comment.
+
+### 3.5 Quantitative Regression Thresholds
 
 | Metric | PASS | WARN | BLOCK |
 |---|---|---|---|
@@ -121,6 +147,7 @@ Report:
 | Single type count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
 | Relationship count **loss** | Δ ≤ 10% loss | 10–20% loss | > 20% loss |
 | Relationship count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
+| Entity **retention** | 0 unexplained removed IDs | removed IDs all explained as dedup/consolidation | unexplained removed IDs |
 | Schema validity | 100% | — | < 100% |
 | Performance regression | Δ ≤ +10% time | +10–20% time | > +20% time |
 | Performance improvement | Always PASS | — | — |
@@ -293,6 +320,21 @@ Every template-change PR MUST include this section as a PR comment:
 | Events | | | | |
 | **Total** | | | | |
 
+### Entity Retention Diff
+
+(Output of `tools/entity_retention_diff.py` for one representative A vs B run pair.)
+
+| Type | A | B | Retained | Removed | Added | Net |
+|---|---|---|---|---|---|---|
+| characters | | | | | | |
+| locations | | | | | | |
+| items | | | | | | |
+| factions | | | | | | |
+| events | | | | | | |
+| **Total** | | | | | | |
+
+Removed entity IDs (explain each): [list, or "none"]
+
 ### Relationships
 
 | Metric | A mean ± σ | B mean ± σ | Δ% | Status |
@@ -329,6 +371,7 @@ Every template-change PR MUST include this section as a PR comment:
 
 - [ ] No BLOCK on any metric
 - [ ] All WARN items have documented justification
+- [ ] Every removed entity ID in the retention diff is explained (dedup/consolidation) or treated as a BLOCK
 - [ ] Ground truth validation passes for B (full-session runs only; skip for `--max-turns 30`)
 ````
 
@@ -340,6 +383,7 @@ The PR is **mergeable** when:
 2. All WARN statuses have written justification explaining why the regression is acceptable.
 3. Ground truth validation (`validate_extraction.py`) exits 0 for variant B (full-session runs only).
 4. Schema validation (`validate.py --framework <dir>`) reports 0 violations for variant B.
+5. Every removed entity ID in the retention diff (§3.4) is explained as intentional dedup/consolidation; unexplained removals are a BLOCK.
 
 ---
 
