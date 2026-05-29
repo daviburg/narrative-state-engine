@@ -32,10 +32,10 @@ import sys
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from catalog_merger import CATALOG_KEYS, load_catalogs, load_events
+from catalog_merger import load_catalogs, load_events
 
 # Friendly entity-type label for each canonical catalog key, plus events.
-# Order is the report's column/row order.
+# Order matches the documented table order (docs/ab-test-standard.md §3.1/§3.4).
 _CATALOG_KEY_TO_TYPE = {
     "characters.json": "characters",
     "locations.json": "locations",
@@ -43,19 +43,30 @@ _CATALOG_KEY_TO_TYPE = {
     "factions.json": "factions",
 }
 _EVENTS_TYPE = "events"
-ENTITY_TYPES = [_CATALOG_KEY_TO_TYPE[k] for k in CATALOG_KEYS] + [_EVENTS_TYPE]
+ENTITY_TYPES = list(_CATALOG_KEY_TO_TYPE.values()) + [_EVENTS_TYPE]
 
 
 def _resolve_catalog_dir(path: str) -> str:
     """Return the catalogs directory for a framework dir or catalogs dir.
 
-    If ``path`` contains a ``catalogs`` subdirectory, return that; otherwise
-    assume ``path`` is already the catalogs directory.
+    Accepts:
+    - A framework directory that contains a ``catalogs/`` subdirectory.
+    - A directory whose name is ``catalogs`` (i.e. already the catalogs dir).
+
+    Raises:
+        ValueError: If ``path`` is neither a framework dir nor a catalogs dir,
+            to prevent silently producing an all-zero report for an invalid path.
     """
     nested = os.path.join(path, "catalogs")
     if os.path.isdir(nested):
         return nested
-    return path
+    if os.path.basename(os.path.normpath(path)) == "catalogs":
+        return path
+    raise ValueError(
+        f"Cannot resolve catalog directory from '{path}': "
+        "expected a framework directory containing a 'catalogs/' subdirectory, "
+        "or a directory named 'catalogs'."
+    )
 
 
 def _collect_ids(catalog_dir: str) -> dict[str, set[str]]:
@@ -232,9 +243,13 @@ def main(argv: list[str] | None = None) -> int:
             print(f"ERROR: --{label} directory not found: {path}", file=sys.stderr)
             return 2
 
-    report = compute_retention_diff(
-        args.variant_a, args.variant_b, removal_threshold=args.threshold
-    )
+    try:
+        report = compute_retention_diff(
+            args.variant_a, args.variant_b, removal_threshold=args.threshold
+        )
+    except ValueError as exc:
+        print(f"ERROR: {exc}", file=sys.stderr)
+        return 2
 
     if args.json:
         print(json.dumps(report, indent=2, ensure_ascii=False))
