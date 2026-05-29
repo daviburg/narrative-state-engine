@@ -261,7 +261,7 @@ def main(argv: list[str] | None = None) -> int:
         report = compute_retention_diff(
             args.variant_a, args.variant_b, removal_threshold=args.threshold
         )
-    except ValueError as exc:
+    except (ValueError, json.JSONDecodeError, OSError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 

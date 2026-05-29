@@ -147,7 +147,7 @@ python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-b-r
 | Single type count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
 | Relationship count **loss** | Δ ≤ 10% loss | 10–20% loss | > 20% loss |
 | Relationship count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
-| Entity **retention** | 0 unexplained removed IDs | removed IDs all explained as dedup/consolidation | unexplained removed IDs |
+| Entity **retention** | no removed IDs | removed IDs all explained as dedup/consolidation | unexplained removed IDs |
 | Schema validity | 100% | — | < 100% |
 | Performance regression | Δ ≤ +10% time | +10–20% time | > +20% time |
 | Performance improvement | Always PASS | — | — |
