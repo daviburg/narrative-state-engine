@@ -50,7 +50,7 @@ jobs:
             );
 
             if (!botComment) {
-              const repoUrl = `https://github.com/${owner}/${repo}/blob/main`;
+              const repoUrl = `${context.payload.repository.html_url}/blob/${context.payload.repository.default_branch}`;
               await github.rest.issues.createComment({
                 owner, repo, issue_number: pr_number,
                 body: `## ⚠️ A/B Test Required\n\nThis PR modifies extraction behavior (files in \`templates/extraction/\` or extraction tools). Per the [A/B test standard](${repoUrl}/docs/ab-test-standard.md), extraction quality changes require empirical validation before merge.\n\n**Required before merge:**\n- [ ] A/B test results posted as a PR comment\n- [ ] ≥3 paired runs per variant (only if temperature > 0; 1 run suffices at temp 0)\n- [ ] Entity count comparison with acceptable variance\n\nSee the [A/B test checklist](${repoUrl}/docs/ab-test-checklist.md) for details.`
