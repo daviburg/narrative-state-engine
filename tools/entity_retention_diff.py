@@ -54,18 +54,19 @@ def _resolve_catalog_dir(path: str) -> str:
     - A directory whose name is ``catalogs`` (i.e. already the catalogs dir).
 
     Raises:
-        ValueError: If ``path`` is neither a framework dir nor a catalogs dir,
-            to prevent silently producing an all-zero report for an invalid path.
+        ValueError: If ``path`` does not resolve to an existing catalogs
+            directory, to prevent silently producing an all-zero report for an
+            invalid or non-existent path.
     """
     nested = os.path.join(path, "catalogs")
     if os.path.isdir(nested):
         return nested
-    if os.path.basename(os.path.normpath(path)) == "catalogs":
+    if os.path.basename(os.path.normpath(path)) == "catalogs" and os.path.isdir(path):
         return path
     raise ValueError(
         f"Cannot resolve catalog directory from '{path}': "
-        "expected a framework directory containing a 'catalogs/' subdirectory, "
-        "or a directory named 'catalogs'."
+        "expected an existing framework directory containing a 'catalogs/' subdirectory, "
+        "or an existing directory named 'catalogs'."
     )
 
 
