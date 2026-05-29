@@ -4060,9 +4060,10 @@ def _sweep_stale_items(
         # Item is stale — remove it
         name = entity.get("name", eid)
         first_turn = entity.get("first_seen_turn", "?")
+        last_turn = entity.get("last_updated_turn", first_turn)
         print(
             f"  [STALE-ITEM] Removing {eid} ({name}): "
-            f"{ref_count} event refs, first_seen {first_turn}",
+            f"{ref_count} event refs, first_seen {first_turn}, last_updated {last_turn}",
             file=sys.stderr,
         )
         removed_ids.append(eid)
