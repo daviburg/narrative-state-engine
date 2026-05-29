@@ -131,8 +131,8 @@ class TestComputeRetentionDiff:
         report = compute_retention_diff(str(dir_a), str(dir_b), removal_threshold=1)
         # one removal, threshold of 1 -> not flagged (removed > threshold is False)
         assert report["flagged"] is False
-        # flagged_types still records per-type removals regardless of threshold
-        assert report["flagged_types"] == ["characters"]
+        # flagged_types is empty when the flag is not raised
+        assert report["flagged_types"] == []
 
     def test_no_flag_when_only_added(self, tmp_path):
         dir_a = tmp_path / "a"

@@ -135,7 +135,6 @@ def compute_retention_diff(
     ids_b = _collect_ids(_resolve_catalog_dir(dir_b))
 
     by_type: dict[str, dict] = {}
-    flagged_types: list[str] = []
     total_a = total_b = total_retained = total_removed = total_added = 0
 
     for entity_type in ENTITY_TYPES:
@@ -157,14 +156,18 @@ def compute_retention_diff(
             "net_change": b_count - a_count,
         }
 
-        if removed > 0:
-            flagged_types.append(entity_type)
-
         total_a += a_count
         total_b += b_count
         total_retained += len(diff["retained"])
         total_removed += removed
         total_added += added
+
+    flagged = total_removed > removal_threshold
+    flagged_types = (
+        [et for et in ENTITY_TYPES if len(by_type[et]["removed"]) > 0]
+        if flagged
+        else []
+    )
 
     return {
         "by_type": by_type,
@@ -177,7 +180,7 @@ def compute_retention_diff(
             "net_change": total_b - total_a,
         },
         "removal_threshold": removal_threshold,
-        "flagged": total_removed > removal_threshold,
+        "flagged": flagged,
         "flagged_types": flagged_types,
     }
 
