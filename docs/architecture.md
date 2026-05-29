@@ -358,7 +358,7 @@ When extraction quality is inadequate — missing entities, duplicates, or noise
 
 **Policy:**
 
-- Fix quality at the source (template or model) whenever feasible; add a post-processing heuristic only when a source fix is not.
+- Fix quality at the source (template or model) whenever feasible; add a post-processing heuristic only when a source fix is infeasible.
 - A new threshold or sweep parameter MUST be justified, documented here, and validated via an A/B entity-retention diff (#448). Recalibrate when the model changes.
 - Evidence: in the deduplication experiment the coreference-template fix (#443) delivered the dominant gain, while the Python heuristics (cross-catalog gate, interval tuning) added no measurable benefit and risked over-deduplication. The smart-compression regression (#394) and stale-sweep regression (#441) are further cautionary cases.
 
