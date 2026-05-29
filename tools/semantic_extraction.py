@@ -4026,7 +4026,7 @@ def _sweep_stale_items(
             for rel in entity.get("relationships", []):
                 target = rel.get("target_id", "")
                 if target:
-                    relationship_targets.add(target)
+                    relationship_targets.add(_normalize_entity_id(target, known_ids))
 
     items = catalogs.get("items.json", [])
     removed_ids: list[str] = []
@@ -4035,7 +4035,9 @@ def _sweep_stale_items(
     for entity in items:
         eid = entity.get("id", "")
         first_seen = _parse_turn_number(entity.get("first_seen_turn"))
-        last_updated = _parse_turn_number(entity.get("last_updated_turn")) or first_seen
+        last_updated = _parse_turn_number(entity.get("last_updated_turn"))
+        if last_updated is None:
+            last_updated = first_seen
         ref_count = ref_counts.get(eid, 0)
 
         # Survival signal 1: too new (either first seen or last updated recently)
