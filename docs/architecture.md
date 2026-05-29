@@ -210,7 +210,7 @@ The extraction pipeline applies context budget controls automatically to prevent
 
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 
-**Compression Metrics Logging**: Every call to `format_known_entities_bounded()` with `turn_text` emits a `COMPRESS:` line to stderr recording the before/after token counts and entity selection ratio. When the 50% entity floor triggers, a `COMPRESS: floor triggered` line is logged with the entity counts and token count. The extraction log record includes `entity_detail_max_tokens` (the adaptive limit used for detail extraction, or `null` for low-entity turns) and `catalog_entity_count` for A/B diagnostics.
+**Compression Metrics Logging**: Every call to `format_known_entities_bounded()` with `turn_text` logs a `COMPRESS:` debug message recording the before/after token counts and entity selection ratio. When the 50% entity floor triggers, a `COMPRESS: floor triggered` debug message is logged with the entity counts and token count. The extraction log record includes `entity_detail_max_tokens` (the adaptive limit used for detail extraction, or `null` for low-entity turns) and `catalog_entity_count` for A/B diagnostics.
 
 ### Story Summary Layer (Framework)
 
