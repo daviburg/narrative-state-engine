@@ -199,7 +199,7 @@ The extraction pipeline applies context budget controls automatically to prevent
 - Token budget: 20% of context window with automatic tier degradation
 
 **Arc-Aware Compression**: Generalizes the PC-only volatile digest and relationship compaction to all entities:
-- History arrays capped to 3 entries per key (same as PC)
+- History arrays capped to 1 entry per key (`_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 1`); PC volatile history is still capped at 3 entries (`_PC_MAX_VOLATILE_SNAPSHOTS = 3`)
 - Entries older than 50 turns digested to a summary line
 - Relationship histories trimmed to last 3 entries (arc summaries used for PC when available)
 

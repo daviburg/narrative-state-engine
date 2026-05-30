@@ -1426,7 +1426,8 @@ def _format_prior_entity_context(
     if "status_updated_turn" in current_entry:
         prior["status_updated_turn"] = current_entry["status_updated_turn"]
 
-    # stable_attributes — trimmed to key attrs for both PC and non-PC
+    # stable_attributes — trimmed to key attrs for PC and non-PC chars/locations;
+    # items and factions are exempt and keep all stable attributes.
     sa = current_entry.get("stable_attributes")
     if sa:
         if is_pc:

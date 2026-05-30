@@ -85,6 +85,12 @@ class TestStableAttributeCompression:
         assert result["stable_attributes"]["role"] == "tribal leader"
 
     def test_pc_stable_attrs_use_existing_filter(self):
+        """PC uses _PC_KEY_STABLE_ATTRS, which differs from _NPC_KEY_STABLE_ATTRS.
+
+        In particular, 'role' is in _NPC_KEY_STABLE_ATTRS but NOT in
+        _PC_KEY_STABLE_ATTRS, so it must be absent from the PC result even
+        though it would be retained for a non-PC character.
+        """
         entity = {
             "id": "char-player",
             "name": "Fenouille",
@@ -97,9 +103,8 @@ class TestStableAttributeCompression:
         }
         result = json.loads(_format_prior_entity_context(entity))
         sa = result.get("stable_attributes", {})
-        assert "species" in sa
-        # PC uses _PC_KEY_STABLE_ATTRS — "role" may or may not be in that set
-        # The key test is that PC still uses the existing filter, not the new NPC one
+        assert "species" in sa       # species is in _PC_KEY_STABLE_ATTRS
+        assert "role" not in sa      # role is NOT in _PC_KEY_STABLE_ATTRS; it would be kept for NPC
 
     def test_pc_stable_attr_values_also_stripped(self):
         """PC stable attributes also get provenance metadata stripped."""
