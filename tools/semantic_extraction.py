@@ -3198,7 +3198,7 @@ def extract_and_merge(
     _pw = getattr(llm, "parallel_workers", 1)
 
     # Adaptive max_tokens for entity detail extraction: when any entity has
-    # substantial volatile history or stable attributes (the actual drivers of
+    # substantial volatile state or stable attributes (the actual drivers of
     # large detail-extraction outputs), use a higher limit to prevent
     # detail_error: truncated.  Counting only non-trivial entities avoids
     # unnecessarily inflating max_tokens for catalogs of stub entities.
@@ -3206,7 +3206,7 @@ def extract_and_merge(
         1
         for entities in catalogs.values()
         for e in entities
-        if len(e.get("volatile_history") or []) > 3
+        if sum(len(v) for v in (e.get("volatile_state") or {}).values() if isinstance(v, list)) > 3
         or len(e.get("stable_attributes") or {}) > 5
     )
     _detail_max_tokens: int | None = (
