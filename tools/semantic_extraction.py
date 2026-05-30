@@ -44,6 +44,7 @@ from catalog_merger import (
     CATALOG_KEYS,
     _estimate_tokens,
     _find_mentioned_entities,
+    _DISCOVERY_STALENESS_THRESHOLD,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
@@ -1139,6 +1140,10 @@ def _repair_truncated_relationships(partial_text: str) -> list | None:
 # "carried-forward" attributes.
 _PC_KEY_STABLE_ATTRS = {"species", "race", "class", "aliases"}
 
+# Key stable attributes sent in entity detail prompts for non-PC entities.
+# Other attributes are omitted to save tokens — the LLM can add them back if the turn reveals new info.
+_NPC_KEY_STABLE_ATTRS = {"role", "species", "race", "class", "aliases", "appearance", "allegiance", "notable_features"}
+
 # Maximum number of volatile_state snapshots to include for PC
 _PC_MAX_VOLATILE_SNAPSHOTS = 3
 
@@ -1155,13 +1160,19 @@ _REL_TOKEN_BUDGET_FRACTION = 0.2  # Fraction of context_length for relationship 
 
 # Scene-scoped entity detail thresholds
 _SCENE_REL_RECENCY_WINDOW = 10   # Relationships updated within this many turns are kept
-_SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
+_SCENE_MAX_RELATIONSHIPS = 5     # Max relationships after trimming
 
 # Entity detail call cap to prevent O(n²) scaling
 _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
-# Arc-aware compression: max volatile snapshots per key (same as PC)
-_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
+# Adaptive max_tokens for entity detail extraction.
+# When the catalog has more than this many entities, increase max_tokens to
+# prevent detail_error: truncated on high-entity-count turns.
+_HIGH_ENTITY_COUNT_THRESHOLD = 20
+_HIGH_ENTITY_DETAIL_MAX_TOKENS = 8192
+
+# Arc-aware compression: max volatile snapshots per key
+_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 1
 
 
 def _record_prompt_tokens(
@@ -1350,7 +1361,26 @@ def _filter_relationships_for_scene(
         if hist and isinstance(hist, list) and len(hist) > 3:
             r["history"] = hist[-3:]
 
+    # Type-aware scoring for prioritization before capping.
+    # Kinship and partnership are high-value context,
+    # spatial relationships are low-value (change frequently).
+    _kept_ids = {id(r) for r in kept}
+
+    def _rel_score(r: dict) -> float:
+        score = 0.0
+        # Kept relationships (full detail) score higher than summaries
+        if id(r) in _kept_ids:
+            score += 50
+        # Type-aware bonus
+        _type = r.get("type", "") or r.get("relationship_type", "")
+        if _type in ("kinship", "partnership"):
+            score += 20  # Always keep family ties
+        elif _type == "spatial":
+            score -= 10  # Deprioritize location-based relationships
+        return score
+
     all_rels = kept + summary
+    all_rels.sort(key=_rel_score, reverse=True)
     return all_rels[:max_relationships]
 
 
@@ -1396,7 +1426,7 @@ def _format_prior_entity_context(
     if "status_updated_turn" in current_entry:
         prior["status_updated_turn"] = current_entry["status_updated_turn"]
 
-    # stable_attributes — trimmed for PC only (non-PC keeps all even with arc_aware)
+    # stable_attributes — trimmed to key attrs for both PC and non-PC
     sa = current_entry.get("stable_attributes")
     if sa:
         if is_pc:
@@ -1404,7 +1434,27 @@ def _format_prior_entity_context(
             if trimmed_sa:
                 prior["stable_attributes"] = trimmed_sa
         else:
-            prior["stable_attributes"] = sa
+            entity_type = current_entry.get("type", "")
+            if entity_type in ("item", "faction"):
+                # Items and factions are small entries; keep all attributes
+                # to avoid losing important detail (they were fully lost in A/B).
+                trimmed_sa = dict(sa)
+            else:
+                # Non-PC characters/locations: only key identifying attributes
+                trimmed_sa = {k: v for k, v in sa.items() if k in _NPC_KEY_STABLE_ATTRS}
+            if trimmed_sa:
+                prior["stable_attributes"] = trimmed_sa
+
+    # Strip provenance metadata from stable attribute values in the prompt.
+    # The LLM produces these fields in output — it doesn't need them as input.
+    if "stable_attributes" in prior:
+        compressed_sa = {}
+        for k, v in prior["stable_attributes"].items():
+            if isinstance(v, dict) and "value" in v:
+                compressed_sa[k] = v["value"]
+            else:
+                compressed_sa[k] = v
+        prior["stable_attributes"] = compressed_sa
 
     # volatile_state — digest + cap for PC, or for non-PC when arc_aware is on
     vs = current_entry.get("volatile_state")
@@ -2473,6 +2523,7 @@ def _extract_single_entity_detail(
     pc_arcs_data: dict | None,
     config: dict | None = None,
     mentioned_ids: set[str] | None = None,
+    max_tokens: int | None = None,
 ) -> tuple[dict, dict | None, str | None]:
     """Run entity-detail extraction for a single entity.
 
@@ -2480,6 +2531,9 @@ def _extract_single_entity_detail(
     ``(entity_ref, None, error_string)`` on LLM failure, or
     ``(entity_ref, None, None)`` when validation/filtering rejects the result.
     Designed to run inside a ThreadPoolExecutor.
+
+    *max_tokens* overrides the LLM default — pass a higher value for
+    high-entity-count turns to prevent ``detail_error: truncated``.
     """
     entity_id = get_entity_id(entity_ref)
     turn_id = turn["turn_id"]
@@ -2490,6 +2544,7 @@ def _extract_single_entity_detail(
             user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                              arcs_data=entity_arcs, config=config,
                                              mentioned_ids=mentioned_ids),
+            max_tokens=max_tokens,
         )
     except QuotaExhaustedError:
         raise
@@ -2629,6 +2684,8 @@ def _run_discovery_phase(
         context_length=_ctx_len,
         entity_context_budget=_entity_budget,
         turn_text=turn.get("text"),
+        staleness_threshold=_DISCOVERY_STALENESS_THRESHOLD,
+        context_label="discovery",
     )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
@@ -3038,9 +3095,27 @@ def extract_and_merge(
                          if get_entity_id(ref) != "char-player"]
         _new_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if ref.get("is_new", True)]
         _existing_tasks = [(ref, entry) for ref, entry in _non_pc_tasks if not ref.get("is_new", True)]
-        # Sort both by confidence descending
+        # Sort new by confidence descending
         _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
-        _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        # Score existing entities by scene relevance, not just confidence.
+        # Higher score = more likely to have meaningful updates this turn.
+        _turn_text_lower = turn.get("text", "").lower()
+        def _detail_relevance(task_tuple):
+            ref, entry = task_tuple
+            score = ref.get("confidence", 0.5) * 10  # Base: confidence
+            # Bonus: entity name appears in turn text (directly mentioned)
+            _name = ref.get("name", "")
+            if _name and len(_name) >= 3 and re.search(r'\b' + re.escape(_name.lower()) + r'\b', _turn_text_lower):
+                score += 20
+            # Bonus: entity was recently updated (likely still active in scene)
+            if entry:
+                _last = _parse_turn_number(entry.get("last_updated_turn", ""))
+                _current = _parse_turn_number(turn.get("turn_id", ""))
+                if _last and _current and (_current - _last) <= 5:
+                    score += 10
+            return score
+
+        _existing_tasks.sort(key=_detail_relevance, reverse=True)
         # Enforce hard cap: PC slots + new slots + existing slots <= cap
         _available = _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks)
         _kept_new = _new_tasks[:_available]
@@ -3122,6 +3197,22 @@ def extract_and_merge(
     # --- Execute phases 2-4 ---
     _pw = getattr(llm, "parallel_workers", 1)
 
+    # Adaptive max_tokens for entity detail extraction: when any entity has
+    # substantial volatile state or stable attributes (the actual drivers of
+    # large detail-extraction outputs), use a higher limit to prevent
+    # detail_error: truncated.  Counting only non-trivial entities avoids
+    # unnecessarily inflating max_tokens for catalogs of stub entities.
+    _entity_count = sum(
+        1
+        for entities in catalogs.values()
+        for e in entities
+        if sum(len(v) for v in (e.get("volatile_state") or {}).values() if isinstance(v, list)) > 3
+        or len(e.get("stable_attributes") or {}) > 5
+    )
+    _detail_max_tokens: int | None = (
+        _HIGH_ENTITY_DETAIL_MAX_TOKENS if _entity_count > _HIGH_ENTITY_COUNT_THRESHOLD else None
+    )
+
     # --- Prompt token instrumentation ---
     # Estimate tokens for each phase from pre-computed prompt inputs.
     _detail_sys_tmpl = load_template("entity-detail")
@@ -3165,7 +3256,7 @@ def extract_and_merge(
                 f = pool.submit(
                     _extract_single_entity_detail,
                     llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
-                    _mentioned_ids,
+                    _mentioned_ids, _detail_max_tokens,
                 )
                 futures_map[f] = ("detail", entity_ref)
 
@@ -3396,6 +3487,7 @@ def extract_and_merge(
                     user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                                      arcs_data=entity_arcs, config=_cfg,
                                                      mentioned_ids=_mentioned_ids),
+                    max_tokens=_detail_max_tokens,
                 )
             except QuotaExhaustedError:
                 raise
@@ -3679,6 +3771,8 @@ def extract_and_merge(
         "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
         "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
         "entity_detail_capped_count": _entity_detail_capped_count,
+        "entity_detail_max_tokens": _detail_max_tokens,
+        "catalog_entity_count": _entity_count,
     }
     return catalogs, events_list, turn_failed, _log_record
 

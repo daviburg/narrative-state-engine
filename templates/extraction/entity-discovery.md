@@ -11,6 +11,15 @@ Before writing your output:
 2. Your output should not exceed that count by more than 2-3 (for unnamed entities referenced by description).
 3. If the known entities list has 50 entries but you only count 4 names in the turn text, output approximately 4-7 entities, NOT 50.
 
+## Salient-Entity Completeness
+
+The known-entities context you receive may be compressed (shortened or partial) to save space. Compression of the *context* must NOT make you skip entities that are actually present in the *turn text*. Independently of how much prior context you were given:
+
+- Always propose every NAMED item, location, faction, character, and creature that appears in this turn (e.g. a named plant, a named staff, a named brew, a named stream or wood).
+- Always propose concrete physical objects and places that are explicitly described and act in the scene, even when unnamed (use a short descriptive phrase as the name) — for example a container, a tool, a substance, or a distinct place where the action occurs.
+- Peripheral objects and minor locations count: do not drop them just because they seem secondary or because the prior context looked sparse.
+- This does NOT relax the rules below — still skip pronouns, compound-term fragments, common descriptive words, and pure background flavor, and still consolidate synonyms into one entity.
+
 ## Output Format
 
 Return `{"entities": [...]}` where each entity uses one of two formats:

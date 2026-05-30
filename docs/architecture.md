@@ -186,7 +186,10 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 
 The extraction pipeline applies context budget controls automatically to prevent prompt overflow as catalogs grow. All optimizations are always active — no configuration needed.
 
-**Discovery** (always active): Uses 4-tier priority scoring (mentioned → co-located → one-hop → recency backfill) with a token budget (25% of context window) and automatic tier degradation — full → brief → id-only → omit. See #233, #310.
+**Discovery** (always active): Uses 4-tier priority scoring (mentioned → co-located → one-hop → recency backfill) with a token budget (25% of context window) and automatic tier degradation — full → brief → id-only → omit. Staleness threshold: 50 turns for both the general entity context and discovery (discovery is pinned to never go below the general threshold). **50% entity floor**: if context-aware staleness filtering selects fewer than 50% of catalog entities for the discovery prompt, a budget-capped fallback covering every entity is used instead to prevent discovery collapse on late-game turns. See #233, #310.
+
+> **Entity-retention rationale (#460):** an earlier compression experiment (#393) cut the entity budget to 15% and the staleness threshold to 30. The A/B per-ID retention diff showed this caused genuine entity loss via **discovery-context starvation** — peripheral entities (named items such as a moonpetal or an obsidian-topped staff, and minor locations) never reached the discovery stage and were therefore never proposed (they were *not* over-merged). The budget (25%) and staleness (50) are kept at the baseline so the discovery LLM always sees the salient-entity context; the speed/token gain is sourced entirely from the entity-neutral per-entity detail trims below (relationship cap, volatile-snapshot cap, provenance stripping, NPC stable-attribute filtering, adaptive `max_tokens`), which shrink per-entity *detail* without shrinking the discovery *candidate set*. The discovery template (`templates/extraction/entity-discovery.md`) additionally instructs the model to propose all named/concrete items and locations even when the prior context is compressed. **Any future change to these lever values must be validated by the name-aware A/B entity-retention diff (#461/#462) showing ≤5% loss and zero TRUE removed IDs before merge.**
+
 
 **Relationship Relevance Scoring**: Applies a 3-tier priority system to `_collect_existing_relationships()`:
 - Tier 1 (full history): both endpoints mentioned in current turn
@@ -201,12 +204,16 @@ The extraction pipeline applies context budget controls automatically to prevent
 - Relationship histories trimmed to last 3 entries (arc summaries used for PC when available)
 
 **Scene-Scoped Entity Detail**: Trims non-PC catalog entries in the entity-detail prompt:
-- Volatile state: digested + capped to 3 entries per key
-- Relationships: filtered to mentioned + recent (10 turns), capped at 8
-- Stable attributes: preserved in full
-- Entity detail calls per turn capped at 6 (PC excluded from cap; new entities prioritized over existing)
+- Volatile state: digested + capped to 1 entry per key (reduced from 3 for token savings; digest summary preserves history)
+- Relationships: filtered to mentioned + recent (10 turns), capped at 5 (reduced from 8). Type-aware prioritization: kinship/partnership relationships get +20 scoring bonus, spatial relationships get -10 penalty. Family ties are preserved; transient location links are deprioritized.
+- Stable attributes (non-PC characters/locations): filtered to key identifying attributes only (`role`, `species`, `race`, `class`, `aliases`, `appearance`, `allegiance`, `notable_features`). Non-identifying attributes omitted from prompt. **Items and factions are exempt** — their stable attributes are always sent in full since they are small entries and attribute loss degrades quality significantly.
+- Stable attribute provenance stripping: `inference`, `confidence`, and `source_turn` metadata removed from stable attribute values in the prompt — the LLM produces these fields in output, it doesn't need them as input context.
+- Entity detail calls per turn capped at 6 (PC excluded from cap; new entities prioritized over existing). Existing entities ranked by scene relevance (name appears in turn text +20, updated within last 5 turns +10) rather than discovery confidence alone.
+- **Adaptive `max_tokens`**: when the catalog has more than 20 entities, entity detail extraction uses `max_tokens=8192` instead of the default 4096 to prevent `detail_error: truncated` on high-entity-count turns.
 
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
+
+**Compression Metrics Logging**: Every call to `format_known_entities_bounded()` with `turn_text` logs a `COMPRESS:` debug message recording the before/after token counts and entity selection ratio. When the 50% entity floor triggers, a `COMPRESS: floor triggered` debug message is logged with the entity counts and token count. The extraction log record includes `entity_detail_max_tokens` (the adaptive limit used for detail extraction, or `null` for low-entity turns) and `catalog_entity_count` for A/B diagnostics.
 
 ### Story Summary Layer (Framework)
 
