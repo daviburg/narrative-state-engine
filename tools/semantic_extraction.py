@@ -3118,6 +3118,25 @@ def extract_and_merge(
                     _pattern = r"\b" + _escaped + r"\b"
                 if re.search(_pattern, _turn_text_lower):
                     score += 20
+            # Bonus: alias appears in turn text (entity mentioned via alias).
+            # Mirrors the name check above but over stable_attributes.aliases.
+            if entry and score < ref.get("confidence", 0.5) * 10 + 20:
+                _sa_aliases = (entry.get("stable_attributes") or {}).get("aliases")
+                if isinstance(_sa_aliases, dict):
+                    _alias_val = _sa_aliases.get("value", "")
+                    _alias_list = _alias_val if isinstance(_alias_val, list) else [a.strip() for a in str(_alias_val).split(",") if a.strip()]
+                elif isinstance(_sa_aliases, list):
+                    _alias_list = _sa_aliases
+                else:
+                    _alias_list = []
+                for _alias in _alias_list:
+                    _alias_lower = str(_alias).lower()
+                    if len(_alias_lower) >= 3:
+                        _a_escaped = re.escape(_alias_lower)
+                        _a_pattern = (r"(?<!\w)" + _a_escaped + r"(?!\w)") if " " in _alias_lower else (r"\b" + _a_escaped + r"\b")
+                        if re.search(_a_pattern, _turn_text_lower):
+                            score += 20
+                            break
             # Bonus: entity was recently updated (likely still active in scene)
             if entry:
                 _last = _parse_turn_number(entry.get("last_updated_turn", ""))
@@ -3784,7 +3803,7 @@ def extract_and_merge(
         "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
         "entity_detail_capped_count": _entity_detail_capped_count,
         "entity_detail_max_tokens": _detail_max_tokens,
-        "catalog_entity_count": _entity_count,
+        "nontrivial_entity_count": _entity_count,
     }
     return catalogs, events_list, turn_failed, _log_record
 
