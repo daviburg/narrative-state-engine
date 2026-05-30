@@ -3270,11 +3270,17 @@ def extract_and_merge(
                 _pc_ref_snap = _pc_ref
                 _pc_entry_snap = _pc_entry
                 _pc_timeout_snap = _pc_timeout
+                _pc_max_tokens_snap = (
+                    max(_detail_max_tokens, llm.pc_max_tokens)
+                    if _detail_max_tokens is not None
+                    else llm.pc_max_tokens
+                )
 
                 def _pc_llm_call(
                     _ref=_pc_ref_snap,
                     _entry=_pc_entry_snap,
                     _timeout=_pc_timeout_snap,
+                    _max_tokens=_pc_max_tokens_snap,
                 ):
                     return llm.extract_json(
                         system_prompt=load_template("entity-detail"),
@@ -3283,7 +3289,7 @@ def extract_and_merge(
                             config=_cfg, mentioned_ids=_mentioned_ids,
                         ),
                         timeout=_timeout,
-                        max_tokens=llm.pc_max_tokens,
+                        max_tokens=_max_tokens,
                     )
 
                 f = pool.submit(_pc_llm_call)
@@ -3538,7 +3544,11 @@ def extract_and_merge(
                                                      arcs_data=pc_arcs_data, config=_cfg,
                                                      mentioned_ids=_mentioned_ids),
                     timeout=_pc_timeout,
-                    max_tokens=llm.pc_max_tokens,
+                    max_tokens=(
+                        max(_detail_max_tokens, llm.pc_max_tokens)
+                        if _detail_max_tokens is not None
+                        else llm.pc_max_tokens
+                    ),
                 )
                 entity_data = _unwrap_entity_response(detail_result)
                 if entity_data:
