@@ -3101,43 +3101,16 @@ def extract_and_merge(
         _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
         # Score existing entities by scene relevance, not just confidence.
         # Higher score = more likely to have meaningful updates this turn.
-        _turn_text_lower = (turn.get("text") or "").lower()
+        # Pre-compute mentioned IDs once using _find_mentioned_entities, which is
+        # alias-aware and filters common-word false positives consistently.
+        _existing_entries = [entry for _, entry in _existing_tasks if entry is not None]
+        _scene_mentioned_ids = _find_mentioned_entities(_existing_entries, turn.get("text") or "")
         def _detail_relevance(task_tuple):
             ref, entry = task_tuple
             score = ref.get("confidence", 0.5) * 10  # Base: confidence
-            # Bonus: entity name appears in turn text (directly mentioned).
-            # Use the same boundary-aware matching as _find_mentioned_entities:
-            # multi-word names use non-word-character boundaries; single words
-            # use \b.
-            _name = ref.get("name", "")
-            if _name and len(_name) >= 3:
-                _name_lower = _name.lower()
-                _escaped = re.escape(_name_lower)
-                if " " in _name_lower:
-                    _pattern = r"(?<!\w)" + _escaped + r"(?!\w)"
-                else:
-                    _pattern = r"\b" + _escaped + r"\b"
-                if re.search(_pattern, _turn_text_lower):
-                    score += 20
-            # Bonus: alias appears in turn text (entity mentioned via alias).
-            # Mirrors the name check above but over stable_attributes.aliases.
-            if entry and score < ref.get("confidence", 0.5) * 10 + 20:
-                _sa_aliases = (entry.get("stable_attributes") or {}).get("aliases")
-                if isinstance(_sa_aliases, dict):
-                    _alias_val = _sa_aliases.get("value", "")
-                    _alias_list = _alias_val if isinstance(_alias_val, list) else [a.strip() for a in str(_alias_val).split(",") if a.strip()]
-                elif isinstance(_sa_aliases, list):
-                    _alias_list = _sa_aliases
-                else:
-                    _alias_list = []
-                for _alias in _alias_list:
-                    _alias_lower = str(_alias).lower()
-                    if len(_alias_lower) >= 3:
-                        _a_escaped = re.escape(_alias_lower)
-                        _a_pattern = (r"(?<!\w)" + _a_escaped + r"(?!\w)") if " " in _alias_lower else (r"\b" + _a_escaped + r"\b")
-                        if re.search(_a_pattern, _turn_text_lower):
-                            score += 20
-                            break
+            # Bonus: entity name or alias appears in turn text (alias-aware).
+            if get_entity_id(ref) in _scene_mentioned_ids:
+                score += 20
             # Bonus: entity was recently updated (likely still active in scene)
             if entry:
                 _last = _parse_turn_number(entry.get("last_updated_turn", ""))

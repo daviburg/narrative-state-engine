@@ -18,7 +18,6 @@ from catalog_merger import (
     _DISCOVERY_STALENESS_THRESHOLD,
     _CONTEXT_FLOOR_FRACTION,
     format_known_entities_bounded,
-    _estimate_tokens,
 )
 
 
