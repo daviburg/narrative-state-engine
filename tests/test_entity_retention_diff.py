@@ -11,6 +11,7 @@ from entity_retention_diff import (
     diff_id_sets,
     format_markdown,
     main,
+    match_entities,
 )
 
 _TYPE_DIRS = {
@@ -51,6 +52,35 @@ def _write_catalog(base_dir, entity_ids, event_ids=None):
         with open(os.path.join(catalog_dir, "events.json"), "w", encoding="utf-8") as f:
             json.dump(events, f)
 
+    return catalog_dir
+
+
+def _write_named_catalog(base_dir, entities):
+    """Create a V2 catalogs dir from explicit entity specs.
+
+    entities: iterable of dicts with keys ``id`` and ``name`` and an optional
+    ``aliases`` list (stored under ``stable_attributes.aliases.value``).
+    The ID prefix determines the type directory.
+    """
+    catalog_dir = os.path.join(base_dir, "catalogs")
+    for spec in entities:
+        entity_id = spec["id"]
+        prefix = next((p for p in _TYPE_DIRS if entity_id.startswith(p)), "char-")
+        dirname = _TYPE_DIRS[prefix]
+        type_dir = os.path.join(catalog_dir, dirname)
+        os.makedirs(type_dir, exist_ok=True)
+        entity = {
+            "id": entity_id,
+            "name": spec["name"],
+            "type": dirname[:-1] if dirname.endswith("s") else dirname,
+            "identity": f"{entity_id} identity",
+            "first_seen_turn": "turn-001",
+        }
+        aliases = spec.get("aliases")
+        if aliases:
+            entity["stable_attributes"] = {"aliases": {"value": list(aliases)}}
+        with open(os.path.join(type_dir, f"{entity_id}.json"), "w", encoding="utf-8") as f:
+            json.dump(entity, f)
     return catalog_dir
 
 
@@ -292,4 +322,226 @@ class TestMainCli:
         assert rc == 0
         payload = json.loads(capsys.readouterr().out)
         assert payload["totals"]["retained"] == 1
+
+
+class TestMatchEntities:
+    def test_id_mode_exact_only(self):
+        a = [{"id": "char-elder", "name_keys": {"elder"}}]
+        b = [{"id": "char-elder-001", "name_keys": {"elder"}}]
+        result = match_entities(a, b, match_by="id")
+        assert result["removed"] == ["char-elder"]
+        assert result["added"] == ["char-elder-001"]
+        assert result["renamed"] == []
+
+    def test_auto_name_rename(self):
+        a = [{"id": "char-elder", "name_keys": {"elder"}}]
+        b = [{"id": "char-elder-001", "name_keys": {"elder"}}]
+        result = match_entities(a, b, match_by="auto")
+        assert result["removed"] == []
+        assert result["added"] == []
+        assert result["renamed"] == [
+            {"old_id": "char-elder", "new_id": "char-elder-001"}
+        ]
+
+    def test_auto_exact_id_retained(self):
+        a = [{"id": "char-elder", "name_keys": {"elder"}}]
+        b = [{"id": "char-elder", "name_keys": {"elder"}}]
+        result = match_entities(a, b, match_by="auto")
+        assert result["retained"] == ["char-elder"]
+        assert result["renamed"] == []
+
+    def test_name_mode_same_id_retained(self):
+        a = [{"id": "char-elder", "name_keys": {"elder"}}]
+        b = [{"id": "char-elder", "name_keys": {"elder"}}]
+        result = match_entities(a, b, match_by="name")
+        assert result["retained"] == ["char-elder"]
+        assert result["removed"] == []
+        assert result["renamed"] == []
+
+    def test_no_name_keys_only_id_matches(self):
+        # Entities without name keys (e.g. events) can only match by ID.
+        a = [{"id": "evt-001", "name_keys": set()}, {"id": "evt-002", "name_keys": set()}]
+        b = [{"id": "evt-001", "name_keys": set()}, {"id": "evt-003", "name_keys": set()}]
+        result = match_entities(a, b, match_by="auto")
+        assert result["retained"] == ["evt-001"]
+        assert result["removed"] == ["evt-002"]
+        assert result["added"] == ["evt-003"]
+        assert result["renamed"] == []
+
+
+class TestMatchByAuto:
+    def test_identical_ids_zero_churn(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder", "name": "Elder"}])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        assert report["totals"]["removed"] == 0
+        assert report["totals"]["added"] == 0
+        assert report["totals"]["renamed"] == 0
+        assert report["totals"]["retained"] == 1
+        assert report["flagged"] is False
+
+    def test_suffix_rename_is_not_churn(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        # main's bare slug vs compression branch's numeric-suffixed ID, same name.
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder-001", "name": "Elder"}])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        assert report["totals"]["removed"] == 0
+        assert report["totals"]["added"] == 0
+        assert report["totals"]["renamed"] == 1
+        assert report["by_type"]["characters"]["renamed"] == [
+            {"old_id": "char-elder", "new_id": "char-elder-001"}
+        ]
+        assert report["flagged"] is False
+
+    def test_suffix_rename_is_churn_under_match_by_id(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder-001", "name": "Elder"}])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b), match_by="id")
+        assert report["by_type"]["characters"]["removed"] == ["char-elder"]
+        assert report["by_type"]["characters"]["added"] == ["char-elder-001"]
+        assert report["totals"]["renamed"] == 0
+        assert report["flagged"] is True
+
+    def test_genuine_removal_is_true_removed(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(
+            str(dir_a),
+            [{"id": "char-elder", "name": "Elder"}, {"id": "char-mara", "name": "Mara"}],
+        )
+        _write_named_catalog(str(dir_b), [{"id": "char-elder", "name": "Elder"}])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        assert report["by_type"]["characters"]["removed"] == ["char-mara"]
+        assert report["totals"]["renamed"] == 0
+        assert report["flagged"] is True
+
+    def test_genuine_addition_is_true_added(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(
+            str(dir_b),
+            [{"id": "char-elder", "name": "Elder"}, {"id": "char-new", "name": "Newbie"}],
+        )
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        assert report["by_type"]["characters"]["added"] == ["char-new"]
+        assert report["totals"]["removed"] == 0
+        assert report["totals"]["renamed"] == 0
+        assert report["flagged"] is False
+
+    def test_alias_match_is_rename_not_removal(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        # B's name differs, but "Elder" appears as an alias -> matched.
+        _write_named_catalog(
+            str(dir_b),
+            [{"id": "char-sage", "name": "The Sage", "aliases": ["Elder"]}],
+        )
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        assert report["totals"]["removed"] == 0
+        assert report["totals"]["added"] == 0
+        assert report["totals"]["renamed"] == 1
+        assert report["by_type"]["characters"]["renamed"] == [
+            {"old_id": "char-elder", "new_id": "char-sage"}
+        ]
+
+    def test_same_name_different_type_not_matched(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        # Same display name "Relic" but one is a character, one an item.
+        _write_named_catalog(str(dir_a), [{"id": "char-relic", "name": "Relic"}])
+        _write_named_catalog(str(dir_b), [{"id": "item-relic", "name": "Relic"}])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        assert report["by_type"]["characters"]["removed"] == ["char-relic"]
+        assert report["by_type"]["items"]["added"] == ["item-relic"]
+        assert report["totals"]["renamed"] == 0
+        assert report["totals"]["removed"] == 1
+        assert report["totals"]["added"] == 1
+
+    def test_strict_rename_only_exits_zero(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder-001", "name": "Elder"}])
+
+        rc = main(["-a", str(dir_a), "-b", str(dir_b), "--strict"])
+        assert rc == 0
+
+    def test_strict_true_removal_exits_one(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(
+            str(dir_a),
+            [{"id": "char-elder", "name": "Elder"}, {"id": "char-mara", "name": "Mara"}],
+        )
+        _write_named_catalog(str(dir_b), [{"id": "char-elder", "name": "Elder"}])
+
+        rc = main(["-a", str(dir_a), "-b", str(dir_b), "--strict"])
+        assert rc == 1
+
+    def test_invalid_match_by_raises(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder", "name": "Elder"}])
+
+        import pytest
+        with pytest.raises(ValueError, match="match_by must be one of"):
+            compute_retention_diff(str(dir_a), str(dir_b), match_by="bogus")
+
+    def test_json_includes_renamed(self, tmp_path, capsys):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder-001", "name": "Elder"}])
+
+        rc = main(["-a", str(dir_a), "-b", str(dir_b), "--json"])
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["match_by"] == "auto"
+        assert payload["totals"]["renamed"] == 1
+        assert payload["by_type"]["characters"]["renamed"] == [
+            {"old_id": "char-elder", "new_id": "char-elder-001"}
+        ]
+
+    def test_cli_match_by_id_reports_churn(self, tmp_path, capsys):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder-001", "name": "Elder"}])
+
+        rc = main(["-a", str(dir_a), "-b", str(dir_b), "--match-by", "id", "--json"])
+        assert rc == 0
+        payload = json.loads(capsys.readouterr().out)
+        assert payload["match_by"] == "id"
+        assert payload["totals"]["removed"] == 1
+        assert payload["totals"]["added"] == 1
+        assert payload["totals"]["renamed"] == 0
+
+    def test_markdown_shows_rename_section(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_named_catalog(str(dir_a), [{"id": "char-elder", "name": "Elder"}])
+        _write_named_catalog(str(dir_b), [{"id": "char-elder-001", "name": "Elder"}])
+
+        report = compute_retention_diff(str(dir_a), str(dir_b))
+        md = format_markdown(report)
+        assert "ID renames" in md
+        assert "char-elder -> char-elder-001" in md
+        assert "No retention regression" in md
+
 
