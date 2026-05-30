@@ -1166,8 +1166,9 @@ _SCENE_MAX_RELATIONSHIPS = 5     # Max relationships after trimming
 _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
 # Adaptive max_tokens for entity detail extraction.
-# When the catalog has more than this many entities, increase max_tokens to
-# prevent detail_error: truncated on high-entity-count turns.
+# When the count of non-trivial entities (those with substantial volatile
+# state or many stable attributes) exceeds this threshold, increase max_tokens
+# to prevent detail_error: truncated on high-entity-count turns.
 _HIGH_ENTITY_COUNT_THRESHOLD = 20
 _HIGH_ENTITY_DETAIL_MAX_TOKENS = 8192
 
