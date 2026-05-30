@@ -3207,11 +3207,12 @@ def extract_and_merge(
     # --- Execute phases 2-4 ---
     _pw = getattr(llm, "parallel_workers", 1)
 
-    # Adaptive max_tokens for entity detail extraction: when any entity has
-    # substantial volatile state or stable attributes (the actual drivers of
-    # large detail-extraction outputs), use a higher limit to prevent
-    # detail_error: truncated.  Counting only non-trivial entities avoids
-    # unnecessarily inflating max_tokens for catalogs of stub entities.
+    # Adaptive max_tokens for entity detail extraction: when the count of
+    # non-trivial entities (those with substantial volatile state or many
+    # stable attributes) exceeds _HIGH_ENTITY_COUNT_THRESHOLD, use a higher
+    # limit to prevent detail_error: truncated.  Counting only non-trivial
+    # entities avoids unnecessarily inflating max_tokens for catalogs of
+    # stub entities.
     _entity_count = sum(
         1
         for entities in catalogs.values()

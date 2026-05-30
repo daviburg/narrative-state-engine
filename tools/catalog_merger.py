@@ -434,8 +434,9 @@ _DISCOVERY_STALENESS_THRESHOLD = 50
 
 # Minimum fraction of catalog entities that must survive staleness filtering.
 # If fewer than this fraction of entities remain after staleness cutoff, fall
-# back to a budget-capped brief/id-only format covering all catalog entities
-# to prevent catastrophic entity loss.
+# back to a non-omitting brief/id-only format covering all catalog entities
+# to prevent catastrophic entity loss.  The fallback never drops entities,
+# so it may intentionally exceed the token budget.
 _CONTEXT_FLOOR_FRACTION = 0.5
 
 # Minimum entity name length to avoid false-positive keyword matches
@@ -732,8 +733,9 @@ def format_known_entities_bounded(
     ``format_known_entities()``.
 
     A 50% entity-count floor is enforced: if staleness filtering retains fewer
-    than half of all catalog entities, a budget-capped fallback covering every
-    entity is returned to prevent catastrophic entity loss.
+    than half of all catalog entities, a non-omitting fallback covering every
+    entity is returned to prevent catastrophic entity loss.  This fallback
+    never drops entities and may intentionally exceed the token budget.
 
     Args:
         catalogs: Dict keyed by catalog filename → list of entity dicts.
@@ -798,8 +800,8 @@ def format_known_entities_bounded(
     )
 
     # Context floor: if staleness filtering retained fewer than 50% of all
-    # catalog entities, return a budget-capped fallback covering every entity
-    # to prevent catastrophic entity loss.  Only applies when turn_text is
+    # catalog entities, return a non-omitting fallback covering every entity
+    # (may exceed budget) to prevent catastrophic entity loss.  Only applies when turn_text is
     # provided (context-aware selection active); without turn_text there is
     # no staleness filtering and the budget constraint is intentional.
     # This check is placed before the degradation passes to avoid wasting work
