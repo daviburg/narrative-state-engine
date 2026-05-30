@@ -233,7 +233,7 @@ class TestPCContextTrimming:
         assert "backstory" not in sa
         assert "motivation" not in sa
 
-    def test_does_not_trim_non_pc(self):
+    def test_trims_non_pc_stable_attributes_to_key_fields(self):
         entry = {
             "id": "char-kael",
             "name": "Kael",

@@ -815,15 +815,16 @@ def format_known_entities_bounded(
             "  COMPRESS: floor triggered for %s: "
             "staleness filtering retained %d/%d entities "
             "(%d%% < %d%% floor); "
-            "%d tokens → using budget-capped fallback",
+            "%d tokens → using non-omitting fallback (may exceed budget)",
             context_label, _n_surviving, _n_all,
             int(100 * _n_surviving / _n_all),
             int(100 * _CONTEXT_FLOOR_FRACTION),
             _unbounded_tokens,
         )
-        # Build a budget-capped fallback covering all entities: brief format
+        # Build a non-omitting fallback covering all entities: brief format
         # first, degraded to id-only if still over budget, but never omitted
-        # so all entity IDs remain visible to the model.
+        # so all entity IDs remain visible to the model.  Note: id-only may
+        # still exceed the budget; omission is intentionally disallowed here.
         _fallback_lines = [_format_entity_brief(e) for e in all_entities]
         if budget is not None:
             _fallback_used = _estimate_tokens("\n".join(_fallback_lines)) if _fallback_lines else 0

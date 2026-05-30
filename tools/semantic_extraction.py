@@ -3099,14 +3099,24 @@ def extract_and_merge(
         _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
         # Score existing entities by scene relevance, not just confidence.
         # Higher score = more likely to have meaningful updates this turn.
-        _turn_text_lower = turn.get("text", "").lower()
+        _turn_text_lower = (turn.get("text") or "").lower()
         def _detail_relevance(task_tuple):
             ref, entry = task_tuple
             score = ref.get("confidence", 0.5) * 10  # Base: confidence
-            # Bonus: entity name appears in turn text (directly mentioned)
+            # Bonus: entity name appears in turn text (directly mentioned).
+            # Use the same boundary-aware matching as _find_mentioned_entities:
+            # multi-word names use non-word-character boundaries; single words
+            # use \b.
             _name = ref.get("name", "")
-            if _name and len(_name) >= 3 and re.search(r'\b' + re.escape(_name.lower()) + r'\b', _turn_text_lower):
-                score += 20
+            if _name and len(_name) >= 3:
+                _name_lower = _name.lower()
+                _escaped = re.escape(_name_lower)
+                if " " in _name_lower:
+                    _pattern = r"(?<!\w)" + _escaped + r"(?!\w)"
+                else:
+                    _pattern = r"\b" + _escaped + r"\b"
+                if re.search(_pattern, _turn_text_lower):
+                    score += 20
             # Bonus: entity was recently updated (likely still active in scene)
             if entry:
                 _last = _parse_turn_number(entry.get("last_updated_turn", ""))
