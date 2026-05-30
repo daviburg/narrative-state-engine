@@ -190,6 +190,27 @@ class TestComputeRetentionDiff:
         report = compute_retention_diff(catalogs_a, catalogs_b)
         assert report["totals"]["retained"] == 1
 
+    def test_negative_threshold_raises(self, tmp_path):
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        _write_catalog(str(dir_a), ["char-alice"])
+        _write_catalog(str(dir_b), ["char-alice"])
+
+        import pytest
+        with pytest.raises(ValueError, match="removal_threshold must be >= 0"):
+            compute_retention_diff(str(dir_a), str(dir_b), removal_threshold=-1)
+
+    def test_invalid_layout_raises(self, tmp_path):
+        # A directory that exists but has no catalogs/ subdir and is not named catalogs.
+        dir_a = tmp_path / "a"
+        dir_b = tmp_path / "b"
+        dir_a.mkdir()
+        dir_b.mkdir()
+
+        import pytest
+        with pytest.raises(ValueError, match="Cannot resolve catalog directory"):
+            compute_retention_diff(str(dir_a), str(dir_b))
+
 
 class TestFormatMarkdown:
     def test_flagged_output_lists_removed_ids(self, tmp_path):
