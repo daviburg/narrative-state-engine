@@ -115,7 +115,7 @@ Report:
 
 ### 3.4 Entity Retention Diff
 
-Aggregate entity counts (§3.1) can **mask deletion bugs**: a variant that drops 5 distinct entities while adding 5 new ones shows a net delta of 0, hiding the loss. This is exactly how PR #393 (#394, 27% loss) and the stale-sweep over-removal (#441) went undetected. A per-entity retention diff compares entity **IDs** between variant A and variant B so removals are surfaced explicitly.
+Aggregate entity counts (§3.1) can **mask deletion bugs**: a variant that drops 5 distinct entities while adding 5 new ones shows a net delta of 0, hiding the loss. This is exactly how PR #393 (#394, 27% loss) and the stale-sweep over-removal (#441) went undetected. A per-entity retention diff compares entities between variant A and variant B — matching by ID and, when IDs differ across branches, by name/alias — so genuine removals are surfaced explicitly and ID-scheme renames are not mistaken for churn.
 
 Run `tools/entity_retention_diff.py`, comparing one representative variant-A run against one representative variant-B run (use the same run number for both, e.g. `run1`):
 
@@ -127,11 +127,14 @@ python tools/entity_retention_diff.py \
 
 The tool accepts either a framework directory (containing a `catalogs/` subdir) or a `catalogs/` directory directly. For each entity type (characters, locations, items, factions, events) it reports:
 
-- **retained** — IDs present in both A and B (A ∩ B)
-- **removed** — IDs present in A but missing from B (A − B)
-- **added** — IDs present in B but missing from A (B − A)
+- **retained** — entities matched between A and B with the *same* ID
+- **renamed** — entities matched by name/alias but with a *different* ID (an ID-scheme rename, e.g. `char-elder` → `char-elder-001`)
+- **removed** — entities in A with no ID *or* name/alias match in B (TRUE removal)
+- **added** — entities in B with no ID *or* name/alias match in A (TRUE addition)
 
-It emits a Markdown summary table (default) or JSON (`--json`), and **flags** the run when the total number of removed IDs exceeds the configurable `--threshold` (default `0`, i.e. any removal flags). Pass `--strict` to make the tool exit non-zero when flagged (useful for CI gating):
+By default (`--match-by auto`) the tool first pairs entities by exact ID, then falls back to a normalized name + alias match (within the same catalog type) for any leftovers. This prevents **phantom churn** when two branches use different ID schemes for the same entity (e.g. main's bare slug `char-elder` vs the compression branch's `char-elder-001`): the entity is reported as a **rename**, not as one removal plus one addition. Use `--match-by id` to restore the legacy exact-ID-only behavior, or `--match-by name` to pair purely on name/alias.
+
+It emits a Markdown summary table (default) or JSON (`--json`), and **flags** the run when the total number of TRUE removed entities exceeds the configurable `--threshold` (default `0`, i.e. any removal flags). ID renames never count toward the threshold. Pass `--strict` to make the tool exit non-zero when flagged (useful for CI gating):
 
 ```bash
 python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-b-run1 --threshold 0 --strict
