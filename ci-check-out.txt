@@ -1,1 +1,0 @@
-[{"conclusion":"success","name":"CI","status":"completed"},{"conclusion":"success","name":"CodeQL","status":"completed"}]
