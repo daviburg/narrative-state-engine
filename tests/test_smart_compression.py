@@ -276,11 +276,15 @@ class TestContextFloor:
         """When floor triggers, all entity IDs are preserved in the result."""
         catalogs = self._make_large_catalogs(30)
 
-        # Use a tiny budget to force heavy compression and trigger floor
+        # All 30 catalog entities are stale (last_updated_turn <= turn-200,
+        # current_turn=300, staleness_threshold=50), so staleness filtering
+        # excludes them all -- that is what triggers the floor, not the tiny
+        # budget.  The small budget is present to ensure the floor result is
+        # also returned within budget constraints.
         result = format_known_entities_bounded(
             catalogs,
             current_turn=300,
-            entity_context_budget=5,  # 5 tokens -- tiny, will trigger floor
+            entity_context_budget=5,
             turn_text="something happened",
         )
         # Floor must have fired: all entity IDs must appear in the result
@@ -313,10 +317,13 @@ class TestContextFloor:
         # when turn_text mentions only a few.
         catalogs = self._make_large_catalogs(30)
 
+        # All catalog entities are stale relative to current_turn=300 with the
+        # discovery staleness threshold, so staleness filtering excludes them
+        # all -- that is what triggers the floor fallback, not the tiny budget.
         result = format_known_entities_bounded(
             catalogs,
             current_turn=300,
-            entity_context_budget=5,  # tiny budget to force floor
+            entity_context_budget=5,
             turn_text="something happened",
             staleness_threshold=_DISCOVERY_STALENESS_THRESHOLD,
             context_label="discovery",
