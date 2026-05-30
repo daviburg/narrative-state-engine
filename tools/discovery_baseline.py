@@ -26,6 +26,7 @@ from tools.catalog_merger import (
     find_entity_by_id,
     _estimate_tokens,
     _infer_type_from_prefix,
+    _DISCOVERY_STALENESS_THRESHOLD,
 )
 from tools.semantic_extraction import format_discovery_prompt, load_template
 from tools.llm_client import LLMClient
@@ -252,6 +253,8 @@ def main():
             context_length=context_length,
             entity_context_budget=entity_budget,
             turn_text=turn_text,
+            staleness_threshold=_DISCOVERY_STALENESS_THRESHOLD,
+            context_label="discovery",
         )
         known_tokens = _estimate_tokens(known)
 

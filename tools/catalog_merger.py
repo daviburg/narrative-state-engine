@@ -419,9 +419,10 @@ _DEFAULT_STALENESS_THRESHOLD = 30
 # late-game turns with few new mentions lose awareness of most of the catalog.
 _DISCOVERY_STALENESS_THRESHOLD = 50
 
-# Minimum fraction of uncompressed context tokens that must survive compression.
-# If the compressed result falls below this fraction, fall back to the
-# uncompressed context to prevent catastrophic entity loss.
+# Minimum fraction of catalog entities that must survive staleness filtering.
+# If fewer than this fraction of entities remain after staleness cutoff, fall
+# back to a budget-capped brief/id-only format covering all catalog entities
+# to prevent catastrophic entity loss.
 _CONTEXT_FLOOR_FRACTION = 0.5
 
 # Minimum entity name length to avoid false-positive keyword matches
