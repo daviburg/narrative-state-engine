@@ -3124,11 +3124,6 @@ def extract_and_merge(
     turn_id = turn["turn_id"]
     _t0 = time.monotonic()
     _entities_before = sum(len(v) for v in catalogs.values())
-    _rels_before = sum(
-        len(e.get("relationships") or [])
-        for entities in catalogs.values()
-        for e in entities
-    )
     _events_before = len(events_list)
 
     # Per-phase tracking for extraction log (#217)
@@ -3274,6 +3269,16 @@ def extract_and_merge(
             "name": pc_name,
             "type": "character",
         })
+
+    # Count relationships only for mentioned entities — mirrors the subset the
+    # relationship prompt actually receives via _collect_existing_relationships.
+    _mentioned_id_set = {e["id"] for e in mentioned_entities}
+    _rels_before = sum(
+        len(e.get("relationships") or [])
+        for entities in catalogs.values()
+        for e in entities
+        if (get_entity_id(e) or e.get("id")) in _mentioned_id_set
+    )
 
     # Pre-compute relationship context
     _run_rels = len(mentioned_entities) >= 2
