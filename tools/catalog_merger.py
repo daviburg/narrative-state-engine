@@ -681,7 +681,8 @@ def format_known_entities_bounded(
     entity_context_budget: int | None = None,
     recency_window: int | None = None,
     turn_text: str | None = None,
-) -> str:
+    return_stats: bool = False,
+) -> str | tuple[str, dict]:
     """Format known entities with a configurable token budget.
 
     When *turn_text* is provided, entities are selected by contextual
@@ -714,12 +715,29 @@ def format_known_entities_bounded(
         turn_text: The current turn's text content.  When provided, enables
             context-aware entity selection based on mentions, co-location,
             and relationships.
+        return_stats: When True, return ``(text, stats)`` where ``stats`` holds
+            the pre-bound token estimate and section counters
+            (``raw_tokens``, ``catalog_entries_pruned``,
+            ``catalog_entries_degraded``).  The default (``False``) keeps the
+            original string-only return so existing callers are unchanged.  The
+            stats path is the backward-compatible plumbing PR-2 wires into the
+            per-turn metrics.
 
     Returns:
-        Formatted entity list string, possibly with a truncation note.
+        Formatted entity list string, possibly with a truncation note.  When
+        ``return_stats`` is True, a ``(text, stats)`` tuple instead.
     """
     if recency_window is None:
         recency_window = _DEFAULT_RECENCY_WINDOW
+
+    def _ret(text: str, raw_tokens: int, pruned: int, degraded: int):
+        if return_stats:
+            return text, {
+                "raw_tokens": raw_tokens,
+                "catalog_entries_pruned": pruned,
+                "catalog_entries_degraded": degraded,
+            }
+        return text
 
     # Derive budget
     budget: int | None = entity_context_budget
@@ -732,12 +750,14 @@ def format_known_entities_bounded(
         all_entities.extend(entities)
 
     if not all_entities:
-        return "(none — empty catalog)"
+        _empty = "(none — empty catalog)"
+        return _ret(_empty, _estimate_tokens(_empty), 0, 0)
 
     # If no budget constraint and no turn text for context-aware filtering,
     # fall back to unbounded format
     if budget is None and not turn_text:
-        return format_known_entities(catalogs)
+        _full = format_known_entities(catalogs)
+        return _ret(_full, _estimate_tokens(_full), 0, 0)
 
     # Fast-path: if full unbounded output fits within budget AND no turn
     # text is available for context-aware filtering, return it directly so
@@ -745,8 +765,9 @@ def format_known_entities_bounded(
     # When turn_text IS provided, we always use context-aware selection to
     # proactively trim stale entities even when under budget.
     unbounded = format_known_entities(catalogs)
-    if not turn_text and _estimate_tokens(unbounded) <= budget:
-        return unbounded
+    _unbounded_tokens = _estimate_tokens(unbounded)
+    if not turn_text and _unbounded_tokens <= budget:
+        return _ret(unbounded, _unbounded_tokens, 0, 0)
 
     # Order entities by contextual relevance when turn text is available,
     # otherwise fall back to recency-only partitioning.
@@ -823,7 +844,16 @@ def format_known_entities_bounded(
         )
         result += note
 
-    return result
+    # Count kept entities rendered below full detail (brief / id-only).
+    # Only computed when stats are requested — re-running _format_entity_full
+    # per kept line is wasted work on the hot path when the value is discarded.
+    degraded = 0
+    if return_stats:
+        degraded = sum(
+            1 for i in range(len(lines))
+            if lines[i] != _format_entity_full(ordered[i])
+        )
+    return _ret(result, _unbounded_tokens, omitted, degraded)
 
 
 # ---------------------------------------------------------------------------

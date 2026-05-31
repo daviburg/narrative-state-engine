@@ -68,6 +68,16 @@ The **≥3-runs-per-variant** requirement applies **only** when a test is run at
 | > +20% wall-clock time | BLOCK — must optimize before merge |
 | Any performance improvement | Always PASS — no upper bound on speed gains |
 
+### 2.4 Compression PRs — Combined Cost+Quality Gate (#464)
+
+Any PR that changes context compression behavior (the adaptive stage, the discovery floor, or any of the `format_known_entities_bounded` / `_collect_existing_relationships` / `_trim_entry_for_scene` surfaces) MUST report cost and quality **together** and **bucketed by turn band**. Session totals are insufficient — PR #393/#394/#463 each regressed late-turn behavior that a whole-session average masked.
+
+- **Turn-band bucketing is mandatory.** Report prompt-token cost (raw, compressed, ratio) and entity/relationship retention separately for the **1-20, 21-50, 51-100** bands (and 101+ when the run extends that far). Use `tools/agg_compression.py <extraction-log.jsonl>` to produce the per-band table for each variant.
+- **Combined gate (both must hold):**
+  - **Cost:** the candidate's `compression_ratio` must not *increase* (cost must not grow) in any band versus baseline — late-turn bands are the ones that matter.
+  - **Quality:** zero understanding loss — `compression.dropped_then_referenced[]` must be empty, the discovery floor must hold (`floor_held=yes`), and the §3.4 Entity Retention Diff must show no net entity/relationship deletions attributable to compression in any band.
+- A cost win in early bands that comes with *any* quality regression in a late band is a **BLOCK**, not a trade-off.
+
 ---
 
 ## 3. Quality Metrics — Quantitative
