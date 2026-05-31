@@ -233,7 +233,7 @@ Per-turn stderr lines replace the former lone `[ctx-opt]` print so raw-vs-compre
 
 In PR-1 these print with `ratio=1.00`, `(INACTIVE)`, all drop counters `0`, `floor_held=yes`, and `priority_kept=N/N`.
 
-The three compression surfaces (`format_known_entities_bounded`, `_collect_existing_relationships`, `_trim_entry_for_scene`) gained backward-compatible `return_stats` paths that report their pre-/post-compression token estimates and section counters. PR-1 leaves the call sites on the string-only return (no behavior change); PR-2 wires these stats into the per-turn metrics.
+The three compression surfaces (`format_known_entities_bounded`, `_collect_existing_relationships`, `_trim_entry_for_scene`) gained backward-compatible `return_stats` paths; the stats payload differs per surface: `format_known_entities_bounded` reports `raw_tokens` plus entity-level counters; `_collect_existing_relationships` reports both pre- and post-compression token estimates plus tier counters; `_trim_entry_for_scene` reports drop counters only. PR-1 leaves the call sites on the result-only return (no behavior change); PR-2 wires these stats into the per-turn metrics.
 
 **Aggregator**: `tools/agg_compression.py` (successor to the ad-hoc `_agg_pr463.py`) reads the new fields and buckets metrics by turn-index band (1-20, 21-50, 51-100, 101+), emitting a per-band raw/compressed/ratio table. Turn-band bucketing is the report that gates PR-2 — the late-vs-early split is exactly what hid the #393/#394/#463 regressions when only session totals were checked.
 
