@@ -83,7 +83,15 @@ def aggregate_bands(records: list[dict]) -> dict[str, dict]:
             continue
         band = agg[band_label]
         band["n"] += 1
-        pm = rec.get("prompt_metrics", {}) or {}
+        tc = rec.get("turn_compression") or {}
+        if tc and "prompt_metrics" not in rec:
+            raise ValueError(
+                f"Extraction-log record for turn {rec.get('turn_id')!r} has "
+                "'turn_compression' but is missing 'prompt_metrics'. Current "
+                "instrumentation always writes both fields; this record may be "
+                "from a mixed-version or corrupt log."
+            )
+        pm = rec.get("prompt_metrics") or {}
         rec_raw = 0
         rec_comp = 0
         for phase in PHASES:
@@ -97,7 +105,6 @@ def aggregate_bands(records: list[dict]) -> dict[str, dict]:
             band["phases"][phase]["calls"] += ph.get("calls", 0)
             rec_raw += raw
             rec_comp += comp
-        tc = rec.get("turn_compression") or {}
         if tc:
             band["raw_total"] += tc.get("raw_input_tokens_total", 0)
             band["comp_total"] += tc.get("compressed_input_tokens_total", 0)

@@ -1253,7 +1253,7 @@ def _build_turn_compression(finalized: dict[str, dict]) -> dict:
 
 
 def _build_compression_signals(
-    catalogs: dict, mentioned_entities: list, turn_id: str | None
+    entity_snapshot: int, rel_snapshot: int, mentioned_entities: list, turn_id: str | None
 ) -> dict:
     """Build the quality-observability signals for the turn.
 
@@ -1262,14 +1262,12 @@ def _build_compression_signals(
     catalog entity/relationship the layer was handed is "included", and the
     join-key lists (``dropped_entity_ids``, ``dropped_then_referenced``) are
     empty.  PR-2 populates the real drops.
+
+    ``entity_snapshot`` and ``rel_snapshot`` must be counts captured
+    *before* the discovery/detail/relationship/event phases run so that
+    ``included_vs_total`` reflects what the compression layer was actually
+    handed, not the post-extraction state.
     """
-    entity_total = sum(len(v) for v in catalogs.values())
-    rel_total = 0
-    for entities in catalogs.values():
-        for e in entities:
-            rels = e.get("relationships")
-            if isinstance(rels, list):
-                rel_total += len(rels)
     return {
         "strategy": "baseline",
         "params": {},
@@ -1281,10 +1279,10 @@ def _build_compression_signals(
         "dropped_plot_thread_ids": [],
         "context_window_turn_floor": None,
         "included_vs_total": {
-            "entities_included": entity_total,
-            "entities_total": entity_total,
-            "relationships_included": rel_total,
-            "relationships_total": rel_total,
+            "entities_included": entity_snapshot,
+            "entities_total": entity_snapshot,
+            "relationships_included": rel_snapshot,
+            "relationships_total": rel_snapshot,
         },
         "dropped_then_referenced": [],
     }
@@ -3123,6 +3121,11 @@ def extract_and_merge(
     turn_id = turn["turn_id"]
     _t0 = time.monotonic()
     _entities_before = sum(len(v) for v in catalogs.values())
+    _rels_before = sum(
+        len(e.get("relationships") or [])
+        for entities in catalogs.values()
+        for e in entities
+    )
     _events_before = len(events_list)
 
     # Per-phase tracking for extraction log (#217)
@@ -3847,7 +3850,7 @@ def extract_and_merge(
     _finalized_metrics = _finalize_prompt_metrics(_prompt_metrics)
     _turn_compression = _build_turn_compression(_finalized_metrics)
     _compression_signals = _build_compression_signals(
-        catalogs, mentioned_entities, turn_id,
+        _entities_before, _rels_before, mentioned_entities, turn_id,
     )
     _print_compression_lines(
         turn_id, _turn_compression, _finalized_metrics, mentioned_entities,

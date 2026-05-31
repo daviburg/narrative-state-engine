@@ -210,7 +210,7 @@ The extraction pipeline applies context budget controls automatically to prevent
 
 #### Raw-vs-Compressed Instrumentation (#464, PR-1)
 
-Compression is **born observable**: raw-vs-compressed measurement landed *before* any adaptive behavior change so a regression can never again hide in a stderr-only print (the #460/#463 blind spot). PR-1 adds measurement only — the assembled prompt is byte-for-byte identical to the prior baseline, so `raw_input_tokens == input_tokens` and `compression_ratio == 1.0` on every record (the faithful no-op).
+Compression is **born observable**: raw-vs-compressed measurement landed *before* any adaptive behavior change so a regression can never again hide in a stderr-only print (the #460/#463 blind spot). PR-1 adds measurement only — the assembled prompt is byte-for-byte identical to the prior baseline, so `raw_input_tokens == input_tokens` and `compression_ratio == 1.0` on every successful extraction-log record (the faithful no-op). Quota-exhaustion and exception records are written without these fields.
 
 Per-phase, under `prompt_metrics.<phase>` in `extraction-log.jsonl`:
 

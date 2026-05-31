@@ -136,7 +136,7 @@ def test_compression_signals_noop_shape():
         ],
     }
     mentioned = [{"id": "char-a"}, {"id": "char-b"}]
-    sig = _build_compression_signals(catalogs, mentioned, "turn-007")
+    sig = _build_compression_signals(2, 1, mentioned, "turn-007")
     assert sig["strategy"] == "baseline"
     assert sig["params"] == {}
     assert sig["dropped_entity_ids"] == []
