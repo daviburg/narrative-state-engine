@@ -1824,19 +1824,24 @@ def _collect_existing_relationships(
 
     # Compute token budget
     budget = int((context_length or 32768) * _REL_TOKEN_BUDGET_FRACTION)
-    formatted = _format_relationships_budgeted(scored, budget)
 
     if return_stats:
+        formatted, effective = _format_relationships_budgeted(
+            scored, budget, return_effective=True
+        )
         raw_tokens = _estimate_tokens(json.dumps(result, indent=2))
         opt_tokens = _estimate_tokens(formatted)
+        # Count from the EFFECTIVE tiers actually used to build the output
+        # (after budget-driven degradation), not the pre-budget assignment —
+        # otherwise budget-omitted relationships are under-reported.
         stats = {
             "raw_tokens": raw_tokens,
             "compressed_tokens": opt_tokens,
-            "relationships_pruned": sum(1 for t, _, _ in scored if t >= 4),
-            "relationships_degraded": sum(1 for t, _, _ in scored if t in (2, 3)),
+            "relationships_pruned": sum(1 for t, _, _ in effective if t >= 4),
+            "relationships_degraded": sum(1 for t, _, _ in effective if t in (2, 3)),
         }
         return formatted, stats
-    return formatted
+    return _format_relationships_budgeted(scored, budget)
 
 
 def _format_rel_by_tier(tier: int, rel: dict) -> dict:
@@ -1863,12 +1868,18 @@ def _format_rel_by_tier(tier: int, rel: dict) -> dict:
 
 
 def _format_relationships_budgeted(
-    scored: list[tuple[int, str, dict]], budget: int
-) -> str:
+    scored: list[tuple[int, str, dict]], budget: int,
+    return_effective: bool = False,
+) -> str | tuple[str, list[tuple[int, str, dict]]]:
     """Format scored relationships within a token budget.
 
     Starts with all items formatted at their assigned tier, then degrades
     tier-3 to omit and tier-2 to summary form if over budget.
+
+    When *return_effective* is True, returns ``(text, effective)`` where
+    ``effective`` is the tier list actually used to build the output (after any
+    budget-driven degradation), so callers can report accurate pruned/degraded
+    counts rather than counts from the pre-budget tier assignment.
     """
     # Group by owner for output structure
     def _build_output(items: list[tuple[int, str, dict]]) -> dict[str, list]:
@@ -1881,25 +1892,28 @@ def _format_relationships_budgeted(
                 out.setdefault(owner_id, []).append(formatted)
         return out
 
+    def _ret(text: str, effective: list[tuple[int, str, dict]]):
+        return (text, effective) if return_effective else text
+
     # Initial pass with assigned tiers
     output = _build_output(scored)
     text = json.dumps(output, indent=2) if output else ""
     if _estimate_tokens(text) <= budget:
-        return text
+        return _ret(text, scored)
 
     # Over budget — degrade tier 3 to omit
     degraded = [(4 if t == 3 else t, o, r) for t, o, r in scored]
     output = _build_output(degraded)
     text = json.dumps(output, indent=2) if output else ""
     if _estimate_tokens(text) <= budget:
-        return text
+        return _ret(text, degraded)
 
     # Still over — degrade tier 2 to summary (tier 3)
     degraded = [(3 if t == 2 else t, o, r) for t, o, r in degraded]
     output = _build_output(degraded)
     text = json.dumps(output, indent=2) if output else ""
     if _estimate_tokens(text) <= budget:
-        return text
+        return _ret(text, degraded)
 
     # Safety valve: tier-1 histories dominate — trim them to last 2 entries
     for owner_rels in output.values():
@@ -1908,7 +1922,7 @@ def _format_relationships_budgeted(
             if hist and isinstance(hist, list) and len(hist) > 2:
                 rel["history"] = hist[-2:]
     text = json.dumps(output, indent=2) if output else ""
-    return text
+    return _ret(text, degraded)
 
 
 def format_relationship_prompt(turn: dict, mentioned_entities: list,

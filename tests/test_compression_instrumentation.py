@@ -28,6 +28,7 @@ from semantic_extraction import (  # noqa: E402
     _build_turn_compression,
     _collect_existing_relationships,
     _finalize_prompt_metrics,
+    _format_relationships_budgeted,
     _record_prompt_tokens,
     _trim_entry_for_scene,
 )
@@ -215,6 +216,50 @@ def test_collect_existing_relationships_empty_stats():
     )
     assert out == ""
     assert stats["relationships_pruned"] == 0
+
+
+def test_format_relationships_budgeted_returns_assigned_tiers_when_fits():
+    """With ample budget no degradation occurs; effective == assigned."""
+    scored = [
+        (1, "char-a", {"source_id": "char-a", "target_id": "char-b",
+                       "relationship_type": "ally"}),
+        (3, "char-a", {"source_id": "char-a", "target_id": "char-c",
+                       "relationship_type": "knows"}),
+    ]
+    text, effective = _format_relationships_budgeted(
+        scored, budget=100000, return_effective=True,
+    )
+    assert isinstance(text, str)
+    assert effective == scored
+    assert sum(1 for t, _, _ in effective if t >= 4) == 0
+
+
+def test_format_relationships_budgeted_reports_budget_driven_omission():
+    """A tiny budget forces tier-3 -> omit; the EFFECTIVE tier list must
+    reflect the omission so relationships_pruned is not under-reported
+    (#464 reviewer finding)."""
+    scored = [
+        (3, "char-a", {"source_id": "char-a", "target_id": "char-b",
+                       "relationship_type": "knows", "status": "active"}),
+        (3, "char-a", {"source_id": "char-a", "target_id": "char-c",
+                       "relationship_type": "knows", "status": "active"}),
+    ]
+    # Pre-budget assignment has zero tier-4 (no omissions); a budget of 1 token
+    # forces both tier-3 rows to be degraded to omit.
+    assert sum(1 for t, _, _ in scored if t >= 4) == 0
+    _text, effective = _format_relationships_budgeted(
+        scored, budget=1, return_effective=True,
+    )
+    assert sum(1 for t, _, _ in effective if t >= 4) == 2
+
+
+def test_format_relationships_budgeted_default_returns_str_only():
+    scored = [
+        (1, "char-a", {"source_id": "char-a", "target_id": "char-b",
+                       "relationship_type": "ally"}),
+    ]
+    out = _format_relationships_budgeted(scored, budget=100000)
+    assert isinstance(out, str)
 
 
 def test_trim_entry_for_scene_default_returns_dict():
