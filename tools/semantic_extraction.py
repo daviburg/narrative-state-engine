@@ -1292,13 +1292,17 @@ def _print_compression_lines(
     turn_id: str | None,
     turn_compression: dict,
     finalized: dict[str, dict],
-    mentioned_entities: list,
+    llm_discovered: int,
 ) -> None:
     """Emit the per-turn ``[COMPRESSION]`` / ``[RETENTION]`` stderr lines.
 
     Replaces the former lone ``[ctx-opt]`` print so raw-vs-compressed and the
     discovery-floor guardrail are continuously observable.  In PR-1 the ratio
     is 1.00, no phase is active, and all drop counters are zero.
+
+    ``llm_discovered`` must be the count of entities the LLM found for this
+    turn *before* the ``char-player`` floor is appended to ``mentioned_entities``,
+    so that a turn with no discoveries reports ``discovered=0`` rather than 1.
     """
     raw = turn_compression["raw_input_tokens_total"]
     comp = turn_compression["compressed_input_tokens_total"]
@@ -1317,11 +1321,10 @@ def _print_compression_lines(
     degraded = detail.get("catalog_entries_degraded", 0)
     vol_dropped = detail.get("volatile_snapshots_dropped", 0)
     rel_pruned = rel.get("relationships_pruned", 0)
-    k = len(mentioned_entities)
     print(
         f"[RETENTION]   {turn_id} detail: pruned={pruned} degraded={degraded} "
         f"rel_pruned={rel_pruned} vol_dropped={vol_dropped} | discovery: "
-        f"floor_held=yes omitted=0 discovered={k}",
+        f"floor_held=yes omitted=0 discovered={llm_discovered}",
         file=sys.stderr,
     )
 
@@ -3258,6 +3261,10 @@ def extract_and_merge(
                 "type": entity_ref["type"],
             })
 
+    # Capture LLM-discovered count before the char-player floor is added so that
+    # discovered= in the RETENTION line reflects what the LLM found, not the floor.
+    _llm_discovered_count = len(mentioned_entities)
+
     # Always include the player character in relationships and events
     if not any(e["id"] == "char-player" for e in mentioned_entities):
         pc_result = find_entity_by_id(catalogs, "char-player")
@@ -3853,7 +3860,7 @@ def extract_and_merge(
         _entities_before, _rels_before, mentioned_entities, turn_id,
     )
     _print_compression_lines(
-        turn_id, _turn_compression, _finalized_metrics, mentioned_entities,
+        turn_id, _turn_compression, _finalized_metrics, _llm_discovered_count,
     )
     _log_record = {
         "turn_id": turn_id,
