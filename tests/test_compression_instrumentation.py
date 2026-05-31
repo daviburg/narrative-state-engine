@@ -386,3 +386,97 @@ def test_parse_turn_number():
 def test_estimate_tokens_is_shared():
     # Sanity: the aggregator and instrumentation share the catalog tokenizer.
     assert _estimate_tokens("abcdef") >= 1
+
+
+# ---------------------------------------------------------------------------
+# _parse_args — label-to-path pairing preserves positional order
+# ---------------------------------------------------------------------------
+
+def test_parse_args_label_precedes_path():
+    """``--label A run_a.jsonl --label B run_b.jsonl`` pairs correctly."""
+    result = agg_compression._parse_args(
+        ["--label", "A", "run_a.jsonl", "--label", "B", "run_b.jsonl"]
+    )
+    assert result == [("A", "run_a.jsonl"), ("B", "run_b.jsonl")]
+
+
+def test_parse_args_label_after_first_path():
+    """``run_a.jsonl --label B run_b.jsonl`` gives the first path no label."""
+    result = agg_compression._parse_args(
+        ["run_a.jsonl", "--label", "B", "run_b.jsonl"]
+    )
+    assert result == [(None, "run_a.jsonl"), ("B", "run_b.jsonl")]
+
+
+def test_parse_args_no_labels():
+    """Paths without labels all carry ``None``."""
+    result = agg_compression._parse_args(["a.jsonl", "b.jsonl"])
+    assert result == [(None, "a.jsonl"), (None, "b.jsonl")]
+
+
+def test_parse_args_label_equals_form():
+    """``--label=X path`` (equals form) is accepted."""
+    result = agg_compression._parse_args(["--label=X", "x.jsonl"])
+    assert result == [("X", "x.jsonl")]
+
+
+# ---------------------------------------------------------------------------
+# extract_and_merge — turn_compression and compression land in log record
+# ---------------------------------------------------------------------------
+
+def _make_stub_llm():
+    """Minimal stub LLM that returns empty extraction results for all phases."""
+    from unittest.mock import MagicMock
+
+    llm = MagicMock()
+    llm.default_timeout = 10
+    llm.pc_max_tokens = 4096
+    llm.parallel_workers = 1
+    llm.delay = MagicMock()
+    llm.config = {}
+
+    def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None,
+                      schema=None, temperature=None):
+        p = system_prompt.lower()
+        if "discover" in p:
+            return {"entities": []}
+        if "detail" in p:
+            return {"entity": {}}
+        if "relationship" in p:
+            return {"relationships": []}
+        if "event" in p:
+            return {"events": []}
+        return {}
+
+    llm.extract_json = MagicMock(side_effect=_extract_json)
+    return llm
+
+
+def test_extract_and_merge_log_record_has_compression_fields(monkeypatch):
+    """extract_and_merge must include ``turn_compression`` and ``compression``
+    in the returned log record so the aggregator and monitoring tooling can
+    read both fields from the extraction-log.jsonl output."""
+    import semantic_extraction as se
+    from catalog_merger import CATALOG_KEYS
+
+    monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+    se._reset_pc_failure_tracking()
+
+    turn = {"turn_id": "turn-001", "speaker": "dm", "text": "All is quiet."}
+    catalogs = {fn: [] for fn in CATALOG_KEYS}
+    llm = _make_stub_llm()
+
+    _cats, _events, _failed, log = se.extract_and_merge(
+        turn, catalogs, [], llm, min_confidence=0.5,
+    )
+
+    assert "turn_compression" in log, "log record must contain 'turn_compression'"
+    assert "compression" in log, "log record must contain 'compression'"
+
+    # No-op run: ratio == 1.0, no phases activated.
+    tc = log["turn_compression"]
+    assert tc["compression_ratio_total"] == 1.0
+    assert tc["activated_phases"] == []
+
+    # compression quality-signal block must carry the strategy key.
+    assert log["compression"]["strategy"] == "baseline"

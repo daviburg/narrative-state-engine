@@ -163,19 +163,40 @@ def load_records(path: str) -> list[dict]:
 
 
 def _parse_args(argv: list[str]) -> list[tuple[str | None, str]]:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "paths", nargs="*", help="extraction-log.jsonl file(s)"
-    )
-    parser.add_argument(
-        "--label", action="append", default=[],
-        help="optional label for the next path (repeatable)",
-    )
-    args = parser.parse_args(argv)
+    """Parse argv into (label, path) pairs.
+
+    Each ``--label LABEL`` applies to the immediately following positional path
+    argument.  Paths without a preceding ``--label`` carry ``None`` as the
+    label.  argparse would silently collect labels and paths into separate
+    lists, losing the positional relationship; this sequential scan preserves
+    it so ``run_a.jsonl --label B run_b.jsonl`` correctly yields
+    ``[(None, "run_a.jsonl"), ("B", "run_b.jsonl")]``.
+    """
+    if "--help" in argv or "-h" in argv:
+        parser = argparse.ArgumentParser(description=__doc__)
+        parser.add_argument("paths", nargs="*", help="extraction-log.jsonl file(s)")
+        parser.add_argument(
+            "--label", metavar="LABEL", action="append", default=[],
+            help="label for the immediately following path (repeatable)",
+        )
+        parser.parse_args(["--help"])  # prints help and exits
     labeled: list[tuple[str | None, str]] = []
-    for i, path in enumerate(args.paths):
-        label = args.label[i] if i < len(args.label) else None
-        labeled.append((label, path))
+    pending_label: str | None = None
+    i = 0
+    while i < len(argv):
+        tok = argv[i]
+        if tok == "--label" and i + 1 < len(argv):
+            pending_label = argv[i + 1]
+            i += 2
+        elif tok.startswith("--label="):
+            pending_label = tok[len("--label="):]
+            i += 1
+        elif not tok.startswith("-"):
+            labeled.append((pending_label, tok))
+            pending_label = None
+            i += 1
+        else:
+            i += 1  # ignore unrecognised flags
     return labeled
 
 
