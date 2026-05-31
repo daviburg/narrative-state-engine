@@ -228,10 +228,10 @@ Per-turn stderr lines replace the former lone `[ctx-opt]` print so raw-vs-compre
 
 ```
 [COMPRESSION] turn-072 raw=27310 comp=14880 ratio=0.54 phases=entity_detail,relationship_mapper (ACTIVE)
-[RETENTION]   turn-072 detail: pruned=0 degraded=11 rel_pruned=14 vol_dropped=9 | discovery: floor_held=yes omitted=0 priority_kept=8/8
+[RETENTION]   turn-072 detail: pruned=0 degraded=11 rel_pruned=14 vol_dropped=9 | discovery: floor_held=yes omitted=0 discovered=8
 ```
 
-In PR-1 these print with `ratio=1.00`, `(INACTIVE)`, all drop counters `0`, `floor_held=yes`, and `priority_kept=N/N`.
+In PR-1 these print with `ratio=1.00`, `(INACTIVE)`, all drop counters `0`, `floor_held=yes`, and `discovered=N` (the count of LLM-discovered entities for the turn, not a priority-retention ratio).
 
 The three compression surfaces (`format_known_entities_bounded`, `_collect_existing_relationships`, `_trim_entry_for_scene`) gained backward-compatible `return_stats` paths; the stats payload differs per surface: `format_known_entities_bounded` reports `raw_tokens` plus entity-level counters; `_collect_existing_relationships` reports both pre- and post-compression token estimates plus tier counters; `_trim_entry_for_scene` reports drop counters only. PR-1 leaves the call sites on the result-only return (no behavior change); PR-2 wires these stats into the per-turn metrics.
 

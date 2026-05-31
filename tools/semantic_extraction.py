@@ -1321,7 +1321,7 @@ def _print_compression_lines(
     print(
         f"[RETENTION]   {turn_id} detail: pruned={pruned} degraded={degraded} "
         f"rel_pruned={rel_pruned} vol_dropped={vol_dropped} | discovery: "
-        f"floor_held=yes omitted=0 priority_kept={k}/{k}",
+        f"floor_held=yes omitted=0 discovered={k}",
         file=sys.stderr,
     )
 
