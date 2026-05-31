@@ -367,6 +367,16 @@ def test_format_band_table_lists_all_bands():
     assert "Compression by turn band" in table
 
 
+def test_aggregate_bands_skips_quota_exception_records():
+    """Records with a turn_id but neither prompt_metrics nor turn_compression
+    (e.g. quota / exception records) must NOT be counted as successful turns."""
+    quota_record = {"turn_id": "turn-005"}  # neither field present
+    normal = _make_record(10)
+    agg = agg_compression.aggregate_bands([quota_record, normal])
+    assert agg["1-20"]["n"] == 1, "quota record must not inflate turn count"
+    assert agg["1-20"]["raw_total"] == normal["turn_compression"]["raw_input_tokens_total"]
+
+
 def test_parse_turn_number():
     assert agg_compression.parse_turn_number("turn-042") == 42
     assert agg_compression.parse_turn_number(None) is None

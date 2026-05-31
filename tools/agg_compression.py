@@ -82,16 +82,20 @@ def aggregate_bands(records: list[dict]) -> dict[str, dict]:
         if band_label is None:
             continue
         band = agg[band_label]
-        band["n"] += 1
         tc = rec.get("turn_compression") or {}
-        if tc and "prompt_metrics" not in rec:
+        pm = rec.get("prompt_metrics") or {}
+        if not tc and not pm:
+            # Quota / exception record: has a turn_id but carries no
+            # instrumentation data.  Do not count it as a successful turn.
+            continue
+        if tc and not pm:
             raise ValueError(
                 f"Extraction-log record for turn {rec.get('turn_id')!r} has "
                 "'turn_compression' but is missing 'prompt_metrics'. Current "
                 "instrumentation always writes both fields; this record may be "
                 "from a mixed-version or corrupt log."
             )
-        pm = rec.get("prompt_metrics") or {}
+        band["n"] += 1
         rec_raw = 0
         rec_comp = 0
         for phase in PHASES:
