@@ -74,7 +74,7 @@ Any PR that changes context compression behavior (the adaptive stage, the discov
 
 - **Turn-band bucketing is mandatory.** Report prompt-token cost (raw, compressed, ratio) and entity/relationship retention separately for the **1-20, 21-50, 51-100** bands (and 101+ when the run extends that far). Use `tools/agg_compression.py <extraction-log.jsonl>` to produce the per-band table for each variant.
 - **Combined gate (both must hold):**
-  - **Cost:** the candidate's `compression_ratio` must not *increase* (cost must not grow) in any band versus baseline — late-turn bands are the ones that matter.
+  - **Cost:** the candidate's absolute compressed token count **and** `compression_ratio` must each not *increase* in any band versus baseline — ratio alone is insufficient because a lower ratio on a larger raw context can still send more tokens; late-turn bands are the ones that matter.
   - **Quality:** zero understanding loss — `compression.dropped_then_referenced[]` must be empty, the discovery floor must hold (`floor_held=yes`), and the §3.4 Entity Retention Diff must show no net entity/relationship deletions attributable to compression in any band.
 - A cost win in early bands that comes with *any* quality regression in a late band is a **BLOCK**, not a trade-off.
 
