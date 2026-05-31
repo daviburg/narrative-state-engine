@@ -774,6 +774,10 @@ def format_known_entities_bounded(
     ordered, priority_ids = _select_context_aware_entities(
         all_entities, turn_text, current_turn, recency_window,
     )
+    # Stale backfill entities excluded by context-aware selection are absent
+    # from the formatted context just like budget-popped entries, so count
+    # them toward catalog_entries_pruned for accurate instrumentation.
+    context_excluded = len(all_entities) - len(ordered)
 
     # Build lines in context-aware order
     lines: list[str] = []
@@ -853,7 +857,7 @@ def format_known_entities_bounded(
             1 for i in range(len(lines))
             if lines[i] != _format_entity_full(ordered[i])
         )
-    return _ret(result, _unbounded_tokens, omitted, degraded)
+    return _ret(result, _unbounded_tokens, omitted + context_excluded, degraded)
 
 
 # ---------------------------------------------------------------------------
