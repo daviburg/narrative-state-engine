@@ -2832,8 +2832,19 @@ def _run_discovery_phase(
         centrality=_centrality,
     )
     # Raw-vs-compressed delta for the entity section (#465 instrumentation).
-    # When adaptive is off, raw == final so the delta is 0 (faithful no-op).
-    _known_raw_delta = max(0, _known_stats["raw_tokens"] - _estimate_tokens(known))
+    # Attribute a delta to "compression" ONLY when adaptive compression is
+    # active.  When it is off (the default), the entity section can still shrink
+    # because of pre-existing baseline budgeting / staleness pruning inside
+    # ``format_known_entities_bounded()`` — but that is NOT adaptive compression,
+    # so attributing it would make the default-off path falsely report
+    # ``raw > compressed`` / ``compression_ratio < 1.0``.  Force the delta to 0
+    # in the off state so the instrumentation is a faithful no-op (raw ==
+    # compressed, ratio == 1.0).
+    _known_raw_delta = (
+        max(0, _known_stats["raw_tokens"] - _estimate_tokens(known))
+        if _adaptive is not None
+        else 0
+    )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
     _disc_sys_tmpl = load_template("entity-discovery")

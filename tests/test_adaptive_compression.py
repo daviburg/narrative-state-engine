@@ -208,6 +208,42 @@ class TestPressureGate:
         )
         assert _estimate_tokens(out_above) < _estimate_tokens(full)
 
+    def test_gate_fraction_binds_between_gate_and_budget(self):
+        # Regression for the #468 review: ``pressure_gate_fraction`` must
+        # materially change behavior.  When assembled context sits between
+        # ``gate * budget`` and ``budget`` (i.e. under hard overflow but above
+        # the gate), a low gate (0.45) compresses proactively while a 1.0 gate
+        # (compress only on hard overflow) leaves the context untouched.  If the
+        # parameter were inert (the bug), both would be identical.
+        catalogs = _big_catalog(n=40, identity_len=60)
+        centrality = compute_entity_centrality(catalogs)
+        full = format_known_entities_bounded(
+            catalogs, current_turn=40, entity_context_budget=100000,
+            turn_text="zzz",
+            adaptive=adaptive_compression_config(_enabled_config()),
+            centrality=centrality,
+        )
+        assembled = _estimate_tokens(full)
+        # Budget chosen so assembled ~= 70% of budget: above 0.45*budget but
+        # below the budget itself (no hard overflow).
+        budget = int(assembled / 0.7)
+        low_gate = adaptive_compression_config(
+            _enabled_config(pressure_gate_fraction=0.45))
+        high_gate = adaptive_compression_config(
+            _enabled_config(pressure_gate_fraction=1.0))
+        out_low = format_known_entities_bounded(
+            catalogs, current_turn=40, entity_context_budget=budget,
+            turn_text="zzz", adaptive=low_gate, centrality=centrality,
+        )
+        out_high = format_known_entities_bounded(
+            catalogs, current_turn=40, entity_context_budget=budget,
+            turn_text="zzz", adaptive=high_gate, centrality=centrality,
+        )
+        # gate == 1.0 -> no compression below hard budget overflow -> untouched.
+        assert out_high == full
+        # gate == 0.45 -> compresses proactively -> strictly smaller output.
+        assert _estimate_tokens(out_low) < _estimate_tokens(out_high)
+
 
 # ---------------------------------------------------------------------------
 # Discovery floor

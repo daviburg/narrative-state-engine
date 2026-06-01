@@ -262,7 +262,9 @@ from over-trimming. Enable it under the `context_optimizations` block in
 
 - **When off (the default, or the block absent), behavior is byte-for-byte
   identical to the always-on baseline** — `raw_input_tokens == compressed_input_tokens`
-  and `compression_ratio == 0.0` for every phase.
+  and `compression_ratio == 1.0` for every phase (the `[COMPRESSION]` stderr line
+  reports `ratio=1.00 (INACTIVE)`). The ratio is `compressed / raw`, so a faithful
+  no-op is `1.0`, never `0.0`.
 - **When to enable:** late-session runs where entity catalogs have grown large
   enough to overflow context, *after* validating with an A/B entity-retention
   diff (see `docs/ab-test-standard.md`). The keys are Rule-10 thresholds and

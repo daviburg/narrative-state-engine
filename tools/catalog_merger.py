@@ -1012,14 +1012,20 @@ def format_known_entities_bounded(
 
     used = _estimate_tokens("\n".join(lines)) if lines else 0
 
-    # Adaptive pressure gate (#460): below the gate there is no budget pressure,
-    # so return the full uncompressed context.  This is what lets early/low-fill
-    # turns pass through and prevents the #393 discovery starvation.  When
-    # adaptive is None this is inert and the original trimming logic runs.
-    _gate_skip = False
+    # Adaptive pressure gate (#460): ``pressure_gate_fraction`` is both the
+    # activation threshold *and* the trim-down target for the adaptive path.
+    # Compression engages once the assembled context exceeds
+    # ``pressure_gate_fraction * budget`` (proactively, before a hard budget
+    # overflow) and trims back toward that threshold — never below the
+    # discovery floor.  This lets early/low-fill turns pass through untouched
+    # (the #393 starvation fix) while making the fraction materially control
+    # how early and how hard a phase compresses: a value of ``1.0`` reproduces
+    # the original "compress only on hard budget overflow" behavior, while
+    # ``0.45`` compresses once the phase is ~45% full.  When ``adaptive`` is
+    # None this is inert and the original trimming logic runs unchanged.
+    _gate_target: float | None = None
     if adaptive is not None and budget is not None:
-        if used <= adaptive["pressure_gate_fraction"] * budget:
-            _gate_skip = True
+        _gate_target = adaptive["pressure_gate_fraction"] * budget
 
     if adaptive is None:
         # --- Original (default-off) trimming path: byte-for-byte unchanged ---
@@ -1057,7 +1063,8 @@ def format_known_entities_bounded(
                 used = _estimate_tokens("\n".join(lines)) if lines else 0
     else:
         # --- Adaptive path (#460): pressure-gated, floor-protected, centrality
-        # backstop.  Only engages above the pressure gate.
+        # backstop.  Engages once assembled context exceeds the pressure gate
+        # (``_gate_target``) and trims back toward it, never below the floor.
         omitted = 0
         exempt = centrality_exempt_ids(centrality, adaptive)
         floor_tokens = (
@@ -1065,10 +1072,15 @@ def format_known_entities_bounded(
             if budget is not None
             else 0
         )
+        # The trim target is the pressure gate, not the raw budget: this is what
+        # makes ``pressure_gate_fraction`` bind.  With the gate at 1.0 the target
+        # equals the budget (original hard-overflow behavior); below 1.0 the
+        # phase is compressed earlier and harder, down to the gate (bounded by
+        # the discovery floor).
         _trim = (
             budget is not None
-            and not _gate_skip
-            and used > budget
+            and _gate_target is not None
+            and used > _gate_target
             and len(lines) > 1
         )
         if _trim:
@@ -1082,10 +1094,10 @@ def format_known_entities_bounded(
                 if lines[i] != brief_line and lines[i] != id_only_line:
                     lines[i] = brief_line
                     used = _estimate_tokens("\n".join(lines))
-                    if used <= budget or used <= floor_tokens:
+                    if used <= _gate_target or used <= floor_tokens:
                         break
             # Pass 2: degrade brief → id-only, tail-first, centrality exempt.
-            if used > budget and used > floor_tokens:
+            if used > _gate_target and used > floor_tokens:
                 for i in range(len(ordered) - 1, -1, -1):
                     if ordered[i]["id"] in exempt:
                         continue
@@ -1093,14 +1105,14 @@ def format_known_entities_bounded(
                     if lines[i] != id_only_line:
                         lines[i] = id_only_line
                         used = _estimate_tokens("\n".join(lines))
-                        if used <= budget or used <= floor_tokens:
+                        if used <= _gate_target or used <= floor_tokens:
                             break
             # Pass 3: omit non-exempt entities tail-first, but never trim the
             # retained discovery context below the discovery floor (#393 guard).
-            if used > budget and used > floor_tokens:
+            if used > _gate_target and used > floor_tokens:
                 keep = [True] * len(lines)
                 for i in range(len(ordered) - 1, -1, -1):
-                    if used <= budget or used <= floor_tokens:
+                    if used <= _gate_target or used <= floor_tokens:
                         break
                     if ordered[i]["id"] in exempt:
                         continue

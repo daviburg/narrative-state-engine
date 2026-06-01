@@ -480,3 +480,57 @@ def test_extract_and_merge_log_record_has_compression_fields(monkeypatch):
 
     # compression quality-signal block must carry the strategy key.
     assert log["compression"]["strategy"] == "baseline"
+
+
+def test_default_off_noop_even_when_baseline_pruning_removes_entities(monkeypatch):
+    """Regression for the #468 review: with adaptive compression OFF, the
+    emitted compression metrics must be a faithful no-op (``ratio == 1.0``,
+    ``raw == compressed``) EVEN WHEN the pre-existing baseline budgeting /
+    staleness pruning inside ``format_known_entities_bounded()`` shrinks the
+    entity section.  Baseline pruning is not adaptive compression and must not
+    be attributed to it (which would falsely report ``raw > compressed``)."""
+    import semantic_extraction as se
+    from catalog_merger import CATALOG_KEYS
+
+    monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+    se._reset_pc_failure_tracking()
+
+    # A catalog large enough that a small entity budget forces baseline pruning.
+    chars = [
+        {
+            "id": f"char-{i:03d}", "name": f"Entity Number {i:03d}",
+            "type": "character", "identity": "x" * 80,
+            "last_updated_turn": "turn-300",
+        }
+        for i in range(40)
+    ]
+    catalogs = {fn: [] for fn in CATALOG_KEYS}
+    catalogs["characters.json"] = chars
+
+    small_budget = 120
+    # Precondition: with adaptive OFF the bounded formatter DOES prune under
+    # this budget (raw_tokens > final tokens) — otherwise the test is vacuous.
+    _text, _stats = format_known_entities_bounded(
+        catalogs, current_turn=300, entity_context_budget=small_budget,
+        turn_text="Entity Number 000 stands here.", return_stats=True,
+        adaptive=None,
+    )
+    assert _stats["raw_tokens"] > _estimate_tokens(_text), (
+        "test setup must trigger baseline pruning for the assertion to be meaningful"
+    )
+
+    llm = _make_stub_llm()
+    llm.config = {"entity_context_budget": small_budget}
+
+    turn = {"turn_id": "turn-300", "speaker": "dm",
+            "text": "Entity Number 000 stands here."}
+    _cats, _events, _failed, log = se.extract_and_merge(
+        turn, catalogs, [], llm, min_confidence=0.5,
+    )
+
+    tc = log["turn_compression"]
+    # Faithful no-op despite baseline pruning having removed entities from the
+    # discovery prompt: ratio 1.0, raw == compressed, no phase activated.
+    assert tc["compression_ratio_total"] == 1.0
+    assert tc["raw_input_tokens_total"] == tc["compressed_input_tokens_total"]
+    assert tc["activated_phases"] == []
