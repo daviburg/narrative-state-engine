@@ -1164,28 +1164,169 @@ _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
 
 
+# Per-section drop counters recorded alongside each phase's token metrics.
+# In PR-1 (instrumentation only) these stay at zero: no new compression layer
+# is active, so nothing is pruned, degraded, or dropped beyond the existing
+# main baseline.  PR-2 wires the adaptive compressors' real counts here.
+_SECTION_COUNTER_KEYS = (
+    "catalog_entries_pruned",
+    "catalog_entries_degraded",
+    "relationships_pruned",
+    "volatile_snapshots_dropped",
+    "turns_dropped",
+)
+
+
 def _record_prompt_tokens(
-    metrics: dict[str, dict], phase: str, system_prompt: str, user_prompt: str
+    metrics: dict[str, dict],
+    phase: str,
+    system_prompt: str,
+    user_prompt: str,
+    raw_tokens: int | None = None,
+    section_stats: dict | None = None,
 ) -> None:
-    """Record estimated token count for a prompt in the metrics accumulator."""
-    tokens = _estimate_tokens(system_prompt + user_prompt)
+    """Record estimated token counts for a prompt in the metrics accumulator.
+
+    ``raw_tokens`` is the pre-compression token estimate for the phase.  When
+    omitted it defaults to the compressed (final) prompt size — the faithful
+    no-op state where ``raw_input_tokens == input_tokens`` and the per-phase
+    ``compression_ratio`` is 1.0.  ``section_stats`` optionally accumulates the
+    per-section drop counters listed in ``_SECTION_COUNTER_KEYS``.
+
+    The extra parameters are keyword-optional so existing call sites that pass
+    nothing keep recording identical metrics.
+    """
+    comp_tokens = _estimate_tokens(system_prompt + user_prompt)
+    raw = comp_tokens if raw_tokens is None else raw_tokens
     entry = metrics.get(phase)
     if entry is None:
-        metrics[phase] = {"input_tokens": tokens, "calls": 1}
-    else:
-        entry["input_tokens"] += tokens
-        entry["calls"] += 1
+        entry = {"input_tokens": 0, "raw_input_tokens": 0, "calls": 0}
+        for _k in _SECTION_COUNTER_KEYS:
+            entry[_k] = 0
+        metrics[phase] = entry
+    entry["input_tokens"] += comp_tokens
+    entry["raw_input_tokens"] += raw
+    entry["calls"] += 1
+    if section_stats:
+        for k, v in section_stats.items():
+            entry[k] = entry.get(k, 0) + v
 
 
 def _finalize_prompt_metrics(metrics: dict[str, dict]) -> dict[str, dict]:
-    """Compute averages for multi-call phases."""
+    """Compute averages and raw-vs-compressed ratios for each phase."""
     result = {}
     for phase, entry in metrics.items():
         out = dict(entry)
         if out["calls"] > 1:
             out["avg_per_call"] = out["input_tokens"] // out["calls"]
+        out["compressed_input_tokens"] = out["input_tokens"]
+        raw = out.get("raw_input_tokens", out["input_tokens"])
+        out["compression_ratio"] = (
+            round(out["input_tokens"] / raw, 4) if raw else 1.0
+        )
         result[phase] = out
     return result
+
+
+def _build_turn_compression(finalized: dict[str, dict]) -> dict:
+    """Aggregate per-phase metrics into a per-turn compression summary.
+
+    In PR-1 every phase is a no-op (``raw == compressed``), so the total ratio
+    is 1.0 and ``activated_phases`` is empty.
+    """
+    raw_total = sum(
+        p.get("raw_input_tokens", p.get("input_tokens", 0))
+        for p in finalized.values()
+    )
+    comp_total = sum(p.get("input_tokens", 0) for p in finalized.values())
+    ratio = round(comp_total / raw_total, 4) if raw_total else 1.0
+    activated = [
+        name for name, p in finalized.items()
+        if p.get("compression_ratio", 1.0) < 1.0
+    ]
+    return {
+        "raw_input_tokens_total": raw_total,
+        "compressed_input_tokens_total": comp_total,
+        "compression_ratio_total": ratio,
+        "activated_phases": sorted(activated),
+    }
+
+
+def _build_compression_signals(
+    entity_snapshot: int, rel_snapshot: int, mentioned_entities: list, turn_id: str | None
+) -> dict:
+    """Build the quality-observability signals for the turn.
+
+    PR-1 records the structured shape with faithful no-op values: the v3
+    adaptive compression layer is inactive, so nothing is dropped, every
+    catalog entity/relationship the layer was handed is "included", and the
+    join-key lists (``dropped_entity_ids``, ``dropped_then_referenced``) are
+    empty.  PR-2 populates the real drops.
+
+    ``entity_snapshot`` and ``rel_snapshot`` must be counts captured
+    *before* the discovery/detail/relationship/event phases run so that
+    ``included_vs_total`` reflects what the compression layer was actually
+    handed, not the post-extraction state.
+    """
+    return {
+        "strategy": "baseline",
+        "params": {},
+        "dropped_entity_ids": [],
+        "dropped_entity_count": {},
+        "dropped_relationship_count": 0,
+        "dropped_event_ids": [],
+        "dropped_event_count": 0,
+        "dropped_plot_thread_ids": [],
+        "context_window_turn_floor": None,
+        "included_vs_total": {
+            "entities_included": entity_snapshot,
+            "entities_total": entity_snapshot,
+            "relationships_included": rel_snapshot,
+            "relationships_total": rel_snapshot,
+        },
+        "dropped_then_referenced": [],
+    }
+
+
+def _print_compression_lines(
+    turn_id: str | None,
+    turn_compression: dict,
+    finalized: dict[str, dict],
+    llm_discovered: int,
+) -> None:
+    """Emit the per-turn ``[COMPRESSION]`` / ``[RETENTION]`` stderr lines.
+
+    Replaces the former lone ``[ctx-opt]`` print so raw-vs-compressed and the
+    discovery-floor guardrail are continuously observable.  In PR-1 the ratio
+    is 1.00, no phase is active, and all drop counters are zero.
+
+    ``llm_discovered`` must be the count of entities the LLM found for this
+    turn *before* the ``char-player`` floor is appended to ``mentioned_entities``,
+    so that a turn with no discoveries reports ``discovered=0`` rather than 1.
+    """
+    raw = turn_compression["raw_input_tokens_total"]
+    comp = turn_compression["compressed_input_tokens_total"]
+    ratio = turn_compression["compression_ratio_total"]
+    activated = turn_compression["activated_phases"]
+    phases = ",".join(activated)
+    state = "ACTIVE" if activated else "INACTIVE"
+    print(
+        f"[COMPRESSION] {turn_id} raw={raw} comp={comp} ratio={ratio:.2f} "
+        f"phases={phases} ({state})",
+        file=sys.stderr,
+    )
+    detail = finalized.get("entity_detail", {})
+    rel = finalized.get("relationship_mapper", {})
+    pruned = detail.get("catalog_entries_pruned", 0)
+    degraded = detail.get("catalog_entries_degraded", 0)
+    vol_dropped = detail.get("volatile_snapshots_dropped", 0)
+    rel_pruned = rel.get("relationships_pruned", 0)
+    print(
+        f"[RETENTION]   {turn_id} detail: pruned={pruned} degraded={degraded} "
+        f"rel_pruned={rel_pruned} vol_dropped={vol_dropped} | discovery: "
+        f"floor_held=yes omitted=0 discovered={llm_discovered}",
+        file=sys.stderr,
+    )
 
 
 def _parse_turn_number(turn_id: str | None) -> int | None:
@@ -1530,7 +1671,8 @@ def format_detail_prompt(
 
 
 def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
-                          current_turn_num: int | None = None) -> dict:
+                          current_turn_num: int | None = None,
+                          return_stats: bool = False) -> dict | tuple[dict, dict]:
     """Trim a catalog entry for scene-scoped detail injection.
 
     Keeps all stable_attributes and identity, but trims volatile_state
@@ -1543,10 +1685,18 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
     *current_turn_num* is the turn number currently being processed.
     When provided, it is used for recency calculation instead of the
     entry's own ``last_updated_turn``.
+
+    When *return_stats* is True, returns ``(trimmed, stats)`` where ``stats``
+    reports ``volatile_snapshots_dropped`` and ``relationships_pruned`` for this
+    entry.  The default (``False``) keeps the original dict-only return so
+    existing callers are unchanged.  The stats path is the backward-compatible
+    plumbing PR-2 wires into the per-turn metrics.
     """
     if mentioned_ids is None:
         mentioned_ids = set()
     trimmed = {}
+    _vol_dropped = 0
+    _rel_pruned = 0
     # Copy core fields
     for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn",
                 "identity", "current_status", "status_updated_turn", "notes"):
@@ -1572,6 +1722,7 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
                     trimmed_vs[k] = v[:1] + v[-_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS:]
                 else:
                     trimmed_vs[k] = v[-_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS:]
+                _vol_dropped += len(v) - len(trimmed_vs[k])
             else:
                 trimmed_vs[k] = v
         trimmed["volatile_state"] = trimmed_vs
@@ -1585,7 +1736,13 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
         trimmed["relationships"] = _filter_relationships_for_scene(
             rels, mentioned_ids, _recency_ref,
         )
+        _rel_pruned = max(0, len(rels) - len(trimmed["relationships"]))
 
+    if return_stats:
+        return trimmed, {
+            "volatile_snapshots_dropped": _vol_dropped,
+            "relationships_pruned": _rel_pruned,
+        }
     return trimmed
 
 
@@ -1596,7 +1753,8 @@ def _collect_existing_relationships(
     turn_text: str = "",
     current_turn_num: int | None = None,
     context_length: int | None = None,
-) -> str:
+    return_stats: bool = False,
+) -> str | tuple[str, dict]:
     """Gather existing relationships for the given entities and format as JSON.
 
     Returns a compact JSON string containing per-entity relationships so the
@@ -1604,6 +1762,13 @@ def _collect_existing_relationships(
 
     Relationship relevance scoring is always active: applies a tiered
     priority system with a token budget to keep the relationship block bounded.
+
+    When ``return_stats`` is True, returns ``(formatted, stats)`` where ``stats``
+    carries the pre-/post-formatting token estimates and tier counters
+    (``raw_tokens``, ``compressed_tokens``, ``relationships_pruned``,
+    ``relationships_degraded``).  The default (``False``) keeps the original
+    string-only return so existing call sites are unchanged.  This stats path is
+    the backward-compatible plumbing PR-2 will wire into the per-turn metrics.
     """
     result: dict[str, list] = {}
     for eid in entity_ids:
@@ -1614,6 +1779,13 @@ def _collect_existing_relationships(
             if rels:
                 result[eid] = rels
     if not result:
+        if return_stats:
+            return "", {
+                "raw_tokens": 0,
+                "compressed_tokens": 0,
+                "relationships_pruned": 0,
+                "relationships_degraded": 0,
+            }
         return ""
 
     # --- Relationship relevance scoring ---
@@ -1653,13 +1825,24 @@ def _collect_existing_relationships(
 
     # Compute token budget
     budget = int((context_length or 32768) * _REL_TOKEN_BUDGET_FRACTION)
-    formatted = _format_relationships_budgeted(scored, budget)
 
-    raw_tokens = _estimate_tokens(json.dumps(result, indent=2))
-    opt_tokens = _estimate_tokens(formatted)
-    print(f"  [ctx-opt] Relationship scoring: {raw_tokens} → {opt_tokens} tokens "
-          f"(budget={budget})", file=sys.stderr)
-    return formatted
+    if return_stats:
+        formatted, effective = _format_relationships_budgeted(
+            scored, budget, return_effective=True
+        )
+        raw_tokens = _estimate_tokens(json.dumps(result, indent=2))
+        opt_tokens = _estimate_tokens(formatted)
+        # Count from the EFFECTIVE tiers actually used to build the output
+        # (after budget-driven degradation), not the pre-budget assignment —
+        # otherwise budget-omitted relationships are under-reported.
+        stats = {
+            "raw_tokens": raw_tokens,
+            "compressed_tokens": opt_tokens,
+            "relationships_pruned": sum(1 for t, _, _ in effective if t >= 4),
+            "relationships_degraded": sum(1 for t, _, _ in effective if t in (2, 3)),
+        }
+        return formatted, stats
+    return _format_relationships_budgeted(scored, budget)
 
 
 def _format_rel_by_tier(tier: int, rel: dict) -> dict:
@@ -1686,12 +1869,18 @@ def _format_rel_by_tier(tier: int, rel: dict) -> dict:
 
 
 def _format_relationships_budgeted(
-    scored: list[tuple[int, str, dict]], budget: int
-) -> str:
+    scored: list[tuple[int, str, dict]], budget: int,
+    return_effective: bool = False,
+) -> str | tuple[str, list[tuple[int, str, dict]]]:
     """Format scored relationships within a token budget.
 
     Starts with all items formatted at their assigned tier, then degrades
     tier-3 to omit and tier-2 to summary form if over budget.
+
+    When *return_effective* is True, returns ``(text, effective)`` where
+    ``effective`` is the tier list actually used to build the output (after any
+    budget-driven degradation), so callers can report accurate pruned/degraded
+    counts rather than counts from the pre-budget tier assignment.
     """
     # Group by owner for output structure
     def _build_output(items: list[tuple[int, str, dict]]) -> dict[str, list]:
@@ -1704,25 +1893,28 @@ def _format_relationships_budgeted(
                 out.setdefault(owner_id, []).append(formatted)
         return out
 
+    def _ret(text: str, effective: list[tuple[int, str, dict]]):
+        return (text, effective) if return_effective else text
+
     # Initial pass with assigned tiers
     output = _build_output(scored)
     text = json.dumps(output, indent=2) if output else ""
     if _estimate_tokens(text) <= budget:
-        return text
+        return _ret(text, scored)
 
     # Over budget — degrade tier 3 to omit
     degraded = [(4 if t == 3 else t, o, r) for t, o, r in scored]
     output = _build_output(degraded)
     text = json.dumps(output, indent=2) if output else ""
     if _estimate_tokens(text) <= budget:
-        return text
+        return _ret(text, degraded)
 
     # Still over — degrade tier 2 to summary (tier 3)
     degraded = [(3 if t == 2 else t, o, r) for t, o, r in degraded]
     output = _build_output(degraded)
     text = json.dumps(output, indent=2) if output else ""
     if _estimate_tokens(text) <= budget:
-        return text
+        return _ret(text, degraded)
 
     # Safety valve: tier-1 histories dominate — trim them to last 2 entries
     for owner_rels in output.values():
@@ -1731,7 +1923,7 @@ def _format_relationships_budgeted(
             if hist and isinstance(hist, list) and len(hist) > 2:
                 rel["history"] = hist[-2:]
     text = json.dumps(output, indent=2) if output else ""
-    return text
+    return _ret(text, degraded)
 
 
 def format_relationship_prompt(turn: dict, mentioned_entities: list,
@@ -3064,6 +3256,10 @@ def extract_and_merge(
                 "type": entity_ref["type"],
             })
 
+    # Capture LLM-discovered count before the char-player floor is added so that
+    # discovered= in the RETENTION line reflects what the LLM found, not the floor.
+    _llm_discovered_count = len(mentioned_entities)
+
     # Always include the player character in relationships and events
     if not any(e["id"] == "char-player" for e in mentioned_entities):
         pc_result = find_entity_by_id(catalogs, "char-player")
@@ -3073,6 +3269,16 @@ def extract_and_merge(
             "name": pc_name,
             "type": "character",
         })
+
+    # Count relationships only for mentioned entities — mirrors the subset the
+    # relationship prompt actually receives via _collect_existing_relationships.
+    _mentioned_id_set = {e["id"] for e in mentioned_entities}
+    _rels_before = sum(
+        len(e.get("relationships") or [])
+        for entities in catalogs.values()
+        for e in entities
+        if (get_entity_id(e) or e.get("id")) in _mentioned_id_set
+    )
 
     # Pre-compute relationship context
     _run_rels = len(mentioned_entities) >= 2
@@ -3653,6 +3859,14 @@ def extract_and_merge(
     _entities_after = sum(len(v) for v in catalogs.values())
     _events_after = len(events_list)
     _temporal_after = len(timeline) if timeline is not None else 0
+    _finalized_metrics = _finalize_prompt_metrics(_prompt_metrics)
+    _turn_compression = _build_turn_compression(_finalized_metrics)
+    _compression_signals = _build_compression_signals(
+        _entities_before, _rels_before, mentioned_entities, turn_id,
+    )
+    _print_compression_lines(
+        turn_id, _turn_compression, _finalized_metrics, _llm_discovered_count,
+    )
     _log_record = {
         "turn_id": turn_id,
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
@@ -3677,8 +3891,10 @@ def extract_and_merge(
         "discovery_ms": int((_t_after_discovery - _t0) * 1000),
         "parallel_ms": int((_t_after_parallel - _t_after_discovery) * 1000),
         "temporal_ms": int((_t_after_temporal - _t_after_parallel) * 1000),
-        "prompt_metrics": _finalize_prompt_metrics(_prompt_metrics),
+        "prompt_metrics": _finalized_metrics,
         "entity_detail_capped_count": _entity_detail_capped_count,
+        "turn_compression": _turn_compression,
+        "compression": _compression_signals,
     }
     return catalogs, events_list, turn_failed, _log_record
 

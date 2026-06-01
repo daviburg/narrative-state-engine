@@ -216,7 +216,28 @@ to trim prompt content. These are always active and require no configuration.
 | **Scene-scoped detail** | Trims non-PC catalog entries in the entity-detail prompt: volatile state is digested and capped, relationships are filtered to mentioned + recent (20 turns) and capped at 15, stable attributes are preserved in full. |
 
 Monitor the `prompt_metrics` field in `extraction-log.jsonl` to verify
-budget compliance.
+budget compliance.  The `turn_compression` field records per-turn raw and
+compressed token totals and lists which phases were active.
+
+To aggregate across a session and bucket by turn-index band (1-20, 21-50,
+51-100, 101+), use `tools/agg_compression.py`:
+
+```bash
+python tools/agg_compression.py sessions/<name>/framework/extraction-log.jsonl
+
+# Compare two runs side-by-side:
+python tools/agg_compression.py --label A run_a/extraction-log.jsonl \
+                                 --label B run_b/extraction-log.jsonl
+```
+
+The `--label` flag applies to the immediately following path; paths without a
+preceding `--label` are displayed using their file path as the title.
+
+Turn-band bucketing reveals late-session prompt growth that session-total
+averages mask.  A healthy session shows a flat or slowly rising ratio across
+all bands.  A ratio approaching 1.0 in the 51-100 and 101+ bands with
+`activated_phases` empty indicates the compression surfaces were never
+triggered; a ratio well below 1.0 in those bands confirms active compression.
 
 ### Timeout Watchdog
 

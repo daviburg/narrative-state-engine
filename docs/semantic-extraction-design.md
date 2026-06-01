@@ -591,6 +591,16 @@ def extract_and_merge(
     return catalogs
 ```
 
+#### 8.1.1 Compression measurement contract (#464)
+
+Every phase records both the **raw** (pre-compression) and **compressed** (assembled) prompt token estimate, so cost and quality regressions are measurable per phase and per turn band before any adaptive trimming is introduced.
+
+- **Measurement contract.** For phase `p`, `raw_input_tokens(p) ≥ compressed_input_tokens(p)` always, and `compression_ratio(p) = compressed / raw ∈ (0, 1]`. `raw` is what the prompt *would* cost with no compression layer; `compressed` is what was actually sent. The PR-1 baseline keeps the two equal (`ratio == 1.0`) — the instrumentation is a faithful no-op until PR-2 activates trimming.
+- **Failure-mode mapping.** Each historical compression regression maps to a now-logged signal: silent late-turn cost blowup → `turn_compression.compression_ratio_total` per turn band; dropped-then-needed context (#393 discovery starvation, #441 stale sweep) → `compression.dropped_then_referenced[]` and `context_window_turn_floor`; over-aggressive pruning → `compression.dropped_entity_count` / `dropped_relationship_count` vs `included_vs_total`. The per-turn `[COMPRESSION]` / `[RETENTION]` stderr lines make these visible during a run, not just post-hoc.
+- **No-op guarantee (PR-1).** With the call sites unchanged, all drop counters are `0`, all dropped-id lists are empty, `included == total`, `activated_phases == []`, and the discovery floor reports `floor_held=yes`.
+
+The three compression surfaces expose an opt-in `return_stats` path that yields `(result, stats)` instead of the bare result; the stats payload differs per surface: `format_known_entities_bounded` returns `raw_tokens` plus entity-level counters (`catalog_entries_pruned`, `catalog_entries_degraded`); `_collect_existing_relationships` returns both `raw_tokens` and `compressed_tokens` plus tier counters; `_trim_entry_for_scene` returns drop counters only (`volatile_snapshots_dropped`, `relationships_pruned`). PR-2 consumes these; PR-1 ships them dormant and unit-tested.
+
 ### 8.2 `tools/catalog_merger.py` — Merge logic
 
 The merger handles:
