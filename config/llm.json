@@ -20,5 +20,15 @@
   "entity_refresh_batch_size": 10,
   "checkpoint_interval": 25,
   "dedup_audit_interval": 50,
-  "skip_response_format": true
+  "skip_response_format": true,
+  "context_optimizations": {
+    "adaptive_compression": {
+      "enabled": false,
+      "pressure_gate_fraction": 0.45,
+      "discovery_floor_fraction": 0.25,
+      "turn_total_budget_fraction": 0.85,
+      "centrality_min_degree": 2,
+      "centrality_exempt_top_n": null
+    }
+  }
 }

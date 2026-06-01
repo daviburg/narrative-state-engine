@@ -29,6 +29,9 @@ from catalog_merger import (
     save_catalogs,
     save_events,
     format_known_entities_bounded,
+    adaptive_compression_config,
+    compute_entity_centrality,
+    coordinate_turn_total,
     find_entity_by_id,
     merge_entity,
     merge_relationships,
@@ -2815,13 +2818,22 @@ def _run_discovery_phase(
         _ctx_len = None
     _cfg = getattr(llm, "config", None)
     _entity_budget = _cfg.get("entity_context_budget") if isinstance(_cfg, dict) else None
-    known = format_known_entities_bounded(
+    # Adaptive compression (#460) — default-off; None disables every new path.
+    _adaptive = adaptive_compression_config(_cfg)
+    _centrality = compute_entity_centrality(catalogs) if _adaptive is not None else None
+    known, _known_stats = format_known_entities_bounded(
         catalogs,
         current_turn=current_turn_num,
         context_length=_ctx_len,
         entity_context_budget=_entity_budget,
         turn_text=turn.get("text"),
+        return_stats=True,
+        adaptive=_adaptive,
+        centrality=_centrality,
     )
+    # Raw-vs-compressed delta for the entity section (#465 instrumentation).
+    # When adaptive is off, raw == final so the delta is 0 (faithful no-op).
+    _known_raw_delta = max(0, _known_stats["raw_tokens"] - _estimate_tokens(known))
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
     _disc_sys_tmpl = load_template("entity-discovery")
@@ -3075,6 +3087,9 @@ def _run_discovery_phase(
         "discovery_filtered": _discovery_filtered,
         "discovery_sys_tmpl": _disc_sys_tmpl,
         "discovery_user_prompt": _disc_user_prompt,
+        "discovery_raw_delta": _known_raw_delta,
+        "discovery_pruned": _known_stats.get("catalog_entries_pruned", 0),
+        "discovery_degraded": _known_stats.get("catalog_entries_degraded", 0),
     }
 
 
@@ -3176,6 +3191,9 @@ def extract_and_merge(
         _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
         _disc_sys_tmpl = prefetched_discovery.get("discovery_sys_tmpl")
         _disc_user_prompt = prefetched_discovery.get("discovery_user_prompt")
+        _disc_raw_delta = prefetched_discovery.get("discovery_raw_delta", 0)
+        _disc_pruned = prefetched_discovery.get("discovery_pruned", 0)
+        _disc_degraded = prefetched_discovery.get("discovery_degraded", 0)
     else:
         _discovery_result = _run_discovery_phase(
             turn, catalogs, llm, min_confidence,
@@ -3189,10 +3207,32 @@ def extract_and_merge(
         _phase_log["discovery_error"] = _discovery_result["phase_log"]["discovery_error"]
         _disc_sys_tmpl = _discovery_result.get("discovery_sys_tmpl")
         _disc_user_prompt = _discovery_result.get("discovery_user_prompt")
+        _disc_raw_delta = _discovery_result.get("discovery_raw_delta", 0)
+        _disc_pruned = _discovery_result.get("discovery_pruned", 0)
+        _disc_degraded = _discovery_result.get("discovery_degraded", 0)
 
-    # Instrument discovery prompt tokens (captured at build site, not re-computed)
+    # Instrument discovery prompt tokens (captured at build site, not re-computed).
+    # When adaptive compression trimmed the entity section, _disc_raw_delta is the
+    # tokens removed; raw = compressed + delta so the #465 metrics report the real
+    # compression.  When the feature is off the delta is 0 (raw == compressed).
     if _disc_sys_tmpl and _disc_user_prompt:
-        _record_prompt_tokens(_prompt_metrics, "discovery", _disc_sys_tmpl, _disc_user_prompt)
+        _disc_raw_tokens = (
+            _estimate_tokens(_disc_sys_tmpl + _disc_user_prompt) + _disc_raw_delta
+            if _disc_raw_delta
+            else None
+        )
+        _disc_section_stats = (
+            {
+                "catalog_entries_pruned": _disc_pruned,
+                "catalog_entries_degraded": _disc_degraded,
+            }
+            if _disc_raw_delta
+            else None
+        )
+        _record_prompt_tokens(
+            _prompt_metrics, "discovery", _disc_sys_tmpl, _disc_user_prompt,
+            raw_tokens=_disc_raw_tokens, section_stats=_disc_section_stats,
+        )
 
     # Notify the batch loop so it can submit the next turn's discovery prefetch
     # while this turn's phases 2-4 run on the GPU.
@@ -3861,6 +3901,38 @@ def extract_and_merge(
     _temporal_after = len(timeline) if timeline is not None else 0
     _finalized_metrics = _finalize_prompt_metrics(_prompt_metrics)
     _turn_compression = _build_turn_compression(_finalized_metrics)
+    # Turn-total budget coordinator (#460): the smallest turn-level aggregation
+    # point.  Inert when adaptive compression is off (allocations == assembled).
+    _adaptive_turn = adaptive_compression_config(_cfg)
+    if _adaptive_turn is not None:
+        _ctx_len_turn = getattr(llm, "context_length", None)
+        _phase_budgets = [
+            {
+                "name": _name,
+                "tokens": _p.get("input_tokens", 0),
+                # discovery keeps its floor; other phases may yield fully.
+                "floor": (
+                    int(_p.get("input_tokens", 0) * _adaptive_turn["discovery_floor_fraction"])
+                    if _name == "discovery"
+                    else 0
+                ),
+                "priority": 1 if _name == "discovery" else 0,
+            }
+            for _name, _p in _finalized_metrics.items()
+        ]
+        _turn_alloc = coordinate_turn_total(
+            _phase_budgets,
+            _ctx_len_turn if isinstance(_ctx_len_turn, int) else None,
+            _adaptive_turn,
+        )
+        _turn_compression["turn_total_allocated"] = sum(
+            p["allocated"] for p in _turn_alloc
+        )
+        _turn_compression["turn_total_cap"] = (
+            int(_ctx_len_turn * _adaptive_turn["turn_total_budget_fraction"])
+            if isinstance(_ctx_len_turn, int)
+            else None
+        )
     _compression_signals = _build_compression_signals(
         _entities_before, _rels_before, mentioned_entities, turn_id,
     )

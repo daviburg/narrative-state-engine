@@ -233,6 +233,47 @@ python tools/agg_compression.py --label A run_a/extraction-log.jsonl \
 The `--label` flag applies to the immediately following path; paths without a
 preceding `--label` are displayed using their file path as the title.
 
+#### Adaptive compression (opt-in, #460)
+
+The three optimizations above are always on. **Adaptive, pressure-gated
+compression** is an additional, **default-off** layer that only trims context
+when a phase is actually under budget pressure, and protects entity discovery
+from over-trimming. Enable it under the `context_optimizations` block in
+`config/llm.json`:
+
+```jsonc
+"context_optimizations": {
+  "adaptive_compression": {
+    "enabled": false,                    // master switch — DEFAULT OFF
+    "pressure_gate_fraction": 0.45,      // only compress a phase when its
+                                         // assembled context exceeds 45% of budget
+    "discovery_floor_fraction": 0.25,    // never trim discovery context below
+                                         // 25% of its budget (anti-starvation)
+    "turn_total_budget_fraction": 0.85,  // cap total assembled context per turn
+                                         // at 85% of context_length
+    "centrality_min_degree": 2,          // entities with relationship-degree /
+                                         // mention-frequency >= this are exempt
+                                         // from degrade/omit passes
+    "centrality_exempt_top_n": null      // OR exempt the top-N most central
+                                         // entities (null = use min_degree only)
+  }
+}
+```
+
+- **When off (the default, or the block absent), behavior is byte-for-byte
+  identical to the always-on baseline** — `raw_input_tokens == compressed_input_tokens`
+  and `compression_ratio == 0.0` for every phase.
+- **When to enable:** late-session runs where entity catalogs have grown large
+  enough to overflow context, *after* validating with an A/B entity-retention
+  diff (see `docs/ab-test-standard.md`). The keys are Rule-10 thresholds and
+  must be recalibrated when the model changes.
+- The `pressure_gate_fraction` keeps early/low-fill turns uncompressed (the fix
+  for the #393 discovery-starvation regression); the `discovery_floor_fraction`
+  guarantees discovery is never starved even under heavy pressure; the
+  `centrality_min_degree` backstop keeps structurally important entities at full
+  detail; the `turn_total_budget_fraction` caps the per-turn total across all
+  phases, trimming lowest-centrality, lowest-priority content first.
+
 Turn-band bucketing reveals late-session prompt growth that session-total
 averages mask.  A healthy session shows a flat or slowly rising ratio across
 all bands.  A ratio approaching 1.0 in the 51-100 and 101+ bands with

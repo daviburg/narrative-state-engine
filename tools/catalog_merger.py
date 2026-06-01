@@ -438,6 +438,200 @@ _ONE_HOP_PRIORITY_CAP = 0.5
 # suffer from false-positive cascade so the cap would break valid one-hop.
 _ONE_HOP_CAP_MIN_ENTITIES = 20
 
+# ---------------------------------------------------------------------------
+# Adaptive, pressure-gated compression (PR-2, epic #464, #460)
+#
+# Every constant below is a Rule-10 magic threshold: it is a named module
+# constant whose default is overridden from
+# ``config/llm.json → context_optimizations.adaptive_compression`` and is
+# documented in ``docs/architecture.md``.  All values must be RECALIBRATED ON
+# MODEL CHANGE — the effective char/token ratio used by ``_estimate_tokens``
+# and the context window both shift with the model.
+# ---------------------------------------------------------------------------
+
+# justification: below this fill ratio there is no real budget pressure, so
+# trimming early/low-fill turns only starves discovery (the #393 regression).
+# A phase is compressed only once its assembled context exceeds this fraction
+# of the phase budget.  Recalibrate on model change.
+_PRESSURE_GATE_FRACTION = 0.45
+
+# justification: protects against the #393 discovery-starvation entity loss —
+# discovery context is never trimmed below this fraction of its budget, even
+# under heavy pressure (only the turn-total cap may override, and only after
+# trimming other phases first).  Recalibrate on model change.
+_DISCOVERY_FLOOR_FRACTION = 0.25
+
+# justification: hard cap on the sum of assembled context across all phases of
+# a turn, as a fraction of the model context window — leaves headroom for the
+# response.  Recalibrate on model change (context_length and response budget
+# both shift).
+_TURN_TOTAL_BUDGET_FRACTION = 0.85
+
+# justification: entities whose structural centrality (relationship degree +
+# inbound references + mention frequency) is at or above this are exempt from
+# the degrade/omit passes.  Purely structural — no domain word list (Rule 9).
+# Recalibrate on model change.
+_CENTRALITY_MIN_DEGREE = 2
+
+# justification: optional top-N centrality exemption; ``None`` derives the
+# exemption purely from ``_CENTRALITY_MIN_DEGREE``.  Recalibrate on model change.
+_CENTRALITY_EXEMPT_TOP_N = None
+
+
+def _coerce_fraction(value, default: float) -> float:
+    """Return ``value`` as a float in (0, 1], else ``default``."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return default
+    if 0.0 < f <= 1.0:
+        return f
+    return default
+
+
+def adaptive_compression_config(config: dict | None) -> dict | None:
+    """Resolve the adaptive-compression settings, or ``None`` when disabled.
+
+    Reads ``context_optimizations.adaptive_compression`` from the llm config.
+    Returns ``None`` (so every call site short-circuits with a single guard)
+    when the block is absent or ``enabled`` is falsey — guaranteeing
+    byte-for-byte identical behaviour to pre-#460 ``main`` when the feature is
+    off.  When enabled, returns a dict of the resolved, validated thresholds.
+    """
+    if not isinstance(config, dict):
+        return None
+    opt = config.get("context_optimizations")
+    if not isinstance(opt, dict):
+        return None
+    ac = opt.get("adaptive_compression")
+    if not isinstance(ac, dict) or not ac.get("enabled"):
+        return None
+    top_n = ac.get("centrality_exempt_top_n", _CENTRALITY_EXEMPT_TOP_N)
+    if top_n is not None:
+        try:
+            top_n = int(top_n)
+            if top_n <= 0:
+                top_n = None
+        except (TypeError, ValueError):
+            top_n = None
+    min_deg = ac.get("centrality_min_degree", _CENTRALITY_MIN_DEGREE)
+    try:
+        min_deg = int(min_deg)
+    except (TypeError, ValueError):
+        min_deg = _CENTRALITY_MIN_DEGREE
+    return {
+        "pressure_gate_fraction": _coerce_fraction(
+            ac.get("pressure_gate_fraction"), _PRESSURE_GATE_FRACTION
+        ),
+        "discovery_floor_fraction": _coerce_fraction(
+            ac.get("discovery_floor_fraction"), _DISCOVERY_FLOOR_FRACTION
+        ),
+        "turn_total_budget_fraction": _coerce_fraction(
+            ac.get("turn_total_budget_fraction"), _TURN_TOTAL_BUDGET_FRACTION
+        ),
+        "centrality_min_degree": min_deg,
+        "centrality_exempt_top_n": top_n,
+    }
+
+
+def compute_entity_centrality(catalogs: dict) -> dict[str, int]:
+    """Structural centrality score per entity id.
+
+    The score is purely structural (Rule 9 — no domain word lists): it sums the
+    entity's outbound ``relationships[]`` degree, the count of inbound
+    references from other entities' relationships, and a mention-frequency term
+    (``mention_count`` when present, else ``len(source_turns)``).  Used as the
+    centrality backstop so high-degree / frequently-referenced entities survive
+    the degrade/omit passes under budget pressure.
+    """
+    outbound: dict[str, int] = {}
+    inbound: dict[str, int] = {}
+    for entities in catalogs.values():
+        for e in entities:
+            eid = e.get("id")
+            if not eid:
+                continue
+            rels = e.get("relationships") or []
+            outbound[eid] = outbound.get(eid, 0) + len(rels)
+            for rel in rels:
+                if not isinstance(rel, dict):
+                    continue
+                tgt = rel.get("target_id")
+                if tgt:
+                    inbound[tgt] = inbound.get(tgt, 0) + 1
+    score: dict[str, int] = {}
+    for entities in catalogs.values():
+        for e in entities:
+            eid = e.get("id")
+            if not eid:
+                continue
+            s = outbound.get(eid, 0) + inbound.get(eid, 0)
+            mc = e.get("mention_count")
+            if isinstance(mc, int):
+                s += mc
+            else:
+                st = e.get("source_turns")
+                if isinstance(st, list):
+                    s += len(st)
+            score[eid] = score.get(eid, 0) + s
+    return score
+
+
+def centrality_exempt_ids(
+    centrality: dict[str, int] | None, adaptive: dict | None
+) -> set[str]:
+    """Return the set of entity ids exempt from degrade/omit passes."""
+    if not centrality or adaptive is None:
+        return set()
+    min_deg = adaptive["centrality_min_degree"]
+    exempt = {eid for eid, s in centrality.items() if s >= min_deg}
+    top_n = adaptive["centrality_exempt_top_n"]
+    if top_n:
+        top = sorted(centrality.items(), key=lambda kv: kv[1], reverse=True)[:top_n]
+        exempt |= {eid for eid, _ in top}
+    return exempt
+
+
+def coordinate_turn_total(
+    phases: list[dict], context_length: int | None, adaptive: dict | None
+) -> list[dict]:
+    """Enforce the per-turn total context budget across phases.
+
+    This is the smallest-possible turn-level aggregation point (the brief
+    forbids restructuring the pipeline).  Each ``phases`` entry is a dict with:
+
+    * ``name``     — phase identifier,
+    * ``tokens``   — assembled (uncompressed) token estimate,
+    * ``floor``    — minimum retainable tokens (e.g. the discovery floor, or
+                     the centrality-exempt minimum); defaults to 0,
+    * ``priority`` — lower trims first.
+
+    Returns the phases with an added ``allocated`` token count.  When
+    ``adaptive`` is ``None`` the allocation equals ``tokens`` (no-op).  When the
+    sum exceeds ``turn_total_budget_fraction * context_length`` the overflow is
+    trimmed from the lowest-priority phases first, never below each phase's
+    ``floor`` — so the discovery floor and centrality-exempt content are
+    preserved while lower-priority content is trimmed first.
+    """
+    out = [dict(p, allocated=p.get("tokens", 0)) for p in phases]
+    if adaptive is None or not context_length:
+        return out
+    cap = int(context_length * adaptive["turn_total_budget_fraction"])
+    total = sum(p["allocated"] for p in out)
+    if total <= cap:
+        return out
+    over = total - cap
+    for p in sorted(out, key=lambda x: x.get("priority", 0)):
+        if over <= 0:
+            break
+        trimmable = p["allocated"] - int(p.get("floor", 0))
+        if trimmable <= 0:
+            continue
+        cut = min(trimmable, over)
+        p["allocated"] -= cut
+        over -= cut
+    return out
+
 
 def _entity_names(entity: dict) -> list[str]:
     """Return the entity's name and aliases as a list of strings."""
@@ -682,6 +876,8 @@ def format_known_entities_bounded(
     recency_window: int | None = None,
     turn_text: str | None = None,
     return_stats: bool = False,
+    adaptive: dict | None = None,
+    centrality: dict[str, int] | None = None,
 ) -> str | tuple[str, dict]:
     """Format known entities with a configurable token budget.
 
@@ -722,6 +918,18 @@ def format_known_entities_bounded(
             original string-only return so existing callers are unchanged.  The
             stats path is the backward-compatible plumbing PR-2 wires into the
             per-turn metrics.
+            adaptive: Resolved adaptive-compression settings from
+                ``adaptive_compression_config()``, or ``None`` (default) to disable
+                all PR-2 (#460) code paths.  When ``None`` the function behaves
+                byte-for-byte identically to pre-#460 ``main``.  When provided it
+                enables the pressure gate (skip trimming below
+                ``pressure_gate_fraction`` of budget), the discovery floor (never
+                trim below ``discovery_floor_fraction`` of budget), and the
+                centrality backstop.
+            centrality: Optional per-entity structural centrality map from
+                ``compute_entity_centrality()``.  Entities at or above the
+                configured centrality threshold are exempt from the degrade/omit
+                passes.  Only consulted when *adaptive* is provided.
 
     Returns:
         Formatted entity list string, possibly with a truncation note.  When
@@ -804,38 +1012,107 @@ def format_known_entities_bounded(
 
     used = _estimate_tokens("\n".join(lines)) if lines else 0
 
-    # If output exceeds budget, degrade lowest-priority entities from the
-    # end of the list (backfill tier first, then one-hop, etc.).
-    if budget is not None and used > budget and len(lines) > 1:
-        # Pass 1: degrade full → brief from the tail (skip already-brief
-        # and id-only lines to avoid accidentally upgrading them)
-        for i in range(len(ordered) - 1, -1, -1):
-            brief_line = _format_entity_brief(ordered[i])
-            id_only_line = _format_entity_id_only(ordered[i])
-            # Only degrade if current line is longer than brief
-            if lines[i] != brief_line and lines[i] != id_only_line:
-                lines[i] = brief_line
-                used = _estimate_tokens("\n".join(lines))
-                if used <= budget:
-                    break
+    # Adaptive pressure gate (#460): below the gate there is no budget pressure,
+    # so return the full uncompressed context.  This is what lets early/low-fill
+    # turns pass through and prevents the #393 discovery starvation.  When
+    # adaptive is None this is inert and the original trimming logic runs.
+    _gate_skip = False
+    if adaptive is not None and budget is not None:
+        if used <= adaptive["pressure_gate_fraction"] * budget:
+            _gate_skip = True
 
-    # Pass 2: degrade brief → id-only from the tail
-    if budget is not None and used > budget and len(lines) > 1:
-        for i in range(len(ordered) - 1, -1, -1):
-            id_only_line = _format_entity_id_only(ordered[i])
-            if lines[i] != id_only_line:
-                lines[i] = id_only_line
-                used = _estimate_tokens("\n".join(lines))
-                if used <= budget:
-                    break
+    if adaptive is None:
+        # --- Original (default-off) trimming path: byte-for-byte unchanged ---
+        # If output exceeds budget, degrade lowest-priority entities from the
+        # end of the list (backfill tier first, then one-hop, etc.).
+        if budget is not None and used > budget and len(lines) > 1:
+            # Pass 1: degrade full → brief from the tail (skip already-brief
+            # and id-only lines to avoid accidentally upgrading them)
+            for i in range(len(ordered) - 1, -1, -1):
+                brief_line = _format_entity_brief(ordered[i])
+                id_only_line = _format_entity_id_only(ordered[i])
+                # Only degrade if current line is longer than brief
+                if lines[i] != brief_line and lines[i] != id_only_line:
+                    lines[i] = brief_line
+                    used = _estimate_tokens("\n".join(lines))
+                    if used <= budget:
+                        break
 
-    # Pass 3: if still over budget, omit from the end
-    omitted = 0
-    if budget is not None and used > budget and len(lines) > 1:
-        while lines and used > budget:
-            lines.pop()
-            omitted += 1
-            used = _estimate_tokens("\n".join(lines)) if lines else 0
+        # Pass 2: degrade brief → id-only from the tail
+        if budget is not None and used > budget and len(lines) > 1:
+            for i in range(len(ordered) - 1, -1, -1):
+                id_only_line = _format_entity_id_only(ordered[i])
+                if lines[i] != id_only_line:
+                    lines[i] = id_only_line
+                    used = _estimate_tokens("\n".join(lines))
+                    if used <= budget:
+                        break
+
+        # Pass 3: if still over budget, omit from the end
+        omitted = 0
+        if budget is not None and used > budget and len(lines) > 1:
+            while lines and used > budget:
+                lines.pop()
+                omitted += 1
+                used = _estimate_tokens("\n".join(lines)) if lines else 0
+    else:
+        # --- Adaptive path (#460): pressure-gated, floor-protected, centrality
+        # backstop.  Only engages above the pressure gate.
+        omitted = 0
+        exempt = centrality_exempt_ids(centrality, adaptive)
+        floor_tokens = (
+            adaptive["discovery_floor_fraction"] * budget
+            if budget is not None
+            else 0
+        )
+        _trim = (
+            budget is not None
+            and not _gate_skip
+            and used > budget
+            and len(lines) > 1
+        )
+        if _trim:
+            # Pass 1: degrade full → brief, tail-first, skipping centrality
+            # exempt entities and stopping at the discovery floor.
+            for i in range(len(ordered) - 1, -1, -1):
+                if ordered[i]["id"] in exempt:
+                    continue
+                brief_line = _format_entity_brief(ordered[i])
+                id_only_line = _format_entity_id_only(ordered[i])
+                if lines[i] != brief_line and lines[i] != id_only_line:
+                    lines[i] = brief_line
+                    used = _estimate_tokens("\n".join(lines))
+                    if used <= budget or used <= floor_tokens:
+                        break
+            # Pass 2: degrade brief → id-only, tail-first, centrality exempt.
+            if used > budget and used > floor_tokens:
+                for i in range(len(ordered) - 1, -1, -1):
+                    if ordered[i]["id"] in exempt:
+                        continue
+                    id_only_line = _format_entity_id_only(ordered[i])
+                    if lines[i] != id_only_line:
+                        lines[i] = id_only_line
+                        used = _estimate_tokens("\n".join(lines))
+                        if used <= budget or used <= floor_tokens:
+                            break
+            # Pass 3: omit non-exempt entities tail-first, but never trim the
+            # retained discovery context below the discovery floor (#393 guard).
+            if used > budget and used > floor_tokens:
+                keep = [True] * len(lines)
+                for i in range(len(ordered) - 1, -1, -1):
+                    if used <= budget or used <= floor_tokens:
+                        break
+                    if ordered[i]["id"] in exempt:
+                        continue
+                    keep[i] = False
+                    omitted += 1
+                    used = _estimate_tokens(
+                        "\n".join(l for j, l in enumerate(lines) if keep[j])
+                    ) if any(keep) else 0
+                # Rebuild lines/ordered together to keep indices aligned for the
+                # degraded-count computation below.
+                lines = [l for j, l in enumerate(lines) if keep[j]]
+                ordered = [o for j, o in enumerate(ordered) if keep[j]]
 
     result = "\n".join(lines)
 
