@@ -906,7 +906,7 @@ Use the helper script from the repository root:
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/start_extraction_detached.ps1 `
   -Session sessions/session-import `
-  -TranscriptFile sessions/_import/session-import-full-transcript.txt `
+  -TranscriptFile sessions/session-import/raw/full-transcript.md `
   -Framework framework-local `
   -PlayerLabel "Fenouille Moonwind" `
   -SegmentSize 100

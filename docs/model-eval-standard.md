@@ -366,13 +366,13 @@ curl -s http://localhost:8081/v1/models | python -m json.tool
 
 ### 8.2 Run Model A (Baseline)
 
-> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. The `sessions/session-import` and `sessions/_import/` paths are listed in `.gitignore` and are not committed to the repository; see `docs/usage.md` for instructions on setting up a local session before running evaluations.
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/session-import/raw/full-transcript.md` and create the session directory at `sessions/session-import`. The `sessions/session-import` and `sessions/_import/` paths are listed in `.gitignore` and are not committed to the repository; see `docs/usage.md` for instructions on setting up a local session before running evaluations.
 
 ```bash
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-eval-a-run1 \
     --max-turns 30 \
     --overwrite \
@@ -383,7 +383,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-eval-a-run2 \
     --max-turns 30 \
     --overwrite \
@@ -394,7 +394,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-eval-a-run3 \
     --max-turns 30 \
     --overwrite \
@@ -409,7 +409,7 @@ python tools/bootstrap_session.py \
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-eval-b-run1 \
     --max-turns 30 \
     --overwrite \
