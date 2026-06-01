@@ -150,7 +150,7 @@ When dispatching tasks to address automated Copilot review comments on a PR, use
    - If review posted 1+ new comments: restart at step 1 (new fix cycle)
 6. **Iteration Cap**: If the cycle exceeds 15 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
 
-The canonical, reusable submitter is `saas/orchestrator/scripts/submit_pr_fix.py --repo <owner/name> --pr <N>` (in narrative-state-engine-private, alongside the rest of `saas/`; it supersedes the one-off `_submit_pr_fix_*.py` scripts). Tasks target **arclight** by default — the authenticated copilot-cli worker; windows-dev currently lacks copilot auth. The branch is auto-derived from the PR via `gh pr view`, and a built-in duplicate guard prevents double-submission of a fix for the same PR.
+The canonical, reusable submitter is `saas/orchestrator/scripts/submit_pr_fix.py --repo <owner/name> --pr <N>` (in narrative-state-engine-private, alongside the rest of `saas/`; it supersedes the one-off `_submit_pr_fix_*.py` scripts). Tasks target **arclight** by default — the primary authenticated copilot-cli worker; windows-dev is an authenticated fallback worker. The branch is auto-derived from the PR via `gh pr view`, and a built-in duplicate guard prevents double-submission of a fix for the same PR.
 
 ## Output Format
 - Delegation decisions with rationale
