@@ -208,6 +208,48 @@ The extraction pipeline applies context budget controls automatically to prevent
 
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 
+#### Raw-vs-Compressed Instrumentation (#464, PR-1)
+
+Compression is **born observable**: raw-vs-compressed measurement landed *before* any adaptive behavior change so a regression can never again hide in a stderr-only print (the #460/#463 blind spot). PR-1 adds measurement only — the assembled prompt is byte-for-byte identical to the prior baseline, so `raw_input_tokens == input_tokens` and `compression_ratio == 1.0` on every successful extraction-log record (the faithful no-op). Quota-exhaustion and exception records are written without these fields.
+
+Per-phase, under `prompt_metrics.<phase>` in `extraction-log.jsonl`:
+
+- `raw_input_tokens` — pre-compression estimate. In PR-1 it defaults to the compressed size (no new compression layer is active).
+- `compressed_input_tokens` — final assembled prompt size (mirrors `input_tokens`).
+- `compression_ratio` — `compressed / raw` (`1.0` in PR-1).
+- Section drop counters: `catalog_entries_pruned`, `catalog_entries_degraded`, `relationships_pruned`, `volatile_snapshots_dropped`, `turns_dropped` (all `0` in PR-1).
+
+Per-turn, two new top-level blocks:
+
+- `turn_compression` — `raw_input_tokens_total`, `compressed_input_tokens_total`, `compression_ratio_total`, and `activated_phases` (empty in PR-1). A phase is "activated" only when its ratio drops below 1.0.
+- `compression` — the quality-observability signals: `dropped_entity_ids[]`, `dropped_entity_count` (by type), `dropped_relationship_count`, `dropped_event_ids[]`/`dropped_event_count`, `dropped_plot_thread_ids[]`, `context_window_turn_floor`, `included_vs_total`, `dropped_then_referenced[]` (the dropped-but-surfaced join key), plus `strategy` and `params`. In PR-1 the dropped lists are empty, `included == total`, `strategy == "baseline"`, and `params == {}`.
+
+Per-turn stderr lines replace the former lone `[ctx-opt]` print so raw-vs-compressed and the discovery-floor guardrail are continuously visible:
+
+```
+[COMPRESSION] turn-072 raw=27310 comp=14880 ratio=0.54 phases=entity_detail,relationship_mapper (ACTIVE)
+[RETENTION]   turn-072 detail: pruned=0 degraded=11 rel_pruned=14 vol_dropped=9 | discovery: floor_held=yes omitted=0 discovered=8
+```
+
+In PR-1 these print with `ratio=1.00`, `(INACTIVE)`, all drop counters `0`, `floor_held=yes`, and `discovered=N` (the count of LLM-discovered entities for the turn, not a priority-retention ratio).
+
+The three compression surfaces (`format_known_entities_bounded`, `_collect_existing_relationships`, `_trim_entry_for_scene`) gained backward-compatible `return_stats` paths; the stats payload differs per surface: `format_known_entities_bounded` reports `raw_tokens` plus entity-level counters; `_collect_existing_relationships` reports both pre- and post-compression token estimates plus tier counters; `_trim_entry_for_scene` reports drop counters only. PR-1 leaves the call sites on the result-only return (no behavior change); PR-2 wires these stats into the per-turn metrics.
+
+**Aggregator**: `tools/agg_compression.py` (successor to the ad-hoc `_agg_pr463.py`) reads the new fields and buckets metrics by turn-index band (1-20, 21-50, 51-100, 101+), emitting a per-band raw/compressed/ratio table. Turn-band bucketing is the report that gates PR-2 — the late-vs-early split is exactly what hid the #393/#394/#463 regressions when only session totals were checked.
+
+#### Planned Adaptive Compression Stage (#464, PR-2 — not yet shipped)
+
+PR-2 adds a pressure-gated adaptive compression stage on top of the baseline surfaces: a phase compresses only when its raw prompt exceeds a fraction of the context window, keeping early/small turns a structural no-op. A hard discovery floor and a "never omit a priority entity" rule preserve the #393 guardrail. The constants below are **token budgets gated on measured prompt size** (the permitted form under the Source-Quality / Rule 10 policy, not hardcoded domain word lists), and are **tech debt requiring A/B recalibration when the model, tokenizer, or context length changes**. They are calibrated against PR-1's measured growth curve, not guesses.
+
+| Constant | Role | Calibrating eval |
+|---|---|---|
+| `_COMPRESSION_ACTIVATION_FRACTION` | Per-phase pressure threshold below which the prompt is sent verbatim | _TBD — set from PR-1 100-turn baseline_ |
+| `_DISCOVERY_MIN_BUDGET_FRACTION` | Hard discovery floor (the #393 guardrail) | _TBD_ |
+| `_TURN_TOTAL_BUDGET_FRACTION` | Per-turn soft ceiling before discovery is touched | _TBD_ |
+| `_REL_TOKEN_BUDGET_FRACTION` (adaptive) | Tiered relationship budget under pressure | _TBD_ |
+
+
+
 ### Story Summary Layer (Framework)
 
 High-level narrative arc summary generated from extracted data.
