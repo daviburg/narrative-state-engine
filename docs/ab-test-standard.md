@@ -22,22 +22,53 @@ This document defines the required A/B testing gate for any PR that modifies ext
 
 ### 1.2 Runs Per Variant
 
-**The default A/B testing standard is temperature 0 (deterministic), for which 1 run per variant is sufficient.** At temperature 0 the extraction output is effectively deterministic — reproducible enough that 1 run is the standard, so a single run per variant captures the full signal and no averaging is required.
+**The backend is not deterministic at any temperature, so a minimum of 3 runs per variant is always required.** The determinism baseline `eval-main-determinism-temp0` compared the *same* `main` commit (SHA `769e1ad`) against itself — identical templates, model (`Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`), hardware (B70), and temperature 0 — and produced divergent catalogs (per-type removed=3, added=1, renamed=2 over turns 1–10; catalog byte-diff non-zero). Temperature 0 is therefore **not** a substitute for repetition: the llama.cpp/GGUF execution path introduces run-to-run variance that a single run cannot distinguish from a template effect.
 
 | Sampling mode | Minimum runs per variant | Recommended runs per variant |
 |---|---|---|
-| **Temperature 0 (deterministic) — default** | 1 | 1 |
-| Temperature > 0 (non-deterministic sampling) | 3 | 5 |
+| **Temperature 0** | 3 | 5 |
+| Temperature > 0 | 3 | 5 |
 
-The **≥3-runs-per-variant** requirement applies **only** when a test is run at temperature > 0 (non-deterministic sampling). In that case, report **mean ± standard deviation** for all metrics, and if any metric's standard deviation exceeds 15% of its mean, increase to 5 runs. At temperature 0, report the single-run values directly (no standard deviation).
+Report **mean ± standard deviation** for all metrics at every temperature. If any metric's standard deviation exceeds 15% of its mean, increase to 5 runs. With 3 runs per variant, the three pairwise A-vs-A comparisons (run1↔run2, run1↔run3, run2↔run3) are used to establish the backend noise floor (§1.4) that the retention gate (§3.5) is measured against.
 
-> **Rationale:** Variability is not re-introduced without justification. Current policy is temperature 0 until the high-quality outcomes available from the B70 hardware are exhausted; only then would non-deterministic sampling (and the ≥3-runs averaging requirement) be warranted.
+> **Rationale:** The earlier "temperature 0 ⇒ 1 run is sufficient" policy assumed byte-level reproducibility that the backend does not provide. Because an A-vs-A self-comparison already shows non-zero entity churn, a single B run cannot be attributed to the template change rather than to backend noise. Minimum 3 runs is chosen as the smallest count that yields multiple independent A-vs-A pairwise comparisons (Rule 10: chosen, not inherited).
 
 ### 1.3 Variant Definitions
 
 - **Variant A (baseline):** Templates from `main` branch HEAD. Use `--framework framework-ab-a-runN` output directory (one per run, e.g. `framework-ab-a-run1`, `framework-ab-a-run2`, etc.).
 - **Variant B (candidate):** Templates from the PR branch. Use `--framework framework-ab-b-runN` output directory (one per run, e.g. `framework-ab-b-run1`, `framework-ab-b-run2`, etc.).
 - Both variants MUST use identical `config/llm.json`, identical model, and identical hardware.
+
+### 1.4 Noise-Floor (A-vs-A) Baseline — REQUIRED
+
+Before judging B-vs-A, the tester MUST establish the backend **noise floor** for this model + hardware by self-comparing the variant-A runs against each other. This quantifies the run-to-run churn caused by backend non-determinism, which becomes the tolerance band for the retention gate (§3.5).
+
+**Procedure:**
+
+1. Run variant A at least 3 times (`framework-ab-a-run1..3`), per §1.2.
+2. Run `tools/entity_retention_diff.py` (with default `--match-by auto`, so ID-scheme renames are excluded) on **every pairwise combination** of the A runs:
+
+   ```bash
+   python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-a-run2 --json
+   python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-a-run3 --json
+   python tools/entity_retention_diff.py -a framework-ab-a-run2 -b framework-ab-a-run3 --json
+   ```
+
+3. For each entity type (characters, locations, items, factions, events), record the **removed**, **added**, and **renamed** counts from each pairwise diff, and the **% removed** = removed ÷ (A-side entity count of that type).
+4. Define the **per-type noise floor** `NF_type` = the **maximum** removed count for that type observed across the pairwise A-vs-A comparisons (worst-case backend churn). Record the matching **% noise floor** as well. Compute an aggregate **total** noise floor `NF_total` the same way.
+
+**Reported as a table** (include in the PR comment, §5.1):
+
+```
+| Type       | A-vs-A removed (max) | A-side count | % noise floor | NF_type |
+|------------|----------------------|--------------|---------------|---------|
+| characters | 3                    | 18           | 16.7%         | 3       |
+| locations  | 1                    | 8            | 12.5%         | 1       |
+| ...        | ...                  | ...          | ...           | ...     |
+| **Total**  | 5                    | 60           | 8.3%          | 5       |
+```
+
+Renames are **never** counted toward the noise floor (they reflect ID-scheme churn, not entity loss). If `NF_type` is 0 for a type, the backend was stable for that type in this run set and the strict zero-removal expectation applies to it (subject to the +1 quantization margin in §3.5).
 
 ---
 
@@ -144,13 +175,18 @@ The tool accepts either a framework directory (containing a `catalogs/` subdir) 
 
 By default (`--match-by auto`) the tool first pairs entities by exact ID, then falls back to a normalized name + alias match (within the same catalog type) for any leftovers. This prevents **phantom churn** when two branches use different ID schemes for the same entity (e.g. main's bare slug `char-elder` vs the compression branch's `char-elder-001`): the entity is reported as a **rename**, not as one removal plus one addition. Use `--match-by id` to restore the legacy exact-ID-only behavior, or `--match-by name` to pair purely on name/alias.
 
-It emits a Markdown summary table (default) or JSON (`--json`), and **flags** the run when the total number of TRUE removed entities exceeds the configurable `--threshold` (default `0`, i.e. any removal flags). ID renames never count toward the threshold. Pass `--strict` to make the tool exit non-zero when flagged (useful for CI gating):
+It emits a Markdown summary table (default) or JSON (`--json`), and **flags** the run when the total number of TRUE removed entities exceeds the configurable `--threshold`. ID renames never count toward the threshold. Because the backend is non-deterministic (§1.2), the threshold is **no longer fixed at 0** — it is set to the noise floor measured in §1.4. For each B-vs-A run pair, set `--threshold` to `NF_total` so that churn within the backend noise floor does not flag:
 
 ```bash
-python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-b-run1 --threshold 0 --strict
+# Compare each B run against the same-numbered A run; --threshold = measured NF_total
+python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-b-run1 --threshold <NF_total>
+python tools/entity_retention_diff.py -a framework-ab-a-run2 -b framework-ab-b-run2 --threshold <NF_total>
+python tools/entity_retention_diff.py -a framework-ab-a-run3 -b framework-ab-b-run3 --threshold <NF_total>
 ```
 
-**This diff is a required output** — include the Markdown table in the PR comment (see §5.1) and list any removed entity IDs. Removed IDs are not automatically a BLOCK (B may legitimately consolidate duplicates), but each removed ID MUST be explained in the PR comment.
+For each entity type, take the **maximum** B-vs-A removed count across the run pairs as the observed signal `R_type` (and `R_total` for the aggregate). The gate compares `R_type` against `NF_type` per the tolerance band in §3.5.
+
+**This diff is a required output** — include the Markdown table in the PR comment (see §5.1) and list any removed entity IDs. Removed IDs are not automatically a BLOCK (B may legitimately consolidate duplicates, and removals within the noise floor are backend noise), but each removed ID that **exceeds** the noise floor MUST be explained in the PR comment.
 
 ### 3.5 Quantitative Regression Thresholds
 
@@ -162,12 +198,20 @@ python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-b-r
 | Single type count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
 | Relationship count **loss** | Δ ≤ 10% loss | 10–20% loss | > 20% loss |
 | Relationship count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
-| Entity **retention** | no removed IDs | removed IDs all explained as dedup/consolidation | unexplained removed IDs |
+| Entity **retention** (per type and total) | `R ≤ NF` (within noise floor) | `NF < R ≤ 2·NF + 1` (above noise floor; explain each removed ID as dedup/consolidation) | `R > 2·NF + 1` (exceeds noise band) **or** any unexplained removed ID in the WARN band |
 | Schema validity | 100% | — | < 100% |
 | Performance regression | Δ ≤ +10% time | +10–20% time | > +20% time |
 | Performance improvement | Always PASS | — | — |
 
 A single BLOCK on any metric blocks the PR. WARN requires documented justification.
+
+> **Retention tolerance band.** `R` is the observed B-vs-A removed count (max across run pairs, §3.4) and `NF` is the A-vs-A noise floor (§1.4), evaluated **per entity type** and for the **total**. A type BLOCKs if either its per-type band or the total band is exceeded.
+>
+> - **PASS:** `R ≤ NF` — the removal is indistinguishable from backend run-to-run noise.
+> - **WARN:** `NF < R ≤ 2·NF + 1` — above noise; acceptable only if every removed entity ID in this band is explained as intentional dedup/consolidation.
+> - **BLOCK:** `R > 2·NF + 1` — the signal exceeds twice the noise floor and cannot be attributed to backend variance.
+>
+> **Renames never count** toward `R` (ID-scheme churn; use `--match-by auto`). The `2·` multiplier requires a real regression to exceed twice the measured noise (a conservative 2:1 SNR detection boundary); the `+1` absorbs single-entity flapping at small counts, since entities are discrete and a one-entity difference near `NF=0` is within quantization noise. Both constants are **chosen, not inherited** (Rule 10) and must be revisited if the model or backend changes (re-measure `NF` per §1.4 on every run set — `NF` is never carried over from a prior PR).
 
 ---
 
@@ -312,11 +356,11 @@ Every template-change PR MUST include this section as a PR comment:
 - Model: [model name and quantization]
 - Hardware: [GPU(s) used]
 - Turns: [range]
-- Runs per variant: [N] (1 at the temperature 0 default; ≥3 only at temperature > 0 — see §1.2)
+- Runs per variant: [N] (minimum 3 at any temperature — backend is non-deterministic, see §1.2)
 - Temperature: [value]
 - Config: `config/llm.json` (unchanged between A/B)
 
-> The `mean ± σ` columns below apply to temperature > 0 runs. At the temperature 0 default, report the single-run value directly (σ omitted).
+> `mean ± σ` is reported for all metrics at every temperature (≥3 runs always). The backend is non-deterministic even at temperature 0 (determinism baseline `eval-main-determinism-temp0`), so the entity-retention gate is evaluated against the measured A-vs-A noise floor below, not a zero-removal expectation.
 
 ### Performance
 
@@ -337,20 +381,37 @@ Every template-change PR MUST include this section as a PR comment:
 | Events | | | | |
 | **Total** | | | | |
 
+### Noise Floor (A-vs-A)
+
+Pairwise self-comparison of the variant-A runs (§1.4), `--match-by auto` (renames excluded). This is the tolerance band for the retention gate.
+
+| Type | A-vs-A removed (max) | A-side count | % noise floor | NF_type |
+|---|---|---|---|---|
+| characters | | | | |
+| locations | | | | |
+| items | | | | |
+| factions | | | | |
+| events | | | | |
+| **Total** | | | | |
+
+Pairwise comparisons used: run1↔run2, run1↔run3, run2↔run3.
+
 ### Entity Retention Diff
 
-(Output of `tools/entity_retention_diff.py` for one representative A vs B run pair.)
+(Output of `tools/entity_retention_diff.py` aggregated across the B-vs-A run pairs; `Removed (R)` is the per-type maximum removed across those pairs.)
 
-| Type | A | B | Retained | Removed | Added | Net |
-|---|---|---|---|---|---|---|
-| characters | | | | | | |
-| locations | | | | | | |
-| items | | | | | | |
-| factions | | | | | | |
-| events | | | | | | |
-| **Total** | | | | | | |
+| Type | A | B | Retained | Removed (R) | Added | NF_type | Band (PASS/WARN/BLOCK) |
+|---|---|---|---|---|---|---|---|
+| characters | | | | | | | |
+| locations | | | | | | | |
+| items | | | | | | | |
+| factions | | | | | | | |
+| events | | | | | | | |
+| **Total** | | | | | | | |
 
-Removed entity IDs (explain each): [list, or "none"]
+`R` = max removed across B-vs-A run pairs. Band per §3.5: PASS `R ≤ NF`, WARN `NF < R ≤ 2·NF+1` (explain each removed ID), BLOCK `R > 2·NF+1`.
+
+Removed entity IDs above the noise floor (explain each): [list, or "none"]
 
 ### Relationships
 
@@ -388,7 +449,8 @@ Removed entity IDs (explain each): [list, or "none"]
 
 - [ ] No BLOCK on any metric
 - [ ] All WARN items have documented justification
-- [ ] Every removed entity ID in the retention diff is explained (dedup/consolidation) or treated as a BLOCK
+- [ ] A-vs-A noise floor measured and reported (§1.4)
+- [ ] Every removed entity ID **above** the noise floor (WARN band) is explained (dedup/consolidation); any removal in the BLOCK band blocks the PR
 - [ ] Ground truth validation passes for B (full-session runs only; skip for `--max-turns 30`)
 ````
 
@@ -400,7 +462,7 @@ The PR is **mergeable** when:
 2. All WARN statuses have written justification explaining why the regression is acceptable.
 3. Ground truth validation (`validate_extraction.py`) exits 0 for variant B (full-session runs only).
 4. Schema validation (`validate.py --framework <dir>`) reports 0 violations for variant B.
-5. Every removed entity ID in the retention diff (§3.4) is explained as intentional dedup/consolidation; unexplained removals are a BLOCK.
+5. Every removed entity ID **exceeding the A-vs-A noise floor** (§1.4) is explained as intentional dedup/consolidation; removals in the BLOCK band (`R > 2·NF+1`) are a BLOCK regardless of explanation.
 
 ---
 
@@ -418,7 +480,7 @@ curl -s http://localhost:8081/v1/models | python -m json.tool
 
 ### 6.2 Run Variant A (Baseline)
 
-> **Note:** The multi-run (run1/run2/run3) commands below illustrate the temperature > 0 workflow, which requires ≥3 runs per variant (see §1.2). Under the **temperature 0 default**, only `run1` is needed per variant — skip `run2`/`run3`.
+> **Note:** The multi-run (run1/run2/run3) commands below are required at **every** temperature — a minimum of 3 runs per variant applies because the backend is non-deterministic even at temperature 0 (see §1.2). The variant-A runs also feed the A-vs-A noise-floor baseline (§1.4).
 
 ```bash
 # From the repo root, on main branch
@@ -464,7 +526,7 @@ python tools/bootstrap_session.py \
 
 ### 6.3 Run Variant B (Candidate)
 
-> **Note:** As in §6.2, the multi-run (run1/run2/run3) commands below illustrate the temperature > 0 workflow, which requires ≥3 runs per variant (see §1.2). Under the **temperature 0 default**, only `run1` is needed per variant — skip `run2`/`run3`.
+> **Note:** As in §6.2, the multi-run (run1/run2/run3) commands below are required at **every** temperature — a minimum of 3 runs per variant applies because the backend is non-deterministic even at temperature 0 (see §1.2).
 
 ```bash
 git checkout <pr-branch>

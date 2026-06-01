@@ -11,6 +11,7 @@ Full standard: [ab-test-standard.md](ab-test-standard.md).
 - [ ] On `main` branch, pulled latest
 - [ ] `config/llm.json` unchanged between A and B runs
 - [ ] Output directories will be created per-run: `framework-ab-a-run{1,2,3}`, `framework-ab-b-run{1,2,3}`
+- [ ] Plan A-vs-A noise-floor baseline: 3 pairwise diffs of framework-ab-a-run{1,2,3} (see standard §1.4)
 
 ## Run A (Baseline — main branch)
 
@@ -38,6 +39,16 @@ python tools/bootstrap_session.py \
 ```
 
 - [ ] Run A completed ×3 (minimum). Outputs in `framework-ab-a-run{1,2,3}/catalogs`
+
+## Noise Floor (A-vs-A)
+
+```bash
+python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-a-run2 --json
+python tools/entity_retention_diff.py -a framework-ab-a-run1 -b framework-ab-a-run3 --json
+python tools/entity_retention_diff.py -a framework-ab-a-run2 -b framework-ab-a-run3 --json
+```
+
+- [ ] Per-type max removed recorded as `NF_type`; total as `NF_total` (renames excluded, `--match-by auto`)
 
 ## Run B (Candidate — PR branch)
 
@@ -93,6 +104,7 @@ python tools/validate_extraction.py \
 - [ ] Relationship count (total)
 - [ ] Wall-clock time per run
 - [ ] Mean ± σ computed for all metrics across runs
+- [ ] entity_retention_diff.py run for each B-vs-A pair with --threshold <NF_total>; R_type / R_total recorded
 
 ## Thresholds — Automated (Pass/Fail)
 
@@ -104,6 +116,7 @@ python tools/validate_extraction.py \
 | Single type count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
 | Relationship count **loss** | Δ ≤ 10% loss | 10–20% loss | > 20% loss |
 | Relationship count **gain** | Δ ≤ 15% gain | 15–25% gain | > 25% gain (hallucination signal) |
+| Entity retention (per type & total) | `R ≤ NF` | `NF < R ≤ 2·NF+1` (explain removed IDs) | `R > 2·NF+1` |
 | Performance regression | Δ ≤ +10% time | +10–20% time | > +20% time |
 | Performance improvement | Always PASS | — | — |
 | Schema validity | 100% | — | < 100% |
@@ -121,6 +134,7 @@ python tools/validate_extraction.py \
 ## PR Report
 
 - [ ] A/B Test Results posted as a PR comment (see template in `docs/ab-test-standard.md` §5.1)
+- [ ] Noise Floor (A-vs-A) table included in PR comment (§5.1)
 - [ ] All tables filled with mean ± σ values
 - [ ] Zero BLOCK statuses
 - [ ] All WARN statuses have written justification
