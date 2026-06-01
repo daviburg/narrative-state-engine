@@ -22,16 +22,16 @@ from catalog_merger import (  # noqa: E402
     _estimate_tokens,
     format_known_entities_bounded,
 )
-from semantic_extraction import (  # noqa: E402
-    _SECTION_COUNTER_KEYS,
-    _build_compression_signals,
-    _build_turn_compression,
-    _collect_existing_relationships,
-    _finalize_prompt_metrics,
-    _format_relationships_budgeted,
-    _record_prompt_tokens,
-    _trim_entry_for_scene,
-)
+import semantic_extraction as se  # noqa: E402
+
+_SECTION_COUNTER_KEYS = se._SECTION_COUNTER_KEYS
+_build_compression_signals = se._build_compression_signals
+_build_turn_compression = se._build_turn_compression
+_collect_existing_relationships = se._collect_existing_relationships
+_finalize_prompt_metrics = se._finalize_prompt_metrics
+_format_relationships_budgeted = se._format_relationships_budgeted
+_record_prompt_tokens = se._record_prompt_tokens
+_trim_entry_for_scene = se._trim_entry_for_scene
 
 
 # ---------------------------------------------------------------------------
@@ -456,7 +456,6 @@ def test_extract_and_merge_log_record_has_compression_fields(monkeypatch):
     """extract_and_merge must include ``turn_compression`` and ``compression``
     in the returned log record so the aggregator and monitoring tooling can
     read both fields from the extraction-log.jsonl output."""
-    import semantic_extraction as se
     from catalog_merger import CATALOG_KEYS
 
     monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
@@ -489,7 +488,6 @@ def test_default_off_noop_even_when_baseline_pruning_removes_entities(monkeypatc
     staleness pruning inside ``format_known_entities_bounded()`` shrinks the
     entity section.  Baseline pruning is not adaptive compression and must not
     be attributed to it (which would falsely report ``raw > compressed``)."""
-    import semantic_extraction as se
     from catalog_merger import CATALOG_KEYS
 
     monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
