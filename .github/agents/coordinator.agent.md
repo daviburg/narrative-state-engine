@@ -116,6 +116,7 @@ If you (coordinator) catch yourself about to dispatch an agent to run a >1 minut
 | "Shut down / reboot arclight" | @b70-optimizer |
 | "Check server health / SSH admin tasks" | @b70-optimizer |
 | "Submit orchestrator task" | @developer (local Python API, not SSH) |
+| "Address PR Copilot comments" | @developer (runs `saas/orchestrator/scripts/submit_pr_fix.py --repo <owner/name> --pr <N>`) |
 | "Restart/stop/start LLM servers on RTX box" | @rtx4070-optimizer |
 | "Why is extraction slow / token budget" | @token-economist |
 | "Tune prompt for fewer tokens" | @token-economist + @model-optimizer (quality check) |
@@ -149,7 +150,7 @@ When dispatching tasks to address automated Copilot review comments on a PR, use
    - If review posted 1+ new comments: restart at step 1 (new fix cycle)
 6. **Iteration Cap**: If the cycle exceeds 15 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
 
-Each fix-pr task targets the local dev coordinator host and should include the PR number, repo, and branch in metadata.
+The canonical, reusable submitter is `saas/orchestrator/scripts/submit_pr_fix.py --repo <owner/name> --pr <N>` (in narrative-state-engine-private, alongside the rest of `saas/`; it supersedes the one-off `_submit_pr_fix_*.py` scripts). Tasks target **arclight** by default — the primary authenticated copilot-cli worker; windows-dev is an authenticated fallback worker. The branch is auto-derived from the PR via `gh pr view`, and a built-in duplicate guard prevents double-submission of a fix for the same PR.
 
 ## Output Format
 - Delegation decisions with rationale
