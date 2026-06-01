@@ -398,7 +398,7 @@ Pairwise comparisons used: run1↔run2, run1↔run3, run2↔run3.
 
 ### Entity Retention Diff
 
-(Output of `tools/entity_retention_diff.py` for one representative A vs B run pair.)
+(Output of `tools/entity_retention_diff.py` aggregated across the B-vs-A run pairs; `Removed (R)` is the per-type maximum removed across those pairs.)
 
 | Type | A | B | Retained | Removed (R) | Added | NF_type | Band (PASS/WARN/BLOCK) |
 |---|---|---|---|---|---|---|---|
