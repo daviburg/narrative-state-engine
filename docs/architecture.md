@@ -443,7 +443,7 @@ This subsection covers two adjacent prompt paths in the same module: the **entit
 | Confidence filter | discovery | `DEFAULT_MIN_CONFIDENCE=0.6` | Yes |
 | PC failure cooldown | `_should_skip_pc` | `warn=10` (`_PC_FAILURE_WARN_THRESHOLD`), `skip-threshold=20` (`_PC_SKIP_THRESHOLD`, consecutive failures to enter cooldown), `skip-turns=50` (`_PC_SKIP_COOLDOWN`, turns skipped per cooldown), `retry=5` (`_PC_RETRY_WINDOW`) | Yes |
 | Entity refresh | `find_stale_entities` / `refresh_entities` | `_DEFAULT_REFRESH_INTERVAL=50`, `_DEFAULT_REFRESH_BATCH_SIZE=10`, `_MAX_REFRESH_BATCH_SIZE=25`, `_REFRESH_TYPE_SHARES` (characters `0.5` / locations `0.2` / items `0.2` / factions `0.1`) | Yes |
-| Periodic LLM dedup | `_run_periodic_dedup` | `_DEFAULT_DEDUP_AUDIT_INTERVAL=50`, `dedup_audit.AUTO_MERGE_THRESHOLD=0.9`, `dedup_audit.REVIEW_THRESHOLD=0.6` | Yes |
+| Periodic LLM dedup | `_run_periodic_dedup` | `_DEFAULT_DEDUP_AUDIT_INTERVAL=50`, `dedup_audit.AUTO_MERGE_THRESHOLD=0.9` (pairs below this are dropped; the periodic path has no review queue, so `dedup_audit.REVIEW_THRESHOLD` is not used here) | Yes |
 | Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` (inline literals, no module constants) | Partial |
 
 #### D. Post-batch reconciliation (runs in this order)
