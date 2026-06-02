@@ -432,7 +432,7 @@ This is the read-only inventory (Phase 1 of #449) of every post-processing / con
 | Prior-state compaction | `_format_prior_entity_context` | `pc_max_snapshots=3`, `digest_window=50` | PC trims stable attributes | Yes |
 | Scene relationship trim | `_filter_relationships_for_scene` | `recency_window=10`, `max_rels=8` | drops edges → dangling-rel cleanup then removes them | Yes |
 | Existing-rel budgeting | `_format_relationships_budgeted` | `recency_window=15`, `budget_fraction=0.2` | — | Yes |
-| **Entity-detail call cap** | inline in `extract_and_merge` | `max_detail_entities_per_turn=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
+| **Entity-detail call cap** | `_MAX_DETAIL_ENTITIES_PER_TURN` const, enforced in `extract_and_merge` | `_MAX_DETAIL_ENTITIES_PER_TURN=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
 
 #### C. Per-turn / periodic passes
 
@@ -448,7 +448,7 @@ This is the read-only inventory (Phase 1 of #449) of every post-processing / con
 
 | Order | Pass | Thresholds | Risk | 9B-era? |
 |---|---|---|---|---|
-| 1 | Catalog dedup | token-overlap `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
+| 1 | Catalog dedup | token-overlap `1.0` if smaller set `≤2` tokens else `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
 | 2 | Orphan stub sweep | `min_refs` char=`3`/loc=`2`/faction=`1` | creates stubs the stale sweep may remove | Yes |
 | 3 | Name-mention discovery | `min_events=2`, wordfreq `3e-6` | can resurrect phantoms | Yes |
 | 4 | Stale-item sweep | `min_refs=2`, `window=25` | #445 survival signals merged | Yes |
