@@ -237,10 +237,13 @@ class LLMClient:
         """Log the effective sampler configuration (#471) — best-effort.
 
         Emits two records to stderr:
-          1. The sampler params THIS client threads into its requests. The
-             same samplers are now applied on every call path (both
-             ``extract_json`` and ``generate_text``), so this record reflects
-             what either method will send.
+          1. The sampler params THIS client threads into its requests. Both
+             call paths (``extract_json`` and ``generate_text``) thread the
+             same configured samplers, so this record applies to either
+             method. Note the *send* path still drops backend-incompatible
+             keys (e.g. the Ollama native streaming path forwards only
+             ``temperature``); such values are annotated ``(not sent)`` below
+             so the record reflects what actually reaches the backend.
           2. The backend's effective defaults from llama-server's ``/props``,
              when reachable (self-hosted backends only).
 

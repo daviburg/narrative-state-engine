@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import types
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -805,12 +806,50 @@ class TestSamplerParamsInRequestBody:
 class TestSamplerObservability:
     """Verify the startup sampler log and best-effort /props probe."""
 
-    def test_props_probe_404_is_swallowed(self, tmp_path):
+    @pytest.fixture
+    def httpx_stub(self):
+        """Provide an ``httpx`` module for the /props probe tests.
+
+        CI installs only ``requirements.txt`` (no ``httpx``), so
+        ``pytest.importorskip("httpx")`` would silently skip these tests and
+        never exercise the probe's swallow-and-stay-offline behavior. When the
+        real package is absent, install a minimal stub exposing the two names
+        the probe relies on — ``get`` (patched per test) and ``ConnectError`` —
+        so the probe's ``import httpx`` resolves and the tests run for real.
+        """
+        try:
+            import httpx  # noqa: F401
+            yield httpx
+            return
+        except ImportError:
+            pass
+
+        stub = types.ModuleType("httpx")
+
+        class ConnectError(Exception):
+            pass
+
+        def _unpatched_get(*_args, **_kwargs):
+            raise RuntimeError("httpx.get stub must be patched in the test")
+
+        stub.ConnectError = ConnectError
+        stub.get = _unpatched_get
+        saved = sys.modules.get("httpx")
+        sys.modules["httpx"] = stub
+        try:
+            yield stub
+        finally:
+            if saved is not None:
+                sys.modules["httpx"] = saved
+            else:
+                del sys.modules["httpx"]
+
+    def test_props_probe_404_is_swallowed(self, tmp_path, httpx_stub):
         """A 404 from /props must not raise when the probe runs."""
         cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
         client = LLMClient(config_path=cfg)
 
-        httpx = pytest.importorskip("httpx")
+        httpx = httpx_stub
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         with patch.object(httpx, "get", return_value=mock_resp) as mock_get:
@@ -821,22 +860,22 @@ class TestSamplerObservability:
         called_url = mock_get.call_args[0][0]
         assert called_url == "http://localhost:8000/props"
 
-    def test_props_probe_exception_is_swallowed(self, tmp_path):
+    def test_props_probe_exception_is_swallowed(self, tmp_path, httpx_stub):
         """A connection error from /props must not raise when the probe runs."""
         cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
         client = LLMClient(config_path=cfg)
 
-        httpx = pytest.importorskip("httpx")
+        httpx = httpx_stub
         with patch.object(httpx, "get",
                           side_effect=httpx.ConnectError("refused")):
             # Must not raise.
             client._log_sampler_config(probe_backend=True)
 
-    def test_props_probe_skipped_under_pytest(self, tmp_path):
+    def test_props_probe_skipped_under_pytest(self, tmp_path, httpx_stub):
         """Auto-probe stays offline under pytest (no spurious network calls)."""
         cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
 
-        httpx = pytest.importorskip("httpx")
+        httpx = httpx_stub
         # Construction triggers the auto path (probe_backend=None), which must
         # be suppressed under pytest so the suite never hits the network.
         with patch.object(httpx, "get") as mock_get:
@@ -844,12 +883,12 @@ class TestSamplerObservability:
             client._log_sampler_config()  # auto path
         mock_get.assert_not_called()
 
-    def test_props_probe_skipped_for_cloud(self, tmp_path):
+    def test_props_probe_skipped_for_cloud(self, tmp_path, httpx_stub):
         """Cloud providers are never probed even with probing forced on."""
         cfg = _write_config(tmp_path)  # default base_url is api.openai.com
         client = LLMClient(config_path=cfg)
 
-        httpx = pytest.importorskip("httpx")
+        httpx = httpx_stub
         # Force probing on: the cloud gate must suppress the probe regardless
         # of the forced flag (and regardless of pytest).
         with patch.object(httpx, "get") as mock_get:
