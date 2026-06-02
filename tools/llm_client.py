@@ -275,11 +275,14 @@ class LLMClient:
         # we must not make spurious network calls to them.  Suppressed under
         # pytest to keep the unit suite offline.  llama-server serves /props at
         # the ROOT, not under /v1, so strip a trailing /v1.
+        #
+        # Cloud providers are NEVER probed, even when a caller forces
+        # ``probe_backend=True``: cloud APIs have no /props endpoint and we
+        # must not make spurious network calls (e.g. to api.openai.com/props).
+        if self._is_cloud_provider:
+            return
         if probe_backend is None:
-            probe_backend = (
-                not self._is_cloud_provider
-                and "PYTEST_CURRENT_TEST" not in os.environ
-            )
+            probe_backend = "PYTEST_CURRENT_TEST" not in os.environ
         if not probe_backend:
             return
         try:

@@ -821,8 +821,9 @@ class TestSamplerObservability:
         client = LLMClient(config_path=cfg)
 
         httpx = pytest.importorskip("httpx")
-        # Auto path: cloud gate suppresses the probe regardless of pytest.
+        # Force probing on: the cloud gate must suppress the probe regardless
+        # of the forced flag (and regardless of pytest).
         with patch.object(httpx, "get") as mock_get:
-            client._log_sampler_config()
+            client._log_sampler_config(probe_backend=True)
         mock_get.assert_not_called()
 
