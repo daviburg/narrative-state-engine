@@ -767,15 +767,15 @@ Place the raw source text inside the session's `raw/` directory:
 > under `sessions/<session>/raw/`.
 
 ```bash
-mkdir -p sessions/session-001/raw
+mkdir -p sessions/session-import/raw
 # Place your transcript at:
-# sessions/session-001/raw/full-transcript.md
+# sessions/session-import/raw/full-transcript.md
 ```
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 Useful flags:
@@ -882,8 +882,8 @@ When bootstrapping a session, semantic extraction runs automatically over all tu
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 The pipeline processes each turn through four agents:
@@ -1019,8 +1019,8 @@ Explicit segmented extraction command:
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --segment-size 100
 ```
 
@@ -1036,8 +1036,8 @@ Equivalent command relying on the auto-default (>150 turns):
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 Recommended segment sizes:
@@ -1066,8 +1066,8 @@ batch.
 ```bash
 # Batch 1: turns 1-25
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --max-turns 25
 
 # Review wiki pages in framework/catalogs/*/README.md
@@ -1075,16 +1075,16 @@ python tools/bootstrap_session.py \
 
 # Batch 2: turns 26-50
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --start-turn 26 --max-turns 50
 
 # Review again, then:
 
 # Batch 3: turns 51-75
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/session-001/raw/full-transcript.md \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --start-turn 51 --max-turns 75
 ```
 
