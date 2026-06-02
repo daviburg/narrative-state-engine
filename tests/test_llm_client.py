@@ -931,3 +931,127 @@ class TestSamplerObservability:
         assert "min_p=0.05(not sent)" in err
         assert "top_p=0.9 " in err
         assert "seed=7 " in err
+
+# ---------------------------------------------------------------------------
+# Sampler params threaded into generate_text (#472)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateTextSamplerParams:
+    """generate_text threads the same samplers as extract_json (#472).
+
+    The startup "client effective sampling" log claims the samplers apply to
+    every request this client sends; these tests pin that generate_text honors
+    that claim rather than silently sending only temperature/max_tokens.
+    """
+
+    def test_samplers_present_for_self_hosted(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8080/v1",
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.generate_text(system_prompt="sys", user_prompt="user")
+
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        assert captured["extra_body"]["top_k"] == 1
+        assert captured["extra_body"]["min_p"] == 0.0
+
+    def test_top_k_min_p_dropped_for_cloud(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.generate_text(system_prompt="sys", user_prompt="user")
+
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        assert "extra_body" not in captured
+
+    def test_samplers_absent_when_not_configured(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.generate_text(system_prompt="sys", user_prompt="user")
+
+        assert "top_p" not in captured
+        assert "seed" not in captured
+        assert "extra_body" not in captured
+
+
+# ---------------------------------------------------------------------------
+# _is_cloud_provider explicit self_hosted override (#472)
+# ---------------------------------------------------------------------------
+
+
+class TestSelfHostedOverride:
+    """An explicit self_hosted flag overrides the URL heuristic (#472).
+
+    Without it, a self-hosted llama-server/vLLM reachable by public DNS name
+    or public IP is misclassified as cloud and has top_k/min_p dropped.
+    """
+
+    def test_public_url_forced_self_hosted_keeps_samplers(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "https://gpu.example.com/v1",
+            "self_hosted": True,
+            "retry_attempts": 1,
+            "top_k": 7,
+            "min_p": 0.01,
+            "top_p": 0.9,
+            "seed": 3,
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._is_cloud_provider is False
+        captured, fake_create = _capture_request_kwargs(client)
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+        assert captured["extra_body"]["top_k"] == 7
+        assert captured["extra_body"]["min_p"] == 0.01
+
+    def test_self_hosted_false_forces_cloud(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8080/v1",
+            "self_hosted": False,
+            "retry_attempts": 1,
+            "top_k": 7,
+            "min_p": 0.01,
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._is_cloud_provider is True
+        captured, fake_create = _capture_request_kwargs(client)
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+        assert "extra_body" not in captured
+
+    def test_self_hosted_provider_name_is_not_cloud(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "provider": "vllm",
+            "base_url": "https://gpu.example.com/v1",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._is_cloud_provider is False

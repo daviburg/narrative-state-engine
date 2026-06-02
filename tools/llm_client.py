@@ -237,7 +237,10 @@ class LLMClient:
         """Log the effective sampler configuration (#471) — best-effort.
 
         Emits two records to stderr:
-          1. The sampler params THIS client will send (always).
+          1. The sampler params THIS client threads into its requests. The
+             same samplers are now applied on every call path (both
+             ``extract_json`` and ``generate_text``), so this record reflects
+             what either method will send.
           2. The backend's effective defaults from llama-server's ``/props``,
              when reachable (self-hosted backends only).
 
@@ -583,11 +586,33 @@ class LLMClient:
     def _is_cloud_provider(self) -> bool:
         """True when the configured provider appears to be a cloud API.
 
-        Checks all endpoints in the client pool (base_urls) when configured,
-        falling back to base_url. Returns True only if ALL endpoints appear
-        to be cloud (non-local) URLs.
+        Resolution order (most explicit wins):
+          1. An explicit ``self_hosted`` config flag overrides everything.
+             Set ``"self_hosted": true`` for a self-hosted backend reachable
+             via a public hostname or public IP (so top_k/min_p are still
+             forwarded), or ``false`` to force cloud handling. This closes the
+             gap where the URL heuristic below would misclassify a self-hosted
+             llama-server/vLLM reached by DNS name or public address as cloud
+             and silently drop its top_k/min_p samplers (#472 review).
+          2. Ollama is always self-hosted.
+          3. A known self-hosted ``provider`` name (llama-server, vllm, ...)
+             is treated as non-cloud regardless of URL.
+          4. Otherwise fall back to a URL heuristic: checks all endpoints in
+             the client pool (base_urls) when configured, falling back to
+             base_url, and returns True only if ALL endpoints appear to be
+             cloud (non-local) URLs.
         """
+        explicit = self.config.get("self_hosted")
+        if isinstance(explicit, bool):
+            return not explicit
         if self._is_ollama:
+            return False
+        provider = self.config.get("provider", "").lower()
+        self_hosted_providers = {
+            "llama", "llama-server", "llama.cpp", "llamacpp", "llama_cpp",
+            "vllm", "tgi", "local", "self_hosted", "self-hosted",
+        }
+        if provider in self_hosted_providers:
             return False
         urls = getattr(self, '_base_urls', None) or [self.config.get("base_url", "")]
         local_patterns = [
@@ -1001,9 +1026,31 @@ class LLMClient:
                         "temperature": self.temperature,
                         "max_tokens": self.max_tokens,
                     }
+                    # Explicit sampler params (#471/#472) — thread the same
+                    # deterministic samplers as extract_json so the startup
+                    # "client effective sampling" log is accurate for EVERY
+                    # LLMClient request path, not just JSON extraction.  top_p
+                    # and seed are native OpenAI params; top_k and min_p are not,
+                    # so they ride in extra_body, which only self-hosted
+                    # OpenAI-compatible backends (llama-server, vLLM) accept.
+                    # Cloud providers reject unknown extra_body params (HTTP
+                    # 400), so top_k/min_p are omitted there.
+                    if self.top_p is not None:
+                        kwargs["top_p"] = self.top_p
+                    if self.seed is not None:
+                        kwargs["seed"] = self.seed
+                    sampler_extra: dict = {}
+                    if not self._is_cloud_provider:
+                        if self.top_k is not None:
+                            sampler_extra["top_k"] = self.top_k
+                        if self.min_p is not None:
+                            sampler_extra["min_p"] = self.min_p
                     if timeout is not None:
                         kwargs["timeout"] = timeout
                     if self._is_ollama:
+                        # Note: top_k/min_p are not forwarded on the Ollama path
+                        # (Ollama uses its own options mapping); only the
+                        # llama-server/OpenAI path threads them via extra_body.
                         options = dict(self.ollama_options) if self.ollama_options else {}
                         if self.context_length:
                             options["num_ctx"] = self.context_length
@@ -1014,6 +1061,8 @@ class LLMClient:
                             extra_body_raw["format"] = self.ollama_format
                         if extra_body_raw:
                             kwargs["extra_body"] = extra_body_raw
+                    elif sampler_extra:
+                        kwargs["extra_body"] = sampler_extra
 
                     hard_deadline = (timeout or self.default_timeout) * 3
                     response = self._call_with_deadline(

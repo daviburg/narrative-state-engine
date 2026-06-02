@@ -321,6 +321,8 @@ Ollama is an alternative local backend. Configure `config/llm.json`:
 
 > **Note:** Ollama exposes an OpenAI-compatible `/v1` endpoint, so the tooling connects to it through the OpenAI-compatible client path. Set `"provider": "ollama"` when targeting Ollama to enable Ollama-specific request options (`extra_body.options`). The default Ollama port (`:11434`) is also auto-detected regardless of the `provider` value.
 
+> **Self-hosted backends behind a public address:** non-standard samplers (`top_k`, `min_p`) ride in `extra_body`, which only self-hosted OpenAI-compatible backends (llama-server, vLLM) accept — cloud APIs reject them, so they are dropped there. The provider is classified from the `base_url` (local/loopback/RFC1918 ⇒ self-hosted). If your self-hosted server is reachable by a public DNS name or public IP, set `"self_hosted": true` so `top_k`/`min_p` are still forwarded; set `"self_hosted": false` to force cloud handling. Known self-hosted `provider` names (`llama-server`, `vllm`, `tgi`, `local`, …) are also treated as self-hosted regardless of URL.
+
 ### Setting the Context Size (Ollama)
 
 Ollama's OpenAI-compatible `/v1` endpoint **ignores** runtime `num_ctx`
