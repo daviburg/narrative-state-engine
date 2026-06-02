@@ -259,11 +259,37 @@ class LLMClient:
         try:
             rr = (f" (round-robin x{len(self._base_urls)})"
                   if len(self._base_urls) > 1 else "")
+            # Report only what THIS client actually transmits.  The send path
+            # drops some samplers depending on the backend, so echoing raw
+            # config would misrepresent the request:
+            #   * Ollama streaming (/api/chat): only temperature is forwarded;
+            #     top_k/top_p/min_p/seed are not sent.
+            #   * Ollama OpenAI-compat (/v1): top_p and seed are native, but
+            #     top_k/min_p are NOT forwarded (no extra_body sampler path).
+            #   * llama-server/vLLM/OpenAI: all configured samplers are sent.
+            # Configured-but-dropped values are annotated "(not sent)" so the
+            # log never claims a sampler that did not reach the backend.
+            if self._use_ollama_streaming:
+                sent = {"top_k": False, "top_p": False,
+                        "min_p": False, "seed": False}
+            elif self._is_ollama:
+                sent = {"top_k": False, "top_p": True,
+                        "min_p": False, "seed": True}
+            else:
+                sent = {"top_k": True, "top_p": True,
+                        "min_p": True, "seed": True}
+
+            def _fmt(name: str, value) -> str:
+                if value is not None and not sent[name]:
+                    return f"{name}={value}(not sent)"
+                return f"{name}={value}"
+
             print(
                 "  [sampler] INFO client effective sampling: "
                 f"model={self.model} temperature={self.temperature} "
-                f"top_k={self.top_k} top_p={self.top_p} min_p={self.min_p} "
-                f"seed={self.seed} max_tokens={self.max_tokens} "
+                f"{_fmt('top_k', self.top_k)} {_fmt('top_p', self.top_p)} "
+                f"{_fmt('min_p', self.min_p)} {_fmt('seed', self.seed)} "
+                f"max_tokens={self.max_tokens} "
                 f"base_url={base_url}{rr}",
                 file=sys.stderr,
             )

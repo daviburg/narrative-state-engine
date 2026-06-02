@@ -827,3 +827,60 @@ class TestSamplerObservability:
             client._log_sampler_config(probe_backend=True)
         mock_get.assert_not_called()
 
+
+    def test_client_log_marks_dropped_samplers_for_ollama(self, tmp_path, capsys):
+        """Ollama /v1 path drops top_k/min_p — log must flag them not sent."""
+        cfg = _write_config(tmp_path, {
+            "provider": "ollama",
+            "base_url": "http://localhost:11434/v1",
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        # top_k/min_p are not forwarded on the Ollama OpenAI-compat path.
+        assert "top_k=40(not sent)" in err
+        assert "min_p=0.05(not sent)" in err
+        # top_p/seed are native on the /v1 path and ARE sent.
+        assert "top_p=0.9 " in err
+        assert "seed=7 " in err
+
+    def test_client_log_marks_all_dropped_for_ollama_streaming(
+        self, tmp_path, capsys
+    ):
+        """Ollama streaming path forwards only temperature."""
+        cfg = _write_config(tmp_path, {
+            "provider": "ollama",
+            "base_url": "http://localhost:11434/v1",
+            "ollama_format": "json",
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        assert "top_k=40(not sent)" in err
+        assert "top_p=0.9(not sent)" in err
+        assert "min_p=0.05(not sent)" in err
+        assert "seed=7(not sent)" in err
+
+    def test_client_log_no_annotation_for_openai_backend(self, tmp_path, capsys):
+        """llama-server/OpenAI path sends all samplers — no annotation."""
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8000/v1",
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        assert "(not sent)" not in err
+        assert "top_k=40 " in err
+        assert "min_p=0.05 " in err
