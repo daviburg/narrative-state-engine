@@ -440,20 +440,20 @@ This subsection covers two adjacent prompt paths in the same module: the **entit
 
 | Pass | Function | Thresholds | 9B-era? |
 |---|---|---|---|
-| Confidence filter | discovery | `min_confidence=0.6` | Yes |
+| Confidence filter | discovery | `DEFAULT_MIN_CONFIDENCE=0.6` | Yes |
 | PC failure cooldown | `_should_skip_pc` | `warn=10` (`_PC_FAILURE_WARN_THRESHOLD`), `skip-threshold=20` (`_PC_SKIP_THRESHOLD`, consecutive failures to enter cooldown), `skip-turns=50` (`_PC_SKIP_COOLDOWN`, turns skipped per cooldown), `retry=5` (`_PC_RETRY_WINDOW`) | Yes |
-| Entity refresh | `find_stale_entities` / `refresh_entities` | `interval=50`, `batch=10`, `max_batch=25`, type-shares `0.5/0.2/0.2/0.1` | Yes |
-| Periodic LLM dedup | `_run_periodic_dedup` | `interval=50`, `auto_merge=0.9`, `review=0.6` | Yes |
-| Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` | Partial |
+| Entity refresh | `find_stale_entities` / `refresh_entities` | `_DEFAULT_REFRESH_INTERVAL=50`, `_DEFAULT_REFRESH_BATCH_SIZE=10`, `_MAX_REFRESH_BATCH_SIZE=25`, `_REFRESH_TYPE_SHARES` (characters `0.5` / locations `0.2` / items `0.2` / factions `0.1`) | Yes |
+| Periodic LLM dedup | `_run_periodic_dedup` | `_DEFAULT_DEDUP_AUDIT_INTERVAL=50`, `dedup_audit.AUTO_MERGE_THRESHOLD=0.9`, `dedup_audit.REVIEW_THRESHOLD=0.6` | Yes |
+| Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` (inline literals, no module constants) | Partial |
 
 #### D. Post-batch reconciliation (runs in this order)
 
 | Order | Pass | Thresholds | Risk | 9B-era? |
 |---|---|---|---|---|
-| 1 | Catalog dedup | token-overlap `1.0` if smaller set `≤2` tokens else `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
-| 2 | Orphan stub sweep | `min_refs` char=`3`/loc=`2`/faction=`1` | creates stubs the stale sweep may remove | Yes |
-| 3 | Name-mention discovery | `min_events=2`, wordfreq `3e-6` | can resurrect phantoms | Yes |
-| 4 | Stale-item sweep | `min_refs=2`, `window=25` | #445 survival signals merged | Yes |
+| 1 | Catalog dedup | token-overlap `1.0` if smaller set `≤2` tokens else `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) (inline literals in `_dedup_catalogs`, no module constants) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
+| 2 | Orphan stub sweep | `min_refs` char=`_POST_BATCH_ORPHAN_MIN_REFS=3`/loc=`_POST_BATCH_ORPHAN_MIN_REFS_LOC=2`/faction=`_POST_BATCH_ORPHAN_MIN_REFS_FACTION=1` | creates stubs the stale sweep may remove | Yes |
+| 3 | Name-mention discovery | `_NAME_MENTION_MIN_EVENTS=2`, wordfreq `_COMMON_WORD_FREQ_THRESHOLD=3e-6` | can resurrect phantoms | Yes |
+| 4 | Stale-item sweep | `_STALE_ITEM_MIN_REFS=2`, `_STALE_ITEM_WINDOW=25` | #445 survival signals merged | Yes |
 | 5 | Dangling-rel cleanup | — | removes edges to swept items | n/a |
 
 #### Cross-cutting findings
