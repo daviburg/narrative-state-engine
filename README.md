@@ -205,18 +205,20 @@ python tools/ingest_turn.py \
 
 If you already have a large transcript, import it in one step:
 
-Put the source text in a local-only folder that is gitignored:
+Put the source text inside a gitignored session's `raw/` directory (for
+example `sessions/session-import/`, which is listed in `.gitignore`) so your
+private transcript is never committed:
 
 ```bash
-mkdir -p sessions/_import
+mkdir -p sessions/session-import/raw
 # Place your raw transcript text at:
-# sessions/_import/session-001-full-transcript.txt
+# sessions/session-import/raw/full-transcript.md
 ```
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 Use `--dry-run` first to preview parsed turns and writes.

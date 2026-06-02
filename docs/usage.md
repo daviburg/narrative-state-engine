@@ -759,6 +759,13 @@ If you already have a large transcript file, bootstrap a session in one pass:
 
 Place the raw source text inside the session's `raw/` directory:
 
+> **Warning:** `sessions/session-001/` is tracked as the public example, so
+> placing a real (private) transcript under `sessions/session-001/raw/` risks
+> committing private content. Use a gitignored session directory instead — e.g.
+> `sessions/session-import/` (already listed in `.gitignore`) — or add your
+> chosen `sessions/<session>/` path to `.gitignore` before placing transcripts
+> under `sessions/<session>/raw/`.
+
 ```bash
 mkdir -p sessions/session-001/raw
 # Place your transcript at:
