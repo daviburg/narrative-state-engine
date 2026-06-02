@@ -793,18 +793,25 @@ python tools/ingest_turn.py \
 
 If you already have a large transcript file, bootstrap a session in one pass:
 
-Use a local-only import folder (gitignored) for raw source text:
+Place the raw source text inside the session's `raw/` directory:
+
+> **Warning:** `sessions/session-001/` is tracked as the public example, so
+> placing a real (private) transcript under `sessions/session-001/raw/` risks
+> committing private content. Use a gitignored session directory instead — e.g.
+> `sessions/session-import/` (already listed in `.gitignore`) — or add your
+> chosen `sessions/<session>/` path to `.gitignore` before placing transcripts
+> under `sessions/<session>/raw/`.
 
 ```bash
-mkdir -p sessions/_import
+mkdir -p sessions/session-import/raw
 # Place your transcript at:
-# sessions/_import/session-001-full-transcript.txt
+# sessions/session-import/raw/full-transcript.md
 ```
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 Useful flags:
@@ -911,8 +918,8 @@ When bootstrapping a session, semantic extraction runs automatically over all tu
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 The pipeline processes each turn through four agents:
@@ -942,7 +949,7 @@ Use the helper script from the repository root:
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools/start_extraction_detached.ps1 `
   -Session sessions/session-import `
-  -TranscriptFile sessions/_import/session-import-full-transcript.txt `
+  -TranscriptFile sessions/session-import/raw/full-transcript.md `
   -Framework framework-local `
   -PlayerLabel "Fenouille Moonwind" `
   -SegmentSize 100
@@ -1048,8 +1055,8 @@ Explicit segmented extraction command:
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --segment-size 100
 ```
 
@@ -1065,8 +1072,8 @@ Equivalent command relying on the auto-default (>150 turns):
 
 ```bash
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md
 ```
 
 Recommended segment sizes:
@@ -1095,8 +1102,8 @@ batch.
 ```bash
 # Batch 1: turns 1-25
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --max-turns 25
 
 # Review wiki pages in framework/catalogs/*/README.md
@@ -1104,16 +1111,16 @@ python tools/bootstrap_session.py \
 
 # Batch 2: turns 26-50
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --start-turn 26 --max-turns 50
 
 # Review again, then:
 
 # Batch 3: turns 51-75
 python tools/bootstrap_session.py \
-  --session sessions/session-001 \
-  --file sessions/_import/session-001-full-transcript.txt \
+  --session sessions/session-import \
+  --file sessions/session-import/raw/full-transcript.md \
   --start-turn 51 --max-turns 75
 ```
 
