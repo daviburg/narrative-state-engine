@@ -414,7 +414,7 @@ This principle extends *No Hardcoded Word Lists* from word lists to thresholds a
 
 ### Post-Processing Heuristic Threshold Inventory
 
-This is the read-only inventory (Phase 1 of #449) of every post-processing / context-shaping pass in `tools/semantic_extraction.py` and `tools/catalog_merger.py`, with default thresholds, the decision signal each pass keys off, its interaction risk, and whether the constant was calibrated for the prior **9B-era** model and small catalogs. It grounds the *Source-Quality First* policy above with concrete data and is the doc home for the Phase-1 deliverable posted on issue #449 ([inventory comment](https://github.com/daviburg/narrative-state-engine/issues/449#issuecomment-4579673278), the canonical source). Thresholds below are verified against the named functions and module constants; recalibration (Phase 2) is out of scope here.
+This is the read-only inventory (Phase 1 of #449) of the principal post-processing / context-shaping passes in `tools/semantic_extraction.py` and `tools/catalog_merger.py`, with default thresholds, the decision signal each pass keys off, its interaction risk, and whether the constant was calibrated for the prior **9B-era** model and small catalogs. It is not an exhaustive line-by-line audit: it captures the passes that materially shape context or entity retention. It grounds the *Source-Quality First* policy above with concrete data and is the doc home for the Phase-1 deliverable posted on issue #449 ([inventory comment](https://github.com/daviburg/narrative-state-engine/issues/449#issuecomment-4579673278), the canonical source). Thresholds below are verified against the named functions and module constants; recalibration (Phase 2) is out of scope here.
 
 #### A. Discovery-context "smart compression" (`tools/catalog_merger.py`)
 
@@ -439,7 +439,7 @@ This is the read-only inventory (Phase 1 of #449) of every post-processing / con
 | Pass | Function | Thresholds | 9B-era? |
 |---|---|---|---|
 | Confidence filter | discovery | `min_confidence=0.6` | Yes |
-| PC failure cooldown | `_should_skip_pc` | `warn=10`, `skip=20`, `cooldown=50`, `retry=5` | Yes |
+| PC failure cooldown | `_should_skip_pc` | `warn=10` (`_PC_FAILURE_WARN_THRESHOLD`), `skip-threshold=20` (`_PC_SKIP_THRESHOLD`, consecutive failures to enter cooldown), `skip-turns=50` (`_PC_SKIP_COOLDOWN`, turns skipped per cooldown), `retry=5` (`_PC_RETRY_WINDOW`) | Yes |
 | Entity refresh | `find_stale_entities` / `refresh_entities` | `interval=50`, `batch=10`, `max_batch=25`, type-shares `0.5/0.2/0.2/0.1` | Yes |
 | Periodic LLM dedup | `_run_periodic_dedup` | `interval=50`, `auto_merge=0.9`, `review=0.6` | Yes |
 | Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` | Partial |
