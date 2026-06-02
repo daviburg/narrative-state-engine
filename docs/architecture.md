@@ -420,10 +420,10 @@ This is the read-only inventory (Phase 1 of #449) of the principal post-processi
 
 | Pass | Function | Thresholds (default) | Decision signal | Interaction risk | 9B-era? |
 |---|---|---|---|---|---|
-| Context-aware entity selection | `_select_context_aware_entities` | `_DEFAULT_RECENCY_WINDOW=10`, `_ONE_HOP_PRIORITY_CAP=0.5`, `_ONE_HOP_CAP_MIN_ENTITIES=20`, `_MIN_NAME_LENGTH_FOR_MATCH=3` | mention / co-location / one-hop / recency tiers | one-hop cap drops relationship context at ≥20 entities | Yes |
+| Context-aware entity selection | `_select_context_aware_entities` | `_DEFAULT_RECENCY_WINDOW=10`, `_ONE_HOP_PRIORITY_CAP=0.5`, `_ONE_HOP_CAP_MIN_ENTITIES=20`, `_MIN_NAME_LENGTH_FOR_MATCH=3` | mention / co-location / one-hop / recency tiers | one-hop expansion is dropped only when the catalog has ≥20 entities **and** priority ∪ one-hop exceeds 50% of the catalog (`_ONE_HOP_PRIORITY_CAP`), not merely at catalog size ≥20 | Yes |
 | Backfill staleness exclusion | tier 4 of the above | `_DEFAULT_STALENESS_THRESHOLD=50` | `current − last_updated > 50` → entity removed from discovery context | **Primary #394 driver** | Yes |
 | Budget degradation | `format_known_entities_bounded` | `_DEFAULT_ENTITY_BUDGET_FRACTION=0.25`, `_DEFAULT_BRIEF_STALENESS_THRESHOLD=20` | token estimate vs. `context × 0.25` | `turn_text` always forces the context-aware path even under budget; no count floor | Yes |
-| Mention blocklist | `_find_mentioned_entities` | hardcoded ~40-word list | name regex | **Rule 9 violation** (see *No Hardcoded Word Lists*) | n/a |
+| Mention blocklist | `_find_mentioned_entities` | `_COMMON_WORD_BLOCKLIST` (~35-word constant; filters single-word names only) | name regex | **Rule 9 violation** (see *No Hardcoded Word Lists*) | n/a |
 
 #### B. Detail-prompt & relationship-mapper compression (`tools/semantic_extraction.py`)
 
