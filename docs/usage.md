@@ -149,6 +149,10 @@ Configure `config/llm.json` (parallel example):
   "model": "Qwen3.5-9B-Q4_K_M",
   "api_key_env": "",
   "temperature": 0.0,
+  "top_k": 1,
+  "top_p": 1.0,
+  "min_p": 0.0,
+  "seed": 42,
   "max_tokens": 4096,
   "pc_max_tokens": 8192,
   "context_length": 32768,
@@ -158,6 +162,47 @@ Configure `config/llm.json` (parallel example):
   "parallel_workers": 4
 }
 ```
+
+#### Deterministic Sampling (#471)
+
+For reproducible extraction, pin **all** sampler parameters, not just
+temperature. The llama-server baked default is `temperature 1.0` with
+`top_k 20 / top_p 0.95 / min_p 0.05` and a random seed, so a config that
+omits these inherits stochastic sampling even when it *looks* greedy.
+
+| Key | Greedy value | Effect |
+|---|---|---|
+| `temperature` | `0` | disables temperature scaling (argmax) |
+| `top_k` | `1` | keep only the single most-likely token |
+| `top_p` | `1.0` | no nucleus truncation (redundant with `top_k: 1` but explicit) |
+| `min_p` | `0.0` | no minimum-probability floor |
+| `seed` | `42` | pins RNG (irrelevant under pure greedy, but logged for provenance) |
+
+`top_p` and `seed` are native OpenAI parameters sent to every
+OpenAI-compatible backend. `top_k` and `min_p` are forwarded **only to
+self-hosted OpenAI-compatible backends** (e.g. llama-server, vLLM) via
+`extra_body`; cloud providers such as OpenAI reject unknown `extra_body`
+params, so the client drops `top_k`/`min_p` for them and sends only the
+natively-supported samplers. `temperature` behaves differently
+from the other four: `LLMClient` always sends it, defaulting to `0.0` when the
+key is omitted, so the backend default never applies. The remaining four keys
+(`top_k`, `top_p`, `min_p`, `seed`) are truly optional — when omitted the client
+sends nothing for them and the backend default applies.
+
+With this config on a **single pinned GPU endpoint**, single-GPU extraction is
+byte-deterministic (empirically 8/8 byte-identical at 512 tokens). The
+remaining non-determinism source is **cross-GPU round-robin** (`base_urls`
+across non-bit-identical GPUs) — pin one endpoint when byte reproducibility
+matters.
+
+On startup the client logs a `[sampler]` line to stderr showing the effective
+client-sent sampling (model, temperature, top_k, top_p, min_p, seed, max_tokens,
+endpoint) and, for any non-cloud (self-hosted) backend, probes the server's
+`/props` endpoint and logs the server-side `default_generation_settings`. This
+includes self-hosted backends at public hostnames when `self_hosted: true` is
+set in `config/llm.json`. Capture this log in A/B run provenance to verify the
+run actually used the intended sampler config.
+
 
 Key flags:
 
@@ -284,6 +329,8 @@ Ollama is an alternative local backend. Configure `config/llm.json`:
 ```
 
 > **Note:** Ollama exposes an OpenAI-compatible `/v1` endpoint, so the tooling connects to it through the OpenAI-compatible client path. Set `"provider": "ollama"` when targeting Ollama to enable Ollama-specific request options (`extra_body.options`). The default Ollama port (`:11434`) is also auto-detected regardless of the `provider` value.
+
+> **Self-hosted backends behind a public address:** non-standard samplers (`top_k`, `min_p`) ride in `extra_body`, which only self-hosted OpenAI-compatible backends (llama-server, vLLM) accept — cloud APIs reject them, so they are dropped there. The provider is classified from the `base_url` (local/loopback/RFC1918 ⇒ self-hosted). If your self-hosted server is reachable by a public DNS name or public IP, set `"self_hosted": true` so `top_k`/`min_p` are still forwarded; set `"self_hosted": false` to force cloud handling. Known self-hosted `provider` names (`llama-server`, `vllm`, `tgi`, `local`, …) are also treated as self-hosted regardless of URL.
 
 ### Setting the Context Size (Ollama)
 

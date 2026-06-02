@@ -3,6 +3,7 @@
 import json
 import os
 import sys
+import types
 from unittest.mock import MagicMock, patch
 import pytest
 
@@ -665,3 +666,431 @@ class TestBaseUrlOverrideSuppression:
             "http://localhost:8081/v1",
             "http://localhost:8082/v1",
         ]
+
+
+# ---------------------------------------------------------------------------
+# Sampler params threaded into the request body (#471)
+# ---------------------------------------------------------------------------
+
+
+def _mock_ok_response(content='{"entities": []}'):
+    """Build a MagicMock chat-completion response with the given content."""
+    mock_choice = MagicMock()
+    mock_choice.message.content = content
+    mock_choice.finish_reason = "stop"
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    return mock_response
+
+
+def _capture_request_kwargs(client):
+    """Patch the client's create() to capture and return the request kwargs.
+
+    Returns the dict the kwargs are recorded into; run extract_json after.
+    """
+    captured = {}
+
+    def _create(**kwargs):
+        captured.update(kwargs)
+        return _mock_ok_response()
+
+    return captured, _create
+
+
+class TestSamplerParamsInRequestBody:
+    """Verify explicit sampler params (#471) are threaded into the request."""
+
+    def test_sampler_params_present_when_configured(self, tmp_path):
+        """top_k/top_p/min_p/seed appear in the request when set in config."""
+        cfg = _write_config(tmp_path, {
+            # Self-hosted OpenAI-compatible backend: top_k/min_p ride in
+            # extra_body here. Cloud providers reject those params, so this
+            # path is exercised with a local base_url (see the cloud test).
+            "base_url": "http://localhost:8080/v1",
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        # top_p and seed are native OpenAI params
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        # top_k and min_p ride in extra_body
+        assert captured["extra_body"]["top_k"] == 1
+        assert captured["extra_body"]["min_p"] == 0.0
+
+    def test_top_k_min_p_dropped_for_cloud_provider(self, tmp_path):
+        """Cloud providers reject non-standard params, so top_k/min_p are not
+        sent in extra_body; top_p/seed (native OpenAI params) still are."""
+        cfg = _write_config(tmp_path, {
+            # Default base_url is https://api.openai.com/v1 (a cloud provider).
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        # Native OpenAI params are still sent
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        # top_k/min_p must NOT reach a cloud provider (rejected as unknown)
+        assert "extra_body" not in captured
+
+    def test_temperature_zero_is_sent(self, tmp_path):
+        """temperature 0 is sent in the request body (not dropped/defaulted)."""
+        cfg = _write_config(tmp_path, {"retry_attempts": 1, "temperature": 0})
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        assert captured["temperature"] == 0
+
+    def test_sampler_params_absent_when_not_configured(self, tmp_path):
+        """Backward compat: no sampler keys in body when absent from config."""
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        assert "top_p" not in captured
+        assert "seed" not in captured
+        # No extra_body at all for a non-Ollama provider without samplers
+        assert "extra_body" not in captured
+
+    def test_partial_sampler_config(self, tmp_path):
+        """Only configured sampler keys are sent; unset ones stay absent."""
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 1,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        assert captured["seed"] == 7
+        assert "top_p" not in captured
+        assert "extra_body" not in captured
+
+
+# ---------------------------------------------------------------------------
+# Sampler observability — /props probe (#471)
+# ---------------------------------------------------------------------------
+
+
+class TestSamplerObservability:
+    """Verify the startup sampler log and best-effort /props probe."""
+
+    @pytest.fixture
+    def httpx_stub(self):
+        """Provide an ``httpx`` module for the /props probe tests.
+
+        CI installs only ``requirements.txt`` (no ``httpx``), so
+        ``pytest.importorskip("httpx")`` would silently skip these tests and
+        never exercise the probe's swallow-and-stay-offline behavior. When the
+        real package is absent, install a minimal stub exposing the two names
+        the probe relies on — ``get`` (patched per test) and ``ConnectError`` —
+        so the probe's ``import httpx`` resolves and the tests run for real.
+        """
+        try:
+            import httpx  # noqa: F401
+            yield httpx
+            return
+        except ImportError:
+            pass
+
+        stub = types.ModuleType("httpx")
+
+        class ConnectError(Exception):
+            pass
+
+        def _unpatched_get(*_args, **_kwargs):
+            raise RuntimeError("httpx.get stub must be patched in the test")
+
+        stub.ConnectError = ConnectError
+        stub.get = _unpatched_get
+        saved = sys.modules.get("httpx")
+        sys.modules["httpx"] = stub
+        try:
+            yield stub
+        finally:
+            if saved is not None:
+                sys.modules["httpx"] = saved
+            else:
+                del sys.modules["httpx"]
+
+    def test_props_probe_404_is_swallowed(self, tmp_path, httpx_stub):
+        """A 404 from /props must not raise when the probe runs."""
+        cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
+        client = LLMClient(config_path=cfg)
+
+        httpx = httpx_stub
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        with patch.object(httpx, "get", return_value=mock_resp) as mock_get:
+            # Explicit probe — exercises the network path directly.
+            client._log_sampler_config(probe_backend=True)
+        mock_get.assert_called_once()
+        # Probe targets the server ROOT, not /v1
+        called_url = mock_get.call_args[0][0]
+        assert called_url == "http://localhost:8000/props"
+
+    def test_props_probe_exception_is_swallowed(self, tmp_path, httpx_stub):
+        """A connection error from /props must not raise when the probe runs."""
+        cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
+        client = LLMClient(config_path=cfg)
+
+        httpx = httpx_stub
+        with patch.object(httpx, "get",
+                          side_effect=httpx.ConnectError("refused")):
+            # Must not raise.
+            client._log_sampler_config(probe_backend=True)
+
+    def test_props_probe_skipped_under_pytest(self, tmp_path, httpx_stub):
+        """Auto-probe stays offline under pytest (no spurious network calls)."""
+        cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
+
+        httpx = httpx_stub
+        # Construction triggers the auto path (probe_backend=None), which must
+        # be suppressed under pytest so the suite never hits the network.
+        with patch.object(httpx, "get") as mock_get:
+            client = LLMClient(config_path=cfg)
+            client._log_sampler_config()  # auto path
+        mock_get.assert_not_called()
+
+    def test_props_probe_skipped_for_cloud(self, tmp_path, httpx_stub):
+        """Cloud providers are never probed even with probing forced on."""
+        cfg = _write_config(tmp_path)  # default base_url is api.openai.com
+        client = LLMClient(config_path=cfg)
+
+        httpx = httpx_stub
+        # Force probing on: the cloud gate must suppress the probe regardless
+        # of the forced flag (and regardless of pytest).
+        with patch.object(httpx, "get") as mock_get:
+            client._log_sampler_config(probe_backend=True)
+        mock_get.assert_not_called()
+
+
+    def test_client_log_marks_dropped_samplers_for_ollama(self, tmp_path, capsys):
+        """Ollama /v1 path drops top_k/min_p — log must flag them not sent."""
+        cfg = _write_config(tmp_path, {
+            "provider": "ollama",
+            "base_url": "http://localhost:11434/v1",
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        # top_k/min_p are not forwarded on the Ollama OpenAI-compat path.
+        assert "top_k=40(not sent)" in err
+        assert "min_p=0.05(not sent)" in err
+        # top_p/seed are native on the /v1 path and ARE sent.
+        assert "top_p=0.9 " in err
+        assert "seed=7 " in err
+
+    def test_client_log_marks_all_dropped_for_ollama_streaming(
+        self, tmp_path, capsys
+    ):
+        """Ollama streaming path forwards only temperature."""
+        cfg = _write_config(tmp_path, {
+            "provider": "ollama",
+            "base_url": "http://localhost:11434/v1",
+            "ollama_format": "json",
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        assert "top_k=40(not sent)" in err
+        assert "top_p=0.9(not sent)" in err
+        assert "min_p=0.05(not sent)" in err
+        assert "seed=7(not sent)" in err
+
+    def test_client_log_no_annotation_for_openai_backend(self, tmp_path, capsys):
+        """llama-server/OpenAI path sends all samplers — no annotation."""
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8000/v1",
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        assert "(not sent)" not in err
+        assert "top_k=40 " in err
+        assert "min_p=0.05 " in err
+
+    def test_client_log_marks_dropped_samplers_for_cloud(self, tmp_path, capsys):
+        """Cloud OpenAI-compatible APIs reject top_k/min_p — log flags them as
+        not sent while top_p/seed (native params) are sent."""
+        cfg = _write_config(tmp_path, {
+            # Default base_url is https://api.openai.com/v1 (a cloud provider).
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        assert "top_k=40(not sent)" in err
+        assert "min_p=0.05(not sent)" in err
+        assert "top_p=0.9 " in err
+        assert "seed=7 " in err
+
+# ---------------------------------------------------------------------------
+# Sampler params threaded into generate_text (#472)
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateTextSamplerParams:
+    """generate_text threads the same samplers as extract_json (#472).
+
+    The startup "client effective sampling" log claims the samplers apply to
+    every request this client sends; these tests pin that generate_text honors
+    that claim rather than silently sending only temperature/max_tokens.
+    """
+
+    def test_samplers_present_for_self_hosted(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8080/v1",
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.generate_text(system_prompt="sys", user_prompt="user")
+
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        assert captured["extra_body"]["top_k"] == 1
+        assert captured["extra_body"]["min_p"] == 0.0
+
+    def test_top_k_min_p_dropped_for_cloud(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.generate_text(system_prompt="sys", user_prompt="user")
+
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        assert "extra_body" not in captured
+
+    def test_samplers_absent_when_not_configured(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.generate_text(system_prompt="sys", user_prompt="user")
+
+        assert "top_p" not in captured
+        assert "seed" not in captured
+        assert "extra_body" not in captured
+
+
+# ---------------------------------------------------------------------------
+# _is_cloud_provider explicit self_hosted override (#472)
+# ---------------------------------------------------------------------------
+
+
+class TestSelfHostedOverride:
+    """An explicit self_hosted flag overrides the URL heuristic (#472).
+
+    Without it, a self-hosted llama-server/vLLM reachable by public DNS name
+    or public IP is misclassified as cloud and has top_k/min_p dropped.
+    """
+
+    def test_public_url_forced_self_hosted_keeps_samplers(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "https://gpu.example.com/v1",
+            "self_hosted": True,
+            "retry_attempts": 1,
+            "top_k": 7,
+            "min_p": 0.01,
+            "top_p": 0.9,
+            "seed": 3,
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._is_cloud_provider is False
+        captured, fake_create = _capture_request_kwargs(client)
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+        assert captured["extra_body"]["top_k"] == 7
+        assert captured["extra_body"]["min_p"] == 0.01
+
+    def test_self_hosted_false_forces_cloud(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8080/v1",
+            "self_hosted": False,
+            "retry_attempts": 1,
+            "top_k": 7,
+            "min_p": 0.01,
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._is_cloud_provider is True
+        captured, fake_create = _capture_request_kwargs(client)
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+        assert "extra_body" not in captured
+
+    def test_self_hosted_provider_name_is_not_cloud(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "provider": "vllm",
+            "base_url": "https://gpu.example.com/v1",
+        })
+        client = LLMClient(config_path=cfg)
+        assert client._is_cloud_provider is False
