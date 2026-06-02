@@ -190,9 +190,11 @@ matters.
 
 On startup the client logs a `[sampler]` line to stderr showing the effective
 client-sent sampling (model, temperature, top_k, top_p, min_p, seed, max_tokens,
-endpoint) and, for local backends, probes the server's `/props` endpoint and
-logs the server-side `default_generation_settings`. Capture this log in A/B run
-provenance to verify the run actually used the intended sampler config.
+endpoint) and, for any non-cloud (self-hosted) backend, probes the server's
+`/props` endpoint and logs the server-side `default_generation_settings`. This
+includes self-hosted backends at public hostnames when `self_hosted: true` is
+set in `config/llm.json`. Capture this log in A/B run provenance to verify the
+run actually used the intended sampler config.
 
 
 Key flags:
