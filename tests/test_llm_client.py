@@ -665,3 +665,164 @@ class TestBaseUrlOverrideSuppression:
             "http://localhost:8081/v1",
             "http://localhost:8082/v1",
         ]
+
+
+# ---------------------------------------------------------------------------
+# Sampler params threaded into the request body (#471)
+# ---------------------------------------------------------------------------
+
+
+def _mock_ok_response(content='{"entities": []}'):
+    """Build a MagicMock chat-completion response with the given content."""
+    mock_choice = MagicMock()
+    mock_choice.message.content = content
+    mock_choice.finish_reason = "stop"
+    mock_response = MagicMock()
+    mock_response.choices = [mock_choice]
+    return mock_response
+
+
+def _capture_request_kwargs(client):
+    """Patch the client's create() to capture and return the request kwargs.
+
+    Returns the dict the kwargs are recorded into; run extract_json after.
+    """
+    captured = {}
+
+    def _create(**kwargs):
+        captured.update(kwargs)
+        return _mock_ok_response()
+
+    return captured, _create
+
+
+class TestSamplerParamsInRequestBody:
+    """Verify explicit sampler params (#471) are threaded into the request."""
+
+    def test_sampler_params_present_when_configured(self, tmp_path):
+        """top_k/top_p/min_p/seed appear in the request when set in config."""
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        # top_p and seed are native OpenAI params
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        # top_k and min_p ride in extra_body
+        assert captured["extra_body"]["top_k"] == 1
+        assert captured["extra_body"]["min_p"] == 0.0
+
+    def test_temperature_zero_is_sent(self, tmp_path):
+        """temperature 0 is sent in the request body (not dropped/defaulted)."""
+        cfg = _write_config(tmp_path, {"retry_attempts": 1, "temperature": 0})
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        assert captured["temperature"] == 0
+
+    def test_sampler_params_absent_when_not_configured(self, tmp_path):
+        """Backward compat: no sampler keys in body when absent from config."""
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        assert "top_p" not in captured
+        assert "seed" not in captured
+        # No extra_body at all for a non-Ollama provider without samplers
+        assert "extra_body" not in captured
+
+    def test_partial_sampler_config(self, tmp_path):
+        """Only configured sampler keys are sent; unset ones stay absent."""
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 1,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        assert captured["seed"] == 7
+        assert "top_p" not in captured
+        assert "extra_body" not in captured
+
+
+# ---------------------------------------------------------------------------
+# Sampler observability — /props probe (#471)
+# ---------------------------------------------------------------------------
+
+
+class TestSamplerObservability:
+    """Verify the startup sampler log and best-effort /props probe."""
+
+    def test_props_probe_404_is_swallowed(self, tmp_path):
+        """A 404 from /props must not raise when the probe runs."""
+        cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
+        client = LLMClient(config_path=cfg)
+
+        import httpx
+        mock_resp = MagicMock()
+        mock_resp.status_code = 404
+        with patch.object(httpx, "get", return_value=mock_resp) as mock_get:
+            # Explicit probe — exercises the network path directly.
+            client._log_sampler_config(probe_backend=True)
+        mock_get.assert_called_once()
+        # Probe targets the server ROOT, not /v1
+        called_url = mock_get.call_args[0][0]
+        assert called_url == "http://localhost:8000/props"
+
+    def test_props_probe_exception_is_swallowed(self, tmp_path):
+        """A connection error from /props must not raise when the probe runs."""
+        cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
+        client = LLMClient(config_path=cfg)
+
+        import httpx
+        with patch.object(httpx, "get",
+                          side_effect=httpx.ConnectError("refused")):
+            # Must not raise.
+            client._log_sampler_config(probe_backend=True)
+
+    def test_props_probe_skipped_under_pytest(self, tmp_path):
+        """Auto-probe stays offline under pytest (no spurious network calls)."""
+        cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
+
+        import httpx
+        # Construction triggers the auto path (probe_backend=None), which must
+        # be suppressed under pytest so the suite never hits the network.
+        with patch.object(httpx, "get") as mock_get:
+            client = LLMClient(config_path=cfg)
+            client._log_sampler_config()  # auto path
+        mock_get.assert_not_called()
+
+    def test_props_probe_skipped_for_cloud(self, tmp_path):
+        """Cloud providers are never probed even with probing forced on."""
+        cfg = _write_config(tmp_path)  # default base_url is api.openai.com
+        client = LLMClient(config_path=cfg)
+
+        import httpx
+        # Auto path: cloud gate suppresses the probe regardless of pytest.
+        with patch.object(httpx, "get") as mock_get:
+            client._log_sampler_config()
+        mock_get.assert_not_called()
+

@@ -168,6 +168,16 @@ class LLMClient:
         self.client = self._clients[0]
         self.model = self.config.get("model", "gpt-4o")
         self.temperature = self.config.get("temperature", 0.0)
+        # Optional explicit sampler params.  Default None when absent so the
+        # request body is byte-identical to the historical behaviour (no new
+        # fields).  When set, they pin greedy/deterministic decoding — this
+        # matters because some backends bake a stochastic default (e.g.
+        # llama-server defaults to temperature 1.0), so omitting samplers
+        # silently leaks server-side randomness into "temp 0" runs.
+        self.top_k = self.config.get("top_k", None)
+        self.top_p = self.config.get("top_p", None)
+        self.min_p = self.config.get("min_p", None)
+        self.seed = self.config.get("seed", None)
         self.max_tokens = self.config.get("max_tokens", 4096)
         self.pc_max_tokens = self.config.get("pc_max_tokens", self.max_tokens)
         self.retry_attempts = self.config.get("retry_attempts", 3)
@@ -215,6 +225,92 @@ class LLMClient:
             print(
                 f"  Multi-endpoint: {len(self._clients)} endpoints configured, "
                 f"round-robin dispatch enabled",
+                file=sys.stderr,
+            )
+
+        # Sampler observability (#471): self-document the effective sampling
+        # this run will use, so a future "temp 0 that wasn't really 0" is
+        # immediately visible in the logs.  Best-effort; never fatal.
+        self._log_sampler_config()
+
+    def _log_sampler_config(self, probe_backend: bool | None = None) -> None:
+        """Log the effective sampler configuration (#471) — best-effort.
+
+        Emits two records to stderr:
+          1. The sampler params THIS client will send (always).
+          2. The backend's effective defaults from llama-server's ``/props``,
+             when reachable (self-hosted backends only).
+
+        Together they make every run's log self-document its sampling, closing
+        the gap where a stochastic run masqueraded as deterministic. Never
+        raises — any failure is swallowed so it cannot break extraction.
+
+        Args:
+            probe_backend: Whether to make the ``/props`` HTTP probe.  When
+                None (the default), it is auto-enabled for self-hosted
+                backends but suppressed under pytest so the unit suite stays
+                offline.  Tests pass an explicit bool to exercise the probe.
+        """
+        try:
+            base_url = self._base_urls[0] if self._base_urls else self.config.get(
+                "base_url", "")
+        except Exception:
+            base_url = self.config.get("base_url", "")
+        try:
+            rr = (f" (round-robin x{len(self._base_urls)})"
+                  if len(self._base_urls) > 1 else "")
+            print(
+                "  [sampler] INFO client effective sampling: "
+                f"model={self.model} temperature={self.temperature} "
+                f"top_k={self.top_k} top_p={self.top_p} min_p={self.min_p} "
+                f"seed={self.seed} max_tokens={self.max_tokens} "
+                f"base_url={base_url}{rr}",
+                file=sys.stderr,
+            )
+        except Exception:
+            pass
+
+        # Probe llama-server /props for the SERVER-side effective defaults.
+        # Only for self-hosted backends — cloud APIs have no such endpoint and
+        # we must not make spurious network calls to them.  Suppressed under
+        # pytest to keep the unit suite offline.  llama-server serves /props at
+        # the ROOT, not under /v1, so strip a trailing /v1.
+        if probe_backend is None:
+            probe_backend = (
+                not self._is_cloud_provider
+                and "PYTEST_CURRENT_TEST" not in os.environ
+            )
+        if not probe_backend:
+            return
+        try:
+            import httpx
+
+            server_root = base_url.rstrip("/")
+            if server_root.endswith("/v1"):
+                server_root = server_root[:-3]
+            resp = httpx.get(server_root.rstrip("/") + "/props", timeout=5.0)
+            if resp.status_code == 200:
+                params = (
+                    resp.json()
+                    .get("default_generation_settings", {})
+                    .get("params", {})
+                )
+                keys = ("temperature", "top_k", "top_p", "min_p", "seed", "samplers")
+                summary = {k: params.get(k) for k in keys if k in params}
+                print(
+                    f"  [sampler] INFO backend /props effective defaults: {summary}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"  [sampler] DEBUG /props probe returned HTTP "
+                    f"{resp.status_code}; backend sampler defaults unknown.",
+                    file=sys.stderr,
+                )
+        except Exception as e:
+            print(
+                f"  [sampler] DEBUG /props probe unavailable "
+                f"({type(e).__name__}); backend sampler defaults unknown.",
                 file=sys.stderr,
             )
 
@@ -618,6 +714,24 @@ class LLMClient:
                         "temperature": effective_temp,
                         "max_tokens": effective_max,
                     }
+                    # Explicit sampler params (#471) — pin deterministic
+                    # decoding and prevent server-default sampler leakage.
+                    # Some backends bake a stochastic default (llama-server
+                    # defaults to temperature 1.0), so any omitted sampler
+                    # silently inherits server randomness.  top_p and seed are
+                    # native OpenAI params; top_k and min_p are not, so they
+                    # ride in extra_body, which OpenAI-compatible backends
+                    # (llama-server, vLLM) read.  All are sent only when
+                    # configured, keeping the body byte-identical otherwise.
+                    if self.top_p is not None:
+                        kwargs["top_p"] = self.top_p
+                    if self.seed is not None:
+                        kwargs["seed"] = self.seed
+                    sampler_extra: dict = {}
+                    if self.top_k is not None:
+                        sampler_extra["top_k"] = self.top_k
+                    if self.min_p is not None:
+                        sampler_extra["min_p"] = self.min_p
                     # Ollama hangs when response_format=json_object is used with
                     # qwen3.5 models (thinking-mode conflict).  Skip it for those.
                     if not self._skip_response_format:
@@ -625,6 +739,9 @@ class LLMClient:
                     if timeout is not None:
                         kwargs["timeout"] = timeout
                     if self._is_ollama:
+                        # Note: top_k/min_p are not forwarded on the Ollama path
+                        # (Ollama uses its own options mapping); only the
+                        # llama-server/OpenAI path threads them via extra_body.
                         options = dict(self.ollama_options) if self.ollama_options else {}
                         if self.context_length:
                             options["num_ctx"] = self.context_length
@@ -635,6 +752,8 @@ class LLMClient:
                             extra_body["format"] = self.ollama_format
                         if extra_body:
                             kwargs["extra_body"] = extra_body
+                    elif sampler_extra:
+                        kwargs["extra_body"] = sampler_extra
 
                     hard_deadline = (timeout or self.default_timeout) * 3
                     response = self._call_with_deadline(
