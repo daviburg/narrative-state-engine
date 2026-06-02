@@ -420,19 +420,21 @@ This is the read-only inventory (Phase 1 of #449) of the principal post-processi
 
 | Pass | Function | Thresholds (default) | Decision signal | Interaction risk | 9B-era? |
 |---|---|---|---|---|---|
-| Context-aware entity selection | `_select_context_aware_entities` | `recency_window=10`, `one_hop_cap=0.5`, `one_hop_min_entities=20`, `min_name_len=3` | mention / co-location / one-hop / recency tiers | one-hop cap drops relationship context at ≥20 entities | Yes |
-| Backfill staleness exclusion | tier 4 of the above | `staleness_threshold=50` | `current − last_updated > 50` → entity removed from discovery context | **Primary #394 driver** | Yes |
-| Budget degradation | `format_known_entities_bounded` | `budget_fraction=0.25`, `brief_staleness=20` | token estimate vs. `context × 0.25` | `turn_text` always forces the context-aware path even under budget; no count floor | Yes |
+| Context-aware entity selection | `_select_context_aware_entities` | `_DEFAULT_RECENCY_WINDOW=10`, `_ONE_HOP_PRIORITY_CAP=0.5`, `_ONE_HOP_CAP_MIN_ENTITIES=20`, `_MIN_NAME_LENGTH_FOR_MATCH=3` | mention / co-location / one-hop / recency tiers | one-hop cap drops relationship context at ≥20 entities | Yes |
+| Backfill staleness exclusion | tier 4 of the above | `_DEFAULT_STALENESS_THRESHOLD=50` | `current − last_updated > 50` → entity removed from discovery context | **Primary #394 driver** | Yes |
+| Budget degradation | `format_known_entities_bounded` | `_DEFAULT_ENTITY_BUDGET_FRACTION=0.25`, `_DEFAULT_BRIEF_STALENESS_THRESHOLD=20` | token estimate vs. `context × 0.25` | `turn_text` always forces the context-aware path even under budget; no count floor | Yes |
 | Mention blocklist | `_find_mentioned_entities` | hardcoded ~40-word list | name regex | **Rule 9 violation** (see *No Hardcoded Word Lists*) | n/a |
 
-#### B. Detail-prompt compression (`tools/semantic_extraction.py`)
+#### B. Detail-prompt & relationship-mapper compression (`tools/semantic_extraction.py`)
+
+This subsection covers two adjacent prompt paths in the same module: the **entity-detail prompt** (prior-state compaction, scene relationship trim, entity-detail call cap) and the **relationship-mapper prompt** (existing-rel budgeting, flagged below). The latter shapes `format_existing_relationships` input for the relationship-mapper LLM, not the detail prompt.
 
 | Pass | Function | Thresholds | Risk | 9B-era? |
 |---|---|---|---|---|
-| Prior-state compaction | `_format_prior_entity_context` | `pc_max_snapshots=3`, `digest_window=50` | PC trims stable attributes | Yes |
-| Scene relationship trim | `_filter_relationships_for_scene` | `recency_window=10`, `max_rels=8` | drops edges → dangling-rel cleanup then removes them | Yes |
-| Existing-rel budgeting | `_format_relationships_budgeted` | `recency_window=15`, `budget_fraction=0.2` | — | Yes |
-| **Entity-detail call cap** | `_MAX_DETAIL_ENTITIES_PER_TURN` const, enforced in `extract_and_merge` | `_MAX_DETAIL_ENTITIES_PER_TURN=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
+| Prior-state compaction (detail prompt) | `_format_prior_entity_context` | `_PC_MAX_VOLATILE_SNAPSHOTS=3`, `_DIGEST_WINDOW=50` | PC trims stable attributes | Yes |
+| Scene relationship trim (detail prompt) | `_filter_relationships_for_scene` | `_SCENE_REL_RECENCY_WINDOW=10`, `_SCENE_MAX_RELATIONSHIPS=8` | drops edges → dangling-rel cleanup then removes them | Yes |
+| Existing-rel budgeting (**relationship-mapper prompt**) | `_format_relationships_budgeted` | `_REL_RECENCY_WINDOW=15`, `_REL_TOKEN_BUDGET_FRACTION=0.2` | — | Yes |
+| **Entity-detail call cap** (detail prompt) | `_MAX_DETAIL_ENTITIES_PER_TURN` const, enforced in `extract_and_merge` | `_MAX_DETAIL_ENTITIES_PER_TURN=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
 
 #### C. Per-turn / periodic passes
 
