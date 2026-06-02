@@ -178,8 +178,12 @@ omits these inherits stochastic sampling even when it *looks* greedy.
 | `min_p` | `0.0` | no minimum-probability floor |
 | `seed` | `42` | pins RNG (irrelevant under pure greedy, but logged for provenance) |
 
-`top_p` and `seed` are native OpenAI parameters; `top_k` and `min_p` are sent
-via `extra_body` (llama-server reads them). `temperature` behaves differently
+`top_p` and `seed` are native OpenAI parameters sent to every
+OpenAI-compatible backend. `top_k` and `min_p` are forwarded **only to
+self-hosted OpenAI-compatible backends** (e.g. llama-server, vLLM) via
+`extra_body`; cloud providers such as OpenAI reject unknown `extra_body`
+params, so the client drops `top_k`/`min_p` for them and sends only the
+natively-supported samplers. `temperature` behaves differently
 from the other four: `LLMClient` always sends it, defaulting to `0.0` when the
 key is omitted, so the backend default never applies. The remaining four keys
 (`top_k`, `top_p`, `min_p`, `seed`) are truly optional — when omitted the client
