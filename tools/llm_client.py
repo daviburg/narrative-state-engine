@@ -268,6 +268,8 @@ class LLMClient:
                 file=sys.stderr,
             )
         except Exception:
+            # Best-effort observability only: logging the sampler config must
+            # never break extraction, so any formatting/IO error is swallowed.
             pass
 
         # Probe llama-server /props for the SERVER-side effective defaults.
