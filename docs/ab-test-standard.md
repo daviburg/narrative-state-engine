@@ -522,7 +522,7 @@ python tools/bootstrap_session.py \
 
 > **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants. Substitute `localhost:8080` / `localhost:8081` with your actual server endpoints from `config/llm.json` `base_urls`.
 >
-> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/session-import/raw/full-transcript.md` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/session-import/raw/full-transcript.md` and create the session directory together with its `raw/` subdirectory (`mkdir -p sessions/session-import/raw`). These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
 
 ### 6.3 Run Variant B (Candidate)
 

@@ -206,8 +206,8 @@ python tools/ingest_turn.py \
 If you already have a large transcript, import it in one step:
 
 Put the source text inside a gitignored session's `raw/` directory (for
-example `sessions/session-import/`, which is listed in `.gitignore`) so your
-private transcript is never committed:
+example `sessions/session-import/raw/`; the `sessions/session-import` session
+root is listed in `.gitignore`) so your private transcript is never committed:
 
 ```bash
 mkdir -p sessions/session-import/raw
