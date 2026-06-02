@@ -781,7 +781,7 @@ class TestSamplerObservability:
         cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
         client = LLMClient(config_path=cfg)
 
-        import httpx
+        httpx = pytest.importorskip("httpx")
         mock_resp = MagicMock()
         mock_resp.status_code = 404
         with patch.object(httpx, "get", return_value=mock_resp) as mock_get:
@@ -797,7 +797,7 @@ class TestSamplerObservability:
         cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
         client = LLMClient(config_path=cfg)
 
-        import httpx
+        httpx = pytest.importorskip("httpx")
         with patch.object(httpx, "get",
                           side_effect=httpx.ConnectError("refused")):
             # Must not raise.
@@ -807,7 +807,7 @@ class TestSamplerObservability:
         """Auto-probe stays offline under pytest (no spurious network calls)."""
         cfg = _write_config(tmp_path, {"base_url": "http://localhost:8000/v1"})
 
-        import httpx
+        httpx = pytest.importorskip("httpx")
         # Construction triggers the auto path (probe_backend=None), which must
         # be suppressed under pytest so the suite never hits the network.
         with patch.object(httpx, "get") as mock_get:
@@ -820,7 +820,7 @@ class TestSamplerObservability:
         cfg = _write_config(tmp_path)  # default base_url is api.openai.com
         client = LLMClient(config_path=cfg)
 
-        import httpx
+        httpx = pytest.importorskip("httpx")
         # Auto path: cloud gate suppresses the probe regardless of pytest.
         with patch.object(httpx, "get") as mock_get:
             client._log_sampler_config()
