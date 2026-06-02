@@ -215,6 +215,14 @@ def main() -> None:
     # --extract-only: re-run semantic extraction against an EXISTING turn file
     # without creating a new turn or modifying any raw/transcript file (#71).
     if args.extract_only:
+        if args.extract:
+            print(
+                "ERROR: --extract-only and --extract are mutually exclusive; "
+                "--extract-only re-extracts an existing turn without ingesting, "
+                "so it cannot be combined with --extract.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         if not args.file:
             print(
                 "ERROR: --extract-only requires --file pointing to an existing "
@@ -224,6 +232,19 @@ def main() -> None:
             sys.exit(1)
         if not os.path.isfile(args.file):
             print(f"ERROR: Turn file not found: {args.file}", file=sys.stderr)
+            sys.exit(1)
+        # Guard against pointing --file at a turn file outside this session's
+        # transcript/ directory, which would pollute the wrong session's
+        # framework outputs. The file must live in <session>/transcript/.
+        expected_dir = os.path.realpath(os.path.join(session_dir, "transcript"))
+        actual_dir = os.path.realpath(os.path.dirname(args.file))
+        if actual_dir != expected_dir:
+            print(
+                "ERROR: --extract-only --file must be a turn file inside this "
+                f"session's transcript directory ({expected_dir}); got "
+                f"{os.path.realpath(args.file)}.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         parsed = parse_turn_filename(args.file)
         if parsed is None:

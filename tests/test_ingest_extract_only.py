@@ -180,6 +180,54 @@ class TestExtractOnly:
             ingest_turn.main()
         assert exc.value.code == 1
 
+    def test_conflicting_extract_flag_errors(self, tmp_path, monkeypatch):
+        session, turn_file, _transcript_md = _make_session(tmp_path)
+        monkeypatch.setattr(
+            ingest_turn, "run_semantic_extraction",
+            lambda *a, **k: pytest.fail("extraction should not run"),
+        )
+        monkeypatch.setattr(
+            sys, "argv",
+            [
+                "ingest_turn.py",
+                "--session", str(session),
+                "--speaker", "dm",
+                "--file", str(turn_file),
+                "--extract-only",
+                "--extract",
+            ],
+        )
+        with pytest.raises(SystemExit) as exc:
+            ingest_turn.main()
+        assert exc.value.code == 1
+
+    def test_file_outside_session_transcript_errors(self, tmp_path, monkeypatch):
+        session, _turn_file, _transcript_md = _make_session(tmp_path)
+        # A correctly-named turn file but belonging to a DIFFERENT session.
+        other = tmp_path / "session-other" / "transcript"
+        other.mkdir(parents=True)
+        foreign = other / "turn-001-dm.md"
+        foreign.write_text(
+            "# turn-001 — DM\n\nForeign session content.\n", encoding="utf-8"
+        )
+        monkeypatch.setattr(
+            ingest_turn, "run_semantic_extraction",
+            lambda *a, **k: pytest.fail("extraction should not run"),
+        )
+        monkeypatch.setattr(
+            sys, "argv",
+            [
+                "ingest_turn.py",
+                "--session", str(session),
+                "--speaker", "dm",
+                "--file", str(foreign),
+                "--extract-only",
+            ],
+        )
+        with pytest.raises(SystemExit) as exc:
+            ingest_turn.main()
+        assert exc.value.code == 1
+
 
 # ---------------------------------------------------------------------------
 # Regression: normal new-turn ingest still works
