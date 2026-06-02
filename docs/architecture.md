@@ -409,6 +409,58 @@ This principle extends *No Hardcoded Word Lists* from word lists to thresholds a
 
 ---
 
+### Post-Processing Heuristic Threshold Inventory
+
+This is the read-only inventory (Phase 1 of #449) of every post-processing / context-shaping pass in `tools/semantic_extraction.py` and `tools/catalog_merger.py`, with default thresholds, the decision signal each pass keys off, its interaction risk, and whether the constant was calibrated for the prior **9B-era** model and small catalogs. It grounds the *Source-Quality First* policy above with concrete data and is the doc home for the Phase-1 deliverable posted on issue #449 ([inventory comment](https://github.com/daviburg/narrative-state-engine/issues/449#issuecomment-4579673278), the canonical source). Thresholds below are verified against the named functions and module constants; recalibration (Phase 2) is out of scope here.
+
+#### A. Discovery-context "smart compression" (`tools/catalog_merger.py`)
+
+| Pass | Function | Thresholds (default) | Decision signal | Interaction risk | 9B-era? |
+|---|---|---|---|---|---|
+| Context-aware entity selection | `_select_context_aware_entities` | `recency_window=10`, `one_hop_cap=0.5`, `one_hop_min_entities=20`, `min_name_len=3` | mention / co-location / one-hop / recency tiers | one-hop cap drops relationship context at ≥20 entities | Yes |
+| Backfill staleness exclusion | tier 4 of the above | `staleness_threshold=50` | `current − last_updated > 50` → entity removed from discovery context | **Primary #394 driver** | Yes |
+| Budget degradation | `format_known_entities_bounded` | `budget_fraction=0.25`, `brief_staleness=20` | token estimate vs. `context × 0.25` | `turn_text` always forces the context-aware path even under budget; no count floor | Yes |
+| Mention blocklist | `_find_mentioned_entities` | hardcoded ~40-word list | name regex | **Rule 9 violation** (see *No Hardcoded Word Lists*) | n/a |
+
+#### B. Detail-prompt compression (`tools/semantic_extraction.py`)
+
+| Pass | Function | Thresholds | Risk | 9B-era? |
+|---|---|---|---|---|
+| Prior-state compaction | `_format_prior_entity_context` | `pc_max_snapshots=3`, `digest_window=50` | PC trims stable attributes | Yes |
+| Scene relationship trim | `_filter_relationships_for_scene` | `recency_window=10`, `max_rels=8` | drops edges → dangling-rel cleanup then removes them | Yes |
+| Existing-rel budgeting | `_format_relationships_budgeted` | `recency_window=15`, `budget_fraction=0.2` | — | Yes |
+| **Entity-detail call cap** | inline in `extract_and_merge` | `max_detail_entities_per_turn=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
+
+#### C. Per-turn / periodic passes
+
+| Pass | Function | Thresholds | 9B-era? |
+|---|---|---|---|
+| Confidence filter | discovery | `min_confidence=0.6` | Yes |
+| PC failure cooldown | `_should_skip_pc` | `warn=10`, `skip=20`, `cooldown=50`, `retry=5` | Yes |
+| Entity refresh | `find_stale_entities` / `refresh_entities` | `interval=50`, `batch=10`, `max_batch=25`, type-shares `0.5/0.2/0.2/0.1` | Yes |
+| Periodic LLM dedup | `_run_periodic_dedup` | `interval=50`, `auto_merge=0.9`, `review=0.6` | Yes |
+| Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` | Partial |
+
+#### D. Post-batch reconciliation (runs in this order)
+
+| Order | Pass | Thresholds | Risk | 9B-era? |
+|---|---|---|---|---|
+| 1 | Catalog dedup | token-overlap `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
+| 2 | Orphan stub sweep | `min_refs` char=`3`/loc=`2`/faction=`1` | creates stubs the stale sweep may remove | Yes |
+| 3 | Name-mention discovery | `min_events=2`, wordfreq `3e-6` | can resurrect phantoms | Yes |
+| 4 | Stale-item sweep | `min_refs=2`, `window=25` | #445 survival signals merged | Yes |
+| 5 | Dangling-rel cleanup | — | removes edges to swept items | n/a |
+
+#### Cross-cutting findings
+
+1. **Pervasive staleness-window assumption (20 / 25 / 50 turns).** Five independent passes encode turn-windows sized for a 9B model and small catalogs. On 100–344-turn runs with Qwen3.6-35B these compound: an entity dropped from discovery → not re-extracted → goes stale → swept. They must be recalibrated together, not in isolation.
+2. **No global entity-count floor.** Every degradation pass trims from the tail with only a token check; nothing guarantees a minimum number of entities survives. This is the structural gap behind #394 and #441.
+3. **Hardcoded domain word lists** — `_COMMON_WORD_BLOCKLIST`, dedup `STOPWORDS`, `_GENERIC_STEMS`, and `_NON_LOCATION_NAMES` — are Rule 9 debt (overlaps #413; see *No Hardcoded Word Lists* above). Migrate them to template-based filtering rather than extending them.
+
+**Phase 2 (recalibration) is deferred.** It depends on model characterization from #324 and must be validated empirically via the entity-retention A/B diff (#448): recalibrate the staleness windows and the detail-entity cap together against Qwen3.6-35B rather than tuning any single constant alone.
+
+---
+
 ## Design Decisions
 
 ### Why file-based?
