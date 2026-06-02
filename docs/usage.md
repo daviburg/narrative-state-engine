@@ -179,8 +179,11 @@ omits these inherits stochastic sampling even when it *looks* greedy.
 | `seed` | `42` | pins RNG (irrelevant under pure greedy, but logged for provenance) |
 
 `top_p` and `seed` are native OpenAI parameters; `top_k` and `min_p` are sent
-via `extra_body` (llama-server reads them). All five keys are optional — when
-omitted the client sends nothing for them and the backend default applies.
+via `extra_body` (llama-server reads them). `temperature` behaves differently
+from the other four: `LLMClient` always sends it, defaulting to `0.0` when the
+key is omitted, so the backend default never applies. The remaining four keys
+(`top_k`, `top_p`, `min_p`, `seed`) are truly optional — when omitted the client
+sends nothing for them and the backend default applies.
 
 With this config on a **single pinned GPU endpoint**, single-GPU extraction is
 byte-deterministic (empirically 8/8 byte-identical at 512 tokens). The
