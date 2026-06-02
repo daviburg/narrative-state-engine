@@ -702,6 +702,10 @@ class TestSamplerParamsInRequestBody:
     def test_sampler_params_present_when_configured(self, tmp_path):
         """top_k/top_p/min_p/seed appear in the request when set in config."""
         cfg = _write_config(tmp_path, {
+            # Self-hosted OpenAI-compatible backend: top_k/min_p ride in
+            # extra_body here. Cloud providers reject those params, so this
+            # path is exercised with a local base_url (see the cloud test).
+            "base_url": "http://localhost:8080/v1",
             "retry_attempts": 1,
             "temperature": 0,
             "top_k": 1,
@@ -722,6 +726,31 @@ class TestSamplerParamsInRequestBody:
         # top_k and min_p ride in extra_body
         assert captured["extra_body"]["top_k"] == 1
         assert captured["extra_body"]["min_p"] == 0.0
+
+    def test_top_k_min_p_dropped_for_cloud_provider(self, tmp_path):
+        """Cloud providers reject non-standard params, so top_k/min_p are not
+        sent in extra_body; top_p/seed (native OpenAI params) still are."""
+        cfg = _write_config(tmp_path, {
+            # Default base_url is https://api.openai.com/v1 (a cloud provider).
+            "retry_attempts": 1,
+            "temperature": 0,
+            "top_k": 1,
+            "top_p": 1.0,
+            "min_p": 0.0,
+            "seed": 42,
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+
+        with patch.object(client.client.chat.completions, "create",
+                          side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+
+        # Native OpenAI params are still sent
+        assert captured["top_p"] == 1.0
+        assert captured["seed"] == 42
+        # top_k/min_p must NOT reach a cloud provider (rejected as unknown)
+        assert "extra_body" not in captured
 
     def test_temperature_zero_is_sent(self, tmp_path):
         """temperature 0 is sent in the request body (not dropped/defaulted)."""
@@ -884,3 +913,21 @@ class TestSamplerObservability:
         assert "(not sent)" not in err
         assert "top_k=40 " in err
         assert "min_p=0.05 " in err
+
+    def test_client_log_marks_dropped_samplers_for_cloud(self, tmp_path, capsys):
+        """Cloud OpenAI-compatible APIs reject top_k/min_p — log flags them as
+        not sent while top_p/seed (native params) are sent."""
+        cfg = _write_config(tmp_path, {
+            # Default base_url is https://api.openai.com/v1 (a cloud provider).
+            "top_k": 40,
+            "top_p": 0.9,
+            "min_p": 0.05,
+            "seed": 7,
+        })
+        client = LLMClient(config_path=cfg)
+        client._log_sampler_config(probe_backend=False)
+        err = capsys.readouterr().err
+        assert "top_k=40(not sent)" in err
+        assert "min_p=0.05(not sent)" in err
+        assert "top_p=0.9 " in err
+        assert "seed=7 " in err

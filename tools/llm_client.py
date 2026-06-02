@@ -266,7 +266,13 @@ class LLMClient:
             #     top_k/top_p/min_p/seed are not sent.
             #   * Ollama OpenAI-compat (/v1): top_p and seed are native, but
             #     top_k/min_p are NOT forwarded (no extra_body sampler path).
-            #   * llama-server/vLLM/OpenAI: all configured samplers are sent.
+            #   * Self-hosted OpenAI-compat (llama-server/vLLM): top_p and seed
+            #     are native; top_k/min_p ride in extra_body, which these
+            #     backends read, so all configured samplers are sent.
+            #   * Cloud OpenAI-compatible APIs (e.g. api.openai.com): top_p and
+            #     seed are native, but top_k/min_p are NOT sent — they are not
+            #     part of the OpenAI schema and cloud providers reject unknown
+            #     extra_body params (HTTP 400), so the send path drops them.
             # Configured-but-dropped values are annotated "(not sent)" so the
             # log never claims a sampler that did not reach the backend.
             if self._use_ollama_streaming:
@@ -276,8 +282,11 @@ class LLMClient:
                 sent = {"top_k": False, "top_p": True,
                         "min_p": False, "seed": True}
             else:
-                sent = {"top_k": True, "top_p": True,
-                        "min_p": True, "seed": True}
+                # top_k/min_p ride in extra_body, which only self-hosted
+                # OpenAI-compatible backends accept; cloud APIs reject them.
+                forward_extra = not self._is_cloud_provider
+                sent = {"top_k": forward_extra, "top_p": True,
+                        "min_p": forward_extra, "seed": True}
 
             def _fmt(name: str, value) -> str:
                 if value is not None and not sent[name]:
@@ -751,18 +760,25 @@ class LLMClient:
                     # defaults to temperature 1.0), so any omitted sampler
                     # silently inherits server randomness.  top_p and seed are
                     # native OpenAI params; top_k and min_p are not, so they
-                    # ride in extra_body, which OpenAI-compatible backends
-                    # (llama-server, vLLM) read.  All are sent only when
+                    # ride in extra_body, which self-hosted OpenAI-compatible
+                    # backends (llama-server, vLLM) read.  Cloud providers
+                    # reject unknown extra_body params (HTTP 400), so top_k/
+                    # min_p are NOT sent there.  All are sent only when
                     # configured, keeping the body byte-identical otherwise.
                     if self.top_p is not None:
                         kwargs["top_p"] = self.top_p
                     if self.seed is not None:
                         kwargs["seed"] = self.seed
                     sampler_extra: dict = {}
-                    if self.top_k is not None:
-                        sampler_extra["top_k"] = self.top_k
-                    if self.min_p is not None:
-                        sampler_extra["min_p"] = self.min_p
+                    # top_k/min_p are non-standard params carried in extra_body,
+                    # which only self-hosted OpenAI-compatible backends accept.
+                    # Cloud providers reject unknown params (HTTP 400), so omit
+                    # them there and keep the request schema-valid.
+                    if not self._is_cloud_provider:
+                        if self.top_k is not None:
+                            sampler_extra["top_k"] = self.top_k
+                        if self.min_p is not None:
+                            sampler_extra["min_p"] = self.min_p
                     # Ollama hangs when response_format=json_object is used with
                     # qwen3.5 models (thinking-mode conflict).  Skip it for those.
                     if not self._skip_response_format:
