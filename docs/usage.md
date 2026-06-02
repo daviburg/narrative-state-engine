@@ -1228,6 +1228,33 @@ python tools/ingest_turn.py \
 
 See [`docs/semantic-extraction-design.md`](semantic-extraction-design.md) for full pipeline design.
 
+#### Re-extraction (`--extract-only`)
+
+Pass `--extract-only` to re-run semantic extraction against an **existing** turn
+file without creating a new turn or modifying the raw transcript. Use it to
+re-extract already-ingested turns after a template or model change. The target
+turn is given via `--file` and must be an existing
+`transcript/turn-NNN-(player|dm).md` file **inside the given `--session`'s
+`transcript/` directory**; pointing `--file` at a turn file from another session
+is rejected. The turn id and speaker are read from the file name, and the
+transcript header line is stripped before extraction. `--extract-only` cannot be
+combined with `--extract` (they are mutually exclusive).
+Like `--extract`, this mode re-runs semantic extraction and DM-profile analysis
+but does not re-run the structured-data merge.
+
+```bash
+python tools/ingest_turn.py \
+  --session sessions/session-import \
+  --speaker dm \
+  --file sessions/session-import/transcript/turn-022-dm.md \
+  --extract-only \
+  --framework framework-local
+```
+
+`--extract-only` is read-only with respect to `raw/` and `transcript/` files: it
+never appends to `full-transcript.md`, creates a turn file, or updates
+`metadata.json`. To re-extract a whole session, loop over its turn files.
+
 ### Extraction Log
 
 During extraction (batch, segmented, or single-turn), the pipeline writes a per-turn log to `<framework-dir>/extraction-log.jsonl`. Each line is a JSON object recording:

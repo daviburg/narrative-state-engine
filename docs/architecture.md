@@ -61,6 +61,9 @@ tools/analyze_next_move.py
 Semantic extraction is triggered automatically during `bootstrap_session.py` (batch)
 or via the `--extract` flag on `ingest_turn.py` (incremental). It requires an LLM
 endpoint configured in `config/llm.json` and gracefully degrades if unavailable.
+The `--extract-only` flag on `ingest_turn.py` re-runs extraction against an existing
+turn file (given via `--file`) without creating a new turn or modifying the raw
+transcript, for re-extraction after a template or model change.
 
 Planning layer derivation (`derive_planning_layer.py`) bridges the gap between
 extracted catalog data and the derived planning files consumed by
