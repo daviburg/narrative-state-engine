@@ -298,7 +298,10 @@ from over-trimming. Enable it under the `context_optimizations` block in
                                          // at 85% of context_length
     "centrality_min_degree": 2,          // entities with relationship-degree /
                                          // mention-frequency >= this are exempt
-                                         // from degrade/omit passes
+                                         // from the routine degrade/omit passes
+                                         // (a last-resort pass can still omit them
+                                         // if the hard budget binds, never below
+                                         // the discovery floor)
     "centrality_exempt_top_n": null      // OR exempt the top-N most central
                                          // entities (null = use min_degree only)
   }
@@ -318,7 +321,9 @@ from over-trimming. Enable it under the `context_optimizations` block in
   for the #393 discovery-starvation regression); the `discovery_floor_fraction`
   guarantees discovery is never starved even under heavy pressure; the
   `centrality_min_degree` backstop keeps structurally important entities at full
-  detail; and the `turn_total_budget_fraction` **computes and reports** a
+  detail through the routine degrade/omit passes (a last-resort pass can still
+  omit them tail-first if the section's hard budget would otherwise be exceeded,
+  never below the discovery floor); and the `turn_total_budget_fraction` **computes and reports** a
   best-effort per-turn allocation (`turn_total_allocated`/`turn_total_cap`),
   notionally trimming lowest-centrality, lowest-priority content first. This
   turn-total figure is a reporting/diagnostic metric computed at finalize; it is
