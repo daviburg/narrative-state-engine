@@ -412,6 +412,60 @@ This principle extends *No Hardcoded Word Lists* from word lists to thresholds a
 
 ---
 
+### Post-Processing Heuristic Threshold Inventory
+
+This is the read-only inventory (Phase 1 of #449) of the principal post-processing / context-shaping passes in `tools/semantic_extraction.py` and `tools/catalog_merger.py`, with default thresholds, the decision signal each pass keys off, its interaction risk, and whether the constant was calibrated for the prior **9B-era** model and small catalogs. It is not an exhaustive line-by-line audit: it captures the passes that materially shape context or entity retention. It grounds the *Source-Quality First* policy above with concrete data and is the doc home for the Phase-1 deliverable posted on issue #449 ([inventory comment](https://github.com/daviburg/narrative-state-engine/issues/449#issuecomment-4579673278), the canonical source). Thresholds below are verified against the named functions and module constants; recalibration (Phase 2) is out of scope here.
+
+#### A. Discovery-context "smart compression" (`tools/catalog_merger.py`)
+
+| Pass | Function | Thresholds (default) | Decision signal | Interaction risk | 9B-era? |
+|---|---|---|---|---|---|
+| Context-aware entity selection | `_select_context_aware_entities` | `_DEFAULT_RECENCY_WINDOW=10`, `_ONE_HOP_PRIORITY_CAP=0.5`, `_ONE_HOP_CAP_MIN_ENTITIES=20`, `_MIN_NAME_LENGTH_FOR_MATCH=3` | mention / co-location / one-hop / recency tiers | one-hop expansion is dropped only when the catalog has ≥20 entities **and** priority ∪ one-hop exceeds 50% of the catalog (`_ONE_HOP_PRIORITY_CAP`), not merely at catalog size ≥20 | Yes |
+| Backfill staleness exclusion | tier 4 of the above | `_DEFAULT_STALENESS_THRESHOLD=50` | `current − last_updated > 50` → entity removed from discovery context | **Primary #394 driver** | Yes |
+| Budget degradation | `format_known_entities_bounded` | `_DEFAULT_ENTITY_BUDGET_FRACTION=0.25`, `_DEFAULT_BRIEF_STALENESS_THRESHOLD=20` | token estimate vs. `context × 0.25` | `turn_text` always forces the context-aware path even under budget; no count floor | Yes |
+| Mention blocklist | `_find_mentioned_entities` | `_COMMON_WORD_BLOCKLIST` (filters single-word names only) | name regex | **Rule 9 violation** (see *No Hardcoded Word Lists*) | n/a |
+
+#### B. Detail-prompt & relationship-mapper compression (`tools/semantic_extraction.py`)
+
+This subsection covers two adjacent prompt paths in the same module: the **entity-detail prompt** (prior-state compaction, scene relationship trim, entity-detail call cap) and the **relationship-mapper prompt** (existing-rel budgeting, flagged below). The latter shapes `format_existing_relationships` input for the relationship-mapper LLM, not the detail prompt.
+
+| Pass | Function | Thresholds | Risk | 9B-era? |
+|---|---|---|---|---|
+| Prior-state compaction (detail prompt) | `_format_prior_entity_context` | `_PC_MAX_VOLATILE_SNAPSHOTS=3`, `_DIGEST_WINDOW=50` | PC trims stable attributes | Yes |
+| Scene relationship trim (detail prompt) | `_filter_relationships_for_scene` | `_SCENE_REL_RECENCY_WINDOW=10`, `_SCENE_MAX_RELATIONSHIPS=8` | drops edges → dangling-rel cleanup then removes them | Yes |
+| Existing-rel budgeting (**relationship-mapper prompt**) | `_format_relationships_budgeted` | `_REL_RECENCY_WINDOW=15`, `_REL_TOKEN_BUDGET_FRACTION=0.2` | — | Yes |
+| **Entity-detail call cap** (detail prompt) | `_MAX_DETAIL_ENTITIES_PER_TURN` const, enforced in `extract_and_merge` | `_MAX_DETAIL_ENTITIES_PER_TURN=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
+
+#### C. Per-turn / periodic passes
+
+| Pass | Function | Thresholds | 9B-era? |
+|---|---|---|---|
+| Confidence filter | discovery | `DEFAULT_MIN_CONFIDENCE=0.6` | Yes |
+| PC failure cooldown | `_should_skip_pc` | `warn=10` (`_PC_FAILURE_WARN_THRESHOLD`), `skip-threshold=20` (`_PC_SKIP_THRESHOLD`, consecutive failures to enter cooldown), `skip-turns=50` (`_PC_SKIP_COOLDOWN`, turns skipped per cooldown), `retry=5` (`_PC_RETRY_WINDOW`) | Yes |
+| Entity refresh | `find_stale_entities` / `refresh_entities` | `_DEFAULT_REFRESH_INTERVAL=50`, `_DEFAULT_REFRESH_BATCH_SIZE=10`, `_MAX_REFRESH_BATCH_SIZE=25`, `_REFRESH_TYPE_SHARES` (characters `0.5` / locations `0.2` / items `0.2` / factions `0.1`) | Yes |
+| Periodic LLM dedup | `_run_periodic_dedup` | `_DEFAULT_DEDUP_AUDIT_INTERVAL=50`, `dedup_audit.AUTO_MERGE_THRESHOLD=0.9` (only `same_entity` pairs at/above this are auto-merged; `same_entity` pairs in `[0.6, 0.9)` are surfaced via a `REVIEW` log line using an inline `0.6` literal equal to `dedup_audit.REVIEW_THRESHOLD` but not imported from it — there is no persisted review queue, so these are logged only; pairs below `0.6` or not `same_entity` are dropped silently) | Yes |
+| Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` (inline literals, no module constants) | Partial |
+
+#### D. Post-batch reconciliation (runs in this order)
+
+| Order | Pass | Thresholds | Risk | 9B-era? |
+|---|---|---|---|---|
+| 1 | Catalog dedup | token-overlap `1.0` if smaller set `≤2` tokens else `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) (inline literals in `_dedup_catalogs`, no module constants) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
+| 2 | Orphan stub sweep | `min_refs` char=`_POST_BATCH_ORPHAN_MIN_REFS=3`/loc=`_POST_BATCH_ORPHAN_MIN_REFS_LOC=2`/faction=`_POST_BATCH_ORPHAN_MIN_REFS_FACTION=1` | creates stubs the stale sweep may remove | Yes |
+| 3 | Name-mention discovery | `_NAME_MENTION_MIN_EVENTS=2`, wordfreq `_COMMON_WORD_FREQ_THRESHOLD=3e-6` | can resurrect phantoms | Yes |
+| 4 | Stale-item sweep | `_STALE_ITEM_MIN_REFS=2`, `_STALE_ITEM_WINDOW=25` | #445 survival signals merged | Yes |
+| 5 | Dangling-rel cleanup | — | removes edges to swept items | n/a |
+
+#### Cross-cutting findings
+
+1. **Pervasive staleness-window assumption (20 / 25 / 50 turns).** Five independent passes encode turn-windows sized for a 9B model and small catalogs. On 100–344-turn runs with Qwen3.6-35B these compound: an entity dropped from discovery → not re-extracted → goes stale → swept. They must be recalibrated together, not in isolation.
+2. **No global entity-count floor.** Every degradation pass trims from the tail with only a token check; nothing guarantees a minimum number of entities survives. This is the structural gap behind #394 and #441.
+3. **Hardcoded domain word lists** — `_COMMON_WORD_BLOCKLIST`, dedup `STOPWORDS`, `_GENERIC_STEMS`, and `_NON_LOCATION_NAMES` — are Rule 9 debt (overlaps #413; see *No Hardcoded Word Lists* above). Migrate them to template-based filtering rather than extending them.
+
+**Phase 2 (recalibration) is deferred.** It depends on model characterization from #324 and must be validated empirically via the entity-retention A/B diff (#448): recalibrate the staleness windows and the detail-entity cap together against Qwen3.6-35B rather than tuning any single constant alone.
+
+---
+
 ## Design Decisions
 
 ### Why file-based?
