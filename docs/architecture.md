@@ -61,6 +61,9 @@ tools/analyze_next_move.py
 Semantic extraction is triggered automatically during `bootstrap_session.py` (batch)
 or via the `--extract` flag on `ingest_turn.py` (incremental). It requires an LLM
 endpoint configured in `config/llm.json` and gracefully degrades if unavailable.
+The `--extract-only` flag on `ingest_turn.py` re-runs extraction against an existing
+turn file (given via `--file`) without creating a new turn or modifying the raw
+transcript, for re-extraction after a template or model change.
 
 Planning layer derivation (`derive_planning_layer.py`) bridges the gap between
 extracted catalog data and the derived planning files consumed by
@@ -136,6 +139,7 @@ An automated pipeline that uses an LLM to extract structured data from transcrip
 - **Five-agent pipeline**: Entity Discovery → Entity Detail → Relationship Mapper → Event Extractor → Temporal Signal Extractor
 - **Intra-turn parallelism** (#282): When `parallel_workers > 1` in `config/llm.json`, entity detail, PC detail, relationship mapping, and event extraction run concurrently via `ThreadPoolExecutor` after discovery completes. Results are merged sequentially (entities → relationships → events) to maintain catalog consistency. The inter-call delay is applied once per turn instead of between each call. With `parallel_workers: 1` (default), the pipeline uses the original sequential execution path.
 - **Multi-endpoint dispatch**: When `base_urls` (list) is configured in `config/llm.json`, `LLMClient` creates one `OpenAI` client per endpoint and distributes requests via thread-safe round-robin. This enables multi-GPU setups where each `ov_serve.py` instance targets a different GPU (e.g., `--device GPU.0` on port 8000, `--device GPU.1` on port 8001). With `parallel_workers > 1`, concurrent intra-turn requests are spread across all endpoints. Falls back to the single `base_url` when the list is absent.
+- **Deterministic sampling + sampler observability** (#471): `LLMClient` reads optional `top_k`, `top_p`, `min_p`, and `seed` keys from `config/llm.json` (in addition to `temperature`) and threads them through every `extract_json()` call. `top_p`/`seed` are sent as native OpenAI parameters; `top_k`/`min_p` ride in `extra_body` (Ollama uses its own `options` mapping). Backend-dependent forwarding applies on the send path: the Ollama native streaming path (`_use_ollama_streaming`) forwards only `temperature`; the Ollama OpenAI-compat (`/v1`) path forwards `top_p`/`seed` but drops `top_k`/`min_p`; cloud OpenAI APIs forward `top_p`/`seed` but drop `top_k`/`min_p` (rejected as unknown params); self-hosted llama-server/vLLM accept all four. `_log_sampler_config()` annotates any configured-but-dropped sampler as `(not sent)` so the log never claims a sampler that did not reach the backend. All four default to `None` and are omitted from the request when unset, so existing configs are unaffected. The greedy/deterministic config is `temperature: 0, top_k: 1, top_p: 1.0, min_p: 0.0, seed: 42`; with a single pinned GPU endpoint this yields byte-deterministic extraction (the llama-server baked default is the *stochastic* `temperature 1.0`, so omitting these keys is not greedy). On startup, `_log_sampler_config()` writes the effective client-sent sampling to stderr (`[sampler]` prefix) and, for any non-cloud (self-hosted) backend (skipped under cloud providers and under `pytest`), probes the server's root `/props` endpoint and logs its `default_generation_settings` for independent verification. This includes self-hosted backends reachable via public hostnames when `self_hosted: true` is set in `config/llm.json`. The probe is best-effort: all network failures are swallowed and never raise. Cross-GPU `base_urls` round-robin remains the only determinism-breaking source once the deterministic config is in place. See `docs/ab-test-standard.md` §1.2/§1.4.
 - Prompt templates in `templates/extraction/` define each agent's behavior
 - `tools/semantic_extraction.py` orchestrates the pipeline
 - **Kinship relationship prompting**: The relationship mapper template (`templates/extraction/relationship-mapper.md`) explicitly prompts for kinship relationships with family-tie indicators, bidirectionality guidance, confidence calibration, and examples. This addresses under-extraction of family bonds in tribal/community campaign settings.
@@ -409,6 +413,60 @@ When extraction quality is inadequate — missing entities, duplicates, or noise
 - Evidence: in the deduplication experiment the coreference-template fix (#443) delivered the dominant gain, while the Python heuristics (cross-catalog gate, interval tuning) added no measurable benefit and risked over-deduplication. The smart-compression regression (#394) and stale-sweep regression (#441) are further cautionary cases.
 
 This principle extends *No Hardcoded Word Lists* from word lists to thresholds and sweep parameters (see #413, #447).
+
+---
+
+### Post-Processing Heuristic Threshold Inventory
+
+This is the read-only inventory (Phase 1 of #449) of the principal post-processing / context-shaping passes in `tools/semantic_extraction.py` and `tools/catalog_merger.py`, with default thresholds, the decision signal each pass keys off, its interaction risk, and whether the constant was calibrated for the prior **9B-era** model and small catalogs. It is not an exhaustive line-by-line audit: it captures the passes that materially shape context or entity retention. It grounds the *Source-Quality First* policy above with concrete data and is the doc home for the Phase-1 deliverable posted on issue #449 ([inventory comment](https://github.com/daviburg/narrative-state-engine/issues/449#issuecomment-4579673278), the canonical source). Thresholds below are verified against the named functions and module constants; recalibration (Phase 2) is out of scope here.
+
+#### A. Discovery-context "smart compression" (`tools/catalog_merger.py`)
+
+| Pass | Function | Thresholds (default) | Decision signal | Interaction risk | 9B-era? |
+|---|---|---|---|---|---|
+| Context-aware entity selection | `_select_context_aware_entities` | `_DEFAULT_RECENCY_WINDOW=10`, `_ONE_HOP_PRIORITY_CAP=0.5`, `_ONE_HOP_CAP_MIN_ENTITIES=20`, `_MIN_NAME_LENGTH_FOR_MATCH=3` | mention / co-location / one-hop / recency tiers | one-hop expansion is dropped only when the catalog has ≥20 entities **and** priority ∪ one-hop exceeds 50% of the catalog (`_ONE_HOP_PRIORITY_CAP`), not merely at catalog size ≥20 | Yes |
+| Backfill staleness exclusion | tier 4 of the above | `_DEFAULT_STALENESS_THRESHOLD=50` | `current − last_updated > 50` → entity removed from discovery context | **Primary #394 driver** | Yes |
+| Budget degradation | `format_known_entities_bounded` | `_DEFAULT_ENTITY_BUDGET_FRACTION=0.25`, `_DEFAULT_BRIEF_STALENESS_THRESHOLD=20` | token estimate vs. `context × 0.25` | `turn_text` always forces the context-aware path even under budget; no count floor | Yes |
+| Mention blocklist | `_find_mentioned_entities` | `_COMMON_WORD_BLOCKLIST` (filters single-word names only) | name regex | **Rule 9 violation** (see *No Hardcoded Word Lists*) | n/a |
+
+#### B. Detail-prompt & relationship-mapper compression (`tools/semantic_extraction.py`)
+
+This subsection covers two adjacent prompt paths in the same module: the **entity-detail prompt** (prior-state compaction, scene relationship trim, entity-detail call cap) and the **relationship-mapper prompt** (existing-rel budgeting, flagged below). The latter shapes `format_existing_relationships` input for the relationship-mapper LLM, not the detail prompt.
+
+| Pass | Function | Thresholds | Risk | 9B-era? |
+|---|---|---|---|---|
+| Prior-state compaction (detail prompt) | `_format_prior_entity_context` | `_PC_MAX_VOLATILE_SNAPSHOTS=3`, `_DIGEST_WINDOW=50` | PC trims stable attributes | Yes |
+| Scene relationship trim (detail prompt) | `_filter_relationships_for_scene` | `_SCENE_REL_RECENCY_WINDOW=10`, `_SCENE_MAX_RELATIONSHIPS=8` | drops edges → dangling-rel cleanup then removes them | Yes |
+| Existing-rel budgeting (**relationship-mapper prompt**) | `_format_relationships_budgeted` | `_REL_RECENCY_WINDOW=15`, `_REL_TOKEN_BUDGET_FRACTION=0.2` | — | Yes |
+| **Entity-detail call cap** (detail prompt) | `_MAX_DETAIL_ENTITIES_PER_TURN` const, enforced in `extract_and_merge` | `_MAX_DETAIL_ENTITIES_PER_TURN=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
+
+#### C. Per-turn / periodic passes
+
+| Pass | Function | Thresholds | 9B-era? |
+|---|---|---|---|
+| Confidence filter | discovery | `DEFAULT_MIN_CONFIDENCE=0.6` | Yes |
+| PC failure cooldown | `_should_skip_pc` | `warn=10` (`_PC_FAILURE_WARN_THRESHOLD`), `skip-threshold=20` (`_PC_SKIP_THRESHOLD`, consecutive failures to enter cooldown), `skip-turns=50` (`_PC_SKIP_COOLDOWN`, turns skipped per cooldown), `retry=5` (`_PC_RETRY_WINDOW`) | Yes |
+| Entity refresh | `find_stale_entities` / `refresh_entities` | `_DEFAULT_REFRESH_INTERVAL=50`, `_DEFAULT_REFRESH_BATCH_SIZE=10`, `_MAX_REFRESH_BATCH_SIZE=25`, `_REFRESH_TYPE_SHARES` (characters `0.5` / locations `0.2` / items `0.2` / factions `0.1`) | Yes |
+| Periodic LLM dedup | `_run_periodic_dedup` | `_DEFAULT_DEDUP_AUDIT_INTERVAL=50`, `dedup_audit.AUTO_MERGE_THRESHOLD=0.9` (only `same_entity` pairs at/above this are auto-merged; `same_entity` pairs in `[0.6, 0.9)` are surfaced via a `REVIEW` log line using an inline `0.6` literal equal to `dedup_audit.REVIEW_THRESHOLD` but not imported from it — there is no persisted review queue, so these are logged only; pairs below `0.6` or not `same_entity` are dropped silently) | Yes |
+| Within-turn dedup | `_within_turn_dedup` | short-name guard `<5`, Levenshtein `≤3`, ratio `≥0.6` (inline literals, no module constants) | Partial |
+
+#### D. Post-batch reconciliation (runs in this order)
+
+| Order | Pass | Thresholds | Risk | 9B-era? |
+|---|---|---|---|---|
+| 1 | Catalog dedup | token-overlap `1.0` if smaller set `≤2` tokens else `0.5`, char-substr `≥4`, Levenshtein `≤2` (stems `≥6`) (inline literals in `_dedup_catalogs`, no module constants) | hardcoded `STOPWORDS` (Rule 9); over-merge | Partial |
+| 2 | Orphan stub sweep | `min_refs` char=`_POST_BATCH_ORPHAN_MIN_REFS=3`/loc=`_POST_BATCH_ORPHAN_MIN_REFS_LOC=2`/faction=`_POST_BATCH_ORPHAN_MIN_REFS_FACTION=1` | creates stubs the stale sweep may remove | Yes |
+| 3 | Name-mention discovery | `_NAME_MENTION_MIN_EVENTS=2`, wordfreq `_COMMON_WORD_FREQ_THRESHOLD=3e-6` | can resurrect phantoms | Yes |
+| 4 | Stale-item sweep | `_STALE_ITEM_MIN_REFS=2`, `_STALE_ITEM_WINDOW=25` | #445 survival signals merged | Yes |
+| 5 | Dangling-rel cleanup | — | removes edges to swept items | n/a |
+
+#### Cross-cutting findings
+
+1. **Pervasive staleness-window assumption (20 / 25 / 50 turns).** Five independent passes encode turn-windows sized for a 9B model and small catalogs. On 100–344-turn runs with Qwen3.6-35B these compound: an entity dropped from discovery → not re-extracted → goes stale → swept. They must be recalibrated together, not in isolation.
+2. **No global entity-count floor.** Every degradation pass trims from the tail with only a token check; nothing guarantees a minimum number of entities survives. This is the structural gap behind #394 and #441.
+3. **Hardcoded domain word lists** — `_COMMON_WORD_BLOCKLIST`, dedup `STOPWORDS`, `_GENERIC_STEMS`, and `_NON_LOCATION_NAMES` — are Rule 9 debt (overlaps #413; see *No Hardcoded Word Lists* above). Migrate them to template-based filtering rather than extending them.
+
+**Phase 2 (recalibration) is deferred.** It depends on model characterization from #324 and must be validated empirically via the entity-retention A/B diff (#448): recalibrate the staleness windows and the detail-entity cap together against Qwen3.6-35B rather than tuning any single constant alone.
 
 ---
 

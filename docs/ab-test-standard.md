@@ -22,26 +22,36 @@ This document defines the required A/B testing gate for any PR that modifies ext
 
 ### 1.2 Runs Per Variant
 
-**The backend is not deterministic at any temperature, so a minimum of 3 runs per variant is always required.** The determinism baseline `eval-main-determinism-temp0` compared the *same* `main` commit (SHA `769e1ad`) against itself — identical templates, model (`Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`), hardware (B70), and temperature 0 — and produced divergent catalogs (per-type removed=3, added=1, renamed=2 over turns 1–10; catalog byte-diff non-zero). Temperature 0 is therefore **not** a substitute for repetition: the llama.cpp/GGUF execution path introduces run-to-run variance that a single run cannot distinguish from a template effect.
+**With `temperature: 0` and a single pinned GPU endpoint, single-GPU extraction is byte-deterministic** — a live sampler sweep on the arclight llama-server (`Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`, Vulkan, `-np 1`) produced **8/8 byte-identical** completions at 512 tokens with zero residual jitter. The two real sources of run-to-run non-determinism are:
+
+1. **Non-zero temperature (or omitted samplers).** Stochastic sampling diverges by design. Note the server's *baked default* is `temperature 1.0` (`top_k 20 / top_p 0.95 / min_p 0.05 / random seed`), so a caller that omits temperature inherits full randomness. Always send the deterministic sampler config (§1.3, `config/llm.json`: `temperature: 0`, `top_k: 1`, `top_p: 1.0`, `min_p: 0.0`, `seed: 42`).
+2. **Cross-GPU round-robin.** Dispatching across non-bit-identical GPUs (e.g. `base_urls` round-robin over `:8000` + `:8001`) breaks byte reproducibility even under identical greedy sampling (GPU0 ≠ GPU1, first divergence observed at char 271). Reproducibility-sensitive runs MUST pin a **single** endpoint.
+
+> **Correction (#471):** The earlier `eval-main-determinism-temp0` baseline that showed divergent catalogs for the same commit was *not* evidence of temp-0 backend non-determinism — it was cross-GPU round-robin noise plus a config that ran at `temperature 0.3`, not 0. The OpenAI chat endpoint echoes no sampler metadata, so this went unverified. The client now logs the effective client-sent and server-side (`/props`) sampling at startup; A/B runs MUST capture that log in the run provenance.
+
+A minimum of **3 runs per variant** is still required as a safety net, but with the deterministic sampler config on a single pinned GPU the residual noise floor (§1.4) should be **~0**. Any nonzero single-GPU noise floor signals a **config problem** — a non-zero temperature, omitted samplers, or accidental round-robin — and MUST be investigated, not assumed to be inherent backend churn.
 
 | Sampling mode | Minimum runs per variant | Recommended runs per variant |
 |---|---|---|
-| **Temperature 0** | 3 | 5 |
+| **Temperature 0 (deterministic, single pinned GPU)** | 3 | 5 |
 | Temperature > 0 | 3 | 5 |
 
-Report **mean ± standard deviation** for all metrics at every temperature. If any metric's standard deviation exceeds 15% of its mean, increase to 5 runs. With 3 runs per variant, the three pairwise A-vs-A comparisons (run1↔run2, run1↔run3, run2↔run3) are used to establish the backend noise floor (§1.4) that the retention gate (§3.5) is measured against.
+Report **mean ± standard deviation** for all metrics. If any metric's standard deviation exceeds 15% of its mean, increase to 5 runs. With 3 runs per variant, the three pairwise A-vs-A comparisons (run1↔run2, run1↔run3, run2↔run3) establish the backend noise floor (§1.4) the retention gate (§3.5) is measured against.
 
-> **Rationale:** The earlier "temperature 0 ⇒ 1 run is sufficient" policy assumed byte-level reproducibility that the backend does not provide. Because an A-vs-A self-comparison already shows non-zero entity churn, a single B run cannot be attributed to the template change rather than to backend noise. Minimum 3 runs is chosen as the smallest count that yields multiple independent A-vs-A pairwise comparisons (Rule 10: chosen, not inherited).
+> **Rationale:** 3 runs is retained as the smallest count that yields multiple independent A-vs-A pairwise comparisons and that surfaces an accidental stochastic/round-robin misconfiguration (which would show up as a nonzero noise floor). It is a safety net, not an admission that temp-0 single-GPU is non-deterministic (Rule 10: chosen, not inherited).
+
 
 ### 1.3 Variant Definitions
 
 - **Variant A (baseline):** Templates from `main` branch HEAD. Use `--framework framework-ab-a-runN` output directory (one per run, e.g. `framework-ab-a-run1`, `framework-ab-a-run2`, etc.).
 - **Variant B (candidate):** Templates from the PR branch. Use `--framework framework-ab-b-runN` output directory (one per run, e.g. `framework-ab-b-run1`, `framework-ab-b-run2`, etc.).
 - Both variants MUST use identical `config/llm.json`, identical model, and identical hardware.
+- Both variants MUST run with the **deterministic sampler config** (`temperature: 0` + explicit `top_k: 1`, `top_p: 1.0`, `min_p: 0.0`, `seed: 42`), MUST pin a **single** GPU endpoint (no `base_urls` round-robin), and MUST capture the client's startup `[sampler]` log (effective client-sent sampling + server-side `/props`) in the run provenance so the configuration is independently verifiable.
 
 ### 1.4 Noise-Floor (A-vs-A) Baseline — REQUIRED
 
-Before judging B-vs-A, the tester MUST establish the backend **noise floor** for this model + hardware by self-comparing the variant-A runs against each other. This quantifies the run-to-run churn caused by backend non-determinism, which becomes the tolerance band for the retention gate (§3.5).
+Before judging B-vs-A, the tester MUST establish the backend **noise floor** for this model + hardware by self-comparing the variant-A runs against each other. With the deterministic sampler config on a single pinned GPU this noise floor is expected to be **~0** (empirically 8/8 byte-identical at 512 tokens); a **nonzero** floor is a **red flag** that the run was misconfigured (non-zero temperature, omitted samplers, or accidental cross-GPU round-robin) and MUST be investigated before any B-vs-A judgment. The recorded floor still becomes the tolerance band for the retention gate (§3.5).
+
 
 **Procedure:**
 
@@ -492,7 +502,7 @@ git pull
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-ab-a-run1 \
     --max-turns 30 \
     --overwrite \
@@ -502,7 +512,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-ab-a-run2 \
     --max-turns 30 \
     --overwrite \
@@ -512,7 +522,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-ab-a-run3 \
     --max-turns 30 \
     --overwrite \
@@ -522,7 +532,7 @@ python tools/bootstrap_session.py \
 
 > **Note:** Always specify `--base-url` explicitly to prevent round-robin mixing between A and B variants. Substitute `localhost:8080` / `localhost:8081` with your actual server endpoints from `config/llm.json` `base_urls`.
 >
-> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/_import/session-import-full-transcript.txt` and create the session directory at `sessions/session-import`. These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
+> **Note:** The `--session` and `--file` paths refer to a locally prepared import session. Place your transcript at `sessions/session-import/raw/full-transcript.md` and create the session directory together with its `raw/` subdirectory (`mkdir -p sessions/session-import/raw`). These paths are not committed to the repository; see `docs/usage.md` for instructions on setting up a session before running A/B tests.
 
 ### 6.3 Run Variant B (Candidate)
 
@@ -535,7 +545,7 @@ git checkout <pr-branch>
 # Run 1:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-ab-b-run1 \
     --max-turns 30 \
     --overwrite \
@@ -545,7 +555,7 @@ python tools/bootstrap_session.py \
 # Run 2:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-ab-b-run2 \
     --max-turns 30 \
     --overwrite \
@@ -555,7 +565,7 @@ python tools/bootstrap_session.py \
 # Run 3:
 python tools/bootstrap_session.py \
     --session sessions/session-import \
-    --file sessions/_import/session-import-full-transcript.txt \
+    --file sessions/session-import/raw/full-transcript.md \
     --framework framework-ab-b-run3 \
     --max-turns 30 \
     --overwrite \
@@ -573,7 +583,7 @@ The two B70 GPU servers (ports 8080 and 8081 by default — see `tools/submit_ab
 # Terminal 1 — Variant A on GPU 0 (port 8080)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
-    --file sessions/_import/session-import-full-transcript.txt `
+    --file sessions/session-import/raw/full-transcript.md `
     --framework framework-ab-a-run1 `
     --max-turns 30 `
     --base-url http://localhost:8080/v1 `
@@ -583,7 +593,7 @@ python tools/bootstrap_session.py `
 # Terminal 2 — Variant B on GPU 1 (port 8081)
 python tools/bootstrap_session.py `
     --session sessions/session-import `
-    --file sessions/_import/session-import-full-transcript.txt `
+    --file sessions/session-import/raw/full-transcript.md `
     --framework framework-ab-b-run1 `
     --max-turns 30 `
     --base-url http://localhost:8081/v1 `
