@@ -166,12 +166,16 @@ def test_format_known_entities_bounded_return_stats_tuple():
     text, stats = format_known_entities_bounded(catalogs, return_stats=True)
     assert isinstance(text, str)
     assert set(stats) == {
-        "raw_tokens", "catalog_entries_pruned", "catalog_entries_degraded",
+        "raw_tokens", "pre_compression_tokens",
+        "catalog_entries_pruned", "catalog_entries_degraded",
     }
     # No budget pressure -> nothing pruned or degraded.
     assert stats["catalog_entries_pruned"] == 0
     assert stats["catalog_entries_degraded"] == 0
     assert stats["raw_tokens"] >= 0
+    # No trimming on this path, so the pre-compression basis equals the raw
+    # (unbounded) estimate and yields a zero adaptive-compression delta.
+    assert stats["pre_compression_tokens"] == stats["raw_tokens"]
 
 
 def test_format_known_entities_bounded_stats_match_str_path():

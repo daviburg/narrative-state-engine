@@ -943,10 +943,27 @@ def format_known_entities_bounded(
     if recency_window is None:
         recency_window = _DEFAULT_RECENCY_WINDOW
 
-    def _ret(text: str, raw_tokens: int, pruned: int, degraded: int):
+    def _ret(
+        text: str,
+        raw_tokens: int,
+        pruned: int,
+        degraded: int,
+        pre_compression: int | None = None,
+    ):
         if return_stats:
             return text, {
                 "raw_tokens": raw_tokens,
+                # Section token count after baseline context-aware selection and
+                # recency-based formatting but *before* the adaptive trim passes.
+                # This is the faithful basis for attributing a token delta to
+                # adaptive compression (#460): subtracting from ``raw_tokens``
+                # (the fully unbounded all-entities estimate) would wrongly count
+                # baseline budgeting/staleness pruning as compression.  For the
+                # no-trim early returns it equals the returned text's own
+                # estimate, so the derived delta is 0.
+                "pre_compression_tokens": (
+                    raw_tokens if pre_compression is None else pre_compression
+                ),
                 "catalog_entries_pruned": pruned,
                 "catalog_entries_degraded": degraded,
             }
@@ -1016,6 +1033,10 @@ def format_known_entities_bounded(
                 lines.append(_format_entity_id_only(entity))
 
     used = _estimate_tokens("\n".join(lines)) if lines else 0
+    # Snapshot the assembled section size *before* any trimming so callers can
+    # attribute the adaptive-compression delta to the trim passes alone, not to
+    # the baseline context-aware selection / staleness formatting above.
+    _pre_trim_tokens = used
 
     # Adaptive pressure gate (#460): ``pressure_gate_fraction`` is both the
     # activation threshold *and* the trim-down target for the adaptive path.
@@ -1151,7 +1172,13 @@ def format_known_entities_bounded(
             1 for i in range(len(lines))
             if lines[i] != _format_entity_full(ordered[i])
         )
-    return _ret(result, _unbounded_tokens, omitted + context_excluded, degraded)
+    return _ret(
+        result,
+        _unbounded_tokens,
+        omitted + context_excluded,
+        degraded,
+        pre_compression=_pre_trim_tokens,
+    )
 
 
 # ---------------------------------------------------------------------------

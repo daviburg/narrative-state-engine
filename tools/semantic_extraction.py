@@ -47,6 +47,7 @@ from catalog_merger import (
     CATALOG_KEYS,
     _estimate_tokens,
     _find_mentioned_entities,
+    _DEFAULT_ENTITY_BUDGET_FRACTION,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
@@ -2840,9 +2841,24 @@ def _run_discovery_phase(
     # ``raw > compressed`` / ``compression_ratio < 1.0``.  Force the delta to 0
     # in the off state so the instrumentation is a faithful no-op (raw ==
     # compressed, ratio == 1.0).
+    _known_compressed_tokens = _estimate_tokens(known)
     _known_raw_delta = (
-        max(0, _known_stats["raw_tokens"] - _estimate_tokens(known))
+        max(0, _known_stats["pre_compression_tokens"] - _known_compressed_tokens)
         if _adaptive is not None
+        else 0
+    )
+    # Entity-section floor for the turn-total coordinator (#460).  The discovery
+    # floor is a fraction of the entity-context *budget* (per
+    # ``format_known_entities_bounded``/docs), never of the phase's consumed
+    # tokens.  Derive the same budget basis here so the coordinator protects the
+    # right amount; the per-phase floor is assembled at the turn level where the
+    # discovery prompt's total ``input_tokens`` is known.
+    _disc_entity_budget = _entity_budget
+    if _disc_entity_budget is None and isinstance(_ctx_len, int):
+        _disc_entity_budget = int(_ctx_len * _DEFAULT_ENTITY_BUDGET_FRACTION)
+    _known_entity_floor = (
+        int(_adaptive["discovery_floor_fraction"] * _disc_entity_budget)
+        if _adaptive is not None and _disc_entity_budget
         else 0
     )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
@@ -3099,6 +3115,12 @@ def _run_discovery_phase(
         "discovery_sys_tmpl": _disc_sys_tmpl,
         "discovery_user_prompt": _disc_user_prompt,
         "discovery_raw_delta": _known_raw_delta,
+        # Entity-section token size and its protected floor, threaded so the
+        # turn-total coordinator can floor the discovery phase at
+        # ``fixed_prompt + entity_floor`` instead of mis-scaling the floor off
+        # the phase's consumed tokens (#460).
+        "discovery_entity_tokens": _known_compressed_tokens,
+        "discovery_entity_floor": _known_entity_floor,
         # Zero the drop counters in the off state so baseline budgeting/staleness
         # pruning is never attributed to the adaptive layer (faithful no-op).
         "discovery_pruned": (
@@ -3215,6 +3237,8 @@ def extract_and_merge(
         _disc_raw_delta = prefetched_discovery.get("discovery_raw_delta", 0)
         _disc_pruned = prefetched_discovery.get("discovery_pruned", 0)
         _disc_degraded = prefetched_discovery.get("discovery_degraded", 0)
+        _disc_entity_tokens = prefetched_discovery.get("discovery_entity_tokens", 0)
+        _disc_entity_floor = prefetched_discovery.get("discovery_entity_floor", 0)
     else:
         _discovery_result = _run_discovery_phase(
             turn, catalogs, llm, min_confidence,
@@ -3231,6 +3255,8 @@ def extract_and_merge(
         _disc_raw_delta = _discovery_result.get("discovery_raw_delta", 0)
         _disc_pruned = _discovery_result.get("discovery_pruned", 0)
         _disc_degraded = _discovery_result.get("discovery_degraded", 0)
+        _disc_entity_tokens = _discovery_result.get("discovery_entity_tokens", 0)
+        _disc_entity_floor = _discovery_result.get("discovery_entity_floor", 0)
 
     # Instrument discovery prompt tokens (captured at build site, not re-computed).
     # When adaptive compression trimmed the entity section, _disc_raw_delta is the
@@ -3937,8 +3963,16 @@ def extract_and_merge(
                 "name": _name,
                 "tokens": _p.get("input_tokens", 0),
                 # discovery keeps its floor; other phases may yield fully.
+                # The discovery floor protects the fixed (non-entity) prompt
+                # portion plus the entity-section floor — the entity floor is a
+                # fraction of the entity-context *budget* (computed at the
+                # discovery build site), not of the phase's consumed tokens.
                 "floor": (
-                    int(_p.get("input_tokens", 0) * _adaptive_turn["discovery_floor_fraction"])
+                    max(
+                        0,
+                        _p.get("input_tokens", 0)
+                        - max(0, _disc_entity_tokens - _disc_entity_floor),
+                    )
                     if _name == "discovery"
                     else 0
                 ),
