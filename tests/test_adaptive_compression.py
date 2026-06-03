@@ -332,6 +332,27 @@ class TestCentralityBackstop:
         # b: inbound 1 (from hub) = 1
         assert c["char-b"] == 1
 
+    def test_malformed_relationships_do_not_inflate_degree(self):
+        # A malformed catalog entry whose ``relationships`` is a dict or string
+        # must not have its outbound degree inflated by ``len(dict)`` /
+        # ``len(str)`` — non-list relationships count as zero relationships.
+        catalogs = _make_catalogs([
+            _make_entity("char-bad-dict", "BadDict"),
+            _make_entity("char-bad-str", "BadStr"),
+            _make_entity("char-good", "Good", relationships=[
+                {"target_id": "char-bad-dict"},
+            ]),
+        ])
+        catalogs["characters.json"][0]["relationships"] = {
+            "k1": 1, "k2": 2, "k3": 3,
+        }
+        catalogs["characters.json"][1]["relationships"] = "a" * 50
+        c = compute_entity_centrality(catalogs)
+        # Dict/str contribute 0 outbound; only inbound from char-good counts.
+        assert c["char-bad-dict"] == 1
+        assert c["char-bad-str"] == 0
+        assert c["char-good"] == 1
+
     def test_mention_frequency_contributes(self):
         catalogs = _make_catalogs([
             _make_entity("char-x", "X"),

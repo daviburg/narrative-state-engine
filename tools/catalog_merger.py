@@ -369,6 +369,21 @@ def _estimate_tokens(text: str) -> int:
     return max(1, len(text) // 3)
 
 
+def _joined_token_estimate(char_sum: int, count: int) -> int:
+    """Token estimate for ``count`` lines joined by ``"\\n"``.
+
+    Equivalent to ``_estimate_tokens("\\n".join(lines))`` where ``lines`` has
+    ``count`` entries totalling ``char_sum`` characters, but computed from the
+    running totals so the omit passes can evaluate a candidate removal in O(1)
+    instead of rebuilding and re-measuring the whole joined string each
+    iteration (which made those passes O(n²)).
+    """
+    if count <= 0:
+        return 0
+    # ``"\\n".join`` adds ``count - 1`` separator characters.
+    return max(1, (char_sum + count - 1) // 3)
+
+
 def _format_entity_full(entity: dict) -> str:
     """Format a single entity with full detail (ID, name, type, identity, aliases)."""
     desc = entity.get("identity", "")
@@ -560,7 +575,13 @@ def compute_entity_centrality(catalogs: dict) -> dict[str, int]:
             eid = e.get("id")
             if not eid:
                 continue
-            rels = e.get("relationships") or []
+            # ``relationships`` must be a list; a malformed catalog entry
+            # (dict/str) would make ``len(rels)`` count keys/chars and wildly
+            # inflate the outbound degree, over-exempting entities and
+            # defeating compression.  Treat any non-list as no relationships.
+            rels = e.get("relationships")
+            if not isinstance(rels, list):
+                rels = []
             outbound[eid] = outbound.get(eid, 0) + len(rels)
             for rel in rels:
                 if not isinstance(rel, dict):
@@ -1147,25 +1168,29 @@ def format_known_entities_bounded(
             # Because entities are removed in discrete chunks, a single omission
             # can drop ``used`` from above the floor to below it — so each cut is
             # evaluated *before* it is committed and reverted if it would cross
-            # the floor.
+            # the floor.  Running char/line totals keep the candidate estimate
+            # O(1) per iteration (overall O(n)) instead of rejoining every line.
             if used > _gate_target and used > floor_tokens:
                 keep = [True] * len(lines)
+                kept_chars = sum(len(l) for l in lines)
+                kept_count = len(lines)
                 for i in range(len(ordered) - 1, -1, -1):
                     if used <= _gate_target or used <= floor_tokens:
                         break
                     if ordered[i]["id"] in exempt:
                         continue
-                    keep[i] = False
-                    candidate = _estimate_tokens(
-                        "\n".join(l for j, l in enumerate(lines) if keep[j])
-                    ) if any(keep) else 0
+                    candidate = _joined_token_estimate(
+                        kept_chars - len(lines[i]), kept_count - 1
+                    )
                     if candidate < floor_tokens:
                         # Reverting this omission keeps us at/above the floor.
                         # Skip to a (smaller) earlier entity rather than stop, so
                         # a single large tail entity can't block otherwise-safe
                         # trims toward the gate.
-                        keep[i] = True
                         continue
+                    keep[i] = False
+                    kept_chars -= len(lines[i])
+                    kept_count -= 1
                     used = candidate
                     omitted += 1
                 # Rebuild lines/ordered together to keep indices aligned for the
@@ -1186,20 +1211,23 @@ def format_known_entities_bounded(
                 and len(lines) > 1
             ):
                 keep = [True] * len(lines)
+                kept_chars = sum(len(l) for l in lines)
+                kept_count = len(lines)
                 for i in range(len(ordered) - 1, -1, -1):
                     if used <= budget or used <= floor_tokens:
                         break
-                    keep[i] = False
-                    candidate = _estimate_tokens(
-                        "\n".join(l for j, l in enumerate(lines) if keep[j])
-                    ) if any(keep) else 0
+                    candidate = _joined_token_estimate(
+                        kept_chars - len(lines[i]), kept_count - 1
+                    )
                     if candidate < floor_tokens:
                         # Same floor guard as Pass 3: revert the last cut rather
                         # than push the retained context below the floor, and keep
                         # scanning for a smaller entity that can be trimmed safely
                         # so the section still tries to get under the hard budget.
-                        keep[i] = True
                         continue
+                    keep[i] = False
+                    kept_chars -= len(lines[i])
+                    kept_count -= 1
                     used = candidate
                     omitted += 1
                 lines = [l for j, l in enumerate(lines) if keep[j]]
