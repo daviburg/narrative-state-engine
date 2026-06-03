@@ -318,8 +318,12 @@ from over-trimming. Enable it under the `context_optimizations` block in
   for the #393 discovery-starvation regression); the `discovery_floor_fraction`
   guarantees discovery is never starved even under heavy pressure; the
   `centrality_min_degree` backstop keeps structurally important entities at full
-  detail; the `turn_total_budget_fraction` caps the per-turn total across all
-  phases, trimming lowest-centrality, lowest-priority content first.
+  detail; and the `turn_total_budget_fraction` **computes and reports** a
+  best-effort per-turn allocation (`turn_total_allocated`/`turn_total_cap`),
+  notionally trimming lowest-centrality, lowest-priority content first. This
+  turn-total figure is a reporting/diagnostic metric computed at finalize; it is
+  **not** yet enforced back into prompt construction, so it does not trim any
+  already-assembled phase prompt at runtime.
 
 Turn-band bucketing reveals late-session prompt growth that session-total
 averages mask.  A healthy session shows a flat or slowly rising ratio across

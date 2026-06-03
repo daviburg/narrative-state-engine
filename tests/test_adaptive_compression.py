@@ -347,6 +347,33 @@ class TestCentralityBackstop:
         exempt = centrality_exempt_ids(centrality, adaptive)
         assert exempt == {"char-a", "char-b"}
 
+    def test_last_resort_trims_exempt_when_over_hard_budget(self):
+        # When *every* entity is centrality-exempt, the gated degrade/omit
+        # passes (which skip exempt entities) cannot free any room, so the
+        # known-entities section would otherwise exit far above its hard token
+        # budget.  The last-resort pass must still omit exempt entities down to
+        # the hard budget (while respecting the discovery floor) so the section
+        # stays bounded and adaptive compression cannot cause a context overflow.
+        n = 40
+        catalogs = _big_catalog(n=n, identity_len=120)
+        budget = 300
+        adaptive = adaptive_compression_config(_enabled_config())
+        # Force every entity above centrality_min_degree -> all exempt.
+        centrality = {f"char-{i:03d}": 99 for i in range(n)}
+        assert centrality_exempt_ids(centrality, adaptive) == set(centrality)
+        out = format_known_entities_bounded(
+            catalogs, current_turn=300, entity_context_budget=budget,
+            turn_text="zzz", adaptive=adaptive, centrality=centrality,
+        )
+        # Retained content (excluding the truncation note) stays within the
+        # hard budget, and some exempt entities were omitted to get there.
+        retained = out.split("\n\n(Note:")[0]
+        assert _estimate_tokens(retained) <= budget
+        assert "Note:" in out
+        # The discovery floor is still honored — not everything is stripped.
+        floor = adaptive["discovery_floor_fraction"] * budget
+        assert _estimate_tokens(retained) >= floor
+
 
 # ---------------------------------------------------------------------------
 # Turn-total budget coordinator

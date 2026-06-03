@@ -1151,6 +1151,30 @@ def format_known_entities_bounded(
                 # degraded-count computation below.
                 lines = [l for j, l in enumerate(lines) if keep[j]]
                 ordered = [o for j, o in enumerate(ordered) if keep[j]]
+            # Pass 4 (last resort): when so many entities are centrality-exempt
+            # that the gated passes above could not free enough room, the
+            # known-entities section can still exit *above the hard budget*.
+            # Omit exempt entities tail-first as well — but only as far as the
+            # hard ``budget`` requires, and never below the discovery floor — so
+            # the section stays within its configured token budget and adaptive
+            # compression cannot itself trigger a context overflow.
+            if (
+                budget is not None
+                and used > budget
+                and used > floor_tokens
+                and len(lines) > 1
+            ):
+                keep = [True] * len(lines)
+                for i in range(len(ordered) - 1, -1, -1):
+                    if used <= budget or used <= floor_tokens:
+                        break
+                    keep[i] = False
+                    omitted += 1
+                    used = _estimate_tokens(
+                        "\n".join(l for j, l in enumerate(lines) if keep[j])
+                    ) if any(keep) else 0
+                lines = [l for j, l in enumerate(lines) if keep[j]]
+                ordered = [o for j, o in enumerate(ordered) if keep[j]]
 
     result = "\n".join(lines)
 
