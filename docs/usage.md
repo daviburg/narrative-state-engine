@@ -312,7 +312,12 @@ from over-trimming. Enable it under the `context_optimizations` block in
   identical to the always-on baseline** — `raw_input_tokens == compressed_input_tokens`
   and `compression_ratio == 1.0` for every phase (the `[COMPRESSION]` stderr line
   reports `ratio=1.00 (INACTIVE)`). The ratio is `compressed / raw`, so a faithful
-  no-op is `1.0`, never `0.0`.
+  no-op is `1.0`, never `0.0`. When compression *is* active the raw delta is kept
+  *signed* (#465): if a "compression" pass actually inflates a phase (e.g. the
+  truncation-note overhead outweighs the tokens it removed), `compressed > raw`
+  and the ratio rises **above `1.0`**, deliberately surfacing that prompt-bloat
+  regression rather than clamping it to `1.0`. So treat `ratio < 1.0` as real
+  savings, `1.0` as a no-op, and `ratio > 1.0` as a net-inflation warning.
 - **When to enable:** late-session runs where entity catalogs have grown large
   enough to overflow context, *after* validating with an A/B entity-retention
   diff (see `docs/ab-test-standard.md`). The keys are Rule-10 thresholds and

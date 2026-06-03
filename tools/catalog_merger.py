@@ -953,18 +953,18 @@ def format_known_entities_bounded(
             original string-only return so existing callers are unchanged.  The
             stats path is the backward-compatible plumbing PR-2 wires into the
             per-turn metrics.
-            adaptive: Resolved adaptive-compression settings from
-                ``adaptive_compression_config()``, or ``None`` (default) to disable
-                all PR-2 (#460) code paths.  When ``None`` the function behaves
-                byte-for-byte identically to pre-#460 ``main``.  When provided it
-                enables the pressure gate (skip trimming below
-                ``pressure_gate_fraction`` of budget), the discovery floor (never
-                trim below ``discovery_floor_fraction`` of budget), and the
-                centrality backstop.
-            centrality: Optional per-entity structural centrality map from
-                ``compute_entity_centrality()``.  Entities at or above the
-                configured centrality threshold are exempt from the degrade/omit
-                passes.  Only consulted when *adaptive* is provided.
+        adaptive: Resolved adaptive-compression settings from
+            ``adaptive_compression_config()``, or ``None`` (default) to disable
+            all PR-2 (#460) code paths.  When ``None`` the function behaves
+            byte-for-byte identically to pre-#460 ``main``.  When provided it
+            enables the pressure gate (skip trimming below
+            ``pressure_gate_fraction`` of budget), the discovery floor (never
+            trim below ``discovery_floor_fraction`` of budget), and the
+            centrality backstop.
+        centrality: Optional per-entity structural centrality map from
+            ``compute_entity_centrality()``.  Entities at or above the
+            configured centrality threshold are exempt from the degrade/omit
+            passes.  Only consulted when *adaptive* is provided.
 
     Returns:
         Formatted entity list string, possibly with a truncation note.  When
