@@ -2841,9 +2841,16 @@ def _run_discovery_phase(
     # ``raw > compressed`` / ``compression_ratio < 1.0``.  Force the delta to 0
     # in the off state so the instrumentation is a faithful no-op (raw ==
     # compressed, ratio == 1.0).
+    #
+    # When adaptive compression IS active the delta is kept *signed* (#465): a
+    # negative delta means the "compression" path actually inflated the prompt
+    # (e.g. truncation-note overhead outweighed the removed tokens), so the
+    # instrumentation must be able to report ``compressed > raw`` /
+    # ``compression_ratio > 1.0`` and surface that prompt-bloat regression
+    # instead of clamping it away.
     _known_compressed_tokens = _estimate_tokens(known)
     _known_raw_delta = (
-        max(0, _known_stats["pre_compression_tokens"] - _known_compressed_tokens)
+        _known_stats["pre_compression_tokens"] - _known_compressed_tokens
         if _adaptive is not None
         else 0
     )

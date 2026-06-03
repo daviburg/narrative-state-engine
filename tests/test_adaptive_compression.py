@@ -111,6 +111,22 @@ class TestResolver:
         cfg = _enabled_config(centrality_exempt_top_n=0)
         assert adaptive_compression_config(cfg)["centrality_exempt_top_n"] is None
 
+    def test_negative_min_degree_clamped_to_default(self):
+        # A negative threshold would exempt every entity from trimming, defeating
+        # compression — it must clamp back to the default (#468 review).
+        cfg = _enabled_config(centrality_min_degree=-5)
+        assert adaptive_compression_config(cfg)["centrality_min_degree"] == _CENTRALITY_MIN_DEGREE
+
+    def test_negative_fractional_min_degree_clamped_to_default(self):
+        # -0.5 truncates toward 0 with int(); the sign must be checked before
+        # truncation so it still falls back to the default (#468 review).
+        cfg = _enabled_config(centrality_min_degree=-0.5)
+        assert adaptive_compression_config(cfg)["centrality_min_degree"] == _CENTRALITY_MIN_DEGREE
+
+    def test_invalid_min_degree_falls_back_to_default(self):
+        cfg = _enabled_config(centrality_min_degree="nope")
+        assert adaptive_compression_config(cfg)["centrality_min_degree"] == _CENTRALITY_MIN_DEGREE
+
 
 # ---------------------------------------------------------------------------
 # Default-off pass-through (critical)
@@ -277,6 +293,22 @@ class TestDiscoveryFloor:
         # Floor guarantees discovery is never starved to nothing (#393 guard).
         assert retained.strip() != ""
         assert "char-" in retained
+
+    def test_floor_not_overshot_by_chunky_omissions(self):
+        # Large per-entity lines make a single discrete omission able to drop the
+        # retained context from above the floor to well below it; the omit passes
+        # must revert that last cut rather than violate the floor (#468 review).
+        for budget in (120, 180, 240, 360, 500):
+            catalogs = _big_catalog(n=150, identity_len=400)
+            adaptive = adaptive_compression_config(_enabled_config())
+            centrality = compute_entity_centrality(catalogs)
+            out = format_known_entities_bounded(
+                catalogs, current_turn=300, entity_context_budget=budget,
+                turn_text="zzz", adaptive=adaptive, centrality=centrality,
+            )
+            retained = out.split("\n\n(Note:")[0]
+            floor = adaptive["discovery_floor_fraction"] * budget
+            assert _estimate_tokens(retained) >= floor, f"floor violated at budget={budget}"
 
 
 # ---------------------------------------------------------------------------

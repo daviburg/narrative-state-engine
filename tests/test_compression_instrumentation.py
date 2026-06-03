@@ -92,6 +92,17 @@ def test_record_explicit_raw_tokens_drives_ratio():
     assert out["compression_ratio"] < 1.0
 
 
+def test_record_raw_smaller_than_compressed_surfaces_bloat():
+    # Signed-delta instrumentation (#468 review): when "compression" inflates the
+    # prompt (raw < compressed), the metrics must report ratio > 1.0 rather than
+    # clamp the regression away.
+    metrics: dict = {}
+    _record_prompt_tokens(metrics, "discovery", "system " * 200, "user " * 200, raw_tokens=10)
+    out = _finalize_prompt_metrics(metrics)["discovery"]
+    assert out["compressed_input_tokens"] > out["raw_input_tokens"]
+    assert out["compression_ratio"] > 1.0
+
+
 def test_finalize_zero_raw_is_safe():
     out = _finalize_prompt_metrics(
         {"discovery": {"input_tokens": 0, "raw_input_tokens": 0, "calls": 1}}

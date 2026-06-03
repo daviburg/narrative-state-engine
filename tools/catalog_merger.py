@@ -516,9 +516,18 @@ def adaptive_compression_config(config: dict | None) -> dict | None:
             top_n = None
     min_deg = ac.get("centrality_min_degree", _CENTRALITY_MIN_DEGREE)
     try:
-        min_deg = int(min_deg)
+        min_deg_f = float(min_deg)
     except (TypeError, ValueError):
         min_deg = _CENTRALITY_MIN_DEGREE
+    else:
+        # A negative threshold would exempt *every* entity from the degrade/omit
+        # passes (any degree >= a negative number), silently defeating
+        # compression.  Check the sign on the raw value *before* int truncation
+        # so a fractional negative (e.g. -0.5, which would truncate toward 0 and
+        # escape an int-only clamp) also falls back to the default.
+        min_deg = int(min_deg_f)
+        if min_deg_f < 0:
+            min_deg = _CENTRALITY_MIN_DEGREE
     return {
         "pressure_gate_fraction": _coerce_fraction(
             ac.get("pressure_gate_fraction"), _PRESSURE_GATE_FRACTION
@@ -1135,6 +1144,10 @@ def format_known_entities_bounded(
                             break
             # Pass 3: omit non-exempt entities tail-first, but never trim the
             # retained discovery context below the discovery floor (#393 guard).
+            # Because entities are removed in discrete chunks, a single omission
+            # can drop ``used`` from above the floor to below it — so each cut is
+            # evaluated *before* it is committed and reverted if it would cross
+            # the floor.
             if used > _gate_target and used > floor_tokens:
                 keep = [True] * len(lines)
                 for i in range(len(ordered) - 1, -1, -1):
@@ -1143,10 +1156,18 @@ def format_known_entities_bounded(
                     if ordered[i]["id"] in exempt:
                         continue
                     keep[i] = False
-                    omitted += 1
-                    used = _estimate_tokens(
+                    candidate = _estimate_tokens(
                         "\n".join(l for j, l in enumerate(lines) if keep[j])
                     ) if any(keep) else 0
+                    if candidate < floor_tokens:
+                        # Reverting this omission keeps us at/above the floor.
+                        # Skip to a (smaller) earlier entity rather than stop, so
+                        # a single large tail entity can't block otherwise-safe
+                        # trims toward the gate.
+                        keep[i] = True
+                        continue
+                    used = candidate
+                    omitted += 1
                 # Rebuild lines/ordered together to keep indices aligned for the
                 # degraded-count computation below.
                 lines = [l for j, l in enumerate(lines) if keep[j]]
@@ -1169,10 +1190,18 @@ def format_known_entities_bounded(
                     if used <= budget or used <= floor_tokens:
                         break
                     keep[i] = False
-                    omitted += 1
-                    used = _estimate_tokens(
+                    candidate = _estimate_tokens(
                         "\n".join(l for j, l in enumerate(lines) if keep[j])
                     ) if any(keep) else 0
+                    if candidate < floor_tokens:
+                        # Same floor guard as Pass 3: revert the last cut rather
+                        # than push the retained context below the floor, and keep
+                        # scanning for a smaller entity that can be trimmed safely
+                        # so the section still tries to get under the hard budget.
+                        keep[i] = True
+                        continue
+                    used = candidate
+                    omitted += 1
                 lines = [l for j, l in enumerate(lines) if keep[j]]
                 ordered = [o for j, o in enumerate(ordered) if keep[j]]
 
