@@ -612,6 +612,11 @@ def coordinate_turn_total(
     trimmed from the lowest-priority phases first, never below each phase's
     ``floor`` — so the discovery floor and centrality-exempt content are
     preserved while lower-priority content is trimmed first.
+
+    Cap enforcement is **best-effort**: floors are inviolable, so when the sum
+    of all phase ``floor`` values already exceeds the cap there is nothing left
+    to trim and the returned total allocation will still exceed the cap.  In
+    that case the floors win and the cap is intentionally not met.
     """
     out = [dict(p, allocated=p.get("tokens", 0)) for p in phases]
     if adaptive is None or not context_length:

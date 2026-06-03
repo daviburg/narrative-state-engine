@@ -3099,8 +3099,18 @@ def _run_discovery_phase(
         "discovery_sys_tmpl": _disc_sys_tmpl,
         "discovery_user_prompt": _disc_user_prompt,
         "discovery_raw_delta": _known_raw_delta,
-        "discovery_pruned": _known_stats.get("catalog_entries_pruned", 0),
-        "discovery_degraded": _known_stats.get("catalog_entries_degraded", 0),
+        # Zero the drop counters in the off state so baseline budgeting/staleness
+        # pruning is never attributed to the adaptive layer (faithful no-op).
+        "discovery_pruned": (
+            _known_stats.get("catalog_entries_pruned", 0)
+            if _adaptive is not None
+            else 0
+        ),
+        "discovery_degraded": (
+            _known_stats.get("catalog_entries_degraded", 0)
+            if _adaptive is not None
+            else 0
+        ),
     }
 
 
@@ -3226,6 +3236,11 @@ def extract_and_merge(
     # When adaptive compression trimmed the entity section, _disc_raw_delta is the
     # tokens removed; raw = compressed + delta so the #465 metrics report the real
     # compression.  When the feature is off the delta is 0 (raw == compressed).
+    # The drop counters are emitted independently of the (integer-rounded) token
+    # delta: a prune/degrade can leave non-zero counters while the token estimate
+    # rounds to 0, so gating section_stats on the delta would silently lose them.
+    # _disc_pruned/_disc_degraded are already forced to 0 in the off state, so
+    # default-off counters stay 0.
     if _disc_sys_tmpl and _disc_user_prompt:
         _disc_raw_tokens = (
             _estimate_tokens(_disc_sys_tmpl + _disc_user_prompt) + _disc_raw_delta
@@ -3237,7 +3252,7 @@ def extract_and_merge(
                 "catalog_entries_pruned": _disc_pruned,
                 "catalog_entries_degraded": _disc_degraded,
             }
-            if _disc_raw_delta
+            if (_disc_pruned or _disc_degraded)
             else None
         )
         _record_prompt_tokens(
