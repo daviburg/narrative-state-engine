@@ -1203,7 +1203,12 @@ def _get_type_tiering_config(
     # context_optimizations may itself be malformed (e.g. a list/string): coerce
     # to a dict so the unconditional per-turn read can never crash, even OFF.
     ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
-    enabled: bool = bool(ctx_opt.get("relationship_type_tiering", False))
+    # Strict bool parse: only a real JSON ``true`` enables the (default-OFF)
+    # safety gate.  Permissive ``bool(...)`` would treat truthy non-bools — the
+    # string ``"false"``, a non-empty list like ``[False]``, ``1`` — as enabled,
+    # silently flipping the gate ON for a malformed config.  Real JSON booleans
+    # (used by the A/B configs) are unaffected, so this is behaviour-neutral.
+    enabled: bool = ctx_opt.get("relationship_type_tiering", False) is True
     raw_types = ctx_opt.get("pc_rel_permanent_types")
     # Parse the permanent-type list defensively: keep only string entries, so a
     # malformed override (a non-list, or a list containing unhashable values

@@ -40,6 +40,31 @@ _CFG_ON = {
     }
 }
 
+# Golden snapshot directory holding the pre-#477-main flag-OFF output captured
+# as a frozen fixture (Finding #1).  Comparing flag-OFF output against a frozen
+# literal — rather than only config=None vs config=_CFG_OFF (new-vs-new) — locks
+# byte-identity to main with a test, not just code inspection.
+_GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden", "pc_rel_tiering")
+
+
+def _load_prod_config_on():
+    """Return the production config/llm.json context_optimizations block with the
+    tiering flag forced ON.
+
+    This mirrors exactly what the A/B flag-ON arm runs (the permanent 5-type list
+    ``kinship/adversarial/mentorship/political/partnership`` + a volatile tail cap
+    of 10), so a shrink test built on it reflects real merged behaviour rather
+    than the 7-type test ``_CFG_ON`` override (Finding #4).
+    """
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "config", "llm.json"
+    )
+    with open(cfg_path, encoding="utf-8") as fh:
+        cfg = json.load(fh)
+    ctx_opt = dict(cfg.get("context_optimizations", {}))
+    ctx_opt["relationship_type_tiering"] = True
+    return {"context_optimizations": ctx_opt}
+
 
 def _make_rel(
     target_id,
@@ -94,6 +119,26 @@ class TestGetTypeTieringConfig:
 
     def test_returns_enabled_when_flag_true(self):
         enabled, perm, cap = se._get_type_tiering_config(_CFG_ON)
+        assert enabled is True
+
+    @pytest.mark.parametrize(
+        "bad_flag",
+        ["false", "False", "true", "0", "1", [False], [True], 1, {}, [], 0.0],
+    )
+    def test_non_bool_flag_does_not_enable(self, bad_flag):
+        """Finding #5: a non-bool (truthy or not) must NOT enable the
+        default-OFF safety gate.  Permissive ``bool(...)`` would treat the
+        string ``"false"`` or ``[False]`` as enabled; strict parsing accepts
+        only a real JSON ``true``.  Behaviour-neutral for the A/B configs, which
+        use real JSON booleans."""
+        cfg = {"context_optimizations": {"relationship_type_tiering": bad_flag}}
+        enabled, _perm, _cap = se._get_type_tiering_config(cfg)
+        assert enabled is False
+
+    def test_real_true_bool_enables(self):
+        """Only a real JSON ``true`` flips the gate ON (strict parse, #5)."""
+        cfg = {"context_optimizations": {"relationship_type_tiering": True}}
+        enabled, _perm, _cap = se._get_type_tiering_config(cfg)
         assert enabled is True
 
     def test_default_permanent_types(self):
@@ -312,6 +357,81 @@ class TestFormatPriorEntityContextFlagOff:
 
 
 # ===========================================================================
+# (a) flag OFF == pre-#477-main golden snapshot (Finding #1)
+# ===========================================================================
+
+class TestFlagOffMainGolden:
+    """Finding #1: assert flag-OFF output is byte-identical to a *frozen*
+    pre-#477-main golden snapshot for BOTH PC paths (no-arcs and arcs).
+
+    The other flag-OFF tests compare the new code path config=None vs
+    config=_CFG_OFF (new-vs-new); they prove the two new branches agree but not
+    that either matches the actual pre-PR main output.  These goldens are
+    captured literals checked in under tests/golden/pc_rel_tiering/, so any
+    future change to the OFF path — by either branch — breaks the test.
+    """
+
+    def _golden_entry(self):
+        """The exact deterministic entry used to capture the golden fixtures."""
+        rels = [
+            _make_rel(
+                "char-mom", rel_type="kinship", last_updated_turn="turn-001",
+                history=[
+                    {"turn": f"turn-{i:03d}", "note": f"event {i}"}
+                    for i in range(1, 6)
+                ],
+            ),
+            _make_rel("char-rival", rel_type="adversarial", last_updated_turn="turn-050"),
+            _make_rel("char-ally-1", rel_type="ally", last_updated_turn="turn-080"),
+            _make_rel("char-ally-2", rel_type="ally", last_updated_turn="turn-095"),
+        ]
+        return _make_pc_entry(relationships=rels)
+
+    def _arcs(self):
+        return {
+            "arcs": {
+                tid: {
+                    "arc_summary": [{"phase": "met"}, {"phase": "allied"}],
+                    "current_relationship": "trusted ally",
+                }
+                for tid in ("char-mom", "char-rival", "char-ally-1", "char-ally-2")
+            }
+        }
+
+    @staticmethod
+    def _load_golden(name):
+        with open(os.path.join(_GOLDEN_DIR, name), encoding="utf-8") as fh:
+            return fh.read()
+
+    def test_flag_off_noarcs_matches_main_golden(self):
+        """No-arcs PC path: flag OFF == frozen pre-#477-main golden."""
+        golden = self._load_golden("flag_off_noarcs.json")
+        entry = self._golden_entry()
+        out_none = se._format_prior_entity_context(
+            entry, config=None, mentioned_ids=set(), current_turn_num=100
+        )
+        out_off = se._format_prior_entity_context(
+            entry, config=_CFG_OFF, mentioned_ids=set(), current_turn_num=100
+        )
+        assert out_none == golden
+        assert out_off == golden
+
+    def test_flag_off_arcs_matches_main_golden(self):
+        """Arcs PC path: flag OFF == frozen pre-#477-main golden."""
+        golden = self._load_golden("flag_off_arcs.json")
+        entry = self._golden_entry()
+        arcs = self._arcs()
+        out_none = se._format_prior_entity_context(
+            entry, arcs_data=arcs, config=None, mentioned_ids=set(), current_turn_num=100
+        )
+        out_off = se._format_prior_entity_context(
+            entry, arcs_data=arcs, config=_CFG_OFF, mentioned_ids=set(), current_turn_num=100
+        )
+        assert out_none == golden
+        assert out_off == golden
+
+
+# ===========================================================================
 # _format_prior_entity_context — flag ON tests (b)
 # ===========================================================================
 
@@ -482,6 +602,43 @@ class TestSyntheticPC109Relationships:
         parsed = json.loads(out)
         result_ids = {r["target_id"] for r in parsed["relationships"]}
         assert mentioned_target in result_ids
+
+    def test_shrinks_with_production_default_config(self):
+        """Finding #4: shrink test driven by the PRODUCTION config/llm.json
+        type list (the permanent 5-type set + cap 10), not the 7-type test
+        ``_CFG_ON`` override.
+
+        This reflects what actually merges/runs in the A/B flag-ON arm.  Under
+        the 5-type list, ``factional`` and ``social`` are volatile (not
+        permanent), so they fall into the capped tail; only the 18 permanent
+        bonds (kinship/adversarial/mentorship/political/partnership) are kept
+        uncapped.  The 109-rel web must shrink to ~30-40 with no permanent bond
+        dropped.
+        """
+        cfg = _load_prod_config_on()
+        rels = self._build_109_rels()
+        entry = _make_pc_entry(relationships=rels)
+        out = se._format_prior_entity_context(
+            entry, config=cfg, mentioned_ids=set(), current_turn_num=344
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        count = len(parsed["relationships"])
+        assert 25 <= count <= 45, (
+            f"Expected 25-45 retained relationships with production config, "
+            f"got {count}"
+        )
+        # No permanent-bond (5-type production list) relationship dropped.
+        prod_perm_types = {
+            "kinship", "adversarial", "mentorship", "political", "partnership",
+        }
+        perm_rels = [r for r in rels if r["type"] in prod_perm_types]
+        assert len(perm_rels) == 18  # sanity: matches the synthetic distribution
+        for rel in perm_rels:
+            assert rel["target_id"] in result_ids, (
+                f"Permanent rel {rel['target_id']} ({rel['type']}) was dropped "
+                f"under the production 5-type config"
+            )
 
 
 # ===========================================================================
