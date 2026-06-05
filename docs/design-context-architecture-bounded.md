@@ -308,10 +308,14 @@ A1, that entity is **absent from context** -> the discovery phase sees no anchor
 **duplicate** (the exact `char-older-figure` vs `char-eldorman`, `*-hunter` splintering failure mode that got
 #468 rejected).
 
-**A1 covers it:** the compact A1-IDX identity/alias index is **always in context**. Even a 300-turn-dormant
-entity still has its `id | name | aliases` line present, so discovery resolves the mention to the existing ID
-(`is_new=false`) instead of minting a duplicate. A cheap **promote-on-mention** path then pulls that entity
-from digest-only to A2 full-fidelity for the current turn.
+**A1 covers it** through two layers. While a dormant entity is still in the active working set, the compact
+A1-IDX identity/alias index keeps its anchor **in context** (a 300-turn-dormant *but not yet evicted* entity
+still has its `id | name | aliases` line present), so discovery resolves the mention to the existing ID
+(`is_new=false`) instead of minting a duplicate. Once an entity is evicted (3.4), the anchor leaves context,
+but its identity is retained in cold storage: A2's lexical/embedding match against cold storage **promotes it
+back to hot** the instant it is re-mentioned. Either way the mention resolves to the *existing* ID, and the
+**promote-on-mention** path pulls that entity from digest-only (or cold storage) to A2 full-fidelity for the
+current turn.
 
 ### 5.2 A1's blind spot, covered by A2
 
@@ -429,10 +433,17 @@ name, alias, role, or ID stem. Set is_new=false with existing_id"). Therefore:
 
 A1 + A2 **must solve this, not inherit it.** The design guarantees:
 
-1. **A1-IDX is always in context, for every known entity, every turn.** Identity lines are cheap (~15-18
-   tokens), so even hundreds of entities cost only a few thousand tokens — affordable to keep verbatim. This
-   is the categorical difference from #468: #468 dropped the entry *and its anchor*; A1 drops the expensive
-   *history* while **keeping the anchor**.
+1. **Every entity in the active working set keeps at least a minimal `id | primary-name | type` anchor in
+   context, every turn.** Identity lines are cheap (~15-18 tokens at full fidelity, ~6-8 compressed), so even
+   hundreds of active entities cost only a few thousand tokens — affordable to keep verbatim. This is the
+   categorical difference from #468: #468 dropped the entry *and its anchor*; A1 drops the expensive
+   *history* while **keeping the anchor** for every entity still in the working set. **Full eviction (3.4) is
+   the one case where even the anchor leaves context** — and it is deliberately a *separate, telemetry-gated,
+   reversible* tier, applied only to entities dormant beyond the eviction horizon with low quantitative *and*
+   low semantic importance. For those, the coreference floor is not the in-context anchor but
+   **promote-on-mention recovery from cold storage** (3.4) plus the optional embedding fallback (R3), and the
+   whole tier is gated behind the zero-new-duplicate A/B (Section 8 Q-3; Section 9.1 Phase A1b). Until that
+   gate passes, the working-set anchor is the floor for *every* known entity.
 2. **The cold tier never drops the primary name.** A dormant entity is compressed (aliases moved to cold
    lookup) but its `id | primary-name | type` line stays in-context, preserving the most common coreference
    path. Alias recovery on a near-miss is handled by A2 promote-on-mention + optional embedding recall (R3).
@@ -552,7 +563,7 @@ open-questions interrogation with a plan to **decide from evidence**.
 | Design fork | What we build / default we start with | Deciding telemetry signal |
 |---|---|---|
 | **Digest method** (extractive vs LLM-abstractive) | **Build both** behind the pluggable digest backend (Section 3.1) and A/B them. **Default: extractive** (deterministic, temp-0 byte-stable, no extra model call). | Per-method **quality delta** (entity retention, attribute-corruption rate) **and token/latency cost**. Adopt abstractive only if it wins quality enough to justify its determinism/cost penalty. |
-| **Rollup depth / eviction tier** (intelligent forgetting, 3.4) | **Ship the R0-R2 forgetting tiers** (hot, cold, cluster rollup). Treat full **eviction as a telemetry-gated future tier (R3)**, enabled behind a flag after the zero-duplicate gate. | Cold/evicted **re-mention promote rate** and **duplicate-introduction rate**. If safe forgetting holds (promotes resolve to existing IDs, zero new duplicates), enable deeper eviction; if not, stay shallower. |
+| **Rollup depth / eviction tier** (intelligent forgetting, 3.4) | **Ship the hot, cold, and cluster-rollup forgetting tiers** (Section 3.4; these always retain a minimal in-context anchor). Treat full **eviction as a telemetry-gated future tier**, enabled behind a flag after the zero-duplicate gate. | Cold/evicted **re-mention promote rate** and **duplicate-introduction rate**. If safe forgetting holds (promotes resolve to existing IDs, zero new duplicates), enable deeper eviction; if not, stay shallower. |
 | **Retrieval backend** (lexical/graph vs embedding) | **Ship R0-R2** (lexical + graph + co-occurrence, deterministic) as default; build R3 (embedding) as a **pluggable hybrid** add-on (Section 4.2). | **Retrieval-miss rate that A1's anchor had to backstop**, **duplicate-introduction rate**, and **retrieved-subset relevance hit-rate**. Enable R3 embedding only when these show an R0-R2 recall gap. |
 | **Eviction thresholds** (recency horizon M, centrality floor, eviction horizon) | **Start conservative** — long horizons, high importance bar; forget little. | Distributions of **mention recency**, **centrality**, and **time-since-last-seen** for entities that later re-mention. Tighten thresholds only when telemetry shows forgotten entities rarely return (or return safely via promote-on-mention). |
 | **A1 refresh cadence** (N) | **Hybrid default:** A1-VOL every turn; A1-SAL + IDX tiering every N turns + on status-change events. Seed N from the spike. | Staleness incidents (digest reported a superseded current state) vs recompute cost. Shorten N if staleness appears; lengthen if recompute dominates. |
