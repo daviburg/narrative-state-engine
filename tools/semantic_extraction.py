@@ -1193,9 +1193,17 @@ def _get_type_tiering_config(
     permanent_types: frozenset[str] = (
         frozenset(raw_types) if isinstance(raw_types, list) else _PC_REL_PERMANENT_TYPES_DEFAULT
     )
-    volatile_tail_cap: int = int(
-        ctx_opt.get("pc_rel_volatile_tail_cap", _PC_REL_VOLATILE_TAIL_CAP_DEFAULT)
-    )
+    # Parse the volatile-tail cap defensively: a malformed value (null,
+    # "ten", a list, etc.) must never crash extraction — especially while the
+    # feature is OFF, since this reader runs unconditionally on every turn.
+    # Fall back to the default and clamp negatives to 0.
+    raw_cap = ctx_opt.get("pc_rel_volatile_tail_cap", _PC_REL_VOLATILE_TAIL_CAP_DEFAULT)
+    try:
+        volatile_tail_cap: int = int(raw_cap)
+    except (TypeError, ValueError):
+        volatile_tail_cap = _PC_REL_VOLATILE_TAIL_CAP_DEFAULT
+    if volatile_tail_cap < 0:
+        volatile_tail_cap = 0
     return enabled, permanent_types, volatile_tail_cap
 
 
@@ -1673,15 +1681,22 @@ def _format_prior_entity_context(
     rels = current_entry.get("relationships")
     _tiering_on, _perm_types, _vol_cap = _get_type_tiering_config(config)
     if rels and is_pc and arcs_data:
-        compact = _compact_relationships_with_arcs(rels, arcs_data)
         if _tiering_on:
-            compact = _apply_pc_rel_type_tier(
-                compact,
+            # Apply the type-tier cap to the RAW relationships first, then
+            # compact. Compaction (#120) drops ``last_updated_turn`` for
+            # arc-summarised rels, which would zero out their recency and make
+            # the volatile tail sort incorrectly. Tiering on the raw list keeps
+            # recency intact. Flag-OFF path is unchanged (compact only), so the
+            # A/B control output stays byte-identical.
+            tiered = _apply_pc_rel_type_tier(
+                rels,
                 mentioned_ids or set(),
                 _perm_types,
                 _vol_cap,
             )
-        prior["relationships"] = compact
+            prior["relationships"] = _compact_relationships_with_arcs(tiered, arcs_data)
+        else:
+            prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
     elif rels and is_pc:
         if _tiering_on:
             prior["relationships"] = _apply_pc_rel_type_tier(

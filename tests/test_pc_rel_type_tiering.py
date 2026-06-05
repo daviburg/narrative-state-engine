@@ -13,6 +13,8 @@ import json
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
 
 import semantic_extraction as se
@@ -95,7 +97,9 @@ class TestGetTypeTieringConfig:
         assert enabled is True
 
     def test_default_permanent_types(self):
-        enabled, perm, cap = se._get_type_tiering_config(_CFG_ON)
+        # Omit pc_rel_permanent_types so the built-in default list is exercised.
+        cfg = {"context_optimizations": {"relationship_type_tiering": True}}
+        enabled, perm, cap = se._get_type_tiering_config(cfg)
         assert "kinship" in perm
         assert "adversarial" in perm
         assert "mentorship" in perm
@@ -105,7 +109,9 @@ class TestGetTypeTieringConfig:
         assert "debt" in perm
 
     def test_default_volatile_tail_cap(self):
-        enabled, perm, cap = se._get_type_tiering_config(_CFG_ON)
+        # Omit pc_rel_volatile_tail_cap so the built-in default is exercised.
+        cfg = {"context_optimizations": {"relationship_type_tiering": True}}
+        enabled, perm, cap = se._get_type_tiering_config(cfg)
         assert cap == 10
 
     def test_custom_cap(self):
@@ -597,3 +603,142 @@ class TestCollectExistingRelationshipsL4:
         if out:
             parsed = json.loads(out)
             assert isinstance(parsed, dict)
+
+
+# ===========================================================================
+# Defensive config parsing (Copilot review: malformed cap must not crash)
+# ===========================================================================
+
+class TestVolatileTailCapParsing:
+    """A malformed pc_rel_volatile_tail_cap must never crash extraction,
+    especially while the feature is OFF (the reader runs every turn)."""
+
+    @pytest.mark.parametrize("bad_cap", [None, "ten", "10", [], {}, 3.5])
+    def test_malformed_cap_does_not_crash_when_off(self, bad_cap):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": False,
+                "pc_rel_volatile_tail_cap": bad_cap,
+            }
+        }
+        enabled, _perm, cap = se._get_type_tiering_config(cfg)
+        assert enabled is False
+        assert isinstance(cap, int)
+        assert cap >= 0
+
+    @pytest.mark.parametrize("bad_cap", [None, "ten", [], {}])
+    def test_non_numeric_cap_falls_back_to_default(self, bad_cap):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_volatile_tail_cap": bad_cap,
+            }
+        }
+        _enabled, _perm, cap = se._get_type_tiering_config(cfg)
+        assert cap == se._PC_REL_VOLATILE_TAIL_CAP_DEFAULT
+
+    def test_numeric_string_cap_is_coerced(self):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_volatile_tail_cap": "5",
+            }
+        }
+        _enabled, _perm, cap = se._get_type_tiering_config(cfg)
+        assert cap == 5
+
+    def test_negative_cap_clamped_to_zero(self):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_volatile_tail_cap": -3,
+            }
+        }
+        _enabled, _perm, cap = se._get_type_tiering_config(cfg)
+        assert cap == 0
+
+
+# ===========================================================================
+# PC + arcs path recency (Copilot review: arc summaries drop last_updated_turn)
+# ===========================================================================
+
+class TestPcArcsPathRecency:
+    """On the PC+arcs path, arc-summarised rels lose last_updated_turn during
+    compaction. Tiering must run on the RAW rels so recency ordering of the
+    volatile tail is preserved, and flag-OFF must stay byte-identical."""
+
+    def _arcs_for(self, target_ids):
+        return {
+            "arcs": {
+                tid: {
+                    "arc_summary": [{"phase": "met"}, {"phase": "allied"}],
+                    "current_relationship": "trusted ally",
+                }
+                for tid in target_ids
+            }
+        }
+
+    def test_recent_arc_summarised_volatile_kept_over_older(self):
+        """A recent volatile rel that has an arc summary must outrank older
+        volatile rels in the tail (it must not sort as turn-0)."""
+        # 5 volatile rels, all with arc summaries; cap is 10 so all survive,
+        # but we assert the most-recent ones are present and ordered by recency.
+        recent = _make_rel("char-recent", rel_type="ally", last_updated_turn="turn-099")
+        older = [
+            _make_rel(f"char-old-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{10 + i:03d}")
+            for i in range(15)
+        ]
+        all_rels = older + [recent]
+        target_ids = [r["target_id"] for r in all_rels]
+        entry = _make_pc_entry(relationships=all_rels)
+        out = se._format_prior_entity_context(
+            entry, arcs_data=self._arcs_for(target_ids),
+            config=_CFG_ON, mentioned_ids=set(), current_turn_num=100,
+        )
+        parsed = json.loads(out)
+        result_ids = [r["target_id"] for r in parsed["relationships"]]
+        # cap=10 volatile: the most recent rel must survive the tail trim.
+        assert "char-recent" in result_ids
+        # The oldest rel (turn-010) should be trimmed before the recent one.
+        assert "char-old-0" not in result_ids
+
+    def test_arcs_path_flag_off_byte_identical(self):
+        """Flag OFF on the PC+arcs path must equal the pre-feature output."""
+        rels = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{50 + i:03d}")
+            for i in range(8)
+        ]
+        target_ids = [r["target_id"] for r in rels]
+        arcs = self._arcs_for(target_ids)
+        entry = _make_pc_entry(relationships=rels)
+        out_none = se._format_prior_entity_context(
+            entry, arcs_data=arcs, config=None,
+            mentioned_ids=set(), current_turn_num=100,
+        )
+        out_off = se._format_prior_entity_context(
+            entry, arcs_data=arcs, config=_CFG_OFF,
+            mentioned_ids=set(), current_turn_num=100,
+        )
+        assert out_none == out_off
+
+    def test_arcs_path_permanent_bond_survives(self):
+        """A permanent bond with an arc summary survives a large volatile tail
+        on the PC+arcs path."""
+        kin = _make_rel("char-kin", rel_type="kinship", last_updated_turn="turn-001")
+        volatile = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(50)
+        ]
+        all_rels = [kin] + volatile
+        target_ids = [r["target_id"] for r in all_rels]
+        entry = _make_pc_entry(relationships=all_rels)
+        out = se._format_prior_entity_context(
+            entry, arcs_data=self._arcs_for(target_ids),
+            config=_CFG_ON, mentioned_ids=set(), current_turn_num=344,
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        assert "char-kin" in result_ids
