@@ -210,6 +210,15 @@ The extraction pipeline applies context budget controls automatically to prevent
 - Stable attributes: preserved in full
 - Entity detail calls per turn capped at 6 (PC excluded from cap; new entities prioritized over existing)
 
+**PC Type-Tiered Relationship Cap** (L1+L4, epic #477): Closes the gap left by #385, which capped non-PC relationship detail and the relationship-mapper budget but left the PC path uncapped. Enabled via `context_optimizations.relationship_type_tiering` in `config/llm.json` (default OFF; same-commit flag-OFF run serves as A/B control).
+- **L1 (entity_detail PC path)**: `_format_prior_entity_context` applies `_apply_pc_rel_type_tier()` to the PC relationship list. Relationship types are partitioned into two groups:
+  - *Permanent bonds* (`kinship`, `adversarial`, `mentorship`, `political`, `partnership`, `captor`, `debt`): kept uncapped — these are long-arc callback anchors that never resolve in practice and cannot be reliably filtered by recency or status.
+  - *Volatile tail* (all other types, e.g. `ally`, `spatial`): capped at `pc_rel_volatile_tail_cap` (default 10), sorted by recency (most recent first).
+  - *Mentioned-this-turn force-keep*: any relationship whose target appears in the current turn's mentioned-entity set is kept regardless of type or cap position.
+  - Result: a 109-relationship PC web shrinks to ~30–40 retained entries without dropping any permanent-bond type or any mentioned-this-turn relationship. A/B validation (344t, same-commit flag-OFF control, port-8000 lane, P1) is a separate follow-up task after this PR merges.
+- **L4 (relationship_mapper budget)**: `_collect_existing_relationships` applies the same permanent-type logic to the tier-assignment step. Permanent-bond types are promoted to at least tier 2 when one endpoint is mentioned, and prevented from reaching tier 4 (omit) even when neither endpoint is mentioned. This ensures the volatile tail is trimmed first under budget pressure while permanent bonds survive. Configurable via the same `relationship_type_tiering` flag.
+- Permanent-type list and volatile-tail cap are configurable in `config/llm.json` under `context_optimizations` (`pc_rel_permanent_types`, `pc_rel_volatile_tail_cap`). These are structural schema-type enums, not domain content words (Rule 9).
+
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 
 #### Raw-vs-Compressed Instrumentation (#464, PR-1)

@@ -1,0 +1,599 @@
+"""Unit tests for type-tiered PC relationship cap (L1+L4, epic #477).
+
+Covers:
+  (a) flag OFF: byte-identical output to pre-#477 behaviour (golden)
+  (b) flag ON: keeps ALL permanent-bond types + force-keeps mentioned-this-turn
+      + caps the volatile tail
+  (c) synthetic 109-relationship PC shrinks to ~30-40 WITHOUT dropping any
+      permanent-type or mentioned relationship
+  (d) a <=t100 kinship/adversarial callback anchor SURVIVES
+"""
+
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "tools"))
+
+import semantic_extraction as se
+
+# ---------------------------------------------------------------------------
+# Config helpers
+# ---------------------------------------------------------------------------
+
+_CFG_OFF = {
+    "context_optimizations": {
+        "relationship_type_tiering": False,
+    }
+}
+
+_CFG_ON = {
+    "context_optimizations": {
+        "relationship_type_tiering": True,
+        "pc_rel_permanent_types": [
+            "kinship", "adversarial", "mentorship", "political",
+            "partnership", "captor", "debt",
+        ],
+        "pc_rel_volatile_tail_cap": 10,
+    }
+}
+
+
+def _make_rel(
+    target_id,
+    rel_type="ally",
+    status="active",
+    last_updated_turn="turn-090",
+    source_id="char-player",
+    history=None,
+):
+    rel = {
+        "source_id": source_id,
+        "target_id": target_id,
+        "type": rel_type,
+        "status": status,
+        "last_updated_turn": last_updated_turn,
+        "current_relationship": f"test rel to {target_id}",
+    }
+    if history is not None:
+        rel["history"] = history
+    return rel
+
+
+def _make_pc_entry(relationships=None):
+    entry = {
+        "id": "char-player",
+        "name": "Player Character",
+        "type": "character",
+        "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-100",
+        "identity": "The protagonist",
+        "current_status": "active",
+        "stable_attributes": {"species": "human", "class": "ranger", "aliases": ["Hero"]},
+        "volatile_state": {"equipment": [{"turn": "turn-100", "value": "sword"}]},
+    }
+    if relationships is not None:
+        entry["relationships"] = relationships
+    return entry
+
+
+# ===========================================================================
+# _get_type_tiering_config
+# ===========================================================================
+
+class TestGetTypeTieringConfig:
+    def test_returns_disabled_by_default(self):
+        enabled, perm, cap = se._get_type_tiering_config(None)
+        assert enabled is False
+
+    def test_returns_disabled_when_flag_false(self):
+        enabled, perm, cap = se._get_type_tiering_config(_CFG_OFF)
+        assert enabled is False
+
+    def test_returns_enabled_when_flag_true(self):
+        enabled, perm, cap = se._get_type_tiering_config(_CFG_ON)
+        assert enabled is True
+
+    def test_default_permanent_types(self):
+        enabled, perm, cap = se._get_type_tiering_config(_CFG_ON)
+        assert "kinship" in perm
+        assert "adversarial" in perm
+        assert "mentorship" in perm
+        assert "political" in perm
+        assert "partnership" in perm
+        assert "captor" in perm
+        assert "debt" in perm
+
+    def test_default_volatile_tail_cap(self):
+        enabled, perm, cap = se._get_type_tiering_config(_CFG_ON)
+        assert cap == 10
+
+    def test_custom_cap(self):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_volatile_tail_cap": 5,
+            }
+        }
+        _, _, cap = se._get_type_tiering_config(cfg)
+        assert cap == 5
+
+    def test_custom_permanent_types(self):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_permanent_types": ["kinship"],
+            }
+        }
+        _, perm, _ = se._get_type_tiering_config(cfg)
+        assert perm == frozenset({"kinship"})
+
+
+# ===========================================================================
+# _apply_pc_rel_type_tier
+# ===========================================================================
+
+class TestApplyPcRelTypeTier:
+    """Tests for the _apply_pc_rel_type_tier helper."""
+
+    _PERM = frozenset({"kinship", "adversarial", "mentorship", "political",
+                       "partnership", "captor", "debt"})
+
+    def test_keeps_all_permanent_types(self):
+        """All permanent-bond type rels survive regardless of count."""
+        rels = [
+            _make_rel(f"char-kin-{i}", rel_type="kinship") for i in range(15)
+        ] + [
+            _make_rel(f"char-adv-{i}", rel_type="adversarial") for i in range(10)
+        ]
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=10)
+        result_ids = {r["target_id"] for r in result}
+        for i in range(15):
+            assert f"char-kin-{i}" in result_ids
+        for i in range(10):
+            assert f"char-adv-{i}" in result_ids
+
+    def test_force_keeps_mentioned_volatile(self):
+        """Mentioned-this-turn target is kept regardless of type/position."""
+        rels = [
+            _make_rel("char-social-99", rel_type="ally"),  # volatile, mentioned
+        ] + [
+            _make_rel(f"char-vol-{i}", rel_type="ally") for i in range(20)
+        ]
+        result = se._apply_pc_rel_type_tier(
+            rels, {"char-social-99"}, self._PERM, volatile_tail_cap=5
+        )
+        result_ids = {r["target_id"] for r in result}
+        assert "char-social-99" in result_ids
+
+    def test_volatile_tail_cap_applied(self):
+        """Volatile (non-permanent, non-mentioned) rels capped at volatile_tail_cap."""
+        rels = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(30)
+        ]
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=10)
+        assert len(result) == 10
+
+    def test_permanent_not_counted_against_volatile_cap(self):
+        """Permanent bonds are kept on top of the volatile tail cap."""
+        rels = (
+            [_make_rel(f"char-kin-{i}", rel_type="kinship") for i in range(5)]
+            + [_make_rel(f"char-vol-{i}", rel_type="ally",
+                         last_updated_turn=f"turn-{100 - i:03d}") for i in range(20)]
+        )
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=10)
+        perm_count = sum(1 for r in result if r["type"] == "kinship")
+        vol_count = sum(1 for r in result if r["type"] == "ally")
+        assert perm_count == 5
+        assert vol_count == 10
+
+    def test_history_trimmed_to_3(self):
+        """History arrays are trimmed to the last 3 entries."""
+        rels = [
+            _make_rel("char-x", rel_type="kinship",
+                      history=[{"turn": f"turn-{i}"} for i in range(10)]),
+        ]
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=10)
+        assert len(result[0]["history"]) == 3
+
+    def test_volatile_sorted_by_recency(self):
+        """Volatile tail keeps the most recently updated rels."""
+        rels = [
+            _make_rel("char-old", rel_type="ally", last_updated_turn="turn-001"),
+            _make_rel("char-new", rel_type="ally", last_updated_turn="turn-099"),
+        ]
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=1)
+        assert result[0]["target_id"] == "char-new"
+        assert all(r["target_id"] != "char-old" for r in result)
+
+    def test_early_kinship_survives(self):
+        """A kinship relationship first seen at turn-001 survives the cap (d)."""
+        early_kinship = _make_rel(
+            "char-parent", rel_type="kinship", last_updated_turn="turn-001"
+        )
+        volatile_filler = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(50)
+        ]
+        rels = [early_kinship] + volatile_filler
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=10)
+        result_ids = {r["target_id"] for r in result}
+        assert "char-parent" in result_ids
+
+    def test_early_adversarial_survives(self):
+        """An adversarial relationship first seen at turn-050 survives (d)."""
+        adv = _make_rel("char-villain", rel_type="adversarial", last_updated_turn="turn-050")
+        volatile_filler = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(50)
+        ]
+        rels = [adv] + volatile_filler
+        result = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=10)
+        assert any(r["target_id"] == "char-villain" for r in result)
+
+
+# ===========================================================================
+# _format_prior_entity_context — flag OFF golden test (a)
+# ===========================================================================
+
+class TestFormatPriorEntityContextFlagOff:
+    """(a) flag OFF must produce byte-identical output to pre-#477 baseline."""
+
+    def _make_rels(self, n=5):
+        return [
+            _make_rel(f"char-npc-{i}", rel_type="ally") for i in range(n)
+        ]
+
+    def test_flag_off_no_relationships_unchanged(self):
+        """PC entry with no relationships: flag OFF == no config (golden)."""
+        entry = _make_pc_entry(relationships=None)
+        out_none = se._format_prior_entity_context(
+            entry, config=None, mentioned_ids=set(), current_turn_num=100
+        )
+        out_off = se._format_prior_entity_context(
+            entry, config=_CFG_OFF, mentioned_ids=set(), current_turn_num=100
+        )
+        assert out_none == out_off
+
+    def test_flag_off_with_relationships_unchanged(self):
+        """PC with relationships: flag OFF produces same output as no config."""
+        rels = self._make_rels(10)
+        entry = _make_pc_entry(relationships=rels)
+        out_none = se._format_prior_entity_context(
+            entry, config=None, mentioned_ids=set(), current_turn_num=100
+        )
+        out_off = se._format_prior_entity_context(
+            entry, config=_CFG_OFF, mentioned_ids=set(), current_turn_num=100
+        )
+        assert out_none == out_off
+
+    def test_flag_off_preserves_all_relationships(self):
+        """PC with 20 rels and flag OFF: all 20 included (no count cap)."""
+        rels = [_make_rel(f"char-x-{i}") for i in range(20)]
+        entry = _make_pc_entry(relationships=rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_OFF, mentioned_ids=set(), current_turn_num=100
+        )
+        parsed = json.loads(out)
+        assert len(parsed["relationships"]) == 20
+
+
+# ===========================================================================
+# _format_prior_entity_context — flag ON tests (b)
+# ===========================================================================
+
+class TestFormatPriorEntityContextFlagOn:
+    """(b) flag ON: keeps ALL permanent-bond types + force-keeps mentioned +
+    caps volatile tail."""
+
+    def test_keeps_all_permanent_bond_types(self):
+        """All permanent-bond type rels survive when flag ON."""
+        perm_rels = [
+            _make_rel("char-mom", rel_type="kinship", last_updated_turn="turn-001"),
+            _make_rel("char-enemy", rel_type="adversarial", last_updated_turn="turn-050"),
+            _make_rel("char-mentor", rel_type="mentorship", last_updated_turn="turn-010"),
+            _make_rel("char-king", rel_type="political", last_updated_turn="turn-020"),
+            _make_rel("char-partner", rel_type="partnership", last_updated_turn="turn-030"),
+            _make_rel("char-captor", rel_type="captor", last_updated_turn="turn-060"),
+            _make_rel("char-debt", rel_type="debt", last_updated_turn="turn-070"),
+        ]
+        volatile_rels = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(50)
+        ]
+        entry = _make_pc_entry(relationships=perm_rels + volatile_rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=100
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        for rel in perm_rels:
+            assert rel["target_id"] in result_ids, (
+                f"Permanent-bond rel {rel['target_id']} ({rel['type']}) missing from output"
+            )
+
+    def test_force_keeps_mentioned_volatile(self):
+        """A volatile rel whose target is mentioned this turn is force-kept."""
+        volatile_rels = [
+            _make_rel("char-mentioned", rel_type="ally", last_updated_turn="turn-001"),
+        ] + [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(30)
+        ]
+        entry = _make_pc_entry(relationships=volatile_rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON,
+            mentioned_ids={"char-mentioned"},
+            current_turn_num=100,
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        assert "char-mentioned" in result_ids
+
+    def test_volatile_tail_capped(self):
+        """Volatile rels beyond the cap are dropped when flag ON."""
+        volatile_rels = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(50)
+        ]
+        entry = _make_pc_entry(relationships=volatile_rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=100
+        )
+        parsed = json.loads(out)
+        # volatile_tail_cap=10, 0 permanent, 0 mentioned
+        assert len(parsed["relationships"]) == 10
+
+    def test_flag_on_reduces_total_count(self):
+        """Flag ON reduces relationship count vs flag OFF for large PC."""
+        rels = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{100 - i:03d}")
+            for i in range(30)
+        ]
+        entry = _make_pc_entry(relationships=rels)
+        out_off = se._format_prior_entity_context(
+            entry, config=_CFG_OFF, mentioned_ids=set(), current_turn_num=100
+        )
+        out_on = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=100
+        )
+        count_off = len(json.loads(out_off)["relationships"])
+        count_on = len(json.loads(out_on)["relationships"])
+        assert count_on < count_off
+
+
+# ===========================================================================
+# 109-relationship synthetic PC (c)
+# ===========================================================================
+
+class TestSyntheticPC109Relationships:
+    """(c) Synthetic 109-relationship PC web shrinks to ~30-40."""
+
+    def _build_109_rels(self):
+        """Build a realistic 109-relationship distribution."""
+        rels = []
+        # ~20 permanent bonds
+        for i in range(4):
+            rels.append(_make_rel(f"char-kin-{i}", rel_type="kinship",
+                                  last_updated_turn=f"turn-{10 + i:03d}"))
+        for i in range(5):
+            rels.append(_make_rel(f"char-adv-{i}", rel_type="adversarial",
+                                  last_updated_turn=f"turn-{20 + i:03d}"))
+        for i in range(3):
+            rels.append(_make_rel(f"char-mentor-{i}", rel_type="mentorship",
+                                  last_updated_turn=f"turn-{15 + i:03d}"))
+        for i in range(3):
+            rels.append(_make_rel(f"char-pol-{i}", rel_type="political",
+                                  last_updated_turn=f"turn-{30 + i:03d}"))
+        for i in range(3):
+            rels.append(_make_rel(f"char-part-{i}", rel_type="partnership",
+                                  last_updated_turn=f"turn-{40 + i:03d}"))
+        rels.append(_make_rel("char-captor-0", rel_type="captor",
+                              last_updated_turn="turn-060"))
+        rels.append(_make_rel("char-debt-0", rel_type="debt",
+                              last_updated_turn="turn-070"))
+        # ~89 volatile rels
+        for i in range(89):
+            rels.append(_make_rel(f"char-vol-{i}", rel_type="ally",
+                                  last_updated_turn=f"turn-{100 - (i % 90):03d}"))
+        assert len(rels) == 109
+        return rels
+
+    def test_shrinks_to_30_40(self):
+        """109-rel PC with flag ON shrinks to ~30-40 total retained."""
+        rels = self._build_109_rels()
+        entry = _make_pc_entry(relationships=rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=344
+        )
+        parsed = json.loads(out)
+        count = len(parsed["relationships"])
+        assert 25 <= count <= 45, (
+            f"Expected 25-45 retained relationships, got {count}"
+        )
+
+    def test_no_permanent_type_dropped(self):
+        """No permanent-bond type relationship is dropped in the 109-rel case."""
+        rels = self._build_109_rels()
+        entry = _make_pc_entry(relationships=rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=344
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        perm_types = {
+            "kinship", "adversarial", "mentorship", "political",
+            "partnership", "captor", "debt",
+        }
+        perm_rels = [r for r in rels if r["type"] in perm_types]
+        for rel in perm_rels:
+            assert rel["target_id"] in result_ids, (
+                f"Permanent rel {rel['target_id']} ({rel['type']}) was dropped"
+            )
+
+    def test_mentioned_rel_survives_109(self):
+        """A mentioned-this-turn volatile rel survives even in the 109-rel case."""
+        rels = self._build_109_rels()
+        # Make char-vol-88 mentioned this turn
+        mentioned_target = "char-vol-88"
+        entry = _make_pc_entry(relationships=rels)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON,
+            mentioned_ids={mentioned_target},
+            current_turn_num=344,
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        assert mentioned_target in result_ids
+
+
+# ===========================================================================
+# (d) Early kinship/adversarial callback anchor survives
+# ===========================================================================
+
+class TestEarlyCallbackAnchorSurvives:
+    """(d) A <=t100 kinship or adversarial bond survives regardless of position."""
+
+    def test_kinship_turn_001_survives(self):
+        """A kinship bond first seen at turn-001 survives a large volatile tail."""
+        early_kinship = _make_rel(
+            "char-family-member", rel_type="kinship", last_updated_turn="turn-001"
+        )
+        volatile_filler = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{300 - i:03d}")
+            for i in range(100)
+        ]
+        entry = _make_pc_entry(relationships=[early_kinship] + volatile_filler)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=344
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        assert "char-family-member" in result_ids
+
+    def test_adversarial_turn_050_survives(self):
+        """An adversarial bond from turn-050 survives a large volatile tail."""
+        adv = _make_rel(
+            "char-arch-enemy", rel_type="adversarial", last_updated_turn="turn-050"
+        )
+        volatile_filler = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{300 - i:03d}")
+            for i in range(100)
+        ]
+        entry = _make_pc_entry(relationships=[adv] + volatile_filler)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=344
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        assert "char-arch-enemy" in result_ids
+
+    def test_mentorship_early_survives(self):
+        """A mentorship bond from turn-100 survives across 100 volatile rels."""
+        mentor_rel = _make_rel(
+            "char-mentor", rel_type="mentorship", last_updated_turn="turn-100"
+        )
+        volatile_filler = [
+            _make_rel(f"char-vol-{i}", rel_type="ally",
+                      last_updated_turn=f"turn-{300 - i:03d}")
+            for i in range(100)
+        ]
+        entry = _make_pc_entry(relationships=[mentor_rel] + volatile_filler)
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=344
+        )
+        parsed = json.loads(out)
+        result_ids = {r["target_id"] for r in parsed["relationships"]}
+        assert "char-mentor" in result_ids
+
+
+# ===========================================================================
+# L4: _collect_existing_relationships type-tiering
+# ===========================================================================
+
+class TestCollectExistingRelationshipsL4:
+    """L4 tests: permanent-bond types survive budget trim in relmap."""
+
+    def _make_catalog_with_pc_rels(self, rels):
+        """Build a minimal catalogs dict with the PC having the given rels."""
+        pc_entry = {
+            "id": "char-player",
+            "name": "Player",
+            "type": "character",
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-100",
+            "relationships": rels,
+        }
+        return {
+            "characters": [pc_entry],
+            "locations": [],
+            "items": [],
+            "factions": [],
+        }
+
+    def test_flag_off_byte_identical_to_no_config(self):
+        """L4: flag OFF produces same tier assignment as no config (golden)."""
+        rels = [
+            _make_rel("char-kin", rel_type="kinship"),
+            _make_rel("char-vol", rel_type="ally"),
+        ]
+        catalogs = self._make_catalog_with_pc_rels(rels)
+        out_none = se._collect_existing_relationships(
+            catalogs, ["char-player"],
+            config=None, current_turn_num=100
+        )
+        out_off = se._collect_existing_relationships(
+            catalogs, ["char-player"],
+            config=_CFG_OFF, current_turn_num=100
+        )
+        assert out_none == out_off
+
+    def test_permanent_bond_promoted_over_volatile(self):
+        """L4 ON: permanent bond not demoted to omit while volatile at tier-3."""
+        # With a tight budget, tier-3 gets dropped first.
+        # A permanent bond (kinship) + many volatile rels:
+        # flag ON should protect the kinship rel.
+        rels = (
+            [_make_rel("char-kin", rel_type="kinship",
+                       source_id="char-player", last_updated_turn="turn-001")]
+            + [
+                _make_rel(f"char-vol-{i}", rel_type="ally",
+                          source_id="char-player",
+                          last_updated_turn=f"turn-{80 + i:03d}")
+                for i in range(20)
+            ]
+        )
+        catalogs = self._make_catalog_with_pc_rels(rels)
+        # char-player is mentioned, making one_mentioned=True for all PC rels
+        out = se._collect_existing_relationships(
+            catalogs, ["char-player"],
+            config=_CFG_ON, current_turn_num=100,
+            context_length=4096,  # small budget to force degradation
+        )
+        # kinship should appear in output
+        assert "char-kin" in out
+
+    def test_flag_on_same_result_structure(self):
+        """L4 ON: output is still valid JSON."""
+        rels = [
+            _make_rel("char-kin", rel_type="kinship"),
+            _make_rel("char-ally", rel_type="ally"),
+        ]
+        catalogs = self._make_catalog_with_pc_rels(rels)
+        out = se._collect_existing_relationships(
+            catalogs, ["char-player"],
+            config=_CFG_ON, current_turn_num=100
+        )
+        if out:
+            parsed = json.loads(out)
+            assert isinstance(parsed, dict)
