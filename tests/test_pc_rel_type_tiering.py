@@ -34,7 +34,7 @@ _CFG_ON = {
         "relationship_type_tiering": True,
         "pc_rel_permanent_types": [
             "kinship", "adversarial", "mentorship", "political",
-            "partnership", "captor", "debt",
+            "partnership", "factional", "social",
         ],
         "pc_rel_volatile_tail_cap": 10,
     }
@@ -166,7 +166,7 @@ class TestApplyPcRelTypeTier:
     """Tests for the _apply_pc_rel_type_tier helper."""
 
     _PERM = frozenset({"kinship", "adversarial", "mentorship", "political",
-                       "partnership", "captor", "debt"})
+                       "partnership", "factional", "social"})
 
     def test_keeps_all_permanent_types(self):
         """All permanent-bond type rels survive regardless of count."""
@@ -327,8 +327,8 @@ class TestFormatPriorEntityContextFlagOn:
             _make_rel("char-mentor", rel_type="mentorship", last_updated_turn="turn-010"),
             _make_rel("char-king", rel_type="political", last_updated_turn="turn-020"),
             _make_rel("char-partner", rel_type="partnership", last_updated_turn="turn-030"),
-            _make_rel("char-captor", rel_type="captor", last_updated_turn="turn-060"),
-            _make_rel("char-debt", rel_type="debt", last_updated_turn="turn-070"),
+            _make_rel("char-factional", rel_type="factional", last_updated_turn="turn-060"),
+            _make_rel("char-social", rel_type="social", last_updated_turn="turn-070"),
         ]
         volatile_rels = [
             _make_rel(f"char-vol-{i}", rel_type="ally",
@@ -425,9 +425,9 @@ class TestSyntheticPC109Relationships:
         for i in range(3):
             rels.append(_make_rel(f"char-part-{i}", rel_type="partnership",
                                   last_updated_turn=f"turn-{40 + i:03d}"))
-        rels.append(_make_rel("char-captor-0", rel_type="captor",
+        rels.append(_make_rel("char-factional-0", rel_type="factional",
                               last_updated_turn="turn-060"))
-        rels.append(_make_rel("char-debt-0", rel_type="debt",
+        rels.append(_make_rel("char-social-0", rel_type="social",
                               last_updated_turn="turn-070"))
         # ~89 volatile rels
         for i in range(89):
@@ -460,7 +460,7 @@ class TestSyntheticPC109Relationships:
         result_ids = {r["target_id"] for r in parsed["relationships"]}
         perm_types = {
             "kinship", "adversarial", "mentorship", "political",
-            "partnership", "captor", "debt",
+            "partnership", "factional", "social",
         }
         perm_rels = [r for r in rels if r["type"] in perm_types]
         for rel in perm_rels:
@@ -679,6 +679,43 @@ class TestVolatileTailCapParsing:
         }
         _enabled, _perm, cap = se._get_type_tiering_config(cfg)
         assert cap == 0
+
+
+class TestPermanentTypesParsing:
+    """A malformed context_optimizations block or pc_rel_permanent_types value
+    must never crash extraction. The reader runs every turn, so a bad config
+    must degrade to defaults rather than raise — even while the feature is OFF."""
+
+    @pytest.mark.parametrize("bad_ctx_opt", [[], "tiering", 42, None])
+    def test_non_dict_context_optimizations_does_not_crash(self, bad_ctx_opt):
+        cfg = {"context_optimizations": bad_ctx_opt}
+        enabled, perm, cap = se._get_type_tiering_config(cfg)
+        assert enabled is False
+        assert perm == se._PC_REL_PERMANENT_TYPES_DEFAULT
+        assert cap == se._PC_REL_VOLATILE_TAIL_CAP_DEFAULT
+
+    def test_unhashable_permanent_type_entries_are_skipped(self):
+        """A list containing unhashable values (e.g. {} / []) must not raise;
+        only the string entries are kept."""
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_permanent_types": ["kinship", {}, [], 7, "political"],
+            }
+        }
+        _enabled, perm, _cap = se._get_type_tiering_config(cfg)
+        assert perm == frozenset({"kinship", "political"})
+
+    @pytest.mark.parametrize("bad_types", ["kinship", 5, {"kinship": True}])
+    def test_non_list_permanent_types_falls_back_to_default(self, bad_types):
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_permanent_types": bad_types,
+            }
+        }
+        _enabled, perm, _cap = se._get_type_tiering_config(cfg)
+        assert perm == se._PC_REL_PERMANENT_TYPES_DEFAULT
 
 
 # ===========================================================================

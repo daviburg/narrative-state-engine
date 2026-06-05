@@ -1199,11 +1199,20 @@ def _get_type_tiering_config(
     optional overrides for the permanent-type list and volatile tail cap.
     Default: disabled (byte-identical to pre-#477 behaviour when off).
     """
-    ctx_opt: dict = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    raw_ctx_opt = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    # context_optimizations may itself be malformed (e.g. a list/string): coerce
+    # to a dict so the unconditional per-turn read can never crash, even OFF.
+    ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
     enabled: bool = bool(ctx_opt.get("relationship_type_tiering", False))
     raw_types = ctx_opt.get("pc_rel_permanent_types")
+    # Parse the permanent-type list defensively: keep only string entries, so a
+    # malformed override (a non-list, or a list containing unhashable values
+    # such as {} or []) can never raise. Falls back to the default when no
+    # usable list is provided.
     permanent_types: frozenset[str] = (
-        frozenset(raw_types) if isinstance(raw_types, list) else _PC_REL_PERMANENT_TYPES_DEFAULT
+        frozenset(t for t in raw_types if isinstance(t, str))
+        if isinstance(raw_types, list)
+        else _PC_REL_PERMANENT_TYPES_DEFAULT
     )
     # Parse the volatile-tail cap defensively: a malformed value (null,
     # "ten", a list, etc.) must never crash extraction — especially while the
@@ -1512,7 +1521,7 @@ def _apply_pc_rel_type_tier(
 
     Partitions relationships into three groups:
     - **Permanent bonds** (kinship, adversarial, mentorship, political,
-      partnership, captor, debt): kept uncapped — these are long-arc callback
+      partnership): kept uncapped — these are long-arc callback
       anchors that never resolve in practice.
     - **Mentioned-this-turn volatile**: any relationship whose target is in
       *mentioned_ids* is force-kept regardless of type or cap.
