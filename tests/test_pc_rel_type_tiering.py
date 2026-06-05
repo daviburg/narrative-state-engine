@@ -105,8 +105,6 @@ class TestGetTypeTieringConfig:
         assert "mentorship" in perm
         assert "political" in perm
         assert "partnership" in perm
-        assert "captor" in perm
-        assert "debt" in perm
 
     def test_default_volatile_tail_cap(self):
         # Omit pc_rel_volatile_tail_cap so the built-in default is exercised.
@@ -133,6 +131,31 @@ class TestGetTypeTieringConfig:
         }
         _, perm, _ = se._get_type_tiering_config(cfg)
         assert perm == frozenset({"kinship"})
+
+    def test_default_permanent_types_subset_of_schema_enum(self):
+        """The built-in default permanent-type list must be a subset of the
+        relationship `type` enum in schemas/entity.schema.json (N2 fragility
+        guard, #477).  A type not in that enum can never appear on a validated
+        relationship, so listing it here would be dead config; conversely this
+        keeps the permanent list honest as the schema evolves.  Operators may
+        still override with arbitrary custom types — only the *default* is
+        pinned to the schema enum.
+        """
+        schema_path = os.path.join(
+            os.path.dirname(__file__), "..", "schemas", "entity.schema.json"
+        )
+        with open(schema_path, encoding="utf-8") as fh:
+            schema = json.load(fh)
+        rel_type_enum = set(
+            schema["properties"]["relationships"]["items"]["properties"]["type"]["enum"]
+        )
+        default_perm = set(se._PC_REL_PERMANENT_TYPES_DEFAULT)
+        assert default_perm, "default permanent-type list must not be empty"
+        missing = default_perm - rel_type_enum
+        assert not missing, (
+            f"default pc_rel_permanent_types contains types not in the "
+            f"relationship `type` schema enum: {sorted(missing)}"
+        )
 
 
 # ===========================================================================

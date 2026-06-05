@@ -1168,9 +1168,21 @@ _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
 # ---------------------------------------------------------------------------
 # Schema-level relationship types that represent long-arc callback anchors.
 # These are structural type enum values, not domain content words (Rule 9).
+#
+# INVARIANT: every member here MUST be a value in the relationship `type` enum
+# defined in schemas/entity.schema.json (mirrored in
+# schemas/relationship-index.schema.json and templates/extraction/
+# relationship-mapper.md).  A type that is not in that enum can never appear on
+# a validated relationship, so listing it here is dead config — and, worse, a
+# future model emitting a *new* bond type that is added to the schema but not
+# here would be silently treated as volatile.  The subset is asserted by
+# tests/test_pc_rel_type_tiering.py::test_default_permanent_types_subset_of_schema_enum.
+# The list is intentionally a subset (not all enum types are permanent): the
+# volatile types — factional, social, romantic, spatial, other — are the
+# trimmable tail.  Operators can still override with arbitrary custom types via
+# config.context_optimizations.pc_rel_permanent_types (open forward-compat path).
 _PC_REL_PERMANENT_TYPES_DEFAULT: frozenset[str] = frozenset({
     "kinship", "adversarial", "mentorship", "political", "partnership",
-    "captor", "debt",
 })
 
 # Maximum number of volatile-type (non-permanent) relationships to retain for

@@ -28,7 +28,7 @@
   "context_optimizations": {
     "relationship_type_tiering": false,
     "_comment": "L1+L4 type-tiered PC relationship cap (epic #477). Set true to cap PC entity-detail relationships by type: permanent bonds kept uncapped, volatile tail trimmed to pc_rel_volatile_tail_cap. Also promotes permanent-bond types in the relationship-mapper budget trim. Default OFF; same-commit flag-OFF run serves as A/B control.",
-    "pc_rel_permanent_types": ["kinship", "adversarial", "mentorship", "political", "partnership", "captor", "debt"],
+    "pc_rel_permanent_types": ["kinship", "adversarial", "mentorship", "political", "partnership"],
     "pc_rel_volatile_tail_cap": 10
   }
 }
