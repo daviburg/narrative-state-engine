@@ -1,7 +1,7 @@
 # Per-Turn Extraction Token Stabilization — Design Report
 
 **Status**: Design (pre-implementation). Deep-design-first artifact for the token-stabilization epic.
-**Baseline run**: `eval-qwen36-344t-full` (344-turn full extraction, qwen3.6, 374 logged turns).
+**Baseline run**: `eval-qwen36-344t-full` (344-turn full extraction, qwen3.6; 374 logged extraction records across the 344 distinct turns -- turns 1-30 were re-extracted and so are each logged twice).
 **Audience**: pipeline engineers (`@developer`), quality (`@quality-analyst`), model (`@model-optimizer`), and the dashboard developer.
 
 > **Every projected token number in Sections 3 and 4 is an ESTIMATE.** Estimates are labelled `[ESTIMATE]`
@@ -38,6 +38,8 @@ Per-turn **total input tokens** across the four extraction phases fit a clean st
 full 344-turn run:
 
 $$\text{total\_input\_tokens}(t) = 15182 + 88.62 \cdot t \qquad (n = 374,\ \text{linear fit})$$
+
+Here `n = 374` is the number of per-turn **extraction-log records** the fit is computed over, *not* a turn count: the run covers **344 distinct turns**, but turns 1-30 were re-extracted, so the first 30 turns contribute 60 records (314 single-record turns + 30 double-logged turns = 374 records). Every band mean in Section 2 is likewise a **per-record** mean.
 
 There is **no plateau** — the trend is linear and unbounded across the entire run. The slope of
 **~88.6 tokens per turn** is the runaway.
@@ -110,14 +112,22 @@ Stacked composition of per-turn tokens (MEASURED band means)
 
 ### 2.2 Per-phase slope contribution (MEASURED, derived)
 
-Dividing each phase's early->late growth by ~315 turns of separation between band midpoints:
+Dividing each phase's early->late growth by the **~306 turns** separating the two band midpoints
+(t1-30 midpoint t15.5, t300-344 midpoint t322):
 
 | Phase | early->late growth | approx slope (tok/turn) | share of 88.6 slope |
 |---|---:|---:|---:|
-| entity_detail | 9,831 -> 27,767 | ~57 | ~64% |
+| entity_detail | 9,831 -> 27,767 | ~59 | ~66% |
 | relationship_mapper | 2,546 -> 6,900 | ~14 | ~16% |
 | discovery | 2,991 -> 5,481 | ~8 | ~9% |
-| event_extractor | 1,754 -> 2,937 | ~4 | ~4% |
+| event_extractor | 1,754 -> 2,937 | ~4 | ~5% |
+
+> **Note — two-band approximation, not an exact decomposition.** These per-phase slopes are a two-point
+> estimate between the early and late band means, not a per-phase OLS fit. They sum to **~85 tok/turn**
+> (the two-band total slope `(43,084 - 17,122) / 306`), which **approximates but does not equal** the global
+> OLS slope of **88.62** computed over all 374 records (the mid-session band and per-record dispersion pull
+> the OLS slope slightly higher). The `share of 88.6 slope` column therefore sums to **~96%**, not 100%;
+> treat it as indicative attribution, not an exact split.
 
 The phase **shares** and the **slope shares** line up: entity_detail dominates both the level and the
 growth. Stabilization therefore has to win inside entity_detail first.
@@ -129,20 +139,22 @@ growth. Stabilization therefore has to win inside entity_detail first.
 | Sub-driver | t1–30 | t300–344 | what it is |
 |---|---:|---:|---|
 | detail calls / turn | 3.25 | 5.93 | more entities detailed as catalog grows (cap = 6) |
-| tokens / detail call | 2,600 | 4,631 | per-call prompt grows (PC prior-state web) |
+| tokens / detail call | 3,000 | 4,631 | per-call prompt grows (PC prior-state web) |
 | detail total | 9,831 | 27,767 | product of the two |
 
 Attributing the late-band detail total (27,767) to the three sub-drivers using a level/growth split
-(baseline = early `3.25 x 2600 = 8,450`):
+(baseline = early `3.25 x 3000 = 9,750`):
 
 | Sub-driver | est. tokens @t300–344 | mechanism |
 |---|---:|---|
-| **(A) irreducible baseline** | ~8,450 | 3.25 calls x 2,600 baseline/call — the early floor |
-| **(B) call-count growth** | ~7,000 | the +2.68 marginal calls valued at the baseline per-call rate |
-| **(C) PC-uncapped per-call growth** | ~12,300 | per-call size growth (incl. interaction), dominated by the PC detail call carrying an **uncapped relationship web** |
+| **(A) irreducible baseline** | ~9,750 | 3.25 calls x 3,000 baseline/call — the early floor |
+| **(B) call-count growth** | ~8,000 | the +2.68 marginal calls valued at the baseline per-call rate |
+| **(C) PC-uncapped per-call growth** | ~9,700 | per-call size growth (incl. interaction), dominated by the PC detail call carrying an **uncapped relationship web** |
 
-> Attribution method `[derived]`: (B) = `(5.93-3.25) x 2600`; (C) = `3.25 x (4631-2600)` + interaction
-> `(5.93-3.25) x (4631-2600)`. Sum ~= the measured +17,936 growth (within band-mean noise). These are a
+> Attribution method `[derived]`: (A) = `3.25 x 3000`; (B) = `(5.93-3.25) x 3000`; (C) = `3.25 x (4631-3000)`
+> + interaction `(5.93-3.25) x (4631-3000)` (= `5.93 x 1631`). A+B+C = `5.93 x 4631` ~= 27,460, and B+C ~=
+> the measured +17,936 detail growth (within band-mean noise; the small gap is the calls-vs-per-call
+> covariance, since mean(calls) x mean(per-call) != mean(calls x per-call)). These are a
 > *decomposition of measured aggregates*, not independent measurements of each sub-driver.
 
 **The PC-uncapped web, in detail (MEASURED at t344):** `char-player`'s catalog entry carries **109
@@ -184,9 +196,9 @@ assumptions, **(c)** confidence + failure modes, **(d)** quality risk, **(e)** p
 flowchart LR
     subgraph STACK["Per-turn token stack @t300 (41768)"]
         D["discovery 5481 / 13%"]
-        ED_A["entity_detail (A) baseline ~8450"]
-        ED_B["entity_detail (B) call-count growth ~7000"]
-        ED_C["entity_detail (C) PC-uncapped per-call ~12300"]
+        ED_A["entity_detail (A) baseline ~9750"]
+        ED_B["entity_detail (B) call-count growth ~8000"]
+        ED_C["entity_detail (C) PC-uncapped per-call ~9700"]
         RM["relationship_mapper 6900 / 16%"]
         EV["event 2937 / 7%"]
     end
@@ -283,7 +295,10 @@ risk/reward**; sequence after L1/L4 land so its delta is measured against a tigh
 ### L3 — Detail selection-fix (NOT a lower cap)
 
 **(a) Slice attacked.** sub-driver **(B)** call-count growth — but **not** by lowering the cap. The cap=6
-already drops entities (the run capped **525 entity updates**). L3 fixes *which* 6 are kept so the cap never
+already drops entities (across the run **262 non-PC entity-detail candidates were skipped** — the run total of
+the `entity_detail_capped_count` log field, summed over the 78 turns that hit the per-turn detail cap of 6;
+each skipped candidate is an entity that was *not* re-detailed that turn, i.e. a dropped detail call, **not**
+a confirmed lost state update). L3 fixes *which* 6 are kept so the cap never
 drops a **state-change** entity (an entity whose status/volatile-state changed this turn), replacing the
 current "PC + new + existing-by-confidence" ordering with change-aware selection.
 
@@ -296,7 +311,7 @@ compress the PC web and batch calls only once you trust that important entities 
 resizes.
 
 **(d) Quality risk: the selection must NOT drop state-change entities (`@quality-analyst`).** That is the
-whole point of L3; the risk is in *not* doing it (the 525 capped updates may have silently dropped real
+whole point of L3; the risk is in *not* doing it (the **262 skipped entity-detail candidates** may have silently dropped real
 state changes — quality impact currently unknown).
 
 **(e) Prerequisite.** **Ships first** as the guardrail that makes L1's PC cap and L2's batching safe to
@@ -324,14 +339,16 @@ slope each lever removes, and re-assemble a projected slope. **All projected cur
 
 | Slope component | measured tok/turn | lever | est. slope removed | residual |
 |---|---:|---|---:|---:|
-| entity_detail per-call (C) | ~28 of 57 | L1 | ~12–20 | ~8–16 |
-| entity_detail call-count (B) | ~29 of 57 | L2 | ~18–26 | ~3–11 |
+| entity_detail per-call (C) | ~32 of 59 | L1 | ~12–20 | ~12–20 |
+| entity_detail call-count (B) | ~26 of 59 | L2 | ~18–26 | ~0–8 |
 | relationship_mapper | ~14 | L4 | ~8–11 | ~3–6 |
 | discovery | ~8 | — | 0 | ~8 |
 | event_extractor | ~4 | — | 0 | ~4 |
-| **TOTAL** | **~88.6** | L1+L2+L4 | **~38–57** | **~26–45** |
+| **TOTAL** | **~85 (OLS 88.6)** | L1+L2+L4 | **~38–57** | **~27–46** |
 
-(L3 removes ~0 slope; it protects the quality of L1/L2.)
+(L3 removes ~0 slope; it protects the quality of L1/L2.) The phase slopes are the two-band estimates from
+Section 2.2 and sum to ~85 tok/turn; the global OLS slope is 88.6 (see the Section 2.2 note). The
+`est. slope removed` and `residual` ranges are `[ESTIMATE]`.
 
 ### 4.2 Projected curve `[ESTIMATE]`
 
@@ -435,7 +452,7 @@ reference that future *measured* A/B results should overwrite/compare against.
         "label": "t1-30", "turn_lo": 1, "turn_hi": 30,
         "discovery": 2991, "entity_detail": 9831, "relationship_mapper": 2546,
         "event_extractor": 1754, "total": 17122, "llm_calls_per_turn": 6.12,
-        "entity_detail_detail": { "calls_per_turn": 3.25, "tokens_per_call": 2600 }
+        "entity_detail_detail": { "calls_per_turn": 3.25, "tokens_per_call": 3000 }
       },
       {
         "label": "t150-180", "turn_lo": 150, "turn_hi": 180,
@@ -455,14 +472,15 @@ reference that future *measured* A/B results should overwrite/compare against.
       "relationship_mapper": 0.160, "event_extractor": 0.068
     },
     "entity_detail_subdrivers_t300": {
-      "A_baseline": 8450, "B_call_count_growth": 7000, "C_pc_uncapped_per_call": 12300
+      "A_baseline": 9750, "B_call_count_growth": 8000, "C_pc_uncapped_per_call": 9700
     },
     "repetition_overhead_t300": { "low": 15000, "high": 17000, "note": "cross-phase, orthogonal" },
     "pc_relationship_web_t344": {
       "total": 109, "active": 109, "resolved": 0,
       "recency": { "le_t100": 23, "t101_200": 30, "t201_300": 27, "gt_t300": 29 }
     },
-    "capped_entity_updates_run_total": 525
+    "entity_detail_capped_candidates_run_total": 262,
+    "entity_detail_capped_count_note": "sum of the per-turn entity_detail_capped_count log field over the 78 capped turns; non-PC detail candidates skipped when the per-turn detail cap of 6 was exceeded; this is a count of dropped detail calls, NOT a count of lost state updates"
   },
   "levers": [
     {
@@ -557,5 +575,6 @@ slopes that only dominate late).
 | #385 lineage (relmap + non-PC detail budget) | `docs/roadmap.md` (Completed, #385) |
 
 All measured numbers in Sections 1, 2, and the `measured` block of Section 6 are reproduced from
-`eval-qwen36-344t-full/extraction-log.jsonl` (linear fit n=374) and the final
+`eval-qwen36-344t-full/extraction-log.jsonl` (linear fit over n=374 extraction-log records spanning 344
+turns) and the final
 `catalogs/characters/char-player.json`. Sections 3 and 4 are labelled `[ESTIMATE]` throughout.
