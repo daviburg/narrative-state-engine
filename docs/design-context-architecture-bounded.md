@@ -13,6 +13,16 @@ PR #478 levers (L1/L2/L4) explicitly do **not** achieve on their own.
 > **Every projected token number in this document is an `[ESTIMATE]`** with its assumptions stated inline.
 > Measured ground truth is drawn only from PR #478 / `eval-qwen36-344t-full` and is labelled MEASURED.
 > The future *measured* A/B results should overwrite/compare against these estimates.
+>
+> **Central-claim status `[HYPOTHESIS — falsifiable]` (not `[ESTIMATE]`, not a result).** The word "bounded"
+> in this document means **bounded-in-the-limit, conditional on the active identity set `N_active` converging
+> to a constant** — and that convergence is **UNPROVEN over the only window we have measured (344 turns)**.
+> What the data *does* support is **"much flatter and cheaper"**, not "asymptotically bounded": a **~19×
+> flatter slope** (88.62 → ~4.63 tok/turn) and a **~70% per-turn reduction** on the 344-turn offline replay.
+> A flatter line is **not** an asymptote, and that replay **excluded A1/A2 build/maintenance costs**. The
+> asymptotic-bound claim is therefore a **falsifiable hypothesis**, settled only by the long-run accounting in
+> [§5.6 Falsification gates](#56-falsification-gates) and [§9](#9-phasing-spike-and-ab). Appendix A marks the
+> bound claim `[HYPOTHESIS — falsifiable]` accordingly.
 
 ---
 
@@ -28,6 +38,7 @@ PR #478 levers (L1/L2/L4) explicitly do **not** achieve on their own.
 8. [Quality risks and mitigations](#8-quality-risks-and-mitigations)
 9. [Phasing, spike plan, and the long-run A/B requirement](#9-phasing-spike-and-ab)
 10. [Learn-as-you-go — telemetry-driven decisions](#10-learn-as-you-go--telemetry-driven-decisions)
+11. [Alternatives considered & rejected; named spikes](#11-alternatives-considered--rejected-named-spikes)
 
 ---
 
@@ -117,6 +128,19 @@ digest** that is *maintained* (updated in place, rolled up) rather than *re-list
 actively **forgets** (rolls up and then evicts) dormant low-importance entities (Section 3.4). The digest has
 three compartments, each with its own budget and refresh discipline:
 
+> **A1 is a typed-view renderer over the structured catalog NSE already persists — not a free-text memory.**
+> This is the framing the design commits to. The source of truth stays the **existing structured store**
+> ([framework/catalogs/relationship-index.json](../framework/catalogs/relationship-index.json),
+> [framework/catalogs/scene-graph.json](../framework/catalogs/scene-graph.json), and the per-entity JSON
+> records). A1 does not invent a parallel prose memory; it **renders bounded, typed, query-specific *views***
+> over that structured data — an identity-index view (A1-IDX), a salient-state view (A1-SAL), a
+> current-status view (A1-VOL). The shipping **extractive default (Section 3.1, pluggable backend) is exactly
+> a typed-view renderer**: a deterministic projection of fields NSE already stores, with prose appearing only
+> at the prompt boundary. The optional abstractive backend summarizes those same typed records; it never
+> becomes the system of record. This keeps identity, diffability, duplicate detection, and update semantics
+> structural, and confines summary-error risk to a rendering layer that can always be re-derived from the
+> catalog.
+
 | Compartment | Content | Budget `[ESTIMATE]` | Refresh cadence | Bounded by |
 |---|---|---:|---|---|
 | **A1-IDX** Identity index | One ultra-compact line per known entity: `id \| primary-name \| aliases \| type \| 1-line role`. The **coreference anchor**. | ~15-18 tok/entity; ~6K at N=344 | Append on new entity; edit on alias/identity change | Hierarchical rollup **and intelligent forgetting** of dormant entities (3.4) |
@@ -127,6 +151,26 @@ three compartments, each with its own budget and refresh discipline:
 independent of session length. `B_IDX` is the single residual catalog-coupled term, and it is the
 **cheapest possible** per-entity cost (an identity line, not a relationship web) — see Section 5.4 for why
 this is the right place to concentrate the residual, and 3.4 for how intelligent forgetting bounds it too.
+
+**These budgets are TARGET ENVELOPES with typed non-droppable invariants — NOT silent caps.** This is the
+property that distinguishes A1-SAL/A1-VOL (and the A2 budget, Section 4.3) from the **rejected A3 hard caps**
+(Section 2): a fixed number alone, enforced by "rank and drop the overflow," *is* A3 by another name. To avoid
+that, every budget here carries an explicit **priority type system** with invariants that overflow may never
+violate:
+
+| Priority class | Examples | Droppable on overflow? |
+|---|---|---|
+| **P0 — identity anchors** | `id \| primary-name \| type` line for every entity in the working set | **NEVER** |
+| **P0 — mentioned-entity current status** | current_status / status_updated_turn for any entity mentioned this turn | **NEVER** |
+| **P1 — active arcs & unresolved relationships** | open-arc participants, unresolved-relationship targets | Only after a rolled summary line exists |
+| **P2 — relationship history** | superseded snapshots, resolved-relationship history | Droppable (already rolled) |
+
+When a dense turn would push A1-SAL, A1-VOL, or A2 past its envelope, the system drops **only P2 (then P1
+*after* its rolled summary is written)** and **emits LOUD overflow / degraded-mode telemetry** — never a silent
+truncation. A P0 invariant breach is a **failure event** (alarmed, treated as a budget bug per Section 2), not
+a routine trim. This is what makes the envelopes safe where a blind cap is not: the engine knows an identity
+anchor is cheap and non-negotiable, while relationship history is expensive and droppable *only once
+summarized*.
 
 **Pluggable digest backend (build-for-both).** The function that condenses history into A1-SAL (and the
 rolled summary lines in A1-IDX/A1-VOL) is a **pluggable backend** with two interchangeable implementations:
@@ -167,6 +211,24 @@ rolling**:
 `B_IDX` is the single residual catalog-coupled term (`s_IDX · N(t)`, Section 5.3). Hot/cold compression alone
 only *slows* its growth; to truly **bound** it we must be willing to **forget** — to stop paying context for
 entities that no longer matter. This is a **first-class design element**, not an afterthought.
+
+> **Eviction is THE central boundedness-vs-quality tradeoff of this entire design — not telemetry-gated
+> cleanup.** The asymptotic-bound *hypothesis* (the doc's headline claim) lives or dies here: without
+> eviction, `B_IDX` stays catalog-coupled and nothing is bounded; *with* aggressive eviction, identity
+> corruption (#468-style duplicate/splinter) returns. The risk is **fundamentally asymmetric**: a **false
+> keep costs only tokens** (a recoverable, linear waste), but a **false evict can CORRUPT identity or state**
+> (a re-mention mints a duplicate, an arc loses its anchor — a correctness failure, not a cost failure). The
+> two error directions are therefore **not** trade-off-symmetric, and the policy must be tuned with that
+> asymmetry front and center.
+>
+> **Every importance signal we have is a PAST-salience proxy that cannot guarantee FUTURE narrative
+> salience.** Mention recency, mention count, graph centrality, and arc/key-plot flags all describe how
+> important an entity *has been*; narratives routinely reintroduce a low-mention clue, a one-off NPC, a stale
+> debt, a wound, a rumor, or a place name as a late callback that *becomes* important. If the catalog itself
+> never flagged the object as key-plot, **no heuristic here can know it will matter** — that is a structural
+> limit, not a tuning gap. Eviction is consequently the design's most quality-sensitive knob; **threshold
+> tuning stays telemetry-gated (Section 10), but the framing is action-now and load-bearing**, and the entire
+> eviction tier is gated behind the zero-new-duplicate A/B before it ships.
 
 **The motivating case.** "Animal bones" are noted around camp at turns 15-18 and then never recur for 300+
 turns. Keeping a full identity line (and its aliases, history) in context for the next several in-game *years*
@@ -267,14 +329,21 @@ The two together (R0-R2 lexical/graph **+** R3 embedding) form a **hybrid** retr
 
 **Telemetry-gated R3 (build the signal, decide later).** We do **not** commit to embedding retrieval upfront.
 We **ship R0-R2 first** (they reuse #233 machinery and are deterministic) and treat R3 as a
-**telemetry-gated future tier**. The deciding telemetry is explicit:
+**telemetry-gated future tier**. The deciding telemetry is explicit, and is **recall-first**:
 
+- **PRIMARY — Retrieval RECALL (measured BEFORE budget pruning).** The fraction of the turn's
+  *must-include* set that appears in the retrieved set **before** any budget pruning. The must-include set is
+  **every baseline-touched entity + every changed-relationship endpoint + every state-change entity** for the
+  turn. A miss here is a correctness risk (a high relevance hit-rate can coexist with catastrophic recall
+  misses), so recall is the metric that gates R3, not relevance.
 - **Retrieval-miss rate that A1's anchor had to backstop** — mentions that resolved *only* because the A1-IDX
   identity index caught them, which R0-R2 retrieval failed to surface.
 - **Duplicate-introduction rate** — net new duplicates attributable to a retrieval miss.
-- **Retrieved-subset relevance hit-rate** — fraction of the retrieved set the turn actually operated on.
+- **SECONDARY — Retrieved-subset relevance hit-rate** — fraction of the retrieved set the turn actually
+  operated on. Useful for budget efficiency, but explicitly **demoted below recall**: it must never be
+  optimized at the cost of recall.
 
-R3 embedding ships when, and only when, that telemetry shows R0-R2 leaving a measurable coreference-recall
+R3 embedding ships when, and only when, that telemetry shows R0-R2 leaving a measurable coreference-**recall**
 gap (Section 10).
 
 ### 4.3 Budget and plug-in points
@@ -293,6 +362,29 @@ Plug-in points:
 - **relationship_mapper:** scores only the retrieved subset's 1-hop neighborhood instead of the full
   catalog pre-prune (which today can reach 40K+ before #385's budget compression). A2 moves the bound
   *upstream* of the scorer, so the expensive pre-prune disappears.
+
+### 4.4 Ordering invariant — cold-store retrieval runs BEFORE discovery (closes the promote-on-mention loop)
+
+**This is a hard data-flow ordering rule, not an aside.** Promote-on-mention (Section 3.4) is **circular**
+unless retrieval against cold storage runs *before* the discovery phase: an entity that has been **evicted**
+has no anchor in the in-context known list, so if discovery runs first it sees no match, sets `is_new=true`,
+and **mints a duplicate before promotion can ever fire** (the #468 failure mode). Recognizing the mention
+*requires* the anchor to already be present in the discovery prompt.
+
+The pipeline therefore enforces this per-turn step order:
+
+1. **A2 cold-store retrieval first.** Run R0-R2 (lexical/alias + graph + co-occurrence; R3 embedding when
+   enabled) over **cold storage and evicted entities**, keyed on the current turn text.
+2. **Inject top cold candidates into the discovery known-entity list.** The highest-scoring cold/evicted
+   candidates are added to the discovery prompt's known-list **before** discovery runs, so an
+   evicted-then-rementioned entity has an anchor to resolve against (`is_new=false`, existing ID).
+3. **Then discovery runs**, now able to coreference-match the re-mention instead of minting a duplicate.
+4. **Promote-on-mention fires** on the resolved ID, restoring full fidelity for the turn (Section 5.1).
+
+Without step 1→2 preceding discovery, eviction is **not** coreference-safe and the bound cannot be claimed.
+This ordering is the materially stronger requirement GPT-5.5's review surfaced (F2), and it is now a
+first-class invariant: any implementation that lets discovery run before cold-store retrieval is a **design
+violation**, gated by the adversarial A/B fixture in Section 9.3.
 
 ---
 
@@ -313,9 +405,11 @@ A1-IDX identity/alias index keeps its anchor **in context** (a 300-turn-dormant 
 still has its `id | name | aliases` line present), so discovery resolves the mention to the existing ID
 (`is_new=false`) instead of minting a duplicate. Once an entity is evicted (3.4), the anchor leaves context,
 but its identity is retained in cold storage: A2's lexical/embedding match against cold storage **promotes it
-back to hot** the instant it is re-mentioned. Either way the mention resolves to the *existing* ID, and the
-**promote-on-mention** path pulls that entity from digest-only (or cold storage) to A2 full-fidelity for the
-current turn.
+back to hot** the instant it is re-mentioned. **This is only coreference-safe because cold-store retrieval
+runs BEFORE discovery (§4.4) and injects the cold candidate into the discovery known-list** — otherwise
+discovery would mint a duplicate before promotion could fire. Either way the mention resolves to the
+*existing* ID, and the **promote-on-mention** path pulls that entity from digest-only (or cold storage) to A2
+full-fidelity for the current turn.
 
 ### 5.2 A1's blind spot, covered by A2
 
@@ -349,8 +443,11 @@ $$
 
 Since net new entities/turn `dN/dt` falls over a session (most entities appear early), and **cold rollup plus
 intelligent forgetting (3.4) — eviction of dormant low-importance entities** drives the cold-tier slope toward
-zero (eviction bounds the entity *count* in `B_IDX`, not merely the per-entity cost), the curve is **bounded
-in the limit** with a **small residual slope** during the active-growth phase.
+zero (eviction bounds the entity *count* in `B_IDX`, not merely the per-entity cost), the curve is
+**conjectured to be bounded-in-the-limit** with a **small residual slope** during the active-growth phase.
+This is a **`[HYPOTHESIS — falsifiable]`, conditional on `N_active` converging** (and on A1/A2 build costs
+staying sub-linear) — **UNPROVEN over the measured 344t window**, which shows a ~19× flatter slope (a much
+cheaper line), not a demonstrated asymptote. See [§5.6](#56-falsification-gates) for the disproof criteria.
 
 ### 5.4 Projected curve vs the 88.62 baseline `[ESTIMATE]`
 
@@ -391,22 +488,26 @@ Per-turn total: baseline vs L1+L2+L4 vs A1+A2 (ESTIMATE)
 
 ```mermaid
 flowchart TD
-    TT["Current turn text"] --> R0["A2 R0: lexical/alias match\nvs A1-IDX (force-include mentioned)"]
+    TT["Current turn text"] --> R0["A2 R0: lexical/alias match\nvs A1-IDX + cold store (force-include mentioned)"]
     R0 --> R1["A2 R1-R3: 1-hop graph + co-occurrence\n+ optional embedding recall"]
     R1 --> RET["Retrieved relevant subset\n(full fidelity, fixed budget B_A2)"]
 
-    CAT[("Catalog / relationship index")] --> DIG["A1 digest builder\n(pluggable: extractive | abstractive,\ndeterministic-cached, rolling + hierarchical)"]
+    CAT[("Catalog / relationship index")] --> DIG["A1 digest builder\n(typed-view renderer over structured catalog;\npluggable: extractive | abstractive,\ndeterministic-cached, rolling + hierarchical)"]
     DIG --> IDX["A1-IDX identity/alias index\n(coreference anchor, always in-context)"]
     DIG --> SAL["A1-SAL salient state\n(arcs, unresolved rels) - fixed budget"]
     DIG --> VOL["A1-VOL current-status verbatim\n- fixed budget"]
     DIG --> EVICT["intelligent forgetting:\nroll up + evict dormant\nlow-importance entities (telemetry-gated)"]
+    EVICT --> COLD[("Cold storage (on-disk)\nevicted + cold-tier entities")]
 
+    COLD --> R0
+    R1 -- "cold candidates injected\nBEFORE discovery (ordering invariant 4.4)" --> DISC
     IDX --> PROMO["promote-on-mention:\ncold/evicted entity -> full fidelity"]
-    EVICT -. "re-mention" .-> PROMO
+    COLD -. "re-mention match" .-> PROMO
     PROMO --> RET
 
-    IDX --> DISC["Discovery prompt\n(anchor = full known-id/alias index)"]
-    RET --> DETAIL["entity_detail prompt\n(full fidelity for retrieved set)"]
+    IDX --> DISC["Discovery prompt\n(anchor = known-id/alias index\n+ injected cold candidates)"]
+    DISC --> DETAIL["entity_detail prompt\n(full fidelity for retrieved set)"]
+    RET --> DETAIL
     SAL --> DETAIL
     VOL --> DETAIL
     RET --> RELMAP["relationship_mapper\n(scores retrieved neighborhood only)"]
@@ -417,6 +518,32 @@ flowchart TD
     RELMAP --> BUD
     BACKSTOP["Hard cap = LLM ctx limit\n(emergency backstop only, logs loudly)"] -.-> BUD
 ```
+
+### 5.6 Falsification gates
+
+The headline claim (§5.3) is `[HYPOTHESIS — falsifiable]`, not a result. The current evidence supports only
+**"much flatter and cheaper"** — a **~19× flatter slope** (88.62 → ~4.63 tok/turn) and a **~70% per-turn
+reduction** on the **single** 344-turn offline replay, with **A1/A2 build/maintenance costs excluded**. A
+flatter line is not an asymptote. The asymptotic-bound claim is **DISPROVEN** if *any* of the following holds
+once the design is built and measured end-to-end (these are the gates the Section 9 work must try to fail):
+
+1. **Active-set slope stays positive after warmup, with build costs included.** With A1/A2 BUILD costs
+   (digest construction, retrieval/index maintenance) counted, the end-to-end per-turn input-token slope
+   remains statistically above zero over longer replays (344 → 700 → 1000 turns) after the warmup phase.
+2. **`N_active` keeps growing ~linearly.** Hot + recently-cold active identity count keeps climbing roughly
+   linearly past t344 even with conservative eviction enabled (i.e. the working set never plateaus).
+3. **A1/A2 maintenance cost grows O(N).** Digest rebuild scans, embedding-candidate generation, graph
+   traversal, or cold-store lookup becomes O(N) per turn — making the maintenance term itself catalog-coupled.
+4. **Quality forces eviction off.** Quality parity (zero-duplicate, recall, state-change) can only be held by
+   disabling eviction or stretching horizons so long that `B_IDX` is effectively catalog-coupled again.
+5. **A zero-duplicate failure is fixable only by retaining more anchors in context.** Any zero-new-duplicate
+   gate failure (Section 6) whose only remedy is keeping *more* anchors hot — i.e. the bound and the
+   correctness gate are in direct conflict.
+
+If none of these holds over the long replay — active-set counts plateau, end-to-end slope is statistically
+indistinguishable from zero after warmup, and the zero-duplicate gate holds for evicted-then-rementioned
+entities — only *then* is "bounded-in-the-limit" earned. Until that measurement exists, this document claims
+**"much flatter and cheaper," not "asymptotically bounded."**
 
 ---
 
@@ -526,10 +653,25 @@ Before the full build, a **read-only measurement spike**:
 - Take the `eval-qwen36-344t-full` catalog snapshots at t50, t150, t250, t344.
 - Compute, **offline (no extraction)**, the projected per-turn prompt size *as if* A1+A2 budgets were in
   effect: `B_IDX(N)` from the actual entity count, fixed A1/A2 budgets, and the measured template+turn cost.
+- **Account for A1/A2 BUILD cost, not just the prompt body.** The projection must include an estimate of
+  digest-build, retrieval, and index-maintenance cost per turn (even if zero for the extractive/R0-R2
+  default), so the spike measures *total pipeline* demand, not a post-oracle prompt size (F5).
 - Plot the projected per-turn curve against the measured 88.62 line.
 - **Success = the projected curve flattens** (slope dominated by `B_IDX`, ~9-18 tok/turn, vs 88.62) and
-  `B_IDX` at t344 is within the ~6K `[ESTIMATE]`. This validates the *bound* claim cheaply, before any
-  pipeline code, and refines every `[ESTIMATE]` in Section 5.4.
+  `B_IDX` at t344 is within the ~6K `[ESTIMATE]`. This **flatness** result supports "much flatter and
+  cheaper"; it does **not** by itself prove the asymptotic bound (§5.6) — that needs the long replay in §9.3.
+
+**Named offline spikes feeding this section (run in parallel, no pipeline code change):**
+
+- **Spike F3 — tokenizer-true `B_IDX`.** Measure p50/p90/p99 tokens per identity line (and aliases-per-entity,
+  token contribution by field) with the **actual tokenizer over the real catalog**, replacing the unmeasured
+  ~15-18 tok/entity `[ESTIMATE]`. Result feeds back into the `B_IDX` term in §5.3/§5.4 and the budgets in §3.1.
+- **Spike F10 — checkpoint-compaction vs always-maintained digest.** Compare periodic checkpoint compaction
+  (+ L1/L2/L4) against the always-maintained A1 digest on slope / quality / engineering cost. Result feeds the
+  digest-method fork in §10 and may simplify the A1 build if it dominates.
+
+Both spikes are **cheap, offline, read-only**; their measured results **overwrite the corresponding
+`[ESTIMATE]`s** in §5.4 and §9 before the full build is committed.
 
 ### 9.3 Long-run A/B requirement (critical)
 
@@ -543,11 +685,34 @@ fails at scale. Requirements:
 - **Quality parity gates (all must pass):**
   1. **Entity-set retention** — A1+A2 catalog retains the baseline's entity set (no lost entities),
   2. **ZERO net new duplicates** (Section 6 gate — make-or-break),
-  3. **No attribute corruption** (Section 8 Q-4),
-  4. **Relationship recall** within tolerance of baseline,
-  5. **State-change coverage** — no state-change entity dropped (the L3 metric).
-- **Token gates:** measured per-turn slope reduced from 88.62 to the projected `B_IDX`-dominated residual;
-  measured t344 per-turn within the Section 5.4 `[ESTIMATE]` band.
+  3. **Adversarial evicted-then-rementioned callback fixture (REQUIRED) — ZERO new duplicates on that path.**
+     A dedicated fixture must re-mention an **evicted** entity using **only a description or a stale alias**
+     (not its primary name), exercising the §4.4 cold-store-before-discovery ordering. Zero new duplicates on
+     the *general* 344-turn replay is necessary but **not sufficient** — that replay rarely stresses this path,
+     so this fixture is a separate, explicit gate (F2).
+  4. **No attribute corruption** (Section 8 Q-4),
+  5. **Retrieval RECALL (recall-first, F6)** — measured **BEFORE budget pruning**, the retrieved set must
+     contain every baseline-touched entity, every changed-relationship endpoint, and every state-change
+     entity. Relevance hit-rate is a **secondary** efficiency metric only.
+  6. **State-change coverage** — no state-change entity dropped (the L3 metric).
+- **End-to-end accounting gates (F5) — total pipeline, not prompt-body alone:**
+  - Report **BOTH** "prompt tokens sent to extraction" **AND** "total pipeline tokens / model-calls /
+    wall-clock LATENCY **including** A1/A2 maintenance" (digest build, embedding generation, retrieval scans,
+    index updates). The bound claim is judged on the *total*, not the post-oracle prompt body.
+  - **Retrieval / cold-store / index lookups must be O(1)/indexed, NOT an O(N) scan.** An O(N) per-turn
+    maintenance cost re-couples the budget to catalog size and **fails §5.6 gate 3**.
+  - **Active-set telemetry must PLATEAU.** Emit and plot per turn: `hot_count`, `cold_in_context_count`,
+    `evicted_count`, `cluster_count`, `retrieved_count`, `candidate_count_before_budget`,
+    `digest_update_tokens` (and embedding/rerank tokens if R3 is on). Boundedness requires these to **flatten**
+    over 344 → 700 → 1000 turns; a persistently rising active set **disproves** the bound (§5.6 gates 1-2).
+  - **Mitigant (must be MEASURED, not asserted):** the **DEFAULT config — extractive digest + R0-R2
+    retrieval — has near-zero added model-call cost** (deterministic projection + index lookups, no extra LLM
+    calls). This is a *claim to verify in the accounting*, not a free pass; abstractive digest / R3 embedding
+    add measurable model-call + latency cost and are gated on it.
+- **Token gates:** measured **end-to-end** per-turn slope reduced from 88.62 toward the projected
+  `B_IDX`-dominated residual; measured t344 per-turn within the Section 5.4 `[ESTIMATE]` band; OLS slope over
+  the long replay reported explicitly (and called "nonzero / flatter" rather than "bounded" if it is not
+  statistically indistinguishable from zero after warmup — §5.6).
 
 ---
 
@@ -574,6 +739,26 @@ to revisit it once the long-run A/B (Section 9.3) produces data.
 
 ---
 
+## 11. Alternatives Considered & Rejected; Named Spikes
+
+The adversarial design review (GPT-5.5) raised several alternative architectures and refinements. Their
+dispositions, for the record:
+
+| Alternative / refinement | Disposition | Rationale |
+|---|---|---|
+| **Structured world-state as first-class source of truth** (vs free-text digest) | **ADOPTED** (into A1) | Folded directly into A1's definition (§3.1): A1 renders **typed views over the existing structured catalog** (`relationship-index.json`, `scene-graph.json`, entity JSON), with prose only at the boundary. This was the strongest finding and is now the A1 framing, not a separate alternative. |
+| **Tokenizer-true `B_IDX` measurement** | **SPIKE — running now** (F3) | Cheap offline measurement (§9.2 Spike F3); result overwrites the ~15-18 tok/entity `[ESTIMATE]` and feeds §5.4. |
+| **Periodic checkpoint compaction** (vs always-maintained digest) | **SPIKE — running now** (F10) | Cheap offline comparison (§9.2 Spike F10) on slope / quality / engineering cost; may simplify the A1 build if it dominates. Result feeds the §10 digest-method fork. |
+| **Hierarchical / episodic memory** (episode windows + episode summaries) | **DEFERRED** (telemetry-gated) | Promising for callback paths and active-set stabilization, but a larger redesign; instrument and revisit — do **not** block A1+A2 on it (§10). |
+| **Learned salience / ranking** for eviction | **DEFERRED** (telemetry-gated) | Could predict future salience, but needs labels/replay data. Per-entity outcome logging (retained / evicted / re-mentioned / duplicate-causing / state-change) is instrumented **now** (F11) to seed the training set **if** heuristic eviction proves unsafe; not a build dependency. |
+| **Smaller-context multi-pass extraction** (split into bounded passes) | **REJECTED** (F12) | Conflicts with the latency goal and with **L2** (per-call repetition batching). Our bottleneck is **per-CALL token cost, not call count**, so more passes worsen the actual constraint. Each added pass re-pays template+turn boilerplate, which L2 exists to *remove*. |
+
+**Spike → doc feedback loop:** Spikes **F3** (tokenizer-true `B_IDX`) and **F10** (checkpoint vs digest) are
+running as offline, read-only measurements **now**; their results overwrite the corresponding `[ESTIMATE]`s in
+**§5.4** and the forks in **§9/§10** before the full build is committed.
+
+---
+
 ## Appendix A — Summary of Claims and Their Status
 
 | Claim | Status |
@@ -581,8 +766,9 @@ to revisit it once the long-run A/B (Section 9.3) produces data.
 | Per-turn baseline `15182 + 88.62*t`, no plateau | MEASURED (PR #478 / `eval-qwen36-344t-full`) |
 | `entity_detail` 64.4% at scale; PC web 109/0 at t344 | MEASURED (PR #478) |
 | L1+L4+L2 halve but do not bound the slope | MEASURED-derived projection (PR #478 Section 4.3) |
-| A1+A2 per-turn `~= C + s_IDX*N(t)`, `s_IDX -> 0` with cold rollup + eviction (intelligent forgetting) | `[ESTIMATE]` (this doc, Section 5) |
+| Measured evidence supports **"much flatter & cheaper"**: ~19× flatter slope (88.62 → ~4.63 tok/turn), ~70% per-turn reduction on the 344t offline replay (A1/A2 build costs EXCLUDED) | MEASURED-derived (offline replay; §5.6) |
+| A1+A2 per-turn `~= C + s_IDX*N(t)`, `s_IDX -> 0` with cold rollup + eviction — **asymptotically bounded** | **`[HYPOTHESIS — falsifiable]`**, conditional on `N_active` convergence; UNPROVEN over 344t (§5.3, §5.6) |
 | Projected t344 per-turn ~16-19K (~58-65% reduction) | `[ESTIMATE]` (Section 5.4) |
-| Zero-duplicate coreference safety from always-in-context A1-IDX | DESIGN GUARANTEE, gated by long-run A/B (Section 6, 9.3) |
-| Intelligent forgetting (dormant eviction) bounds the identity-index entity count | DESIGN ELEMENT, telemetry-gated (Section 3.4, 10) |
+| Zero-duplicate coreference safety from always-in-context A1-IDX + cold-store-before-discovery ordering (§4.4) | DESIGN GUARANTEE, gated by long-run A/B incl. adversarial evicted-then-rementioned fixture (Section 6, 9.3) |
+| Intelligent forgetting (dormant eviction) bounds the identity-index entity count | **`[HYPOTHESIS — falsifiable]`** / central tradeoff, telemetry-gated (Section 3.4, 5.6, 10) |
 | Residual growth concentrated in cheapest term (identity index), driven toward zero by forgetting | `[ESTIMATE]` (Section 5.4, 3.4) |
