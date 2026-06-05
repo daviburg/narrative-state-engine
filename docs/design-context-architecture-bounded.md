@@ -27,7 +27,7 @@ PR #478 levers (L1/L2/L4) explicitly do **not** achieve on their own.
 7. [Relationship to existing levers (L1/L4/L2)](#7-relationship-to-existing-levers)
 8. [Quality risks and mitigations](#8-quality-risks-and-mitigations)
 9. [Phasing, spike plan, and the long-run A/B requirement](#9-phasing-spike-and-ab)
-10. [Open questions / decision points for the human](#10-open-questions)
+10. [Learn-as-you-go — telemetry-driven decisions](#10-learn-as-you-go--telemetry-driven-decisions)
 
 ---
 
@@ -113,19 +113,27 @@ The backstop should **log loudly** when engaged, never silently. The intelligent
 ### 3.1 Definition
 
 A1 replaces the **append-only full-catalog / full-relationship serialization** with a **bounded running state
-digest** that is *maintained* (updated in place, rolled up) rather than *re-listed* in full. The digest has
+digest** that is *maintained* (updated in place, rolled up) rather than *re-listed* in full — and that
+actively **forgets** (rolls up and then evicts) dormant low-importance entities (Section 3.4). The digest has
 three compartments, each with its own budget and refresh discipline:
 
 | Compartment | Content | Budget `[ESTIMATE]` | Refresh cadence | Bounded by |
 |---|---|---:|---|---|
-| **A1-IDX** Identity index | One ultra-compact line per known entity: `id \| primary-name \| aliases \| type \| 1-line role`. The **coreference anchor**. | ~15-18 tok/entity; ~6K at N=344 | Append on new entity; edit on alias/identity change | Hierarchical rollup of cold entities (3.4) |
+| **A1-IDX** Identity index | One ultra-compact line per known entity: `id \| primary-name \| aliases \| type \| 1-line role`. The **coreference anchor**. | ~15-18 tok/entity; ~6K at N=344 | Append on new entity; edit on alias/identity change | Hierarchical rollup **and intelligent forgetting** of dormant entities (3.4) |
 | **A1-SAL** Salient state | Permanent / high-salience facts: open arcs, **unresolved** relationships, durable stable_attributes, long-range callbacks. | fixed ~2,500 | Rolling: every N turns, or on arc/relationship status change | Salience ranking + fixed cap |
 | **A1-VOL** Volatile current-status | The *current* status line for entities touched recently, kept **verbatim** (not summarized). | fixed ~1,500 | Every turn for touched entities | Recency window |
 
 **Total A1 budget `[ESTIMATE]`:** `B_A1 = B_IDX + ~4,000`. Everything except `B_IDX` is a fixed budget
 independent of session length. `B_IDX` is the single residual catalog-coupled term, and it is the
 **cheapest possible** per-entity cost (an identity line, not a relationship web) — see Section 5.4 for why
-this is the right place to concentrate the residual, and 3.4 for how to bound it too.
+this is the right place to concentrate the residual, and 3.4 for how intelligent forgetting bounds it too.
+
+**Pluggable digest backend (build-for-both).** The function that condenses history into A1-SAL (and the
+rolled summary lines in A1-IDX/A1-VOL) is a **pluggable backend** with two interchangeable implementations:
+a deterministic **extractive** digest (sort + truncate + rolled summary lines) and an **LLM-abstractive**
+digest (a model condenses history). This design does **not** commit to either method upfront — there are too
+many unknowns. Both are built and **compared empirically** with quality + token telemetry (Section 10); the
+extractive backend is the shipping **default** for temperature-0 byte-stability and zero extra model calls.
 
 ### 3.2 What is summarized vs kept verbatim
 
@@ -154,35 +162,73 @@ rolling**:
   `_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3` and PC volatile digest.)
 - **Hierarchical across entities:** see 3.4.
 
-### 3.4 Bounding the identity index (A1-IDX) too
+### 3.4 Intelligent forgetting — bounding A1-IDX by evicting dormant entities
 
-`B_IDX` is O(N_entities). For practical sessions (N <= ~500) it is a few thousand tokens and is effectively
-bounded. To bound it for arbitrarily long sessions, **tier the index by activity**:
+`B_IDX` is the single residual catalog-coupled term (`s_IDX · N(t)`, Section 5.3). Hot/cold compression alone
+only *slows* its growth; to truly **bound** it we must be willing to **forget** — to stop paying context for
+entities that no longer matter. This is a **first-class design element**, not an afterthought.
 
-- **Hot tier (verbatim):** entities mentioned/active within a recency window get the full `id | name |
-  aliases | role` line.
-- **Cold tier (compressed):** entities dormant for > M turns collapse to `id | primary-name | type` (aliases
-  moved to a cold-storage lookup that A2's promote-on-mention path consults on a coreference near-miss).
-  Cold lines are ~6-8 tokens.
-- **Optional cluster rollup:** very large cold cohorts (e.g. all members of a defunct faction) can roll into
-  a single cluster line plus a count, expanded on demand.
+**The motivating case.** "Animal bones" are noted around camp at turns 15-18 and then never recur for 300+
+turns. Keeping a full identity line (and its aliases, history) in context for the next several in-game *years*
+is pure waste: that entity is neither **quantitatively important** (very low mention count, near-zero graph
+centrality) nor **semantically important** (not a permanent-bond entity like the PC's companion, not a
+key-plot entity like a recurring antagonist or a quest object). It should be **rolled up and then evicted**
+from the active index. We should not pay context for camp bones years later.
 
-This concentrates the only remaining catalog-coupled growth into a tier whose per-entity cost can be driven
-toward a small constant. **Coreference caveat (Section 6):** an entity's alias must remain *discoverable*
-even when cold — the cold tier therefore keeps the primary name in-context and relies on A2's
-promote-on-mention + an embedding fallback to recover dropped aliases. This is the single most quality-
-sensitive knob in A1 and must be validated, not assumed.
+**Forgetting as a tiered rollup, ending in eviction.** The index ages each entity through tiers, and the tier
+boundaries are **telemetry-gated, not a hardcoded rule**:
+
+| Tier | State | Cost | Trigger (telemetry-driven) |
+|---|---|---:|---|
+| Hot (verbatim) | full `id \| name \| aliases \| role` line | ~15-18 tok | mentioned/active within the recency window |
+| Cold (compressed) | `id \| primary-name \| type`; aliases moved to a cold-storage lookup | ~6-8 tok | dormant > M turns **and** not flagged important |
+| Cluster rollup | very large cold cohorts (e.g. a defunct faction's rank-and-file) collapse to one cluster line + count | ~O(1)/cohort | many co-dormant low-importance entities |
+| **Evicted** | dropped from the active index entirely; retained only in cold storage on disk | **0 tok** | dormant beyond the eviction horizon **and** low quantitative **and** low semantic importance |
+
+**Eviction is reversible (promote-on-mention).** Eviction is never destructive: an evicted entity remains in
+persisted cold storage. A2's lexical/embedding match against cold storage (Section 4.2) **promotes the entity
+back to hot** the instant it is re-mentioned, restoring its identity line and full fidelity for that turn. So
+forgetting is a context-cost optimization, not data loss, and it stays **coreference-safe**: a re-mention
+resolves to the *existing* ID rather than minting a duplicate.
+
+**Importance is measured, not declared.** Whether an entity is "important enough to keep" is decided by
+**telemetry signals**, never a static word list (consistent with the project's no-hardcoded-lists rule):
+
+- **Mention recency** — turns since last seen.
+- **Quantitative importance** — cumulative mention count and graph **centrality** (degree in the relationship
+  index).
+- **Semantic importance** — membership in protected classes derived from the catalog's *own* structure:
+  permanent-bond relationships, open-arc participants, key-plot flags. These come from catalog relationship/arc
+  data, not a hardcoded list of "important" names.
+
+An entity is a forgetting candidate only when it is low on *all* of these signals. The exact thresholds
+(recency horizon `M`, centrality floor, eviction horizon) are **learn-as-you-go** parameters (Section 10):
+start conservative, watch the deciding telemetry (cold/evicted **re-mention promote rate**,
+**duplicate-introduction rate**), and tighten only when the data shows the system forgets *safely*.
+
+**Why this bounds the term.** Cold compression caps per-entity cost; cluster rollup caps per-cohort cost;
+**eviction caps the entity *count* that contributes to `B_IDX` at all.** Together they drive the cold-tier
+contribution to `s_IDX · N(t)` toward a small constant, so the residual slope flattens to ~0 once the active
+(hot + recently-cold) working set stabilizes — even as the on-disk catalog keeps growing. This is the
+mechanism that makes the Section 5.3 bound *real* rather than merely *slower*.
+
+**Coreference caveat (Section 6):** forgetting must never drop an anchor an in-flight coreference still needs.
+An entity's primary name must remain *discoverable* even when cold or evicted — the cold/evicted lookup keeps
+the primary name recoverable via promote-on-mention + an optional embedding fallback. The eviction horizon is
+therefore gated behind the same zero-new-duplicate A/B as cold-tiering (Section 8 Q-3; Section 9.1 Phase
+A1b). This is the single most quality-sensitive knob in A1 and must be validated, not assumed.
 
 ### 3.5 Refresh cadence and determinism
 
 - A1-VOL refreshes **every turn** for touched entities (cheap, correctness-critical).
-- A1-SAL and the IDX hot/cold tiering refresh **on a fixed cadence** (every N turns) and **on status-change
-  events** (arc opened/closed, relationship resolved, identity revealed). Event-driven refresh avoids staleness
-  without per-turn recomputation cost.
-- **Determinism:** the digest must be computed by a **deterministic** function of the catalog (sort keys,
-  fixed rollup rules) so that temperature-0 runs remain byte-stable. If A1 uses an LLM-abstractive summary
-  (Section 10, Q1), that summary must be cached and only recomputed on the cadence/event triggers — not every
-  turn — or temp-0 byte-stability is lost.
+- A1-SAL and the IDX hot/cold/evict tiering refresh **on a fixed cadence** (every N turns) and **on
+  status-change events** (arc opened/closed, relationship resolved, identity revealed). Event-driven refresh
+  avoids staleness without per-turn recomputation cost.
+- **Determinism:** the **extractive** digest backend (the default, Section 3.1) is a **deterministic**
+  function of the catalog (sort keys, fixed rollup rules) so that temperature-0 runs remain byte-stable. The
+  **abstractive** backend (the build-for-both alternative under empirical comparison, Section 10) must be
+  **cached and recomputed only on the cadence/event triggers** — never every turn — or temp-0 byte-stability
+  is lost.
 
 ---
 
@@ -216,9 +262,20 @@ A layered signal, cheapest-first, each gated by budget:
 | R3 | **Embedding similarity** (optional) — semantic recall for paraphrased/un-aliased mentions | moderate | Recall safety net |
 
 R0-R2 are deterministic and lexical/graph-based (temp-0 safe, no model call). R3 is the optional recall
-upgrade (Section 10, Q2) that catches the case A1's alias index misses — a re-mention by a *new* description
-never seen before. Recommendation: **ship R0-R2 first** (they reuse #233 machinery and are deterministic),
-add R3 only if A/B shows a coreference-recall gap.
+upgrade that catches the case A1's alias index misses — a re-mention by a *new* description never seen before.
+The two together (R0-R2 lexical/graph **+** R3 embedding) form a **hybrid** retrieval backend.
+
+**Telemetry-gated R3 (build the signal, decide later).** We do **not** commit to embedding retrieval upfront.
+We **ship R0-R2 first** (they reuse #233 machinery and are deterministic) and treat R3 as a
+**telemetry-gated future tier**. The deciding telemetry is explicit:
+
+- **Retrieval-miss rate that A1's anchor had to backstop** — mentions that resolved *only* because the A1-IDX
+  identity index caught them, which R0-R2 retrieval failed to surface.
+- **Duplicate-introduction rate** — net new duplicates attributable to a retrieval miss.
+- **Retrieved-subset relevance hit-rate** — fraction of the retrieved set the turn actually operated on.
+
+R3 embedding ships when, and only when, that telemetry shows R0-R2 leaving a measurable coreference-recall
+gap (Section 10).
 
 ### 4.3 Budget and plug-in points
 
@@ -283,12 +340,13 @@ possible** catalog term — identity lines, ~15-18 tok/entity hot, ~6-8 cold —
 
 $$
 \text{per\_turn}(t) \;\approx\; C + s_{\text{IDX}} \cdot N(t), \qquad
-s_{\text{IDX}} \approx 15\text{-}18 \text{ tok/entity (hot) }\to 0 \text{ (cold rollup)} \quad [\text{ESTIMATE}]
+s_{\text{IDX}} \approx 15\text{-}18 \text{ tok/entity (hot) }\to 0 \text{ (cold rollup + eviction)} \quad [\text{ESTIMATE}]
 $$
 
-Since net new entities/turn `dN/dt` falls over a session (most entities appear early), and cold rollup drives
-the cold-tier slope toward zero, the curve is **bounded in the limit** with a **small residual slope** during
-the active-growth phase.
+Since net new entities/turn `dN/dt` falls over a session (most entities appear early), and **cold rollup plus
+intelligent forgetting (3.4) — eviction of dormant low-importance entities** drives the cold-tier slope toward
+zero (eviction bounds the entity *count* in `B_IDX`, not merely the per-entity cost), the curve is **bounded
+in the limit** with a **small residual slope** during the active-growth phase.
 
 ### 5.4 Projected curve vs the 88.62 baseline `[ESTIMATE]`
 
@@ -333,12 +391,14 @@ flowchart TD
     R0 --> R1["A2 R1-R3: 1-hop graph + co-occurrence\n+ optional embedding recall"]
     R1 --> RET["Retrieved relevant subset\n(full fidelity, fixed budget B_A2)"]
 
-    CAT[("Catalog / relationship index")] --> DIG["A1 digest builder\n(deterministic, cached,\nrolling + hierarchical)"]
+    CAT[("Catalog / relationship index")] --> DIG["A1 digest builder\n(pluggable: extractive | abstractive,\ndeterministic-cached, rolling + hierarchical)"]
     DIG --> IDX["A1-IDX identity/alias index\n(coreference anchor, always in-context)"]
     DIG --> SAL["A1-SAL salient state\n(arcs, unresolved rels) - fixed budget"]
     DIG --> VOL["A1-VOL current-status verbatim\n- fixed budget"]
+    DIG --> EVICT["intelligent forgetting:\nroll up + evict dormant\nlow-importance entities (telemetry-gated)"]
 
-    IDX --> PROMO["promote-on-mention:\ncold entity -> full fidelity"]
+    IDX --> PROMO["promote-on-mention:\ncold/evicted entity -> full fidelity"]
+    EVICT -. "re-mention" .-> PROMO
     PROMO --> RET
 
     IDX --> DISC["Discovery prompt\n(anchor = full known-id/alias index)"]
@@ -423,7 +483,7 @@ Sequence: **L3 (guardrail) -> L1/L4 -> L2 -> A1 (anchor + digest) -> A2 (retriev
 | Q-2 | **A1 summary fidelity / staleness** | Digest reports a superseded current state -> wrong extraction | **Keep volatile current-status verbatim** (A1-VOL, never summarized); summarize only stable history (A1-SAL); event-driven refresh on status change; hierarchical rollup preserves a rolled summary line, never a silent drop. |
 | Q-3 | **Cold-tier alias loss** (Section 3.4) | A dormant entity's alias drops from the hot index -> a paraphrased re-mention is unrecognized | Cold tier keeps the primary name in-context; A2 R3 embedding recall + promote-on-mention recover the alias; **gate cold-tiering behind the zero-duplicate A/B** — do not enable cold rollup until the hot-only digest is proven duplicate-safe. |
 | Q-4 | **Attribute corruption from digest reuse** | A rolled summary mis-merges two entities' history | Deterministic per-entity rollup keyed on entity ID; per-entity ownership check on write; no cross-entity summarization in A1-SAL. |
-| Q-5 | **Determinism loss** (if LLM-abstractive digest) | Temp-0 byte-stability breaks -> A/B determinism gate fails | Prefer deterministic extractive digest (Section 10 Q1); if abstractive, cache and recompute only on cadence/event, never per turn. |
+| Q-5 | **Determinism loss** (if LLM-abstractive digest) | Temp-0 byte-stability breaks -> A/B determinism gate fails | Prefer the deterministic extractive digest backend (Section 3.1, the shipping default); if abstractive, cache and recompute only on cadence/event, never per turn (Section 10). |
 | Q-6 | **Backstop masking a budget bug** | A1/A2 budget set too high, backstop silently truncates | Backstop logs loudly and is alarmed; treated as a bug, not routine trimming (Section 2). |
 
 ---
@@ -440,8 +500,10 @@ risk the #468 failure mode during development.
    aliases) + A1-SAL + A1-VOL. Wire the digest into discovery (replacing the recency-ordered known-block) and
    entity_detail prior-state. **No cold rollup yet.** Acceptance: zero new duplicates, equal extraction
    quality, measured token reduction.
-2. **Phase A1b — Cold-tier rollup.** Enable activity-tiered IDX compression (3.4) behind a flag. Acceptance:
-   still zero new duplicates (this is the risky step — Section 8 Q-3).
+2. **Phase A1b — Cold-tier rollup + intelligent forgetting.** Enable activity-tiered IDX compression and
+   dormant-entity eviction (3.4) behind a flag, gated on the eviction telemetry signals. Acceptance: still
+   zero new duplicates and a healthy cold/evicted re-mention promote rate (this is the risky step — Section 8
+   Q-3).
 3. **Phase A2a — Deterministic retrieval (R0-R2).** Replace recency/confidence selection in entity_detail and
    relmap with #233-style relevance retrieval + force-include. Acceptance: relationship recall and state-change
    coverage hold; tokens bounded.
@@ -478,16 +540,26 @@ fails at scale. Requirements:
 
 ---
 
-## 10. Open Questions / Decision Points for the Human
+## 10. Learn-as-You-Go — Telemetry-Driven Decisions
 
-| # | Question | Options | Recommendation |
-|---|---|---|---|
-| **Q1** | **A1 summarization method** | (a) deterministic **extractive** (sort + truncate + rolled summary lines), (b) **LLM-abstractive** (a model condenses history) | **(a) extractive** for temp-0 byte-stability and zero extra model calls; revisit (b) only if extractive digests prove too lossy. Abstractive must be cached/event-triggered (Section 3.5). |
-| **Q2** | **A2 retrieval signal** | (a) **lexical + graph** (R0-R2, deterministic), (b) add **embedding** (R3) | Ship **(a) first** (reuses #233, deterministic); add (b) only if A/B shows a coreference-recall gap (Q-1/Q-3). |
-| **Q3** | **A1 refresh cadence** | every turn / every N turns / on-event | **Hybrid:** A1-VOL every turn; A1-SAL + IDX tiering every N turns **and** on status-change events. Tune N in the spike. |
-| **Q4** | **Cold-tier aggressiveness (3.4)** | hot-only (no rollup) / recency-windowed cold tier / cluster rollup | Start **hot-only** (Phase A1a); enable cold rollup (A1b) only after the zero-duplicate gate passes; cluster rollup is a later optimization. |
-| **Q5** | **Digest determinism vs richness** | strictly deterministic / allow cached-abstractive | **Strictly deterministic** unless the spike shows extractive digests measurably hurt quality. Determinism is required for the temp-0 A/B gate. |
-| **Q6** | **A2 budget split across phases** | one shared retrieved set / per-phase budgets | Start with **one shared retrieved set** reused by entity_detail + relmap (simpler, cheaper); split only if a phase needs a different neighborhood depth. |
+Several design forks below are genuinely undecided, and the evidence to settle them does not exist yet. The
+governing principle (the human's steer): **when you don't know, build the signals that let you learn as you
+progress, and decide once you have data** — do not force an upfront answer. For each fork we therefore (a)
+build for the unknown (pluggable where the two options diverge), (b) start from a stated **default**, and (c)
+instrument the **deciding telemetry signal** that will later settle it. This replaces an upfront
+open-questions interrogation with a plan to **decide from evidence**.
+
+| Design fork | What we build / default we start with | Deciding telemetry signal |
+|---|---|---|
+| **Digest method** (extractive vs LLM-abstractive) | **Build both** behind the pluggable digest backend (Section 3.1) and A/B them. **Default: extractive** (deterministic, temp-0 byte-stable, no extra model call). | Per-method **quality delta** (entity retention, attribute-corruption rate) **and token/latency cost**. Adopt abstractive only if it wins quality enough to justify its determinism/cost penalty. |
+| **Rollup depth / eviction tier** (intelligent forgetting, 3.4) | **Ship the R0-R2 forgetting tiers** (hot, cold, cluster rollup). Treat full **eviction as a telemetry-gated future tier (R3)**, enabled behind a flag after the zero-duplicate gate. | Cold/evicted **re-mention promote rate** and **duplicate-introduction rate**. If safe forgetting holds (promotes resolve to existing IDs, zero new duplicates), enable deeper eviction; if not, stay shallower. |
+| **Retrieval backend** (lexical/graph vs embedding) | **Ship R0-R2** (lexical + graph + co-occurrence, deterministic) as default; build R3 (embedding) as a **pluggable hybrid** add-on (Section 4.2). | **Retrieval-miss rate that A1's anchor had to backstop**, **duplicate-introduction rate**, and **retrieved-subset relevance hit-rate**. Enable R3 embedding only when these show an R0-R2 recall gap. |
+| **Eviction thresholds** (recency horizon M, centrality floor, eviction horizon) | **Start conservative** — long horizons, high importance bar; forget little. | Distributions of **mention recency**, **centrality**, and **time-since-last-seen** for entities that later re-mention. Tighten thresholds only when telemetry shows forgotten entities rarely return (or return safely via promote-on-mention). |
+| **A1 refresh cadence** (N) | **Hybrid default:** A1-VOL every turn; A1-SAL + IDX tiering every N turns + on status-change events. Seed N from the spike. | Staleness incidents (digest reported a superseded current state) vs recompute cost. Shorten N if staleness appears; lengthen if recompute dominates. |
+| **A2 budget split** (shared vs per-phase) | **Start with one shared retrieved set** reused by entity_detail + relmap. | Per-phase relevance hit-rate. Split into per-phase budgets only if a phase needs a different neighborhood depth. |
+
+None of these forks blocks the build: each has a safe default that ships, and each carries the instrumentation
+to revisit it once the long-run A/B (Section 9.3) produces data.
 
 ---
 
@@ -498,7 +570,8 @@ fails at scale. Requirements:
 | Per-turn baseline `15182 + 88.62*t`, no plateau | MEASURED (PR #478 / `eval-qwen36-344t-full`) |
 | `entity_detail` 64.4% at scale; PC web 109/0 at t344 | MEASURED (PR #478) |
 | L1+L4+L2 halve but do not bound the slope | MEASURED-derived projection (PR #478 Section 4.3) |
-| A1+A2 per-turn `~= C + s_IDX*N(t)`, `s_IDX -> 0` with cold rollup | `[ESTIMATE]` (this doc, Section 5) |
+| A1+A2 per-turn `~= C + s_IDX*N(t)`, `s_IDX -> 0` with cold rollup + eviction (intelligent forgetting) | `[ESTIMATE]` (this doc, Section 5) |
 | Projected t344 per-turn ~16-19K (~58-65% reduction) | `[ESTIMATE]` (Section 5.4) |
 | Zero-duplicate coreference safety from always-in-context A1-IDX | DESIGN GUARANTEE, gated by long-run A/B (Section 6, 9.3) |
-| Residual growth concentrated in cheapest term (identity index) | `[ESTIMATE]` (Section 5.4) |
+| Intelligent forgetting (dormant eviction) bounds the identity-index entity count | DESIGN ELEMENT, telemetry-gated (Section 3.4, 10) |
+| Residual growth concentrated in cheapest term (identity index), driven toward zero by forgetting | `[ESTIMATE]` (Section 5.4, 3.4) |
