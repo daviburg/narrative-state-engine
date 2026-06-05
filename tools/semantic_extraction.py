@@ -1212,13 +1212,16 @@ def _get_type_tiering_config(
     raw_types = ctx_opt.get("pc_rel_permanent_types")
     # Parse the permanent-type list defensively: keep only string entries, so a
     # malformed override (a non-list, or a list containing unhashable values
-    # such as {} or []) can never raise. Falls back to the default when no
-    # usable list is provided.
-    permanent_types: frozenset[str] = (
-        frozenset(t for t in raw_types if isinstance(t, str))
-        if isinstance(raw_types, list)
-        else _PC_REL_PERMANENT_TYPES_DEFAULT
-    )
+    # such as {} or []) can never raise. A non-list override, or a list that
+    # filters down to zero usable strings (e.g. [] or [{}, 7]), falls back to
+    # the default rather than silently disabling permanent-bond protection.
+    if isinstance(raw_types, list):
+        _filtered_types = frozenset(t for t in raw_types if isinstance(t, str))
+        permanent_types: frozenset[str] = (
+            _filtered_types if _filtered_types else _PC_REL_PERMANENT_TYPES_DEFAULT
+        )
+    else:
+        permanent_types = _PC_REL_PERMANENT_TYPES_DEFAULT
     # Parse the volatile-tail cap defensively: a malformed value (null,
     # "ten", a list, etc.) must never crash extraction — especially while the
     # feature is OFF, since this reader runs unconditionally on every turn.
@@ -1531,7 +1534,9 @@ def _apply_pc_rel_type_tier(
     - **Mentioned-this-turn volatile**: any relationship whose target is in
       *mentioned_ids* is force-kept regardless of type or cap.
     - **Volatile tail** (all other types): kept up to *volatile_tail_cap*
-      entries, sorted by recency (most recent first).
+      entries, sorted by recency (most recent first) with a deterministic
+      tie-break on ``(source_id, target_id, type)`` so the cap-fill is
+      reproducible across catalog regenerations.
 
     History arrays are trimmed to the last 3 entries for all retained
     relationships.  A 109-relationship PC web is expected to shrink to
@@ -1552,12 +1557,23 @@ def _apply_pc_rel_type_tier(
         else:
             volatile_rest.append(rel)
 
-    # Sort volatile rest by recency (most recent = highest turn number first)
-    def _rel_recency(r: dict) -> int:
+    # Sort the volatile tail by recency (most recent first) with an explicit
+    # deterministic tie-break so the cap-fill is reproducible across catalog
+    # regenerations, not merely within one stable sort: exact-recency ties are
+    # broken by (source_id, target_id, relationship_type) ascending (held
+    # finding #3).  Without this, two rels sharing a last_updated_turn could be
+    # retained in input order, which can differ between regenerations.
+    def _rel_sort_key(r: dict) -> tuple[int, str, str, str]:
         t = _parse_turn_number(r.get("last_updated_turn", "turn-0"))
-        return t if t is not None else 0
+        recency = t if t is not None else 0
+        return (
+            -recency,
+            str(r.get("source_id", "")),
+            str(r.get("target_id", "")),
+            str(r.get("type", r.get("relationship_type", ""))),
+        )
 
-    volatile_rest.sort(key=_rel_recency, reverse=True)
+    volatile_rest.sort(key=_rel_sort_key)
     kept_volatile = volatile_mentioned + volatile_rest[:volatile_tail_cap]
 
     result: list[dict] = []

@@ -27,15 +27,15 @@
       "history": [
         {
           "turn": "turn-003",
-          "note": "event 3"
+          "description": "event 3"
         },
         {
           "turn": "turn-004",
-          "note": "event 4"
+          "description": "event 4"
         },
         {
           "turn": "turn-005",
-          "note": "event 5"
+          "description": "event 5"
         }
       ]
     },

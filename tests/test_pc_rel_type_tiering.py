@@ -282,6 +282,45 @@ class TestApplyPcRelTypeTier:
         assert result[0]["target_id"] == "char-new"
         assert all(r["target_id"] != "char-old" for r in result)
 
+    def test_volatile_tail_tie_break_is_deterministic(self):
+        """Held finding #3: exact-recency ties in the volatile tail must be
+        broken deterministically (``(source_id, target_id, type)`` ascending),
+        so the cap-fill is reproducible across catalog regenerations rather than
+        depending on input order under the stable sort.
+
+        Feed the same set of equal-recency rels in two different input orders
+        and assert the retained subset (and its ordering) is identical.
+        """
+        rels_a = [
+            _make_rel("char-d", rel_type="ally", last_updated_turn="turn-050"),
+            _make_rel("char-a", rel_type="ally", last_updated_turn="turn-050"),
+            _make_rel("char-c", rel_type="ally", last_updated_turn="turn-050"),
+            _make_rel("char-b", rel_type="ally", last_updated_turn="turn-050"),
+        ]
+        rels_b = list(reversed(rels_a))
+        out_a = se._apply_pc_rel_type_tier(rels_a, set(), self._PERM, volatile_tail_cap=2)
+        out_b = se._apply_pc_rel_type_tier(rels_b, set(), self._PERM, volatile_tail_cap=2)
+        ids_a = [r["target_id"] for r in out_a]
+        ids_b = [r["target_id"] for r in out_b]
+        # Order-independent and deterministic: ties broken by target_id ascending.
+        assert ids_a == ids_b == ["char-a", "char-b"]
+
+    def test_volatile_tie_break_orders_by_source_then_target_then_type(self):
+        """The tie-break key is ``(source_id, target_id, type)`` ascending for
+        rels sharing a last_updated_turn.  Uses only volatile types (not in
+        ``_PERM``) so all three land in the capped volatile tail."""
+        rels = [
+            _make_rel("char-x", rel_type="spatial", last_updated_turn="turn-040",
+                      source_id="char-player"),
+            _make_rel("char-x", rel_type="ally", last_updated_turn="turn-040",
+                      source_id="char-player"),
+            _make_rel("char-w", rel_type="ally", last_updated_turn="turn-040",
+                      source_id="char-player"),
+        ]
+        out = se._apply_pc_rel_type_tier(rels, set(), self._PERM, volatile_tail_cap=3)
+        keys = [(r["target_id"], r["type"]) for r in out]
+        assert keys == [("char-w", "ally"), ("char-x", "ally"), ("char-x", "spatial")]
+
     def test_early_kinship_survives(self):
         """A kinship relationship first seen at turn-001 survives the cap (d)."""
         early_kinship = _make_rel(
@@ -377,7 +416,7 @@ class TestFlagOffMainGolden:
             _make_rel(
                 "char-mom", rel_type="kinship", last_updated_turn="turn-001",
                 history=[
-                    {"turn": f"turn-{i:03d}", "note": f"event {i}"}
+                    {"turn": f"turn-{i:03d}", "description": f"event {i}"}
                     for i in range(1, 6)
                 ],
             ),
@@ -862,6 +901,21 @@ class TestPermanentTypesParsing:
         }
         _enabled, perm, _cap = se._get_type_tiering_config(cfg)
         assert perm == frozenset({"kinship", "political"})
+
+    @pytest.mark.parametrize("zero_string_list", [[], [{}, 7], [None, [], {"x": 1}]])
+    def test_list_with_no_string_entries_falls_back_to_default(self, zero_string_list):
+        """A list that filters down to zero usable strings (including an
+        explicitly empty list) falls back to the default permanent-type set
+        rather than silently disabling permanent-bond protection with an empty
+        frozenset (Copilot review on _get_type_tiering_config)."""
+        cfg = {
+            "context_optimizations": {
+                "relationship_type_tiering": True,
+                "pc_rel_permanent_types": zero_string_list,
+            }
+        }
+        _enabled, perm, _cap = se._get_type_tiering_config(cfg)
+        assert perm == se._PC_REL_PERMANENT_TYPES_DEFAULT
 
     @pytest.mark.parametrize("bad_types", ["kinship", 5, {"kinship": True}])
     def test_non_list_permanent_types_falls_back_to_default(self, bad_types):
