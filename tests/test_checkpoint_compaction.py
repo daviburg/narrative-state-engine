@@ -20,7 +20,10 @@ Covers:
 
 import json
 import os
+import subprocess
 import sys
+import tempfile
+import textwrap
 
 import pytest
 
@@ -423,6 +426,219 @@ class TestFlagOffGolden:
             entry, config=_CFG_ON, mentioned_ids=set(), current_turn_num=100
         )
         assert out_on != golden
+
+
+# ===========================================================================
+# Flag-OFF base-branch guard (NON-regenerable proof OFF == origin/main)
+# ===========================================================================
+
+# The exact origin/main merge-base the flag-OFF path must stay byte-identical to
+# (see tests/golden/checkpoint_compaction/PROVENANCE.md).  Pinning a commit SHA
+# — not a moving ref — is what makes the guard non-regenerable: it executes the
+# BASE-branch code, so a fixture regenerated from the PR's own changed code
+# cannot satisfy it.
+_BASE_COMMIT = "5f0a38659f8055f32d07e9c6da6e5ac8f13c0246"
+
+_REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+
+
+def _off_case_specs():
+    """Flag-OFF fixtures spanning the seams this PR touched.
+
+    Each spec is fully JSON-serializable concrete input so the SAME bytes drive
+    both the PR-side call and the base-branch subprocess — no rebuild drift.
+    ``kind`` selects the entry point; the flag-OFF control passes no A0 args.
+    """
+    return [
+        # entity_detail prior-state (golden case + a mid-cadence turn).
+        {"kind": "prior", "name": "prior_pc_100",
+         "entry": _vol_entry(100), "current_turn_num": 100},
+        {"kind": "prior", "name": "prior_pc_60",
+         "entry": _vol_entry(60), "current_turn_num": 60},
+        # Singleton volatile fact whose only value is old — the P1 erase case,
+        # but on the OFF (control) path it must match main exactly.
+        {"kind": "prior", "name": "prior_singleton_loc",
+         "entry": {
+             "id": "char-mara", "name": "Mara", "type": "character",
+             "first_seen_turn": "turn-050", "last_updated_turn": "turn-050",
+             "identity": "A wanderer",
+             "volatile_state": {
+                 "location": [{"turn": "turn-050", "value": "loc-castle"}],
+             },
+         }, "current_turn_num": 60},
+        # Non-PC entity with multiple volatile keys at a high turn.
+        {"kind": "prior", "name": "prior_npc_multi",
+         "entry": {
+             "id": "char-borin", "name": "Borin", "type": "character",
+             "first_seen_turn": "turn-001", "last_updated_turn": "turn-110",
+             "identity": "A smith",
+             "volatile_state": {
+                 "status": [
+                     {"turn": f"turn-{i:03d}", "value": f"state-{i}"}
+                     for i in range(1, 111, 7)
+                 ],
+                 "mood": [
+                     {"turn": f"turn-{i:03d}", "value": f"feeling-{i}"}
+                     for i in range(5, 111, 13)
+                 ],
+             },
+         }, "current_turn_num": 110},
+        # discovery known-block over the brief/id-only seam (the anchor floor).
+        {"kind": "discovery", "name": "discovery_anchor_tiers",
+         "catalogs": {"characters.json": [
+             {"id": "zeta-recent-a", "name": "Zeta Recent A",
+              "type": "character", "identity": "identity of zeta-recent-a",
+              "last_updated_turn": "turn-110"},
+             {"id": "zeta-snap-a", "name": "Zeta Snap A", "type": "character",
+              "identity": "identity of zeta-snap-a",
+              "last_updated_turn": "turn-099"},
+             {"id": "zeta-snap-c", "name": "Zeta Snap C", "type": "character",
+              "identity": "identity of zeta-snap-c",
+              "last_updated_turn": "turn-090"},
+             {"id": "zeta-stale-a", "name": "Zeta Stale A", "type": "character",
+              "identity": "identity of zeta-stale-a",
+              "last_updated_turn": "turn-085"},
+         ]},
+         "current_turn": 110, "context_length": 32768,
+         "turn_text": "a quiet uneventful moment passes"},
+    ]
+
+
+def _pr_off_output(spec):
+    """Compute the PR-side flag-OFF output for a spec (config OFF / no A0 args)."""
+    if spec["kind"] == "prior":
+        return se._format_prior_entity_context(
+            spec["entry"], config=None, mentioned_ids=set(),
+            current_turn_num=spec["current_turn_num"],
+        )
+    return cm.format_known_entities_bounded(
+        spec["catalogs"], current_turn=spec["current_turn"],
+        context_length=spec["context_length"], turn_text=spec["turn_text"],
+    )
+
+
+_BASE_RUNNER = textwrap.dedent(
+    """
+    import json, os, sys
+    base_tools, specs_path, out_path = sys.argv[1], sys.argv[2], sys.argv[3]
+    sys.path.insert(0, base_tools)
+    import semantic_extraction as se
+    import catalog_merger as cm
+    specs = json.load(open(specs_path, encoding="utf-8"))
+    out = {}
+    for spec in specs:
+        if spec["kind"] == "prior":
+            out[spec["name"]] = se._format_prior_entity_context(
+                spec["entry"], config=None, mentioned_ids=set(),
+                current_turn_num=spec["current_turn_num"],
+            )
+        else:
+            out[spec["name"]] = cm.format_known_entities_bounded(
+                spec["catalogs"], current_turn=spec["current_turn"],
+                context_length=spec["context_length"], turn_text=spec["turn_text"],
+            )
+    json.dump(out, open(out_path, "w", encoding="utf-8"))
+    """
+)
+
+
+class TestFlagOffBaseBranchGuard:
+    """Prove the flag-OFF path equals origin/main by executing the BASE-branch
+    code, not the PR's own code.  This closes the self-referential gap in the
+    committed golden: a fixture regenerated from the changed code cannot pass,
+    because the comparison materializes ``tools/`` from the pinned base commit
+    and runs it in a subprocess."""
+
+    @staticmethod
+    def _ensure_base_commit_available():
+        present = subprocess.run(
+            ["git", "cat-file", "-e", _BASE_COMMIT + "^{commit}"],
+            cwd=_REPO_ROOT, capture_output=True,
+        ).returncode == 0
+        if not present:
+            # Shallow clones (e.g. a local fetch-depth=1) may lack the object;
+            # try a targeted fetch before giving up.  CI uses fetch-depth: 0.
+            subprocess.run(
+                ["git", "fetch", "--depth=1", "origin", _BASE_COMMIT],
+                cwd=_REPO_ROOT, capture_output=True,
+            )
+            present = subprocess.run(
+                ["git", "cat-file", "-e", _BASE_COMMIT + "^{commit}"],
+                cwd=_REPO_ROOT, capture_output=True,
+            ).returncode == 0
+        return present
+
+    @staticmethod
+    def _materialize_base_tools(dest_dir):
+        archive = subprocess.run(
+            ["git", "archive", _BASE_COMMIT, "tools"],
+            cwd=_REPO_ROOT, capture_output=True,
+        )
+        assert archive.returncode == 0, archive.stderr.decode(errors="replace")
+        extract = subprocess.run(
+            ["tar", "-x", "-C", dest_dir], input=archive.stdout,
+            capture_output=True,
+        )
+        assert extract.returncode == 0, extract.stderr.decode(errors="replace")
+        return os.path.join(dest_dir, "tools")
+
+    def _run_base_outputs(self, specs, tmpdir):
+        base_tools = self._materialize_base_tools(tmpdir)
+        specs_path = os.path.join(tmpdir, "specs.json")
+        out_path = os.path.join(tmpdir, "out.json")
+        with open(specs_path, "w", encoding="utf-8") as fh:
+            json.dump(specs, fh)
+        runner_path = os.path.join(tmpdir, "runner.py")
+        with open(runner_path, "w", encoding="utf-8") as fh:
+            fh.write(_BASE_RUNNER)
+        proc = subprocess.run(
+            [sys.executable, runner_path, base_tools, specs_path, out_path],
+            capture_output=True,
+        )
+        assert proc.returncode == 0, (
+            "base-branch runner failed:\n" + proc.stderr.decode(errors="replace")
+        )
+        with open(out_path, encoding="utf-8") as fh:
+            return json.load(fh)
+
+    def test_flag_off_byte_identical_to_base_branch(self):
+        if not self._ensure_base_commit_available():
+            pytest.skip(
+                f"base commit {_BASE_COMMIT[:12]} unavailable (shallow clone); "
+                "CI checks out with fetch-depth: 0 so this guard runs there"
+            )
+        specs = _off_case_specs()
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_outputs = self._run_base_outputs(specs, tmpdir)
+
+        assert set(base_outputs) == {s["name"] for s in specs}
+        for spec in specs:
+            name = spec["name"]
+            pr_out = _pr_off_output(spec)
+            assert pr_out == base_outputs[name], (
+                f"flag-OFF render diverged from origin/main for case {name!r}: "
+                "the OFF path is NOT byte-identical to the base branch"
+            )
+
+    def test_committed_golden_matches_base_branch(self):
+        # The committed golden literal itself must equal the base-branch output —
+        # pinning the golden to real origin/main code, not the PR's code.
+        if not self._ensure_base_commit_available():
+            pytest.skip(
+                f"base commit {_BASE_COMMIT[:12]} unavailable (shallow clone); "
+                "CI checks out with fetch-depth: 0 so this guard runs there"
+            )
+        golden_spec = {
+            "kind": "prior", "name": "prior_pc_100",
+            "entry": _vol_entry(100), "current_turn_num": 100,
+        }
+        with tempfile.TemporaryDirectory() as tmpdir:
+            base_outputs = self._run_base_outputs([golden_spec], tmpdir)
+        with open(
+            os.path.join(_GOLDEN_DIR, "flag_off_prior.json"), encoding="utf-8"
+        ) as fh:
+            golden = fh.read()
+        assert base_outputs["prior_pc_100"] == golden
 
 
 # ===========================================================================
