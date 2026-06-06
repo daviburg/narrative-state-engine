@@ -1151,6 +1151,15 @@ _DIGEST_WINDOW = 50
 # #220/#212): they must not be overloaded even though both default to 25.
 _DEFAULT_COMPACTION_INTERVAL_K = 25
 
+# Upper sanity bound for the checkpoint cadence.  A cadence larger than any
+# plausible single-session turn count would mean the snapshot boundary never
+# advances, silently disabling checkpoint refresh and reopening unbounded
+# per-entity volatile growth — the exact failure A0 exists to prevent.  A
+# malformed / out-of-range value falls back to the default rather than honoring a
+# refresh-disabling K.  1000 is comfortably above realistic story lengths while
+# still finite (justification per Rule 10).
+_MAX_COMPACTION_INTERVAL_K = 1000
+
 # ---------------------------------------------------------------------------
 # Context optimization constants
 # ---------------------------------------------------------------------------
@@ -1297,19 +1306,18 @@ def _read_compaction_config(config: dict | None) -> tuple[bool, int]:
     # zero/negative int) must never crash extraction and must not yield a
     # degenerate cadence.  Fall back to the default in all such cases.
     raw_k = ctx_opt.get("compaction_interval_k", _DEFAULT_COMPACTION_INTERVAL_K)
-    # A JSON bool is NOT a valid interval: because ``bool`` is a subclass of
-    # ``int``, ``int(True) == 1`` / ``int(False) == 0`` would otherwise slip
-    # past the ``int(...)`` coercion and silently set a degenerate cadence
-    # (``true`` -> 1) instead of honoring the documented "malformed -> default
-    # 25" guarantee.  Reject bools explicitly before the int coercion.
-    if isinstance(raw_k, bool):
-        interval_k: int = _DEFAULT_COMPACTION_INTERVAL_K
+    # Strict int validation, mirroring catalog_merger's public-parameter guard
+    # (catalog_merger.py:807-818): the cadence must be a real ``int`` in
+    # ``[1, _MAX_COMPACTION_INTERVAL_K]``.  ``int(...)`` coercion is deliberately
+    # NOT used — it would silently accept malformed values that the documented
+    # "non-int -> default 25" contract rejects: a string ``"1"`` -> 1 (the
+    # degenerate K=1 path), a float ``1.9`` -> 1 / ``25.9`` -> 25, or an uncapped
+    # huge int that disables checkpoint refresh.  ``type(raw_k) is int`` also
+    # excludes JSON bools (``bool`` subclasses ``int``, so ``isinstance`` would
+    # not), keeping ``true`` -> 1 from slipping through.
+    if type(raw_k) is int and 1 <= raw_k <= _MAX_COMPACTION_INTERVAL_K:
+        interval_k: int = raw_k
     else:
-        try:
-            interval_k = int(raw_k)
-        except (TypeError, ValueError):
-            interval_k = _DEFAULT_COMPACTION_INTERVAL_K
-    if interval_k < 1:
         interval_k = _DEFAULT_COMPACTION_INTERVAL_K
     return enabled, interval_k
 
