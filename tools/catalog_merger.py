@@ -802,13 +802,22 @@ def format_known_entities_bounded(
     # (degraded to brief/id-only by age).  Bounds the full-detail block to a
     # delta window of <= compaction_interval_k turns.  Flag OFF leaves
     # ``_cp_recent_floor`` None, so the recency-window path below is unchanged.
+    #
+    # Defensive coercion: ``compaction_interval_k`` is a public parameter, so a
+    # caller may pass a non-int (e.g. a string, a JSON bool, or a non-positive
+    # int).  Mirror ``_read_compaction_config``'s "malformed -> default 25"
+    # contract here so an unguarded ``current_turn // compaction_interval_k``
+    # can never raise ``TypeError`` / ``ZeroDivisionError``.  A JSON bool is NOT
+    # a valid interval (``bool`` subclasses ``int``), so reject it explicitly.
+    if isinstance(compaction_interval_k, bool):
+        _cp_interval_k = 25
+    elif isinstance(compaction_interval_k, int) and compaction_interval_k >= 1:
+        _cp_interval_k = compaction_interval_k
+    else:
+        _cp_interval_k = 25
     _cp_recent_floor: int | None = None
-    if (
-        checkpoint_compaction
-        and current_turn is not None
-        and compaction_interval_k >= 1
-    ):
-        _cp_recent_floor = (current_turn // compaction_interval_k) * compaction_interval_k
+    if checkpoint_compaction and current_turn is not None:
+        _cp_recent_floor = (current_turn // _cp_interval_k) * _cp_interval_k
 
     # Build lines in context-aware order
     lines: list[str] = []

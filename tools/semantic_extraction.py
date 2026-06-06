@@ -1297,10 +1297,18 @@ def _read_compaction_config(config: dict | None) -> tuple[bool, int]:
     # zero/negative int) must never crash extraction and must not yield a
     # degenerate cadence.  Fall back to the default in all such cases.
     raw_k = ctx_opt.get("compaction_interval_k", _DEFAULT_COMPACTION_INTERVAL_K)
-    try:
-        interval_k: int = int(raw_k)
-    except (TypeError, ValueError):
-        interval_k = _DEFAULT_COMPACTION_INTERVAL_K
+    # A JSON bool is NOT a valid interval: because ``bool`` is a subclass of
+    # ``int``, ``int(True) == 1`` / ``int(False) == 0`` would otherwise slip
+    # past the ``int(...)`` coercion and silently set a degenerate cadence
+    # (``true`` -> 1) instead of honoring the documented "malformed -> default
+    # 25" guarantee.  Reject bools explicitly before the int coercion.
+    if isinstance(raw_k, bool):
+        interval_k: int = _DEFAULT_COMPACTION_INTERVAL_K
+    else:
+        try:
+            interval_k = int(raw_k)
+        except (TypeError, ValueError):
+            interval_k = _DEFAULT_COMPACTION_INTERVAL_K
     if interval_k < 1:
         interval_k = _DEFAULT_COMPACTION_INTERVAL_K
     return enabled, interval_k
