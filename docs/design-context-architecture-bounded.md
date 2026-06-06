@@ -699,19 +699,30 @@ proven duplicate-safe before A2's relevance-selection narrows what gets full fid
 risk the #468 failure mode during development.
 
 0. **Phase A0 — Periodic checkpoint-compaction (K=25).** **[IMPLEMENTED — flag-gated, default OFF, pending
-   A/B before default-ON; #482, epic #477].** The **FIRST bounded increment** and the **default
-   digest-BODY backend.** On a fixed cadence (every K=25 turns) compact the accumulated state into a
-   checkpoint snapshot, and between checkpoints carry an **append-only recent-delta buffer**. **Spike F10
+   A/B before default-ON; #482, epic #477].** The **FIRST slope-reduction increment** and the **default
+   digest-BODY backend.** **Scope (do not overclaim):** A0 is a **per-entity volatile-history slope reducer
+   with bounded staleness (<=K turns)**, **NOT** asymptotic end-to-end bounded context. Discovery still
+   flattens every catalog into the working set and the per-entity coreference anchors remain O(N_selected);
+   priority / mentioned / one-hop sets still grow with catalog topology. On a fixed cadence (every K=25 turns)
+   compact a key's accumulated volatile state into a checkpoint snapshot — a count/theme summary **plus the
+   latest pre-boundary value kept verbatim** — and between checkpoints carry an **append-only recent-delta
+   buffer**. **Spike F10
    (COMPLETE)** measured this at a residual slope of **~17 tok/turn** (down from a re-derived **121.1**
    baseline) at **engineering cost 2** and bounded staleness (<=25 turns) — i.e. it captures most of the
-   bound at roughly **half** the build cost of an always-maintained abstractive digest (slope ~2, eng cost
-   ~4). This is the shipping default for the digest body. **Shipped (#482):** the deterministic, extractive
-   (no-LLM) `_build_checkpoint_compacted_volatile()` digest backend, wired into the entity_detail prior-state
-   (`_format_prior_entity_context`) and the discovery known-block (`format_known_entities_bounded`), gated by
+   slope reduction at roughly **half** the build cost of an always-maintained abstractive digest (slope ~2,
+   eng cost ~4). This is the shipping default for the digest body. **Shipped (#482):** the deterministic,
+   extractive (no-LLM) `_build_checkpoint_compacted_volatile()` digest backend, wired into the entity_detail
+   prior-state (`_format_prior_entity_context`), gated by
    `context_optimizations.checkpoint_compaction` (**default OFF, byte-identical to main**) on the SEPARATE
    `context_optimizations.compaction_interval_k` cadence key (distinct from the disk-persistence
-   `checkpoint_interval`, #220/#212). Flipping the default ON is a separate A/B-gated follow-up against the
-   new flag-ON 344t reference baseline.
+   `checkpoint_interval`, #220/#212). **The discovery known-block (`format_known_entities_bounded`) is NOT
+   compacted by A0:** the per-entity `id | name | type` anchor is the make-or-break coreference floor
+   (§5.6 floor, lines 616-627), so discovery anchors stay byte-identical to the OFF/main control — an earlier
+   draft degraded snapshot-tail anchors to id-only, dropping `type` and making a just-out-of-window entity's
+   ON anchor weaker than OFF (a floor violation), which is now rejected. **Default-ON A/B success criteria
+   (must report, not just aggregate token savings):** N_active / N_selected per turn, the known-block token
+   **slope**, and **zero net-new duplicates/phantoms by band**. Flipping the default ON is a separate A/B-gated
+   follow-up against the new flag-ON 344t reference baseline.
 1. **Phase A1a — Identity-anchor floor + checkpoint digest body (hot tier only).** Persist A1-IDX (all
    entities) as the **always-in-context coreference safety FLOOR**, and use the **A0 checkpoint snapshot +
    append-only recent-delta buffer** as the digest **BODY default** — **NOT** an always-maintained rolling
