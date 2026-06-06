@@ -151,6 +151,53 @@ class TestReadCompactionConfig:
         _, k = se._read_compaction_config(cfg)
         assert k == 25
 
+    @pytest.mark.parametrize(
+        "bad_k",
+        [
+            "1",     # string "1" must NOT coerce to the degenerate K=1 cadence
+            "7",     # arbitrary numeric string -> malformed -> default
+            "25",    # even the default-valued string is still a non-int -> default
+            1.9,     # float must NOT truncate to 1 via int()
+            25.9,    # float must NOT truncate to 25 via int()
+            10 ** 9,  # huge int is uncapped/refresh-disabling -> default
+            2 ** 63,  # very large int beyond the sane upper bound -> default
+        ],
+    )
+    def test_malformed_non_int_or_out_of_range_interval_k_falls_back(self, bad_k):
+        # The cadence contract (mirroring catalog_merger.py:807-818): a real int
+        # in [1, _MAX_COMPACTION_INTERVAL_K] is honored; everything else —
+        # numeric strings, floats, and refresh-disabling huge ints — is malformed
+        # and falls back to the default 25.  ``int(...)`` coercion is forbidden
+        # because it would silently accept "1"->1, 1.9->1, 25.9->25, etc.
+        cfg = {
+            "context_optimizations": {
+                "checkpoint_compaction": True,
+                "compaction_interval_k": bad_k,
+            }
+        }
+        _, k = se._read_compaction_config(cfg)
+        assert k == 25
+
+    def test_interval_k_at_upper_bound_is_honored(self):
+        cfg = {
+            "context_optimizations": {
+                "checkpoint_compaction": True,
+                "compaction_interval_k": se._MAX_COMPACTION_INTERVAL_K,
+            }
+        }
+        _, k = se._read_compaction_config(cfg)
+        assert k == se._MAX_COMPACTION_INTERVAL_K
+
+    def test_interval_k_just_over_upper_bound_falls_back(self):
+        cfg = {
+            "context_optimizations": {
+                "checkpoint_compaction": True,
+                "compaction_interval_k": se._MAX_COMPACTION_INTERVAL_K + 1,
+            }
+        }
+        _, k = se._read_compaction_config(cfg)
+        assert k == 25
+
     @pytest.mark.parametrize("bad_k", [True, False])
     def test_bool_interval_k_falls_back_to_default(self, bad_k):
         # A JSON bool is NOT a valid interval: because ``bool`` subclasses
