@@ -223,6 +223,12 @@ The extraction pipeline applies context budget controls automatically to prevent
   Net effect: the volatile tail is trimmed first, mentioned permanent bonds always survive, and unmentioned permanent bonds survive as summaries when budget allows. Configurable via the same `relationship_type_tiering` flag.
 - Permanent-type list and volatile-tail cap are configurable in `config/llm.json` under `context_optimizations` (`pc_rel_permanent_types`, `pc_rel_volatile_tail_cap`). These are structural schema-type enums, not domain content words (Rule 9).
 
+**Phase A0 — Periodic Checkpoint-Compaction Digest Body** (epic #477, design [docs/design-context-architecture-bounded.md](design-context-architecture-bounded.md) §9.1; Spike F10): the first bounded-context increment and the default digest-BODY backend. Gated via `context_optimizations.checkpoint_compaction` in `config/llm.json` (**default OFF** — byte-identical to main; flipping the default ON requires a separate A/B-gated follow-up PR validated against the new flag-ON 344t reference baseline). On a fixed K-turn cadence (`context_optimizations.compaction_interval_k`, default 25) the accumulated prior state is compacted into a deterministic, **extractive** checkpoint snapshot plus an **append-only recent-delta buffer** — there is **no extra LLM call**, so the digest is byte-stable at temperature 0. Staleness is bounded by K (≤ K turns).
+- **Cadence key is DISTINCT from disk persistence.** `compaction_interval_k` (context compaction) is a separate concern from the top-level `checkpoint_interval` (disk-persistence crash recovery, #220/#212). Both default to 25 but they are **not** overloaded — `_read_compaction_config()` reads `compaction_interval_k`, `_read_checkpoint_interval()` reads `checkpoint_interval`. A malformed/missing cadence falls back to 25.
+- **entity_detail prior-state body** (`_format_prior_entity_context`): when ON, `_build_checkpoint_compacted_volatile()` replaces the sliding `_DIGEST_WINDOW=50` digest (`_build_volatile_digest`). Volatile entries at or before the most recent checkpoint boundary (`floor(t/K)*K`) fold into one snapshot summary line; entries after the boundary are the verbatim append-only delta. At high turn counts the snapshot collapses far more history than the sliding window, so the digest body stays bounded.
+- **discovery known-block** (`format_known_entities_bounded`): when ON, a non-recent, non-priority entity updated at or before the checkpoint boundary (the compacted snapshot tier) renders in the most compact id-only form instead of brief. The full-detail recent/priority set is left **identical to OFF**, preserving the coreference safety floor, so the ON known-block is never larger than OFF.
+- **Scope (A0 only):** this is the digest-body default. It does **not** add eviction, cold-storage rollup (A1b), or A2 retrieval (A2a); no entities are evicted.
+
 **Prompt Token Instrumentation**: Every extraction phase logs estimated input tokens in the extraction log (`prompt_metrics` field) for performance monitoring.
 
 #### Raw-vs-Compressed Instrumentation (#464, PR-1)
@@ -445,7 +451,7 @@ This subsection covers two adjacent prompt paths in the same module: the **entit
 
 | Pass | Function | Thresholds | Risk | 9B-era? |
 |---|---|---|---|---|
-| Prior-state compaction (detail prompt) | `_format_prior_entity_context` | `_PC_MAX_VOLATILE_SNAPSHOTS=3`, `_DIGEST_WINDOW=50` | PC trims stable attributes | Yes |
+| Prior-state compaction (detail prompt) | `_format_prior_entity_context` | `_PC_MAX_VOLATILE_SNAPSHOTS=3`, `_DIGEST_WINDOW=50` (sliding); A0 checkpoint backend `_build_checkpoint_compacted_volatile` `compaction_interval_k=25` when `checkpoint_compaction` ON | PC trims stable attributes | Yes |
 | Scene relationship trim (detail prompt) | `_filter_relationships_for_scene` | `_SCENE_REL_RECENCY_WINDOW=10`, `_SCENE_MAX_RELATIONSHIPS=8` | drops edges → dangling-rel cleanup then removes them | Yes |
 | Existing-rel budgeting (**relationship-mapper prompt**) | `_format_relationships_budgeted` | `_REL_RECENCY_WINDOW=15`, `_REL_TOKEN_BUDGET_FRACTION=0.2` | — | Yes |
 | **Entity-detail call cap** (detail prompt) | `_MAX_DETAIL_ENTITIES_PER_TURN` const, enforced in `extract_and_merge` | `_MAX_DETAIL_ENTITIES_PER_TURN=6` | **Major #394 driver** — high-entity turns lose entities beyond 6 | Yes |
