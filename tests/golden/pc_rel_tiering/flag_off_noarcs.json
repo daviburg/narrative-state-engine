@@ -1,0 +1,72 @@
+{
+  "identity": "The protagonist",
+  "current_status": "active",
+  "stable_attributes": {
+    "species": "human",
+    "class": "ranger",
+    "aliases": [
+      "Hero"
+    ]
+  },
+  "volatile_state": {
+    "equipment": [
+      {
+        "turn": "turn-100",
+        "value": "sword"
+      }
+    ]
+  },
+  "relationships": [
+    {
+      "source_id": "char-player",
+      "target_id": "char-mom",
+      "type": "kinship",
+      "status": "active",
+      "last_updated_turn": "turn-001",
+      "current_relationship": "test rel to char-mom",
+      "history": [
+        {
+          "turn": "turn-003",
+          "description": "event 3"
+        },
+        {
+          "turn": "turn-004",
+          "description": "event 4"
+        },
+        {
+          "turn": "turn-005",
+          "description": "event 5"
+        }
+      ]
+    },
+    {
+      "source_id": "char-player",
+      "target_id": "char-rival",
+      "type": "adversarial",
+      "status": "active",
+      "last_updated_turn": "turn-050",
+      "current_relationship": "test rel to char-rival"
+    },
+    {
+      "source_id": "char-player",
+      "target_id": "char-ally-1",
+      "type": "ally",
+      "status": "active",
+      "last_updated_turn": "turn-080",
+      "current_relationship": "test rel to char-ally-1"
+    },
+    {
+      "source_id": "char-player",
+      "target_id": "char-ally-2",
+      "type": "ally",
+      "status": "active",
+      "last_updated_turn": "turn-095",
+      "current_relationship": "test rel to char-ally-2"
+    }
+  ],
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-100"
+}

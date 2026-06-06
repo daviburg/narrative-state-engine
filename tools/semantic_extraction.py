@@ -1163,6 +1163,78 @@ _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 # Arc-aware compression: max volatile snapshots per key (same as PC)
 _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
 
+# ---------------------------------------------------------------------------
+# Type-tiered PC relationship cap defaults (L1+L4, epic #477)
+# ---------------------------------------------------------------------------
+# Schema-level relationship types that represent long-arc callback anchors.
+# These are structural type enum values, not domain content words (Rule 9).
+#
+# INVARIANT: every member here MUST be a value in the relationship `type` enum
+# defined in schemas/entity.schema.json (mirrored in
+# schemas/relationship-index.schema.json and templates/extraction/
+# relationship-mapper.md).  A type that is not in that enum can never appear on
+# a validated relationship, so listing it here is dead config — and, worse, a
+# future model emitting a *new* bond type that is added to the schema but not
+# here would be silently treated as volatile.  The subset is asserted by
+# tests/test_pc_rel_type_tiering.py::test_default_permanent_types_subset_of_schema_enum.
+# The list is intentionally a subset (not all enum types are permanent): the
+# volatile types — factional, social, romantic, spatial, other — are the
+# trimmable tail.  Operators can still override with arbitrary custom types via
+# config.context_optimizations.pc_rel_permanent_types (open forward-compat path).
+_PC_REL_PERMANENT_TYPES_DEFAULT: frozenset[str] = frozenset({
+    "kinship", "adversarial", "mentorship", "political", "partnership",
+})
+
+# Maximum number of volatile-type (non-permanent) relationships to retain for
+# the PC after mention-forced entries are kept (L1 volatile tail cap).
+_PC_REL_VOLATILE_TAIL_CAP_DEFAULT: int = 10
+
+
+def _get_type_tiering_config(
+    config: dict | None,
+) -> tuple[bool, frozenset[str], int]:
+    """Return (enabled, permanent_types, volatile_tail_cap) from llm config.
+
+    Reads the ``context_optimizations.relationship_type_tiering`` flag and
+    optional overrides for the permanent-type list and volatile tail cap.
+    Default: disabled (byte-identical to pre-#477 behaviour when off).
+    """
+    raw_ctx_opt = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    # context_optimizations may itself be malformed (e.g. a list/string): coerce
+    # to a dict so the unconditional per-turn read can never crash, even OFF.
+    ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
+    # Strict bool parse: only a real JSON ``true`` enables the (default-OFF)
+    # safety gate.  Permissive ``bool(...)`` would treat truthy non-bools — the
+    # string ``"false"``, a non-empty list like ``[False]``, ``1`` — as enabled,
+    # silently flipping the gate ON for a malformed config.  Real JSON booleans
+    # (used by the A/B configs) are unaffected, so this is behaviour-neutral.
+    enabled: bool = ctx_opt.get("relationship_type_tiering", False) is True
+    raw_types = ctx_opt.get("pc_rel_permanent_types")
+    # Parse the permanent-type list defensively: keep only string entries, so a
+    # malformed override (a non-list, or a list containing unhashable values
+    # such as {} or []) can never raise. A non-list override, or a list that
+    # filters down to zero usable strings (e.g. [] or [{}, 7]), falls back to
+    # the default rather than silently disabling permanent-bond protection.
+    if isinstance(raw_types, list):
+        _filtered_types = frozenset(t for t in raw_types if isinstance(t, str))
+        permanent_types: frozenset[str] = (
+            _filtered_types if _filtered_types else _PC_REL_PERMANENT_TYPES_DEFAULT
+        )
+    else:
+        permanent_types = _PC_REL_PERMANENT_TYPES_DEFAULT
+    # Parse the volatile-tail cap defensively: a malformed value (null,
+    # "ten", a list, etc.) must never crash extraction — especially while the
+    # feature is OFF, since this reader runs unconditionally on every turn.
+    # Fall back to the default and clamp negatives to 0.
+    raw_cap = ctx_opt.get("pc_rel_volatile_tail_cap", _PC_REL_VOLATILE_TAIL_CAP_DEFAULT)
+    try:
+        volatile_tail_cap: int = int(raw_cap)
+    except (TypeError, ValueError):
+        volatile_tail_cap = _PC_REL_VOLATILE_TAIL_CAP_DEFAULT
+    if volatile_tail_cap < 0:
+        volatile_tail_cap = 0
+    return enabled, permanent_types, volatile_tail_cap
+
 
 # Per-section drop counters recorded alongside each phase's token metrics.
 # In PR-1 (instrumentation only) these stay at zero: no new compression layer
@@ -1447,6 +1519,72 @@ def _compact_relationships_with_arcs(
     return compact_rels
 
 
+def _apply_pc_rel_type_tier(
+    rels: list,
+    mentioned_ids: set[str],
+    permanent_types: frozenset[str],
+    volatile_tail_cap: int,
+) -> list:
+    """Apply type-tiered cap to PC relationships (L1, epic #477).
+
+    Partitions relationships into three groups:
+    - **Permanent bonds** (kinship, adversarial, mentorship, political,
+      partnership): kept uncapped — these are long-arc callback
+      anchors that never resolve in practice.
+    - **Mentioned-this-turn volatile**: any relationship whose target is in
+      *mentioned_ids* is force-kept regardless of type or cap.
+    - **Volatile tail** (all other types): kept up to *volatile_tail_cap*
+      entries, sorted by recency (most recent first) with a deterministic
+      tie-break on ``(source_id, target_id, type)`` so the cap-fill is
+      reproducible across catalog regenerations.
+
+    History arrays are trimmed to the last 3 entries for all retained
+    relationships.  A 109-relationship PC web is expected to shrink to
+    ~30–40 entries without losing any permanent-bond type or any
+    mentioned-this-turn relationship.
+    """
+    permanent: list[dict] = []
+    volatile_mentioned: list[dict] = []
+    volatile_rest: list[dict] = []
+
+    for rel in rels:
+        rel_type = rel.get("type", rel.get("relationship_type", ""))
+        target_id = rel.get("target_id", "")
+        if rel_type in permanent_types:
+            permanent.append(rel)
+        elif target_id in mentioned_ids:
+            volatile_mentioned.append(rel)
+        else:
+            volatile_rest.append(rel)
+
+    # Sort the volatile tail by recency (most recent first) with an explicit
+    # deterministic tie-break so the cap-fill is reproducible across catalog
+    # regenerations, not merely within one stable sort: exact-recency ties are
+    # broken by (source_id, target_id, relationship_type) ascending (held
+    # finding #3).  Without this, two rels sharing a last_updated_turn could be
+    # retained in input order, which can differ between regenerations.
+    def _rel_sort_key(r: dict) -> tuple[int, str, str, str]:
+        t = _parse_turn_number(r.get("last_updated_turn", "turn-0"))
+        recency = t if t is not None else 0
+        return (
+            -recency,
+            str(r.get("source_id", "")),
+            str(r.get("target_id", "")),
+            str(r.get("type", r.get("relationship_type", ""))),
+        )
+
+    volatile_rest.sort(key=_rel_sort_key)
+    kept_volatile = volatile_mentioned + volatile_rest[:volatile_tail_cap]
+
+    result: list[dict] = []
+    for rel in permanent + kept_volatile:
+        trimmed = dict(rel)
+        if "history" in trimmed and isinstance(trimmed["history"], list):
+            trimmed["history"] = trimmed["history"][-3:]
+        result.append(trimmed)
+    return result
+
+
 def _filter_relationships_for_scene(
     rels: list,
     mentioned_ids: set[str],
@@ -1579,18 +1717,45 @@ def _format_prior_entity_context(
 
     # Relationships — compact with arc summaries for PC (#120),
     # or filter by mention relevance + recency for non-PC (scene-scoped).
+    # When relationship_type_tiering is enabled (L1, #477), apply type-tiered
+    # cap to the PC path to bound the relationship block without dropping
+    # permanent-bond types or mentioned-this-turn relationships.
     rels = current_entry.get("relationships")
+    _tiering_on, _perm_types, _vol_cap = _get_type_tiering_config(config)
     if rels and is_pc and arcs_data:
-        prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
+        if _tiering_on:
+            # Apply the type-tier cap to the RAW relationships first, then
+            # compact. Compaction (#120) drops ``last_updated_turn`` for
+            # arc-summarised rels, which would zero out their recency and make
+            # the volatile tail sort incorrectly. Tiering on the raw list keeps
+            # recency intact. Flag-OFF path is unchanged (compact only), so the
+            # A/B control output stays byte-identical.
+            tiered = _apply_pc_rel_type_tier(
+                rels,
+                mentioned_ids or set(),
+                _perm_types,
+                _vol_cap,
+            )
+            prior["relationships"] = _compact_relationships_with_arcs(tiered, arcs_data)
+        else:
+            prior["relationships"] = _compact_relationships_with_arcs(rels, arcs_data)
     elif rels and is_pc:
-        # PC without arcs: just trim history to last 3 entries
-        compact_rels = []
-        for rel in rels:
-            trimmed = dict(rel)
-            if "history" in trimmed and isinstance(trimmed["history"], list):
-                trimmed["history"] = trimmed["history"][-3:]
-            compact_rels.append(trimmed)
-        prior["relationships"] = compact_rels
+        if _tiering_on:
+            prior["relationships"] = _apply_pc_rel_type_tier(
+                rels,
+                mentioned_ids or set(),
+                _perm_types,
+                _vol_cap,
+            )
+        else:
+            # PC without arcs and type-tiering off: trim history to last 3 entries
+            compact_rels = []
+            for rel in rels:
+                trimmed = dict(rel)
+                if "history" in trimmed and isinstance(trimmed["history"], list):
+                    trimmed["history"] = trimmed["history"][-3:]
+                compact_rels.append(trimmed)
+            prior["relationships"] = compact_rels
     elif rels:
         # Non-PC: scene-scoped filtering (mentioned + recent, capped)
         _mentioned = mentioned_ids or set()
@@ -1802,6 +1967,8 @@ def _collect_existing_relationships(
         mentioned_ids |= text_mentioned
 
     # Flatten all relationships with their owning entity ID
+    # L4 type-tiering config (#477): permanent-bond types survive budget trim
+    _l4_tiering_on, _l4_perm_types, _ = _get_type_tiering_config(config)
     scored: list[tuple[int, str, dict]] = []  # (tier, owner_id, rel)
     for owner_id, rels in result.items():
         for rel in rels:
@@ -1821,6 +1988,23 @@ def _collect_existing_relationships(
                 tier = 3  # summary
             else:
                 tier = 4  # omit
+
+            # L4: boost permanent-bond types so the volatile tail is trimmed
+            # first (tiers 3/4 degrade first under budget pressure).
+            # - One endpoint mentioned: promote to at least tier 2 — the strong
+            #   guarantee; tier 2 survives the tier-3 → omit degradation pass.
+            # - Neither endpoint mentioned: the tier 4 → 3 boost keeps it as a
+            #   summary only when within budget; the degradation pass still
+            #   degrades tier 3 → omit, so an unmentioned permanent bond CAN
+            #   still be omitted under budget pressure.
+            if _l4_tiering_on:
+                rel_type = rel.get("type", rel.get("relationship_type", ""))
+                if rel_type in _l4_perm_types:
+                    if tier == 4:
+                        tier = 3  # prevent silent omit
+                    if one_mentioned and tier >= 3:
+                        tier = 2  # volatile tail drops first; permanent survives
+
             scored.append((tier, owner_id, rel))
 
     # Compute token budget

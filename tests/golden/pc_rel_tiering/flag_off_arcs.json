@@ -1,0 +1,58 @@
+{
+  "identity": "The protagonist",
+  "current_status": "active",
+  "stable_attributes": {
+    "species": "human",
+    "class": "ranger",
+    "aliases": [
+      "Hero"
+    ]
+  },
+  "volatile_state": {
+    "equipment": [
+      {
+        "turn": "turn-100",
+        "value": "sword"
+      }
+    ]
+  },
+  "relationships": [
+    {
+      "target_id": "char-mom",
+      "type": "kinship",
+      "status": "active",
+      "arc_phases": 2,
+      "current": "trusted ally",
+      "summary": "met \u2192 allied"
+    },
+    {
+      "target_id": "char-rival",
+      "type": "adversarial",
+      "status": "active",
+      "arc_phases": 2,
+      "current": "trusted ally",
+      "summary": "met \u2192 allied"
+    },
+    {
+      "target_id": "char-ally-1",
+      "type": "ally",
+      "status": "active",
+      "arc_phases": 2,
+      "current": "trusted ally",
+      "summary": "met \u2192 allied"
+    },
+    {
+      "target_id": "char-ally-2",
+      "type": "ally",
+      "status": "active",
+      "arc_phases": 2,
+      "current": "trusted ally",
+      "summary": "met \u2192 allied"
+    }
+  ],
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-100"
+}
