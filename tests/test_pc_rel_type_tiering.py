@@ -47,6 +47,19 @@ _CFG_ON = {
 _GOLDEN_DIR = os.path.join(os.path.dirname(__file__), "golden", "pc_rel_tiering")
 
 
+def _load_shipped_config():
+    """Return the raw parsed production ``config/llm.json`` dict.
+
+    Single source for the shipped-config path + JSON load so future config-path
+    changes are made in one place.
+    """
+    cfg_path = os.path.join(
+        os.path.dirname(__file__), "..", "config", "llm.json"
+    )
+    with open(cfg_path, encoding="utf-8") as fh:
+        return json.load(fh)
+
+
 def _load_prod_config_on():
     """Return the production config/llm.json context_optimizations block with the
     tiering flag forced ON.
@@ -56,11 +69,7 @@ def _load_prod_config_on():
     of 10), so a shrink test built on it reflects real merged behaviour rather
     than the 7-type test ``_CFG_ON`` override (Finding #4).
     """
-    cfg_path = os.path.join(
-        os.path.dirname(__file__), "..", "config", "llm.json"
-    )
-    with open(cfg_path, encoding="utf-8") as fh:
-        cfg = json.load(fh)
+    cfg = _load_shipped_config()
     ctx_opt = dict(cfg.get("context_optimizations", {}))
     ctx_opt["relationship_type_tiering"] = True
     return {"context_optimizations": ctx_opt}
@@ -102,6 +111,35 @@ def _make_pc_entry(relationships=None):
     if relationships is not None:
         entry["relationships"] = relationships
     return entry
+
+
+# ===========================================================================
+# Shipped default (config/llm.json)
+# ===========================================================================
+
+class TestShippedDefaultConfig:
+    """The shipped production config gates the feature ON by default (epic #477).
+
+    The A/B (150t) measured the flag-ON arm as MERGE-READY at quality parity, so
+    the default was flipped from OFF to ON.  The flag-OFF golden tests still pin
+    flag-OFF == pre-#477-main byte-identity (the A/B control); this asserts the
+    *shipped* value the production runs now use.
+    """
+
+    def test_shipped_config_enables_tiering(self):
+        cfg = _load_shipped_config()
+        ctx_opt = cfg.get("context_optimizations", {})
+        assert ctx_opt.get("relationship_type_tiering") is True
+
+    def test_shipped_config_parses_to_enabled(self):
+        cfg = _load_shipped_config()
+        enabled, perm, cap = se._get_type_tiering_config(cfg)
+        assert enabled is True
+        # Shipped permanent list is the 5 schema-valid permanent-bond types.
+        assert perm == frozenset(
+            {"kinship", "adversarial", "mentorship", "political", "partnership"}
+        )
+        assert cap == 10
 
 
 # ===========================================================================

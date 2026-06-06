@@ -26,8 +26,8 @@
   "dedup_audit_interval": 50,
   "skip_response_format": true,
   "context_optimizations": {
-    "relationship_type_tiering": false,
-    "_comment": "L1+L4 type-tiered PC relationship cap (epic #477). Set true to cap PC entity-detail relationships by type: permanent bonds kept uncapped, volatile tail trimmed to pc_rel_volatile_tail_cap. Also promotes permanent-bond types in the relationship-mapper budget trim. Default OFF; same-commit flag-OFF run serves as A/B control.",
+    "relationship_type_tiering": true,
+    "_comment": "L1+L4 type-tiered PC relationship cap (epic #477). Default ON: caps PC entity-detail relationships by type: permanent bonds kept uncapped, volatile tail trimmed to pc_rel_volatile_tail_cap. Also promotes permanent-bond types in the relationship-mapper budget trim. Set false to restore pre-#477 behaviour (byte-identical to the pre-#477 baseline -- i.e. main before #477 -- when the flag is absent or false; note that once this default-ON change merges, main itself ships the flag ON); a same-commit flag-OFF run serves as the A/B control.",
     "pc_rel_permanent_types": ["kinship", "adversarial", "mentorship", "political", "partnership"],
     "pc_rel_volatile_tail_cap": 10
   }
