@@ -51,6 +51,10 @@ the 344-turn run:
 
 $$\text{total\_input\_tokens}(t) = 15182 + 88.62 \cdot t \qquad (\text{MEASURED, linear fit, } n=374)$$
 
+(Here `n=374` is the number of per-turn token **samples** in the fit, not the turn count: the 344-turn run
+plus a 30-turn re-extraction pass = 374 measured points. The slope/intercept are unchanged by this; `n`
+labels the regression sample size, not the session length.)
+
 There is no plateau. A late turn costs ~2.5x an early turn (17,122 mean at t<=30 -> 43,084 mean at t>=300)
 for the **same** per-turn narrative work. The driver is the `entity_detail` phase (**64.4%** of load at
 scale) plus `relationship_mapper` (16.0%) plus the discovery known-entities block (12.7%). The sub-drivers,
@@ -119,7 +123,7 @@ The backstop should **log loudly** when engaged, never silently. The intelligent
 
 ---
 
-## 3. A1 — Bounded Summary-Based Running State
+## 3. A1 — Bounded Summary-Based Running State <a id="3-a1-bounded-summary-based-running-state"></a>
 
 ### 3.1 Definition
 
@@ -143,7 +147,7 @@ three compartments, each with its own budget and refresh discipline:
 
 | Compartment | Content | Budget `[ESTIMATE]` | Refresh cadence | Bounded by |
 |---|---|---:|---|---|
-| **A1-IDX** Identity index | One ultra-compact line per known entity: `id \| primary-name \| aliases \| type \| 1-line role`. The **coreference anchor**. | ~15-18 tok/entity; ~6K at N=344 | Append on new entity; edit on alias/identity change | Hierarchical rollup **and intelligent forgetting** of dormant entities (3.4) |
+| **A1-IDX** Identity index | One ultra-compact line per known entity: `id \| primary-name \| aliases \| type \| 1-line role`. The **coreference anchor**. | **17 / 19 / 25 tok/entity** (p50 / in-context avg / p90, MEASURED F3); ~5.8K (p50) / 8.6K (p90) at N=344 | Append on new entity; edit on alias/identity change | Hierarchical rollup **and intelligent forgetting** of dormant entities (3.4) |
 | **A1-SAL** Salient state | Permanent / high-salience facts: open arcs, **unresolved** relationships, durable stable_attributes, long-range callbacks. | fixed ~2,500 | Rolling: every N turns, or on arc/relationship status change | Salience ranking + fixed cap |
 | **A1-VOL** Volatile current-status | The *current* status line for entities touched recently, kept **verbatim** (not summarized). | fixed ~1,500 | Every turn for touched entities | Recency window |
 
@@ -151,6 +155,13 @@ three compartments, each with its own budget and refresh discipline:
 independent of session length. `B_IDX` is the single residual catalog-coupled term, and it is the
 **cheapest possible** per-entity cost (an identity line, not a relationship web) — see Section 5.4 for why
 this is the right place to concentrate the residual, and 3.4 for how intelligent forgetting bounds it too.
+
+> **Alias note (MEASURED F3):** the per-entity cost above (17/19/25 tok) was measured over a catalog where
+> `alias=null` for all 696 entities — so the alias slot was empty and the alias-based coreference path was
+> **unexercised by that data**. This is a property of the measured corpus, not a permanent design state: the
+> human confirms earlier extractions populated aliases. When aliases are present, add **~1.6-3 tok/alias** to
+> `B_IDX` (mean ~23-24 tok/entity at ~2 aliases/entity, §5.4). **Pre-A1b validation (§9.1):** confirm aliases
+> are populated in the live pipeline before A1b's cold/eviction tiers rely on the alias-based coreference path.
 
 **These budgets are TARGET ENVELOPES with typed non-droppable invariants — NOT silent caps.** This is the
 property that distinguishes A1-SAL/A1-VOL (and the A2 budget, Section 4.3) from the **rejected A3 hard caps**
@@ -242,7 +253,7 @@ boundaries are **telemetry-gated, not a hardcoded rule**:
 
 | Tier | State | Cost | Trigger (telemetry-driven) |
 |---|---|---:|---|
-| Hot (verbatim) | full `id \| name \| aliases \| role` line | ~15-18 tok | mentioned/active within the recency window |
+| Hot (verbatim) | full `id \| name \| aliases \| role` line | ~17-25 tok (p50-p90, MEASURED F3) | mentioned/active within the recency window |
 | Cold (compressed) | `id \| primary-name \| type`; aliases moved to a cold-storage lookup | ~6-8 tok | dormant > M turns **and** not flagged important |
 | Cluster rollup | very large cold cohorts (e.g. a defunct faction's rank-and-file) collapse to one cluster line + count | ~O(1)/cohort | many co-dormant low-importance entities |
 | **Evicted** | dropped from the active index entirely; retained only in cold storage on disk | **0 tok** | dormant beyond the eviction horizon **and** low quantitative **and** low semantic importance |
@@ -294,7 +305,7 @@ A1b). This is the single most quality-sensitive knob in A1 and must be validated
 
 ---
 
-## 4. A2 — Retrieval-Scoped Injection
+## 4. A2 — Retrieval-Scoped Injection <a id="4-a2-retrieval-scoped-injection"></a>
 
 ### 4.1 Definition
 
@@ -433,12 +444,13 @@ $$
 $$
 
 Only `B_IDX(N)` depends on the session; everything else is a fixed budget. And `B_IDX` is the **cheapest
-possible** catalog term — identity lines, ~15-18 tok/entity hot, ~6-8 cold — and is hierarchically boundable
+possible** catalog term — identity lines, **17 / 19 / 25 tok/entity (p50 / realized in-context avg / p90,
+MEASURED via Spike F3)** hot, ~6-8 cold — and is hierarchically boundable
 (3.4). So:
 
 $$
 \text{per\_turn}(t) \;\approx\; C + s_{\text{IDX}} \cdot N(t), \qquad
-s_{\text{IDX}} \approx 15\text{-}18 \text{ tok/entity (hot) }\to 0 \text{ (cold rollup + eviction)} \quad [\text{ESTIMATE}]
+s_{\text{IDX}} \approx 17\text{-}25 \text{ tok/entity (hot, MEASURED F3) }\to 0 \text{ (cold rollup + eviction)}
 $$
 
 Since net new entities/turn `dN/dt` falls over a session (most entities appear early), and **cold rollup plus
@@ -449,25 +461,46 @@ This is a **`[HYPOTHESIS — falsifiable]`, conditional on `N_active` converging
 staying sub-linear) — **UNPROVEN over the measured 344t window**, which shows a ~19× flatter slope (a much
 cheaper line), not a demonstrated asymptote. See [§5.6](#56-falsification-gates) for the disproof criteria.
 
-### 5.4 Projected curve vs the 88.62 baseline `[ESTIMATE]`
+### 5.4 Projected curve vs the 88.62 baseline (`B_IDX` now MEASURED via Spike F3)
 
 Assumptions: `B_tmpl+B_turn ~= 3,500` (with L2 batching to ~2 detail calls); `B_SAL ~= 2,500`;
-`B_VOL ~= 1,500`; `B_A2 ~= 4,500`; `B_IDX` at ~16 tok/entity hot, with cold rollup beginning at the recency
-window. Net entity counts taken to be ~N(t) growing sub-linearly (proxy: ~0.5-0.7 net entities/turn early,
-tapering).
+`B_VOL ~= 1,500`; `B_A2 ~= 4,500`. The `B_IDX` per-entity cost is **no longer an estimate**: **Spike F3
+(COMPLETE)** tokenized the real identity lines of the 122-entity `eval-qwen36-344t-full` catalog with the
+**Qwen3.6 tokenizer** and MEASURED **s_IDX = 17 (p50) / 19 (realized in-context avg) / 25 (p90)
+tok/entity** (MEASURED, **not** `[ESTIMATE]`), with cold rollup beginning at the recency window. Net entity
+counts taken to be ~N(t) growing sub-linearly (proxy: ~0.5-0.7 net entities/turn early, tapering).
 
 | Turn | Baseline MEASURED fit | A1+A2 projected `[ESTIMATE]` | reduction |
 |---|---:|---:|---:|
 | t100 | 24,044 | ~14,000-16,000 | ~33-42% |
 | t200 | 32,906 | ~15,000-17,500 | ~47-54% |
-| t344 | 45,667 | ~16,000-19,000 | ~58-65% |
+| t344 | 45,667 | ~17,800 (p50) / ~20,600 (p90) | ~55-61% |
+
+At t344 the MEASURED hot-tier `B_IDX` is **5.8K (p50) / 8.6K (p90)** tokens (replacing the earlier ~6K
+`[ESTIMATE]`), giving a per-turn t344 of **~17.8K (p50) / 20.6K (p90)**. The Section-5.4 **16-19K band HOLDS
+at p50 but is EXCEEDED at p90** — a result the long-run A/B (§9.3) must watch closely, since the p90 turns are
+exactly the dense turns the bound has to survive.
 
 The decisive difference vs PR #478's L1+L2+L4 projection (which lands at a *similar* t344 magnitude,
 ~22-28K, but with a residual slope of ~25-40 tok/turn spread across discovery-block growth **and**
 irreducible per-entity content): A1+A2 **collapses the residual slope onto the single cheapest term**
-(`B_IDX`, ~9-18 tok/turn during active growth `[ESTIMATE]`, -> ~0 with cold rollup), and removes the
+(`B_IDX`, ~17-25 tok/turn (p50->p90) during active growth, -> ~0 with cold rollup), and removes the
 per-entity-content slope entirely by replacing it with a fixed A2 budget. The curve **flattens** rather than
 merely tilting.
+
+**Structure dominates the identity line (Spike F3).** ~8 of the ~19 realized tokens per entity are
+**structural** — field delimiters plus an empty alias slot — not content. The kebab-case `id` alone costs
+~4.5 tokens, roughly **3x the primary name**. Two cheap wins fall straight out of this: **drop the empty-alias
+column** when no alias is populated (~-2 tok/entity) and **shorten / integerize the `id`** (~-2-3 tok/entity),
+which together could roughly halve the structural overhead without touching any coreference content.
+
+**Alias-sensitivity caveat (the MEASURED corpus had `alias=null`).** The s_IDX above assumes `alias=null`,
+which held for **all 696 entities across the measured corpora** — i.e. in *this* catalog the alias column was
+empty. That is a property of the measured **data**, **not** a permanent design assumption: the human confirms
+earlier extractions *did* populate aliases. When aliases are present, each adds **~1.6-3 tok**, pushing the
+mean to **~23-24 tok/entity at ~2 aliases/entity**. Treat the null-alias measurement as a **floor**: whenever
+the live pipeline populates aliases, add the per-alias cost to `B_IDX` rather than assuming the column stays
+empty.
 
 ```text
 Per-turn total: baseline vs L1+L2+L4 vs A1+A2 (ESTIMATE)
@@ -545,9 +578,14 @@ indistinguishable from zero after warmup, and the zero-duplicate gate holds for 
 entities — only *then* is "bounded-in-the-limit" earned. Until that measurement exists, this document claims
 **"much flatter and cheaper," not "asymptotically bounded."**
 
+**The F3/F10 spikes (COMPLETE) reinforce but do not settle this.** Both are **offline** and exclude
+`N_active` convergence *and* A1/A2 build cost, so the measured s_IDX (F3) and the measured checkpoint slope
+(F10) support **"much flatter & cheaper"** — they do **not** prove boundedness. The §9.3 long replay remains
+the only gate that can.
+
 ---
 
-## 6. Coreference Safety — the Make-or-Break Property
+## 6. Coreference Safety — the Make-or-Break Property <a id="6-coreference-safety"></a>
 
 This is the property that decides whether the design is shippable. The discovery phase sets `is_new=true`
 **iff** an entity is **not** in the known list ([templates/extraction/entity-discovery.md](../templates/extraction/entity-discovery.md):
@@ -561,7 +599,8 @@ name, alias, role, or ID stem. Set is_new=false with existing_id"). Therefore:
 A1 + A2 **must solve this, not inherit it.** The design guarantees:
 
 1. **Every entity in the active working set keeps at least a minimal `id | primary-name | type` anchor in
-   context, every turn.** Identity lines are cheap (~15-18 tokens at full fidelity, ~6-8 compressed), so even
+   context, every turn.** Identity lines are cheap (**17-25 tokens at full fidelity, p50-p90 MEASURED via
+   Spike F3**, ~6-8 compressed), so even
    hundreds of active entities cost only a few thousand tokens — affordable to keep verbatim. This is the
    categorical difference from #468: #468 dropped the entry *and its anchor*; A1 drops the expensive
    *history* while **keeping the anchor** for every entity still in the working set. **Full eviction (3.4) is
@@ -578,13 +617,21 @@ A1 + A2 **must solve this, not inherit it.** The design guarantees:
    *does* match is pulled to full fidelity, so a recurring entity is both *anchored* (A1) and *re-detailed*
    (A2) in the same turn.
 
+> **Alias-path caveat (MEASURED F3).** In the measured `eval-qwen36-344t-full` catalog, **aliases were absent**
+> (`alias=null` for all 696 entities), so the **alias-based coreference path was unexercised by that data** —
+> coreference there rested entirely on primary-name / id-stem / role matching. This does **not** mean aliases
+> are permanently null (the human confirms earlier extractions populated them); it means the alias path needs
+> its own validation. **Pre-A1b validation item:** confirm aliases are populated in the live pipeline, and
+> exercise the alias coreference path in the A/B fixture, **before** A1b's cold/eviction tiers (which move
+> aliases to a cold-storage lookup, §3.4) rely on them.
+
 **Acceptance gate (non-negotiable):** the A/B (Section 9) must show **ZERO net new duplicate entities** vs
 the baseline catalog over the full long run. Any duplicate regression fails the design, regardless of token
 savings. `@quality-analyst` owns this gate.
 
 ---
 
-## 7. Relationship to Existing Levers (L1/L4/L2)
+## 7. Relationship to Existing Levers (L1/L4/L2) <a id="7-relationship-to-existing-levers"></a>
 
 | Lever (PR #478) | Status under A1+A2 | Reason |
 |---|---|---|
@@ -626,7 +673,7 @@ Sequence: **L3 (guardrail) -> L1/L4 -> L2 -> A1 (anchor + digest) -> A2 (retriev
 
 ---
 
-## 9. Phasing, Spike, and the Long-Run A/B Requirement
+## 9. Phasing, Spike, and the Long-Run A/B Requirement <a id="9-phasing-spike-and-ab"></a>
 
 ### 9.1 Phasing (safety floor first)
 
@@ -634,18 +681,36 @@ Sequence: **L3 (guardrail) -> L1/L4 -> L2 -> A1 (anchor + digest) -> A2 (retriev
 proven duplicate-safe before A2's relevance-selection narrows what gets full fidelity. Building A2 first would
 risk the #468 failure mode during development.
 
-1. **Phase A1a — Identity index + bounded digest (hot tier only).** Persist A1-IDX (all entities, verbatim
-   aliases) + A1-SAL + A1-VOL. Wire the digest into discovery (replacing the recency-ordered known-block) and
+0. **Phase A0 — Periodic checkpoint-compaction (K=25).** The **FIRST bounded increment** and the **default
+   digest-BODY backend.** On a fixed cadence (every K=25 turns) compact the accumulated state into a
+   checkpoint snapshot, and between checkpoints carry an **append-only recent-delta buffer**. **Spike F10
+   (COMPLETE)** measured this at a residual slope of **~17 tok/turn** (down from a re-derived **121.1**
+   baseline) at **engineering cost 2** and bounded staleness (<=25 turns) — i.e. it captures most of the
+   bound at roughly **half** the build cost of an always-maintained abstractive digest (slope ~2, eng cost
+   ~4). This is the shipping default for the digest body.
+1. **Phase A1a — Identity-anchor floor + checkpoint digest body (hot tier only).** Persist A1-IDX (all
+   entities) as the **always-in-context coreference safety FLOOR**, and use the **A0 checkpoint snapshot +
+   append-only recent-delta buffer** as the digest **BODY default** — **NOT** an always-maintained rolling
+   abstractive digest. Wire the digest into discovery (replacing the recency-ordered known-block) and
    entity_detail prior-state. **No cold rollup yet.** Acceptance: zero new duplicates, equal extraction
    quality, measured token reduction.
+   - **Deferred tier — rolling / abstractive digest.** The always-maintained rolling abstractive digest is
+     **demoted to a deferred, trigger-gated tier** (cross-ref the §10 digest-method fork). It is promoted from
+     the A0 checkpoint default **only when a trigger fires:** the residual slope re-approaches the budget
+     (~1000+ turns), an A/B shows snapshot-lag quality loss, or absolute digest size binds.
 2. **Phase A1b — Cold-tier rollup + intelligent forgetting.** Enable activity-tiered IDX compression and
-   dormant-entity eviction (3.4) behind a flag, gated on the eviction telemetry signals. Acceptance: still
-   zero new duplicates and a healthy cold/evicted re-mention promote rate (this is the risky step — Section 8
-   Q-3).
+   dormant-entity eviction (3.4) behind a flag, gated on the eviction telemetry signals. **Pre-A1b
+   validation:** confirm aliases are populated in the live pipeline (they were absent in the measured F3
+   corpus — §3.1, §6) before A1b's cold/eviction tiers rely on the alias-based coreference path. Acceptance:
+   still zero new duplicates and a healthy cold/evicted re-mention promote rate (this is the risky step —
+   Section 8 Q-3).
 3. **Phase A2a — Deterministic retrieval (R0-R2).** Replace recency/confidence selection in entity_detail and
    relmap with #233-style relevance retrieval + force-include. Acceptance: relationship recall and state-change
    coverage hold; tokens bounded.
 4. **Phase A2b — Embedding recall (R3), optional.** Add only if A/B shows a coreference-recall gap.
+
+**Net sequence:** L3 -> L1/L4 -> L2 -> **A0 checkpoint-compaction** -> **A1a identity-anchor floor** ->
+[defer rolling digest] -> A1b eviction (gated) -> A2a -> A2b.
 
 ### 9.2 Minimal spike to validate the bounded-curve claim
 
@@ -657,21 +722,31 @@ Before the full build, a **read-only measurement spike**:
   digest-build, retrieval, and index-maintenance cost per turn (even if zero for the extractive/R0-R2
   default), so the spike measures *total pipeline* demand, not a post-oracle prompt size (F5).
 - Plot the projected per-turn curve against the measured 88.62 line.
-- **Success = the projected curve flattens** (slope dominated by `B_IDX`, ~9-18 tok/turn, vs 88.62) and
-  `B_IDX` at t344 is within the ~6K `[ESTIMATE]`. This **flatness** result supports "much flatter and
-  cheaper"; it does **not** by itself prove the asymptotic bound (§5.6) — that needs the long replay in §9.3.
+- **Success = the projected curve flattens** (slope dominated by `B_IDX`, ~17-25 tok/turn p50-p90 MEASURED,
+  vs 88.62) and `B_IDX` at t344 is within the MEASURED **5.8K (p50) / 8.6K (p90)** band. This **flatness**
+  result supports "much flatter and cheaper"; it does **not** by itself prove the asymptotic bound (§5.6) —
+  that needs the long replay in §9.3.
 
 **Named offline spikes feeding this section (run in parallel, no pipeline code change):**
 
-- **Spike F3 — tokenizer-true `B_IDX`.** Measure p50/p90/p99 tokens per identity line (and aliases-per-entity,
-  token contribution by field) with the **actual tokenizer over the real catalog**, replacing the unmeasured
-  ~15-18 tok/entity `[ESTIMATE]`. Result feeds back into the `B_IDX` term in §5.3/§5.4 and the budgets in §3.1.
-- **Spike F10 — checkpoint-compaction vs always-maintained digest.** Compare periodic checkpoint compaction
-  (+ L1/L2/L4) against the always-maintained A1 digest on slope / quality / engineering cost. Result feeds the
-  digest-method fork in §10 and may simplify the A1 build if it dominates.
+- **Spike F3 — tokenizer-true `B_IDX` (COMPLETE).** Measured p50/p90 tokens per identity line with the
+  **Qwen3.6 tokenizer over the real 122-entity `eval-qwen36-344t-full` catalog**: **s_IDX = 17 (p50) / 19
+  (realized in-context avg) / 25 (p90) tok/entity**, structure-dominated (~8 of ~19 tokens structural; kebab
+  `id` ~4.5 tok, ~3x the name). This **replaces** the former ~15-18 tok/entity `[ESTIMATE]` and feeds the
+  `B_IDX` term in §5.3/§5.4 and the budgets in §3.1. **Caveat:** the measured corpus had `alias=null` for all
+  696 entities, so the alias-cost path is **unvalidated** here (add ~1.6-3 tok/alias when populated; §5.4).
+- **Spike F10 — checkpoint-compaction vs always-maintained digest (COMPLETE).** Periodic checkpoint
+  compaction (K=25) yields a residual slope of **~17 tok/turn** (vs a re-derived **121.1** baseline) at
+  **engineering cost 2** and staleness <=25 turns, against the always-maintained digest's slope ~2 at eng
+  cost ~4 — both far below the baseline. Checkpoint-compaction is therefore **ADOPTED as the first increment
+  (Phase A0, §9.1)** and the digest-body default; the rolling/abstractive digest is **deferred** (§9.1, §10
+  fork). (See Appendix A's AMBER note: F10's re-derived 121.1 baseline is **not** the same number as the
+  doc's 88.62 offline-replay fit — different derivations, do not cross-cite.)
 
-Both spikes are **cheap, offline, read-only**; their measured results **overwrite the corresponding
-`[ESTIMATE]`s** in §5.4 and §9 before the full build is committed.
+Both spikes were **cheap, offline, read-only**; their measured results have now **overwritten the
+corresponding `[ESTIMATE]`s** in §5.4 and §9 — with the standing caveat that both are offline and exclude
+`N_active` convergence and A1/A2 build cost, so they support "much flatter & cheaper" but do **not** prove
+boundedness (§5.6).
 
 ### 9.3 Long-run A/B requirement (critical)
 
@@ -747,15 +822,17 @@ dispositions, for the record:
 | Alternative / refinement | Disposition | Rationale |
 |---|---|---|
 | **Structured world-state as first-class source of truth** (vs free-text digest) | **ADOPTED** (into A1) | Folded directly into A1's definition (§3.1): A1 renders **typed views over the existing structured catalog** (`relationship-index.json`, `scene-graph.json`, entity JSON), with prose only at the boundary. This was the strongest finding and is now the A1 framing, not a separate alternative. |
-| **Tokenizer-true `B_IDX` measurement** | **SPIKE — running now** (F3) | Cheap offline measurement (§9.2 Spike F3); result overwrites the ~15-18 tok/entity `[ESTIMATE]` and feeds §5.4. |
-| **Periodic checkpoint compaction** (vs always-maintained digest) | **SPIKE — running now** (F10) | Cheap offline comparison (§9.2 Spike F10) on slope / quality / engineering cost; may simplify the A1 build if it dominates. Result feeds the §10 digest-method fork. |
+| **Tokenizer-true `B_IDX` measurement** | **COMPLETE** (F3) | s_IDX = **17 / 19 / 25 tok/entity** (p50 / in-context avg / p90, MEASURED, Qwen3.6 tokenizer over the real catalog), **structure-dominated**; alias path **unvalidated** in the measured corpus (`alias=null`). Overwrites the ~15-18 tok/entity `[ESTIMATE]` in §5.4. |
+| **Periodic checkpoint compaction** (vs always-maintained digest) | **ADOPTED as first increment (A0); rolling digest deferred** (F10) | Spike F10 (COMPLETE): checkpoint slope **~17** vs digest **~2**, both **<< 121** (re-derived) / 88 baseline, at **half** the engineering cost — adopted as Phase A0 (§9.1) and the digest-body default; the always-maintained rolling digest is deferred to a trigger-gated tier (§10). |
 | **Hierarchical / episodic memory** (episode windows + episode summaries) | **DEFERRED** (telemetry-gated) | Promising for callback paths and active-set stabilization, but a larger redesign; instrument and revisit — do **not** block A1+A2 on it (§10). |
 | **Learned salience / ranking** for eviction | **DEFERRED** (telemetry-gated) | Could predict future salience, but needs labels/replay data. Per-entity outcome logging (retained / evicted / re-mentioned / duplicate-causing / state-change) is instrumented **now** (F11) to seed the training set **if** heuristic eviction proves unsafe; not a build dependency. |
 | **Smaller-context multi-pass extraction** (split into bounded passes) | **REJECTED** (F12) | Conflicts with the latency goal and with **L2** (per-call repetition batching). Our bottleneck is **per-CALL token cost, not call count**, so more passes worsen the actual constraint. Each added pass re-pays template+turn boilerplate, which L2 exists to *remove*. |
 
 **Spike → doc feedback loop:** Spikes **F3** (tokenizer-true `B_IDX`) and **F10** (checkpoint vs digest) are
-running as offline, read-only measurements **now**; their results overwrite the corresponding `[ESTIMATE]`s in
-**§5.4** and the forks in **§9/§10** before the full build is committed.
+**COMPLETE** (offline, read-only); their measured results have now **overwritten the corresponding
+`[ESTIMATE]`s** in **§5.4** and the forks in **§9/§10**: s_IDX raised to the MEASURED 17/19/25 tok/entity, and
+checkpoint-compaction adopted as Phase A0 (§9.1) with the rolling digest deferred. Both remain offline, so they
+support "much flatter & cheaper" but do **not** prove boundedness (§5.6).
 
 ---
 
@@ -768,7 +845,17 @@ running as offline, read-only measurements **now**; their results overwrite the 
 | L1+L4+L2 halve but do not bound the slope | MEASURED-derived projection (PR #478 Section 4.3) |
 | Measured evidence supports **"much flatter & cheaper"**: ~19× flatter slope (88.62 → ~4.63 tok/turn), ~70% per-turn reduction on the 344t offline replay (A1/A2 build costs EXCLUDED) | MEASURED-derived (offline replay; §5.6) |
 | A1+A2 per-turn `~= C + s_IDX*N(t)`, `s_IDX -> 0` with cold rollup + eviction — **asymptotically bounded** | **`[HYPOTHESIS — falsifiable]`**, conditional on `N_active` convergence; UNPROVEN over 344t (§5.3, §5.6) |
-| Projected t344 per-turn ~16-19K (~58-65% reduction) | `[ESTIMATE]` (Section 5.4) |
+| `s_IDX` identity-line cost = 17 / 19 / 25 tok/entity (p50 / in-context avg / p90); structure-dominated; alias path unexercised (`alias=null`) in the measured corpus | **MEASURED** (Spike F3, Qwen3.6 over `eval-qwen36-344t-full`; §5.4) |
+| Projected t344 per-turn ~16-19K — **HOLDS at p50 (~17.8K), EXCEEDED at p90 (~20.6K)** | `[ESTIMATE]` over MEASURED `B_IDX` (Section 5.4) |
 | Zero-duplicate coreference safety from always-in-context A1-IDX + cold-store-before-discovery ordering (§4.4) | DESIGN GUARANTEE, gated by long-run A/B incl. adversarial evicted-then-rementioned fixture (Section 6, 9.3) |
 | Intelligent forgetting (dormant eviction) bounds the identity-index entity count | **`[HYPOTHESIS — falsifiable]`** / central tradeoff, telemetry-gated (Section 3.4, 5.6, 10) |
-| Residual growth concentrated in cheapest term (identity index), driven toward zero by forgetting | `[ESTIMATE]` (Section 5.4, 3.4) |
+| Residual growth concentrated in cheapest term (identity index), driven toward zero by forgetting. Note: under the Phase-A0 checkpoint default the residual is driven by the **compact-state BODY (~48 tok/entity)**, **not** the ~6.8-tok index line — **eviction targets both** | `[ESTIMATE]` (Section 5.4, 3.4, 9.1) |
+| Periodic checkpoint compaction adopted as the first increment (Phase A0); rolling/abstractive digest deferred to a trigger-gated tier | **MEASURED-derived** (Spike F10: slope ~17 vs digest ~2, half eng cost; §9.1, §9.2, §11) |
+
+> **AMBER note — two baseline slopes, do NOT cross-cite as the same number.** Spike F10's baseline slope
+> (**121.1 tok/turn**, re-derived directly from `prompt_metrics`) is **NOT directly comparable** to this
+> document's headline **88.62 tok/turn** (an offline-replay OLS fit, `n=374`). They come from **different
+> derivations** (raw per-turn prompt metrics vs an offline replay fit over a partly re-extracted sample), so
+> the F10 "121.1 -> 17" reduction and the doc's "88.62 -> ~4.63" reduction are **separate accountings**. Both
+> show the same qualitative result (a large slope collapse), but the absolute baselines must not be quoted
+> interchangeably.
