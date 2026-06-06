@@ -724,20 +724,21 @@ def format_known_entities_bounded(
             original string-only return so existing callers are unchanged.  The
             stats path is the backward-compatible plumbing PR-2 wires into the
             per-turn metrics.
-        checkpoint_compaction: Phase A0 digest-body backend (epic #477, §9.1).
-            When True (and ``current_turn`` is set), a non-recent, non-priority
-            entity whose ``last_updated_turn`` is at or before the most recent
-            checkpoint boundary
-            (``floor(current_turn / compaction_interval_k) * compaction_interval_k``)
-            is part of the compacted *snapshot* and is rendered in the most
-            compact id-only form instead of the brief tier.  The full-detail
-            (recent + priority) set is left IDENTICAL to the OFF path, so the
-            coreference floor is preserved and the ON known-block is never larger
-            than OFF.  Default ``False`` leaves the known-block byte-identical to
-            main.  No entities are evicted (that is A1b).
-        compaction_interval_k: Checkpoint cadence K for ``checkpoint_compaction``
-            (turns between snapshots).  A distinct concern from the
-            disk-persistence checkpoint interval (#220/#212).
+        checkpoint_compaction: Phase A0 digest-body flag (epic #477, §9.1).
+            **No-op for the discovery known-block.**  A0's per-entity coreference
+            ANCHOR is the make-or-break floor
+            (docs/design-context-architecture-bounded.md:616-627): every active
+            known entity keeps at least its ``id | name | type`` brief form until a
+            cold-eviction tier exists, so the discovery anchors are NOT compacted
+            here — the known-block stays byte-identical to the OFF/main control
+            whether this is True or False.  (A0's token win is the per-entity
+            volatile snapshot in ``_format_prior_entity_context``.)  Retained on
+            the signature for API stability and caller symmetry.  No entities are
+            evicted (that is A1b).
+        compaction_interval_k: Checkpoint cadence K (turns between snapshots), a
+            distinct concern from the disk-persistence checkpoint interval
+            (#220/#212).  Unused for the discovery known-block (see
+            ``checkpoint_compaction``); retained for caller symmetry.
 
     Returns:
         Formatted entity list string, possibly with a truncation note.  When
@@ -795,30 +796,21 @@ def format_known_entities_bounded(
     # them toward catalog_entries_pruned for accurate instrumentation.
     context_excluded = len(all_entities) - len(ordered)
 
-    # Phase A0 checkpoint-compaction (epic #477, §9.1): when ON, compute the most
-    # recent checkpoint boundary (``_cp_recent_floor``).  The full-detail set is
-    # UNCHANGED from OFF — it is still the recent/priority entities selected by the
-    # rolling ``recency_window`` below, which preserves the coreference floor.  The
-    # boundary only governs the already-degraded tail: a non-recent, non-priority
-    # entity updated at or before the boundary is part of the compacted *snapshot*
-    # and is rendered id-only instead of brief.  Flag OFF leaves ``_cp_recent_floor``
-    # None, so the recency-window path below is unchanged.
-    #
-    # Defensive coercion: ``compaction_interval_k`` is a public parameter, so a
-    # caller may pass a non-int (e.g. a string, a JSON bool, or a non-positive
-    # int).  Mirror ``_read_compaction_config``'s "malformed -> default 25"
-    # contract here so an unguarded ``current_turn // compaction_interval_k``
-    # can never raise ``TypeError`` / ``ZeroDivisionError``.  A JSON bool is NOT
-    # a valid interval (``bool`` subclasses ``int``), so reject it explicitly.
-    if isinstance(compaction_interval_k, bool):
-        _cp_interval_k = 25
-    elif isinstance(compaction_interval_k, int) and compaction_interval_k >= 1:
-        _cp_interval_k = compaction_interval_k
-    else:
-        _cp_interval_k = 25
-    _cp_recent_floor: int | None = None
-    if checkpoint_compaction and current_turn is not None:
-        _cp_recent_floor = (current_turn // _cp_interval_k) * _cp_interval_k
+    # Phase A0 checkpoint-compaction (epic #477, §9.1) and the discovery
+    # known-block: the per-entity coreference ANCHOR is the make-or-break floor
+    # (docs/design-context-architecture-bounded.md:616-627) — every active known
+    # entity must keep at least its ``id | primary-name | type`` brief form until
+    # a cold-eviction tier exists.  A0 therefore does NOT compact discovery
+    # anchors: rendering here is byte-identical to the flag-OFF control regardless
+    # of ``checkpoint_compaction`` / ``compaction_interval_k``.  An earlier A0 draft
+    # degraded snapshot-tail entities to id-only, which dropped ``type`` and made a
+    # just-out-of-window entity's ON anchor WEAKER than OFF — a coreference-floor
+    # violation that risks minting duplicates.  The A0 token win lives in the
+    # per-entity volatile snapshot (``_format_prior_entity_context``), not in the
+    # discovery anchor tier.  ``checkpoint_compaction`` / ``compaction_interval_k``
+    # are retained on the signature for API stability and caller symmetry but no
+    # longer alter the discovery known-block.
+    _ = (checkpoint_compaction, compaction_interval_k)
 
     # Build lines in context-aware order
     lines: list[str] = []
@@ -838,21 +830,11 @@ def format_known_entities_bounded(
                 if current_turn is not None and turn_num is not None
                 else 0
             )
-            # Phase A0 checkpoint-compaction (epic #477, §9.1): a non-recent,
-            # non-priority entity updated at or before the most recent checkpoint
-            # boundary is part of the compacted *snapshot*, so render it in the
-            # most compact id-only form rather than the brief tier.  This keeps
-            # the full-detail (recent/priority) set IDENTICAL to OFF — preserving
-            # the coreference floor — and only compacts the already-degraded
-            # snapshot tail, so the ON known-block is never larger than OFF.
-            _in_snapshot = (
-                _cp_recent_floor is not None
-                and turn_num is not None
-                and turn_num <= _cp_recent_floor
-            )
-            if _in_snapshot:
-                lines.append(_format_entity_id_only(entity))
-            elif age <= _DEFAULT_BRIEF_STALENESS_THRESHOLD:
+            # Coreference-floor tiering (OFF == ON): keep the brief
+            # ``id | name | type`` anchor until the existing staleness threshold,
+            # after which the pre-existing main path degrades to id-only.  A0 does
+            # not weaken this tier (see the block comment above).
+            if age <= _DEFAULT_BRIEF_STALENESS_THRESHOLD:
                 lines.append(_format_entity_brief(entity))
             else:
                 lines.append(_format_entity_id_only(entity))
