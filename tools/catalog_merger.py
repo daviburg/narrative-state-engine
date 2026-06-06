@@ -682,6 +682,8 @@ def format_known_entities_bounded(
     recency_window: int | None = None,
     turn_text: str | None = None,
     return_stats: bool = False,
+    checkpoint_compaction: bool = False,
+    compaction_interval_k: int = 25,
 ) -> str | tuple[str, dict]:
     """Format known entities with a configurable token budget.
 
@@ -722,6 +724,20 @@ def format_known_entities_bounded(
             original string-only return so existing callers are unchanged.  The
             stats path is the backward-compatible plumbing PR-2 wires into the
             per-turn metrics.
+        checkpoint_compaction: Phase A0 digest-body backend (epic #477, §9.1).
+            When True (and ``current_turn`` is set), a non-recent, non-priority
+            entity whose ``last_updated_turn`` is at or before the most recent
+            checkpoint boundary
+            (``floor(current_turn / compaction_interval_k) * compaction_interval_k``)
+            is part of the compacted *snapshot* and is rendered in the most
+            compact id-only form instead of the brief tier.  The full-detail
+            (recent + priority) set is left IDENTICAL to the OFF path, so the
+            coreference floor is preserved and the ON known-block is never larger
+            than OFF.  Default ``False`` leaves the known-block byte-identical to
+            main.  No entities are evicted (that is A1b).
+        compaction_interval_k: Checkpoint cadence K for ``checkpoint_compaction``
+            (turns between snapshots).  A distinct concern from the
+            disk-persistence checkpoint interval (#220/#212).
 
     Returns:
         Formatted entity list string, possibly with a truncation note.  When
@@ -779,6 +795,21 @@ def format_known_entities_bounded(
     # them toward catalog_entries_pruned for accurate instrumentation.
     context_excluded = len(all_entities) - len(ordered)
 
+    # Phase A0 checkpoint-compaction (epic #477, §9.1): when ON, the full-detail
+    # recency cutoff becomes the most recent checkpoint boundary rather than the
+    # rolling recency_window.  Entities updated after the boundary are the
+    # append-only delta (full detail); those at or before it are the snapshot
+    # (degraded to brief/id-only by age).  Bounds the full-detail block to a
+    # delta window of <= compaction_interval_k turns.  Flag OFF leaves
+    # ``_cp_recent_floor`` None, so the recency-window path below is unchanged.
+    _cp_recent_floor: int | None = None
+    if (
+        checkpoint_compaction
+        and current_turn is not None
+        and compaction_interval_k >= 1
+    ):
+        _cp_recent_floor = (current_turn // compaction_interval_k) * compaction_interval_k
+
     # Build lines in context-aware order
     lines: list[str] = []
     for entity in ordered:
@@ -797,7 +828,21 @@ def format_known_entities_bounded(
                 if current_turn is not None and turn_num is not None
                 else 0
             )
-            if age <= _DEFAULT_BRIEF_STALENESS_THRESHOLD:
+            # Phase A0 checkpoint-compaction (epic #477, §9.1): a non-recent,
+            # non-priority entity updated at or before the most recent checkpoint
+            # boundary is part of the compacted *snapshot*, so render it in the
+            # most compact id-only form rather than the brief tier.  This keeps
+            # the full-detail (recent/priority) set IDENTICAL to OFF — preserving
+            # the coreference floor — and only compacts the already-degraded
+            # snapshot tail, so the ON known-block is never larger than OFF.
+            _in_snapshot = (
+                _cp_recent_floor is not None
+                and turn_num is not None
+                and turn_num <= _cp_recent_floor
+            )
+            if _in_snapshot:
+                lines.append(_format_entity_id_only(entity))
+            elif age <= _DEFAULT_BRIEF_STALENESS_THRESHOLD:
                 lines.append(_format_entity_brief(entity))
             else:
                 lines.append(_format_entity_id_only(entity))

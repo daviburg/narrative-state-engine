@@ -1,0 +1,50 @@
+{
+  "identity": "The protagonist",
+  "current_status": "active",
+  "stable_attributes": {
+    "species": "human",
+    "class": "ranger",
+    "aliases": {
+      "value": [
+        "Hero"
+      ]
+    }
+  },
+  "volatile_state": {
+    "location": [
+      "[49 earlier entries through ~turn-50, including: 49 observations]",
+      {
+        "turn": "turn-098",
+        "value": "place-98"
+      },
+      {
+        "turn": "turn-099",
+        "value": "place-99"
+      },
+      {
+        "turn": "turn-100",
+        "value": "place-100"
+      }
+    ],
+    "mood": [
+      "[4 earlier entries through ~turn-50, including: 4 observations]",
+      {
+        "turn": "turn-080",
+        "value": "feeling-80"
+      },
+      {
+        "turn": "turn-090",
+        "value": "feeling-90"
+      },
+      {
+        "turn": "turn-100",
+        "value": "feeling-100"
+      }
+    ]
+  },
+  "id": "char-player",
+  "name": "Player Character",
+  "type": "character",
+  "first_seen_turn": "turn-001",
+  "last_updated_turn": "turn-100"
+}

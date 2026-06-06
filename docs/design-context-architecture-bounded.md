@@ -698,13 +698,20 @@ Sequence: **L3 (guardrail) -> L1/L4 -> L2 -> A1 (anchor + digest) -> A2 (retriev
 proven duplicate-safe before A2's relevance-selection narrows what gets full fidelity. Building A2 first would
 risk the #468 failure mode during development.
 
-0. **Phase A0 — Periodic checkpoint-compaction (K=25).** The **FIRST bounded increment** and the **default
+0. **Phase A0 — Periodic checkpoint-compaction (K=25).** **[IMPLEMENTED — flag-gated, default OFF, pending
+   A/B before default-ON; #482, epic #477].** The **FIRST bounded increment** and the **default
    digest-BODY backend.** On a fixed cadence (every K=25 turns) compact the accumulated state into a
    checkpoint snapshot, and between checkpoints carry an **append-only recent-delta buffer**. **Spike F10
    (COMPLETE)** measured this at a residual slope of **~17 tok/turn** (down from a re-derived **121.1**
    baseline) at **engineering cost 2** and bounded staleness (<=25 turns) — i.e. it captures most of the
    bound at roughly **half** the build cost of an always-maintained abstractive digest (slope ~2, eng cost
-   ~4). This is the shipping default for the digest body.
+   ~4). This is the shipping default for the digest body. **Shipped (#482):** the deterministic, extractive
+   (no-LLM) `_build_checkpoint_compacted_volatile()` digest backend, wired into the entity_detail prior-state
+   (`_format_prior_entity_context`) and the discovery known-block (`format_known_entities_bounded`), gated by
+   `context_optimizations.checkpoint_compaction` (**default OFF, byte-identical to main**) on the SEPARATE
+   `context_optimizations.compaction_interval_k` cadence key (distinct from the disk-persistence
+   `checkpoint_interval`, #220/#212). Flipping the default ON is a separate A/B-gated follow-up against the
+   new flag-ON 344t reference baseline.
 1. **Phase A1a — Identity-anchor floor + checkpoint digest body (hot tier only).** Persist A1-IDX (all
    entities) as the **always-in-context coreference safety FLOOR**, and use the **A0 checkpoint snapshot +
    append-only recent-delta buffer** as the digest **BODY default** — **NOT** an always-maintained rolling

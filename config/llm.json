@@ -29,6 +29,10 @@
     "relationship_type_tiering": true,
     "_comment": "L1+L4 type-tiered PC relationship cap (epic #477). Default ON: caps PC entity-detail relationships by type: permanent bonds kept uncapped, volatile tail trimmed to pc_rel_volatile_tail_cap. Also promotes permanent-bond types in the relationship-mapper budget trim. Set false to restore pre-#477 behaviour (byte-identical to the pre-#477 baseline -- i.e. main before #477 -- when the flag is absent or false; note that once this default-ON change merges, main itself ships the flag ON); a same-commit flag-OFF run serves as the A/B control.",
     "pc_rel_permanent_types": ["kinship", "adversarial", "mentorship", "political", "partnership"],
-    "pc_rel_volatile_tail_cap": 10
+    "pc_rel_volatile_tail_cap": 10,
+    "checkpoint_compaction": false,
+    "_comment_checkpoint_compaction": "Phase A0 periodic checkpoint-compaction digest body (epic #477, design docs/design-context-architecture-bounded.md sec 9.1; Spike F10). Default OFF: when true, the prior-state volatile digest (entity_detail) and the discovery known-block are compacted on a fixed compaction_interval_k cadence into a deterministic extractive checkpoint snapshot plus an append-only recent-delta buffer (no extra LLM call), bounding staleness to <= compaction_interval_k turns. Flag-OFF output is byte-identical to main (the A/B control). Flipping this default ON requires a separate A/B-gated follow-up PR against the new baseline-480 flag-ON reference baseline.",
+    "compaction_interval_k": 25,
+    "_comment_compaction_interval_k": "Phase A0 context-compaction cadence K (turns between checkpoint snapshots). This is a DISTINCT key from the top-level disk-persistence checkpoint_interval (#220/#212 crash-recovery): they are different concerns and must not be overloaded even though both default to 25. Invalid or missing values fall back to 25."
   }
 }

@@ -1145,6 +1145,12 @@ _PC_MAX_VOLATILE_SNAPSHOTS = 3
 # Number of turns beyond which volatile state entries are digested (#121)
 _DIGEST_WINDOW = 50
 
+# Phase A0 periodic checkpoint-compaction cadence default (epic #477, §9.1).
+# This is the CONTEXT-compaction interval K. It is a DISTINCT concern from the
+# disk-persistence crash-recovery checkpoint cadence (_DEFAULT_CHECKPOINT_INTERVAL,
+# #220/#212): they must not be overloaded even though both default to 25.
+_DEFAULT_COMPACTION_INTERVAL_K = 25
+
 # ---------------------------------------------------------------------------
 # Context optimization constants
 # ---------------------------------------------------------------------------
@@ -1234,6 +1240,43 @@ def _get_type_tiering_config(
     if volatile_tail_cap < 0:
         volatile_tail_cap = 0
     return enabled, permanent_types, volatile_tail_cap
+
+
+def _read_compaction_config(config: dict | None) -> tuple[bool, int]:
+    """Return (enabled, interval_k) for Phase A0 checkpoint-compaction.
+
+    Reads ``context_optimizations.checkpoint_compaction`` (the default-OFF
+    feature gate) and the SEPARATE ``context_optimizations.compaction_interval_k``
+    cadence (epic #477, design §9.1; Spike F10).
+
+    ``compaction_interval_k`` is intentionally a distinct key from the top-level
+    disk-persistence ``checkpoint_interval`` (#220/#212 crash recovery): the two
+    are different concerns and must not be overloaded even though both default to
+    25.  A malformed / missing / non-positive cadence falls back to
+    ``_DEFAULT_COMPACTION_INTERVAL_K``.
+
+    Default: disabled, so the flag-OFF path is byte-identical to main.
+    """
+    raw_ctx_opt = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    # context_optimizations may itself be malformed (e.g. a list/string): coerce
+    # to a dict so this unconditional per-turn read can never crash, even OFF.
+    ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
+    # Strict bool parse: only a real JSON ``true`` enables the (default-OFF)
+    # digest-body backend.  Permissive ``bool(...)`` would treat truthy non-bools
+    # — the string ``"false"``, ``[False]``, ``1`` — as enabled, silently flipping
+    # the gate ON for a malformed config.
+    enabled: bool = ctx_opt.get("checkpoint_compaction", False) is True
+    # Parse the cadence defensively: a malformed value (null, "ten", a list, a
+    # zero/negative int) must never crash extraction and must not yield a
+    # degenerate cadence.  Fall back to the default in all such cases.
+    raw_k = ctx_opt.get("compaction_interval_k", _DEFAULT_COMPACTION_INTERVAL_K)
+    try:
+        interval_k: int = int(raw_k)
+    except (TypeError, ValueError):
+        interval_k = _DEFAULT_COMPACTION_INTERVAL_K
+    if interval_k < 1:
+        interval_k = _DEFAULT_COMPACTION_INTERVAL_K
+    return enabled, interval_k
 
 
 # Per-section drop counters recorded alongside each phase's token metrics.
@@ -1485,6 +1528,60 @@ def _build_volatile_digest(volatile_state: dict, current_turn_num: int) -> dict:
     return result
 
 
+def _build_checkpoint_compacted_volatile(
+    volatile_state: dict, current_turn_num: int, interval_k: int
+) -> dict:
+    """Phase A0 checkpoint-compaction of volatile state (epic #477, §9.1).
+
+    Deterministic and **extractive** — built entirely from already-extracted
+    state with NO extra LLM call, so it is byte-stable at temperature 0.
+
+    On a fixed ``interval_k``-turn cadence, every volatile entry at or before the
+    most recent checkpoint boundary (``floor(t / K) * K``) is folded into a single
+    snapshot summary; entries after the boundary form an **append-only
+    recent-delta buffer** kept verbatim.  Because the delta only ever covers
+    ``(checkpoint_turn, t]``, staleness is bounded by ``interval_k`` turns.
+
+    This replaces the sliding ``_DIGEST_WINDOW`` digest (``_build_volatile_digest``)
+    with a checkpoint-cadence one: at high turn counts the snapshot collapses far
+    more accumulated history into one line, so the digest body stays bounded
+    rather than growing with the recency window.
+
+    The snapshot summary opens with ``[`` so the downstream cap step in
+    ``_format_prior_entity_context`` recognises and preserves it.
+    """
+    if not volatile_state:
+        return volatile_state
+
+    checkpoint_turn = (current_turn_num // interval_k) * interval_k
+    result = {}
+    for key, value in volatile_state.items():
+        if not isinstance(value, list):
+            result[key] = value
+            continue
+
+        snapshot_items = []
+        delta_items = []
+        for item in value:
+            turn_num = _extract_turn_number(item)
+            if turn_num is not None and turn_num <= checkpoint_turn:
+                snapshot_items.append(item)
+            else:
+                delta_items.append(item)
+
+        if snapshot_items:
+            themes = _extract_themes(snapshot_items)
+            summary = (
+                f"[checkpoint turn-{checkpoint_turn}: {len(snapshot_items)} earlier"
+                f" entries, including: {', '.join(themes[:5])}]"
+            )
+            result[key] = [summary] + delta_items
+        else:
+            result[key] = delta_items
+
+    return result
+
+
 def _compact_relationships_with_arcs(
     relationships: list, arcs_data: dict
 ) -> list:
@@ -1694,9 +1791,19 @@ def _format_prior_entity_context(
             )
             max_snapshots = _PC_MAX_VOLATILE_SNAPSHOTS if is_pc else _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS
             # Digest old entries BEFORE trimming so history is compressed
-            # rather than silently dropped.
+            # rather than silently dropped.  When the Phase A0 checkpoint-
+            # compaction flag is ON (epic #477, §9.1), use the checkpoint-
+            # cadence snapshot + append-only recent-delta buffer in place of the
+            # sliding _DIGEST_WINDOW digest.  Flag OFF keeps the exact prior path,
+            # so the A/B control output stays byte-identical to main.
+            _compaction_on, _compaction_k = _read_compaction_config(config)
             if _vs_turn_num:
-                digested_vs = _build_volatile_digest(vs, _vs_turn_num)
+                if _compaction_on:
+                    digested_vs = _build_checkpoint_compacted_volatile(
+                        vs, _vs_turn_num, _compaction_k
+                    )
+                else:
+                    digested_vs = _build_volatile_digest(vs, _vs_turn_num)
             else:
                 digested_vs = dict(vs)
             # Cap recent list-valued entries to keep prompt size bounded
@@ -2999,12 +3106,19 @@ def _run_discovery_phase(
         _ctx_len = None
     _cfg = getattr(llm, "config", None)
     _entity_budget = _cfg.get("entity_context_budget") if isinstance(_cfg, dict) else None
+    # Phase A0 checkpoint-compaction (epic #477, §9.1): when ON, the discovery
+    # known-block is bounded by the checkpoint cadence instead of the recency
+    # window.  Flag OFF passes the default (disabled) values, leaving the
+    # known-block byte-identical to main.
+    _compaction_on, _compaction_k = _read_compaction_config(_cfg)
     known = format_known_entities_bounded(
         catalogs,
         current_turn=current_turn_num,
         context_length=_ctx_len,
         entity_context_budget=_entity_budget,
         turn_text=turn.get("text"),
+        checkpoint_compaction=_compaction_on,
+        compaction_interval_k=_compaction_k,
     )
     _discovery_temp = _cfg.get("discovery_temperature") if isinstance(_cfg, dict) else None
     _discovery_max_tokens = _cfg.get("discovery_max_tokens") if isinstance(_cfg, dict) else None
