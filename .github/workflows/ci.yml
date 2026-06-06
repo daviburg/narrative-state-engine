@@ -16,6 +16,11 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          # Full history so the flag-OFF base-branch guard
+          # (TestFlagOffBaseBranchGuard) can materialize tools/ from the pinned
+          # origin/main merge-base commit and prove OFF == main byte-for-byte.
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@v6
