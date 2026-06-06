@@ -1,6 +1,6 @@
 """Regenerate the Phase A0 flag-OFF byte-identity golden.
 
-Epic #477, issue #482 (PR #483).  The golden at
+Epic #477, issue #482.  The golden at
 ``tests/golden/checkpoint_compaction/flag_off_prior.json`` pins the flag-OFF
 prior-state render to byte-identity with ``main`` (the A/B control for
 ``TestFlagOffGolden::test_flag_off_matches_main_golden``).

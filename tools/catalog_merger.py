@@ -795,13 +795,14 @@ def format_known_entities_bounded(
     # them toward catalog_entries_pruned for accurate instrumentation.
     context_excluded = len(all_entities) - len(ordered)
 
-    # Phase A0 checkpoint-compaction (epic #477, §9.1): when ON, the full-detail
-    # recency cutoff becomes the most recent checkpoint boundary rather than the
-    # rolling recency_window.  Entities updated after the boundary are the
-    # append-only delta (full detail); those at or before it are the snapshot
-    # (degraded to brief/id-only by age).  Bounds the full-detail block to a
-    # delta window of <= compaction_interval_k turns.  Flag OFF leaves
-    # ``_cp_recent_floor`` None, so the recency-window path below is unchanged.
+    # Phase A0 checkpoint-compaction (epic #477, §9.1): when ON, compute the most
+    # recent checkpoint boundary (``_cp_recent_floor``).  The full-detail set is
+    # UNCHANGED from OFF — it is still the recent/priority entities selected by the
+    # rolling ``recency_window`` below, which preserves the coreference floor.  The
+    # boundary only governs the already-degraded tail: a non-recent, non-priority
+    # entity updated at or before the boundary is part of the compacted *snapshot*
+    # and is rendered id-only instead of brief.  Flag OFF leaves ``_cp_recent_floor``
+    # None, so the recency-window path below is unchanged.
     #
     # Defensive coercion: ``compaction_interval_k`` is a public parameter, so a
     # caller may pass a non-int (e.g. a string, a JSON bool, or a non-positive
