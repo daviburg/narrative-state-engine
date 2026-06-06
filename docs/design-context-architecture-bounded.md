@@ -156,12 +156,16 @@ independent of session length. `B_IDX` is the single residual catalog-coupled te
 **cheapest possible** per-entity cost (an identity line, not a relationship web) — see Section 5.4 for why
 this is the right place to concentrate the residual, and 3.4 for how intelligent forgetting bounds it too.
 
-> **Alias note (MEASURED F3):** the per-entity cost above (17/19/25 tok) was measured over a catalog where
-> `alias=null` for all 696 entities — so the alias slot was empty and the alias-based coreference path was
-> **unexercised by that data**. This is a property of the measured corpus, not a permanent design state: the
-> human confirms earlier extractions populated aliases. When aliases are present, add **~1.6-3 tok/alias** to
-> `B_IDX` (mean ~23-24 tok/entity at ~2 aliases/entity, §5.4). **Pre-A1b validation (§9.1):** confirm aliases
-> are populated in the live pipeline before A1b's cold/eviction tiers rely on the alias-based coreference path.
+> **Alias note (MEASURED F3, CORRECTED).** An earlier reading of this spike reported `alias=null` for all
+> entities — that was a **measurement artifact**: the spike script read a non-existent top-level `aliases`
+> key instead of the real nested path `stable_attributes.aliases.value`. **Re-measured correctly, aliases ARE
+> populated:** 15 of the 122 entities (12.3%) in the F3 corpus carry aliases (e.g. the player's alias
+> "Fenouille"; in the `b70-full-a` run "Lyrawyn" carries 4), so the alias-based coreference path **is**
+> exercised by real data. Because alias coverage is sparse (mean ~0.22 aliases/entity overall; ~1.8 on the
+> aliased 12.3%) and cheap (**~1.83 tok/alias** measured), including the real aliases leaves the per-entity
+> p50/p90 **unchanged at 17 / 25**; only the tail rises (p99 29.8 -> 32, max 32 -> 34, mean 18.0 -> 18.5).
+> **Pre-A1b validation (§9.1):** confirm alias **coverage and quality** in the live pipeline (not mere
+> existence) before A1b's cold/eviction tiers rely on the alias-based coreference path. See §5.4.
 
 **These budgets are TARGET ENVELOPES with typed non-droppable invariants — NOT silent caps.** This is the
 property that distinguishes A1-SAL/A1-VOL (and the A2 budget, Section 4.3) from the **rejected A3 hard caps**
@@ -489,18 +493,29 @@ per-entity-content slope entirely by replacing it with a fixed A2 budget. The cu
 merely tilting.
 
 **Structure dominates the identity line (Spike F3).** ~8 of the ~19 realized tokens per entity are
-**structural** — field delimiters plus an empty alias slot — not content. The kebab-case `id` alone costs
-~4.5 tokens, roughly **3x the primary name**. Two cheap wins fall straight out of this: **drop the empty-alias
-column** when no alias is populated (~-2 tok/entity) and **shorten / integerize the `id`** (~-2-3 tok/entity),
-which together could roughly halve the structural overhead without touching any coreference content.
+**structural** — field delimiters plus the alias slot — not content. The kebab-case `id` alone costs
+~4.5 tokens (measured), roughly **3x the primary name** (~1.45 tok). Two cheap wins fall out of this: **omit
+the alias slot per-entity when that entity has no alias** — measured savings ~2 tok/entity (the
+`V_design_omit_empty` variant lands at p50 15 / p90 23 vs 17 / 25) — and **shorten / integerize the `id`**
+(~-2-3 tok/entity), which together roughly halve the structural overhead without touching any coreference
+content. Note this is a **per-entity** omission, **not** a column drop: 12.3% of entities (next paragraph)
+carry real aliases that must stay on the line.
 
-**Alias-sensitivity caveat (the MEASURED corpus had `alias=null`).** The s_IDX above assumes `alias=null`,
-which held for **all 696 entities across the measured corpora** — i.e. in *this* catalog the alias column was
-empty. That is a property of the measured **data**, **not** a permanent design assumption: the human confirms
-earlier extractions *did* populate aliases. When aliases are present, each adds **~1.6-3 tok**, pushing the
-mean to **~23-24 tok/entity at ~2 aliases/entity**. Treat the null-alias measurement as a **floor**: whenever
-the live pipeline populates aliases, add the per-alias cost to `B_IDX` rather than assuming the column stays
-empty.
+**Alias coverage (CORRECTED — supersedes the retracted `alias=null` reading).** An earlier pass of Spike F3
+reported `alias=null` for all entities; that was a **measurement bug** — the script read a top-level `aliases`
+key that does not exist instead of the real nested `stable_attributes.aliases.value`. Re-measured on the same
+corpus with the same Qwen3.6 tokenizer, **15 of 122 entities (12.3%) carry aliases** (by type: 6/45
+characters, 5/21 items, 2/26 locations, 1/15 factions, 1/15 creatures), with **~0.22 aliases/entity overall**
+and **~1.8 on the aliased subset** (max 3 here; up to 4 — e.g. "Lyrawyn" — in the `b70-full-a` run). The
+marginal cost is **~1.83 tok/alias** (≈4.2 tok on a typical aliased line). **Net effect on s_IDX: p50 and p90
+are UNCHANGED at 17 / 25** — because the median and p90 entity have no alias and the earlier (buggy) run
+already reserved a `-` placeholder for the empty slot — and only the upper tail moves (p99 29.8 -> 32.0,
+max 32 -> 34, mean 18.0 -> 18.5). The earlier synthetic "~1.6-3 tok/alias, ~23-24 tok/entity at ~2
+aliases/entity" sensitivity **overstated the load**: real coverage is sparse, so the alias-inclusive `B_IDX`
+projection is **the same** at p50/p90 (5.8K / 8.6K at t344) with only a marginally heavier tail. The
+bounded-in-the-limit hypothesis (§5.6) is therefore **unaffected**; if anything, the heavy-alias tail
+entities are one more reason cold-rollup/eviction of the identity index pays off (it matters slightly *more*,
+not less).
 
 ```text
 Per-turn total: baseline vs L1+L2+L4 vs A1+A2 (ESTIMATE)
@@ -617,13 +632,15 @@ A1 + A2 **must solve this, not inherit it.** The design guarantees:
    *does* match is pulled to full fidelity, so a recurring entity is both *anchored* (A1) and *re-detailed*
    (A2) in the same turn.
 
-> **Alias-path caveat (MEASURED F3).** In the measured `eval-qwen36-344t-full` catalog, **aliases were absent**
-> (`alias=null` for all 696 entities), so the **alias-based coreference path was unexercised by that data** —
-> coreference there rested entirely on primary-name / id-stem / role matching. This does **not** mean aliases
-> are permanently null (the human confirms earlier extractions populated them); it means the alias path needs
-> its own validation. **Pre-A1b validation item:** confirm aliases are populated in the live pipeline, and
-> exercise the alias coreference path in the A/B fixture, **before** A1b's cold/eviction tiers (which move
-> aliases to a cold-storage lookup, §3.4) rely on them.
+> **Alias-path note (MEASURED F3, CORRECTED).** An earlier reading reported `alias=null` for all entities and
+> concluded the alias-based coreference path was "unexercised" — that was a **measurement artifact** (the
+> spike read a non-existent top-level `aliases` key, not the nested `stable_attributes.aliases.value`).
+> Re-measured correctly, **aliases ARE populated** (15/122 = 12.3% of the F3 corpus; the player carries
+> "Fenouille", "Lyrawyn" carries up to 4 in `b70-full-a`), so the alias coreference path **is** exercised by
+> real data. The remaining work is therefore **alias quality/coverage validation**, not an existence check.
+> **Pre-A1b validation item:** confirm alias **coverage and quality** in the live pipeline and exercise the
+> alias path in the A/B fixture **before** A1b's cold/eviction tiers (which move aliases to a cold-storage
+> lookup, §3.4) rely on them.
 
 **Acceptance gate (non-negotiable):** the A/B (Section 9) must show **ZERO net new duplicate entities** vs
 the baseline catalog over the full long run. Any duplicate regression fails the design, regardless of token
@@ -700,8 +717,9 @@ risk the #468 failure mode during development.
      (~1000+ turns), an A/B shows snapshot-lag quality loss, or absolute digest size binds.
 2. **Phase A1b — Cold-tier rollup + intelligent forgetting.** Enable activity-tiered IDX compression and
    dormant-entity eviction (3.4) behind a flag, gated on the eviction telemetry signals. **Pre-A1b
-   validation:** confirm aliases are populated in the live pipeline (they were absent in the measured F3
-   corpus — §3.1, §6) before A1b's cold/eviction tiers rely on the alias-based coreference path. Acceptance:
+   validation:** confirm alias **coverage and quality** in the live pipeline (the F3 corpus has ~12% alias
+   coverage — §3.1, §6; the earlier "absent" reading was a measurement bug) before A1b's cold/eviction tiers
+   rely on the alias-based coreference path. Acceptance:
    still zero new duplicates and a healthy cold/evicted re-mention promote rate (this is the risky step —
    Section 8 Q-3).
 3. **Phase A2a — Deterministic retrieval (R0-R2).** Replace recency/confidence selection in entity_detail and
@@ -733,8 +751,10 @@ Before the full build, a **read-only measurement spike**:
   **Qwen3.6 tokenizer over the real 122-entity `eval-qwen36-344t-full` catalog**: **s_IDX = 17 (p50) / 19
   (realized in-context avg) / 25 (p90) tok/entity**, structure-dominated (~8 of ~19 tokens structural; kebab
   `id` ~4.5 tok, ~3x the name). This **replaces** the former ~15-18 tok/entity `[ESTIMATE]` and feeds the
-  `B_IDX` term in §5.3/§5.4 and the budgets in §3.1. **Caveat:** the measured corpus had `alias=null` for all
-  696 entities, so the alias-cost path is **unvalidated** here (add ~1.6-3 tok/alias when populated; §5.4).
+  `B_IDX` term in §5.3/§5.4 and the budgets in §3.1. **Correction:** an earlier pass mis-read aliases as null
+  (it read a top-level `aliases` key instead of the nested `stable_attributes.aliases.value`); re-measured,
+  **12.3% of entities carry aliases** at ~1.83 tok/alias, which leaves p50/p90 unchanged at 17/25 and lifts
+  only the tail (p99 -> 32, max -> 34; §5.4).
 - **Spike F10 — checkpoint-compaction vs always-maintained digest (COMPLETE).** Periodic checkpoint
   compaction (K=25) yields a residual slope of **~17 tok/turn** (vs a re-derived **121.1** baseline) at
   **engineering cost 2** and staleness <=25 turns, against the always-maintained digest's slope ~2 at eng
@@ -822,7 +842,7 @@ dispositions, for the record:
 | Alternative / refinement | Disposition | Rationale |
 |---|---|---|
 | **Structured world-state as first-class source of truth** (vs free-text digest) | **ADOPTED** (into A1) | Folded directly into A1's definition (§3.1): A1 renders **typed views over the existing structured catalog** (`relationship-index.json`, `scene-graph.json`, entity JSON), with prose only at the boundary. This was the strongest finding and is now the A1 framing, not a separate alternative. |
-| **Tokenizer-true `B_IDX` measurement** | **COMPLETE** (F3) | s_IDX = **17 / 19 / 25 tok/entity** (p50 / in-context avg / p90, MEASURED, Qwen3.6 tokenizer over the real catalog), **structure-dominated**; alias path **unvalidated** in the measured corpus (`alias=null`). Overwrites the ~15-18 tok/entity `[ESTIMATE]` in §5.4. |
+| **Tokenizer-true `B_IDX` measurement** | **COMPLETE** (F3, alias-bug corrected) | s_IDX = **17 / 19 / 25 tok/entity** (p50 / in-context avg / p90, MEASURED, Qwen3.6 tokenizer over the real catalog), **structure-dominated**. Overwrites the ~15-18 tok/entity `[ESTIMATE]` in §5.4. An earlier `alias=null` reading was a **measurement bug** (top-level vs nested `stable_attributes.aliases.value`); corrected — **12.3% of entities carry aliases** at ~1.83 tok/alias, p50/p90 unchanged, only the tail lifts (§5.4/§6). |
 | **Periodic checkpoint compaction** (vs always-maintained digest) | **ADOPTED as first increment (A0); rolling digest deferred** (F10) | Spike F10 (COMPLETE): checkpoint slope **~17** vs digest **~2**, both **<< 121** (re-derived) / 88 baseline, at **half** the engineering cost — adopted as Phase A0 (§9.1) and the digest-body default; the always-maintained rolling digest is deferred to a trigger-gated tier (§10). |
 | **Hierarchical / episodic memory** (episode windows + episode summaries) | **DEFERRED** (telemetry-gated) | Promising for callback paths and active-set stabilization, but a larger redesign; instrument and revisit — do **not** block A1+A2 on it (§10). |
 | **Learned salience / ranking** for eviction | **DEFERRED** (telemetry-gated) | Could predict future salience, but needs labels/replay data. Per-entity outcome logging (retained / evicted / re-mentioned / duplicate-causing / state-change) is instrumented **now** (F11) to seed the training set **if** heuristic eviction proves unsafe; not a build dependency. |
@@ -845,7 +865,7 @@ support "much flatter & cheaper" but do **not** prove boundedness (§5.6).
 | L1+L4+L2 halve but do not bound the slope | MEASURED-derived projection (PR #478 Section 4.3) |
 | Measured evidence supports **"much flatter & cheaper"**: ~19× flatter slope (88.62 → ~4.63 tok/turn), ~70% per-turn reduction on the 344t offline replay (A1/A2 build costs EXCLUDED) | MEASURED-derived (offline replay; §5.6) |
 | A1+A2 per-turn `~= C + s_IDX*N(t)`, `s_IDX -> 0` with cold rollup + eviction — **asymptotically bounded** | **`[HYPOTHESIS — falsifiable]`**, conditional on `N_active` convergence; UNPROVEN over 344t (§5.3, §5.6) |
-| `s_IDX` identity-line cost = 17 / 19 / 25 tok/entity (p50 / in-context avg / p90); structure-dominated; alias path unexercised (`alias=null`) in the measured corpus | **MEASURED** (Spike F3, Qwen3.6 over `eval-qwen36-344t-full`; §5.4) |
+| `s_IDX` identity-line cost = 17 / 19 / 25 tok/entity (p50 / in-context avg / p90); structure-dominated; **aliases ARE populated** (12.3% of the corpus, ~1.83 tok/alias — an earlier `alias=null` reading was a measurement bug; p50/p90 unchanged, tail lifts p99->32/max->34) | **MEASURED** (Spike F3, alias-bug corrected, Qwen3.6 over `eval-qwen36-344t-full`; §5.4/§6) |
 | Projected t344 per-turn ~16-19K — **HOLDS at p50 (~17.8K), EXCEEDED at p90 (~20.6K)** | `[ESTIMATE]` over MEASURED `B_IDX` (Section 5.4) |
 | Zero-duplicate coreference safety from always-in-context A1-IDX + cold-store-before-discovery ordering (§4.4) | DESIGN GUARANTEE, gated by long-run A/B incl. adversarial evicted-then-rementioned fixture (Section 6, 9.3) |
 | Intelligent forgetting (dormant eviction) bounds the identity-index entity count | **`[HYPOTHESIS — falsifiable]`** / central tradeoff, telemetry-gated (Section 3.4, 5.6, 10) |
