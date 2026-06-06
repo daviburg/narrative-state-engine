@@ -952,8 +952,8 @@ class TestPcArcsPathRecency:
     def test_recent_arc_summarised_volatile_kept_over_older(self):
         """A recent volatile rel that has an arc summary must outrank older
         volatile rels in the tail (it must not sort as turn-0)."""
-        # 5 volatile rels, all with arc summaries; cap is 10 so all survive,
-        # but we assert the most-recent ones are present and ordered by recency.
+        # 16 volatile rels (15 older + 1 recent), cap 10 → tail trimmed; assert
+        # recent survives and oldest dropped.
         recent = _make_rel("char-recent", rel_type="ally", last_updated_turn="turn-099")
         older = [
             _make_rel(f"char-old-{i}", rel_type="ally",

@@ -1989,11 +1989,14 @@ def _collect_existing_relationships(
             else:
                 tier = 4  # omit
 
-            # L4: boost permanent-bond types so they survive the volatile-tail
-            # trim (tiers 3/4 are the first to be degraded under budget pressure).
-            # - Never omit permanent bonds (tier 4 → 3)
-            # - When one endpoint is mentioned, promote to at least tier 2 so they
-            #   survive the tier-3 → omit degradation pass entirely.
+            # L4: boost permanent-bond types so the volatile tail is trimmed
+            # first (tiers 3/4 degrade first under budget pressure).
+            # - One endpoint mentioned: promote to at least tier 2 — the strong
+            #   guarantee; tier 2 survives the tier-3 → omit degradation pass.
+            # - Neither endpoint mentioned: the tier 4 → 3 boost keeps it as a
+            #   summary only when within budget; the degradation pass still
+            #   degrades tier 3 → omit, so an unmentioned permanent bond CAN
+            #   still be omitted under budget pressure.
             if _l4_tiering_on:
                 rel_type = rel.get("type", rel.get("relationship_type", ""))
                 if rel_type in _l4_perm_types:
