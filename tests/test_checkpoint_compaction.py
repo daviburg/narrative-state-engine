@@ -57,7 +57,7 @@ def _load_shipped_config():
 def _vol_entry(num_turns=100):
     """Deterministic PC entry with a long-running volatile block.
 
-    Matches tests/_gen_a0_golden.py so the frozen golden stays reproducible.
+    Matches tests/gen_a0_golden.py so the frozen golden stays reproducible.
     """
     return {
         "id": "char-player",
@@ -142,6 +142,21 @@ class TestReadCompactionConfig:
         "bad_k", [None, "ten", [], {}, [25], 0, -5, -1]
     )
     def test_invalid_interval_k_falls_back_to_default(self, bad_k):
+        cfg = {
+            "context_optimizations": {
+                "checkpoint_compaction": True,
+                "compaction_interval_k": bad_k,
+            }
+        }
+        _, k = se._read_compaction_config(cfg)
+        assert k == 25
+
+    @pytest.mark.parametrize("bad_k", [True, False])
+    def test_bool_interval_k_falls_back_to_default(self, bad_k):
+        # A JSON bool is NOT a valid interval: because ``bool`` subclasses
+        # ``int``, an unguarded ``int(True) == 1`` / ``int(False) == 0`` would
+        # otherwise bypass the documented "malformed -> default 25" fallback
+        # (``true`` would silently set a degenerate cadence of 1).
         cfg = {
             "context_optimizations": {
                 "checkpoint_compaction": True,
@@ -433,6 +448,26 @@ class TestDiscoveryKnownBlock:
         assert len(on_out) < len(off_out)
         # Recent entities keep full detail (coreference floor preserved).
         assert "identity of zeta-recent-a" in on_out
+
+    @pytest.mark.parametrize("bad_k", ["25", None, [], {}, 0, -5, True, False])
+    def test_non_int_interval_k_coerced_to_default(self, bad_k):
+        # ``compaction_interval_k`` is a public parameter, so a caller may pass
+        # a non-int (string/bool/list) or a non-positive int.  The defensive
+        # coercion must mirror the config reader's "malformed -> default 25"
+        # contract: never raise ``TypeError`` / ``ZeroDivisionError``, and
+        # produce the same block as the valid K=25 call.
+        cats = self._catalogs()
+        good_out = cm.format_known_entities_bounded(
+            cats, current_turn=110, context_length=32768,
+            turn_text="a quiet uneventful moment passes",
+            checkpoint_compaction=True, compaction_interval_k=25,
+        )
+        bad_out = cm.format_known_entities_bounded(
+            cats, current_turn=110, context_length=32768,
+            turn_text="a quiet uneventful moment passes",
+            checkpoint_compaction=True, compaction_interval_k=bad_k,
+        )
+        assert bad_out == good_out
 
 
 # ===========================================================================
