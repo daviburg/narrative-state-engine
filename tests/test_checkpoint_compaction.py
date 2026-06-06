@@ -506,10 +506,9 @@ class TestDiscoveryKnownBlock:
 
         entities = [
             ent("zeta-recent-a", 110),
-            ent("zeta-recent-b", 105),
-            ent("zeta-snap-a", 99),   # age 11 -> OFF brief, ON id-only
-            ent("zeta-snap-b", 95),   # age 15 -> OFF brief, ON id-only
-            ent("zeta-snap-c", 90),   # age 20 -> OFF brief, ON id-only
+            ent("zeta-snap-a", 99),   # age 11 -> brief both (just out of window)
+            ent("zeta-snap-b", 95),   # age 15 -> brief both
+            ent("zeta-snap-c", 90),   # age 20 -> brief both
             ent("zeta-stale-a", 85),  # age 25 -> id-only both
         ]
         return {"characters.json": entities}
@@ -527,7 +526,10 @@ class TestDiscoveryKnownBlock:
         )
         assert off_out == default_out
 
-    def test_flag_on_smaller_known_block(self):
+    def test_flag_on_anchor_parity_with_off(self):
+        # P1 regression (epic #477): A0 must NOT degrade discovery anchors below
+        # the OFF brief form.  The known-block is byte-identical OFF vs ON — the
+        # id|name|type coreference floor is preserved either way.
         cats = self._catalogs()
         off_out = cm.format_known_entities_bounded(
             cats, current_turn=110, context_length=32768,
@@ -539,10 +541,43 @@ class TestDiscoveryKnownBlock:
             turn_text="a quiet uneventful moment passes",
             checkpoint_compaction=True, compaction_interval_k=25,
         )
-        assert on_out != off_out
-        assert len(on_out) < len(off_out)
+        assert on_out == off_out
         # Recent entities keep full detail (coreference floor preserved).
         assert "identity of zeta-recent-a" in on_out
+
+    @pytest.mark.parametrize(
+        "eid,turn",
+        [("zeta-snap-a", 99), ("zeta-snap-b", 95), ("zeta-snap-c", 90)],
+    )
+    def test_snapshot_tail_entity_keeps_type_field_on(self, eid, turn):
+        # The exact starvation case from the adversarial review: an entity at
+        # current_turn - recency_window - 1 (=age 11) and <= checkpoint_floor
+        # (=100) must keep IDENTICAL OFF/ON anchor fields, including ``type`` —
+        # flag-ON must never drop it to the weaker id-only form.
+        cats = self._catalogs()
+        common = dict(
+            current_turn=110, context_length=32768,
+            turn_text="a quiet uneventful moment passes",
+        )
+        off_out = cm.format_known_entities_bounded(
+            cats, checkpoint_compaction=False, **common
+        )
+        on_out = cm.format_known_entities_bounded(
+            cats, checkpoint_compaction=True, compaction_interval_k=25, **common
+        )
+
+        def _anchor_line(block, entity_id):
+            for line in block.splitlines():
+                if line.startswith(entity_id + " "):
+                    return line
+            raise AssertionError(f"{entity_id} missing from known-block")
+
+        off_line = _anchor_line(off_out, eid)
+        on_line = _anchor_line(on_out, eid)
+        assert on_line == off_line
+        # The brief floor keeps id | name | type (three pipe-joined fields).
+        assert on_line.count(" | ") >= 2
+        assert on_line.endswith(" | character")
 
     @pytest.mark.parametrize("bad_k", ["25", None, [], {}, 0, -5, True, False])
     def test_non_int_interval_k_coerced_to_default(self, bad_k):
