@@ -304,21 +304,34 @@ class TestBuildCheckpointCompactedVolatile:
 
     def test_k_boundary_snapshot_generation(self):
         # At turn 50 with K=25 the most recent boundary is 50: all entries
-        # through turn-50 fold into one snapshot summary, delta is empty.
+        # through turn-50 fold into a snapshot summary PLUS the latest
+        # pre-boundary item kept verbatim; delta is empty.
         out = se._build_checkpoint_compacted_volatile(self._vol(50), 50, 25)
         events = out["events"]
         assert isinstance(events[0], str)
         assert events[0].startswith("[checkpoint turn-50:")
-        # No delta entries at the exact boundary.
-        assert len(events) == 1
+        # Summary + the latest-at-checkpoint item (turn-050), no delta.
+        assert len(events) == 2
+        assert events[1] == {"turn": "turn-050", "value": "event-50"}
+
+    def test_latest_pre_boundary_value_survives_at_boundary(self):
+        # P1 (epic #477): a key whose ONLY current fact sits at/before the
+        # boundary must NOT be erased — the latest value stays verbatim at t=K.
+        vol = {"location": [{"turn": "turn-050", "value": "loc-castle"}]}
+        out = se._build_checkpoint_compacted_volatile(vol, 50, 25)
+        loc = out["location"]
+        assert loc[0].startswith("[checkpoint turn-50:")
+        assert {"turn": "turn-050", "value": "loc-castle"} in loc
 
     def test_delta_append_between_checkpoints(self):
-        # Turn 60, K=25 -> boundary 50.  Entries 1..50 snapshot; 51..60 delta,
-        # appended verbatim and in order.
+        # Turn 60, K=25 -> boundary 50.  Entries 1..50 snapshot (summary +
+        # latest turn-050); 51..60 delta, appended verbatim and in order.
         out = se._build_checkpoint_compacted_volatile(self._vol(60), 60, 25)
         events = out["events"]
         assert events[0].startswith("[checkpoint turn-50:")
-        delta = events[1:]
+        # Index 1 is the latest-at-checkpoint item; the rest is the delta.
+        assert events[1] == {"turn": "turn-050", "value": "event-50"}
+        delta = events[2:]
         assert [e["value"] for e in delta] == [f"event-{i}" for i in range(51, 61)]
 
     def test_no_snapshot_before_first_checkpoint(self):
@@ -343,16 +356,25 @@ class TestBuildCheckpointCompactedVolatile:
         assert json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
 
     def test_staleness_bounded_by_k(self):
-        # Delta entries are strictly after the checkpoint, and the checkpoint is
+        # Delta entries are strictly after the checkpoint; the single latest-
+        # at-checkpoint item sits exactly AT the checkpoint.  The checkpoint is
         # within K turns of the current turn -> staleness < K.
         k = 25
         for t in (37, 60, 99, 110, 250):
             out = se._build_checkpoint_compacted_volatile(self._vol(t), t, k)
             checkpoint = (t // k) * k
             assert t - checkpoint < k
-            for e in out["events"]:
-                if isinstance(e, dict):
-                    tn = se._extract_turn_number(e)
+            events = out["events"]
+            # When a snapshot summary is present, index 1 is the latest-at-
+            # checkpoint item (turn == checkpoint); everything else is delta.
+            has_snapshot = events and isinstance(events[0], str)
+            for idx, e in enumerate(events):
+                if not isinstance(e, dict):
+                    continue
+                tn = se._extract_turn_number(e)
+                if has_snapshot and idx == 1:
+                    assert tn == checkpoint
+                else:
                     assert tn > checkpoint
 
 
@@ -437,6 +459,30 @@ class TestFlagOnReducedBodyPriorState:
         assert on != off
         assert len(on) <= len(off)
 
+    @pytest.mark.parametrize("current_turn", [50, 51])
+    def test_latest_volatile_value_visible_at_and_after_boundary(self, current_turn):
+        # P1 (epic #477): an entity whose ONLY current location fact is set at
+        # turn-050 must keep that value visible in the entity_detail prior-state
+        # both AT the K boundary (t=50) and the turn AFTER (t=51) — the snapshot
+        # must not collapse it into a count/theme summary and erase current state.
+        entry = {
+            "id": "char-mara", "name": "Mara", "type": "character",
+            "first_seen_turn": "turn-050", "last_updated_turn": f"turn-{current_turn:03d}",
+            "identity": "A wanderer",
+            "volatile_state": {
+                "location": [{"turn": "turn-050", "value": "loc-castle"}],
+            },
+        }
+        out = se._format_prior_entity_context(
+            entry, config=_CFG_ON, mentioned_ids=set(),
+            current_turn_num=current_turn,
+        )
+        parsed = json.loads(out)
+        loc = parsed["volatile_state"]["location"]
+        # The current value survives byte-for-byte as a verbatim item.
+        assert {"turn": "turn-050", "value": "loc-castle"} in loc
+        assert "loc-castle" in out
+
 
 # ===========================================================================
 # Flag-ON reduced body — discovery known-block
@@ -444,9 +490,11 @@ class TestFlagOnReducedBodyPriorState:
 
 class TestDiscoveryKnownBlock:
     def _catalogs(self):
-        # Recent (full both), snapshot-brief-eligible (OFF brief / ON id-only),
-        # and deeply-stale (id-only both) entities at current_turn=110, K=25
+        # Recent (full both), brief-tier (id|name|type both OFF and ON), and
+        # deeply-stale (id-only both) entities at current_turn=110, K=25
         # (checkpoint boundary = 100), recency_window=10, brief threshold=20.
+        # A0 must NOT weaken the discovery anchors: OFF and ON are byte-identical
+        # because the id|name|type anchor is the coreference floor.
         def ent(eid, turn):
             return {
                 "id": eid,

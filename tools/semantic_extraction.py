@@ -1544,6 +1544,25 @@ def _build_volatile_digest(volatile_state: dict, current_turn_num: int) -> dict:
     return result
 
 
+def _latest_volatile_item(items: list):
+    """Return the latest (highest-turn) item from a volatile entry list.
+
+    "Latest" is the item with the greatest parseable turn number — the entity's
+    *current* volatile value as of the snapshot.  Ties resolve to the LAST
+    occurrence in input order, matching the append-only "most recently logged
+    wins" semantics of a volatile key.  Falls back to the last list element when
+    no item carries a parseable turn number.
+    """
+    latest = items[-1]
+    latest_turn: int | None = None
+    for item in items:
+        turn_num = _extract_turn_number(item)
+        if turn_num is not None and (latest_turn is None or turn_num >= latest_turn):
+            latest_turn = turn_num
+            latest = item
+    return latest
+
+
 def _build_checkpoint_compacted_volatile(
     volatile_state: dict, current_turn_num: int, interval_k: int
 ) -> dict:
@@ -1553,18 +1572,30 @@ def _build_checkpoint_compacted_volatile(
     state with NO extra LLM call, so it is byte-stable at temperature 0.
 
     On a fixed ``interval_k``-turn cadence, every volatile entry at or before the
-    most recent checkpoint boundary (``floor(t / K) * K``) is folded into a single
-    snapshot summary; entries after the boundary form an **append-only
-    recent-delta buffer** kept verbatim.  Because the delta only ever covers
-    ``(checkpoint_turn, t]``, staleness is bounded by ``interval_k`` turns.
+    most recent checkpoint boundary (``floor(t / K) * K``) is folded into a
+    snapshot; entries after the boundary form an **append-only recent-delta
+    buffer** kept verbatim.  Because the delta only ever covers
+    ``(checkpoint_turn, t]``, *per-entity volatile staleness* is bounded by
+    ``interval_k`` turns.
+
+    The snapshot is **two leading elements**: a count/theme summary line PLUS the
+    **latest pre-boundary item kept verbatim**.  Carrying the latest item is
+    required — a key's only current fact (e.g. a location set at turn-050) may
+    sit entirely at or before the boundary, and folding it into a count/theme
+    summary alone would erase the entity's *current* value from the detail prompt
+    at the boundary (t=K) and the turn after (t=K+1).  The verbatim latest item
+    keeps that value byte-for-byte visible regardless of cadence.
 
     This replaces the sliding ``_DIGEST_WINDOW`` digest (``_build_volatile_digest``)
     with a checkpoint-cadence one: at high turn counts the snapshot collapses far
-    more accumulated history into one line, so the digest body stays bounded
-    rather than growing with the recency window.
+    more accumulated history into one summary line plus the single current value,
+    so the per-entity volatile body's growth slope is reduced (it does not grow
+    with the recency window).  This is a per-entity slope/staleness bound, NOT an
+    end-to-end bounded context (the active-set/catalog coupling is unchanged).
 
     The snapshot summary opens with ``[`` so the downstream cap step in
-    ``_format_prior_entity_context`` recognises and preserves it.
+    ``_format_prior_entity_context`` recognises and preserves it together with the
+    latest-at-checkpoint item.
     """
     if not volatile_state:
         return volatile_state
@@ -1591,7 +1622,8 @@ def _build_checkpoint_compacted_volatile(
                 f"[checkpoint turn-{checkpoint_turn}: {len(snapshot_items)} compacted"
                 f" entries, including: {', '.join(themes[:5])}]"
             )
-            result[key] = [summary] + delta_items
+            latest = _latest_volatile_item(snapshot_items)
+            result[key] = [summary, latest] + delta_items
         else:
             result[key] = delta_items
 
@@ -1829,7 +1861,20 @@ def _format_prior_entity_context(
                     # If the digest produced a summary at index 0 (a string),
                     # preserve it and cap the rest to last N entries.
                     if v and isinstance(v[0], str) and v[0].startswith("["):
-                        trimmed_vs[k] = v[:1] + v[-max_snapshots:]
+                        # The Phase A0 checkpoint snapshot carries TWO leading
+                        # elements — the summary line AND the latest-at-checkpoint
+                        # item (index 1, a non-string).  Both must survive the cap
+                        # so the entity's current volatile value stays visible at
+                        # the K boundary; the sliding digest keeps only the summary.
+                        head = 1
+                        if (
+                            v[0].startswith("[checkpoint ")
+                            and len(v) > 1
+                            and not isinstance(v[1], str)
+                        ):
+                            head = 2
+                        tail_start = max(head, len(v) - max_snapshots)
+                        trimmed_vs[k] = v[:head] + v[tail_start:]
                     else:
                         trimmed_vs[k] = v[-max_snapshots:]
                 else:
