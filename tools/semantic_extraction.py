@@ -1580,7 +1580,7 @@ def _build_checkpoint_compacted_volatile(
         if snapshot_items:
             themes = _extract_themes(snapshot_items)
             summary = (
-                f"[checkpoint turn-{checkpoint_turn}: {len(snapshot_items)} earlier"
+                f"[checkpoint turn-{checkpoint_turn}: {len(snapshot_items)} compacted"
                 f" entries, including: {', '.join(themes[:5])}]"
             )
             result[key] = [summary] + delta_items
