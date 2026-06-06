@@ -105,6 +105,43 @@ def _make_pc_entry(relationships=None):
 
 
 # ===========================================================================
+# Shipped default (config/llm.json)
+# ===========================================================================
+
+class TestShippedDefaultConfig:
+    """The shipped production config gates the feature ON by default (epic #477).
+
+    The A/B (150t) measured the flag-ON arm as MERGE-READY at quality parity, so
+    the default was flipped from OFF to ON.  The flag-OFF golden tests still pin
+    flag-OFF == pre-#477-main byte-identity (the A/B control); this asserts the
+    *shipped* value the production runs now use.
+    """
+
+    def test_shipped_config_enables_tiering(self):
+        cfg_path = os.path.join(
+            os.path.dirname(__file__), "..", "config", "llm.json"
+        )
+        with open(cfg_path, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        ctx_opt = cfg.get("context_optimizations", {})
+        assert ctx_opt.get("relationship_type_tiering") is True
+
+    def test_shipped_config_parses_to_enabled(self):
+        cfg_path = os.path.join(
+            os.path.dirname(__file__), "..", "config", "llm.json"
+        )
+        with open(cfg_path, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+        enabled, perm, cap = se._get_type_tiering_config(cfg)
+        assert enabled is True
+        # Shipped permanent list is the 5 schema-valid permanent-bond types.
+        assert perm == frozenset(
+            {"kinship", "adversarial", "mentorship", "political", "partnership"}
+        )
+        assert cap == 10
+
+
+# ===========================================================================
 # _get_type_tiering_config
 # ===========================================================================
 
