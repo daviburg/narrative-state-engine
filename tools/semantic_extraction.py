@@ -1633,12 +1633,45 @@ def _filter_relationships_for_scene(
     return all_rels[:max_relationships]
 
 
+def _format_prior_entity_context_uncompacted(current_entry: dict) -> str:
+    """Serialise the full, uncompacted prior entity state for instrumentation.
+
+    Mirrors the field selection of :func:`_format_prior_entity_context` but
+    skips every compaction step (volatile digest/cap, relationship
+    filtering/compaction, PC stable-attribute trimming).  The result is the
+    pre-compaction prompt body the model *would* have received with no
+    compression active.  Used only to measure ``raw_tokens`` for the
+    ``entity_detail`` phase (#484); it never feeds a real model call.
+    """
+    prior: dict = {}
+    if "identity" in current_entry:
+        prior["identity"] = current_entry["identity"]
+    if "current_status" in current_entry:
+        prior["current_status"] = current_entry["current_status"]
+    if "status_updated_turn" in current_entry:
+        prior["status_updated_turn"] = current_entry["status_updated_turn"]
+    sa = current_entry.get("stable_attributes")
+    if sa:
+        prior["stable_attributes"] = sa
+    vs = current_entry.get("volatile_state")
+    if vs:
+        prior["volatile_state"] = vs
+    rels = current_entry.get("relationships")
+    if rels:
+        prior["relationships"] = rels
+    for key in ("id", "name", "type", "first_seen_turn", "last_updated_turn", "notes"):
+        if key in current_entry:
+            prior[key] = current_entry[key]
+    return json.dumps(prior, indent=2)
+
+
 def _format_prior_entity_context(
     current_entry: dict | None,
     arcs_data: dict | None = None,
     config: dict | None = None,
     mentioned_ids: set[str] | None = None,
     current_turn_num: int | None = None,
+    compact: bool = True,
 ) -> str:
     """Format the prior entity state for injection into the detail prompt.
 
@@ -1658,9 +1691,19 @@ def _format_prior_entity_context(
     For non-PC entities, relationships are filtered by mention relevance and
     recency (same as scene-scoped trimming), capped at
     ``_SCENE_MAX_RELATIONSHIPS``.
+
+    When ``compact`` is False, every trim/digest/relationship-compaction step is
+    skipped and the full, uncompacted prior state is serialised.  This is the
+    pre-compaction baseline used purely for token-size instrumentation (#484):
+    it lets the caller measure the true uncompressed prompt size without
+    changing the prompt actually sent to the model.  The default (``True``)
+    preserves the existing compacted behaviour byte-for-byte.
     """
     if not current_entry:
         return "{}"
+
+    if not compact:
+        return _format_prior_entity_context_uncompacted(current_entry)
 
     is_pc = current_entry.get("id") == "char-player"
     # Trimming always applies to all entities (arc-aware compression)
@@ -1797,7 +1840,8 @@ def format_detail_prompt(
     arcs_data: dict | None = None,
     config: dict | None = None,
     mentioned_ids: set[str] | None = None,
-) -> str:
+    return_uncompacted: bool = False,
+) -> str | tuple[str, str]:
     """Format the user prompt for entity detail extraction.
 
     Uses a single "Prior entity state" section.  The previously-separate
@@ -1813,6 +1857,14 @@ def format_detail_prompt(
     digested and trimmed similarly to PC, but capped at
     ``_ARC_AWARE_MAX_VOLATILE_SNAPSHOTS`` (a separate constant from PC's
     ``_PC_MAX_VOLATILE_SNAPSHOTS``, though both currently share the same value).
+
+    When ``return_uncompacted`` is True, returns ``(prompt, uncompacted_prompt)``
+    where ``uncompacted_prompt`` is the same prompt built from the full
+    pre-compaction prior entity state.  This is the measurement-only baseline
+    used to record a true ``raw_tokens`` for the ``entity_detail`` phase (#484);
+    the first element is always the unchanged prompt that is actually sent to
+    the model.  The default (``False``) keeps the original string-only return so
+    existing call sites are unchanged.
     """
     _current_turn = _parse_turn_number(turn.get('turn_id', ''))
     prior_json = _format_prior_entity_context(
@@ -1820,19 +1872,30 @@ def format_detail_prompt(
         mentioned_ids=mentioned_ids, current_turn_num=_current_turn,
     )
     entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
-    prompt = (
-        f"## Current Turn\n"
-        f"Turn ID: {turn['turn_id']}\n"
-        f"Speaker: {turn['speaker']}\n"
-        f"Text:\n{turn['text']}\n\n"
-        f"## Entity to Extract/Update\n"
-        f"Entity ID: {entity_id}\n"
-        f"Entity Name: {entity_ref['name']}\n"
-        f"Entity Type: {entity_ref['type']}\n\n"
-        f"## Prior entity state (for reference, update as needed):\n"
-        f"```json\n{prior_json}\n```"
+
+    def _assemble(_prior: str) -> str:
+        return (
+            f"## Current Turn\n"
+            f"Turn ID: {turn['turn_id']}\n"
+            f"Speaker: {turn['speaker']}\n"
+            f"Text:\n{turn['text']}\n\n"
+            f"## Entity to Extract/Update\n"
+            f"Entity ID: {entity_id}\n"
+            f"Entity Name: {entity_ref['name']}\n"
+            f"Entity Type: {entity_ref['type']}\n\n"
+            f"## Prior entity state (for reference, update as needed):\n"
+            f"```json\n{_prior}\n```"
+        )
+
+    prompt = _assemble(prior_json)
+    if not return_uncompacted:
+        return prompt
+    raw_prior_json = _format_prior_entity_context(
+        current_entry, arcs_data=arcs_data, config=config,
+        mentioned_ids=mentioned_ids, current_turn_num=_current_turn,
+        compact=False,
     )
-    return prompt
+    return prompt, _assemble(raw_prior_json)
 
 
 def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
@@ -3514,21 +3577,33 @@ def extract_and_merge(
 
     # --- Prompt token instrumentation ---
     # Estimate tokens for each phase from pre-computed prompt inputs.
+    # entity_detail surfaces both the compacted prompt (actually sent) and the
+    # uncompacted prompt, so raw_tokens reflects the TRUE pre-compaction size
+    # rather than defaulting to the compressed size (#484).  This is
+    # measurement-only: only _detail_user_prompt / _pc_user_prompt are sent.
     _detail_sys_tmpl = load_template("entity-detail")
     for entity_ref, current_entry in _entity_tasks:
         entity_id = get_entity_id(entity_ref)
         _entity_arcs = pc_arcs_data if entity_id == "char-player" else None
-        _detail_user_prompt = format_detail_prompt(
+        _detail_user_prompt, _detail_raw_prompt = format_detail_prompt(
             turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
-            mentioned_ids=_mentioned_ids,
+            mentioned_ids=_mentioned_ids, return_uncompacted=True,
         )
-        _record_prompt_tokens(_prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt)
+        _detail_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _detail_raw_prompt)
+        _record_prompt_tokens(
+            _prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt,
+            raw_tokens=_detail_raw_tokens,
+        )
     if _run_pc:
-        _pc_user_prompt = format_detail_prompt(
+        _pc_user_prompt, _pc_raw_prompt = format_detail_prompt(
             turn, _pc_ref, _pc_entry, arcs_data=pc_arcs_data, config=_cfg,
-            mentioned_ids=_mentioned_ids,
+            mentioned_ids=_mentioned_ids, return_uncompacted=True,
         )
-        _record_prompt_tokens(_prompt_metrics, "entity_detail", _detail_sys_tmpl, _pc_user_prompt)
+        _pc_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _pc_raw_prompt)
+        _record_prompt_tokens(
+            _prompt_metrics, "entity_detail", _detail_sys_tmpl, _pc_user_prompt,
+            raw_tokens=_pc_raw_tokens,
+        )
     if _run_rels:
         _rel_sys_tmpl = load_template("relationship-mapper")
         _rel_user_prompt = format_relationship_prompt(turn, mentioned_entities, existing_rels_json)

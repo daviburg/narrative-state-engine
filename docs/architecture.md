@@ -231,7 +231,7 @@ Compression is **born observable**: raw-vs-compressed measurement landed *before
 
 Per-phase, under `prompt_metrics.<phase>` in `extraction-log.jsonl`:
 
-- `raw_input_tokens` — pre-compression estimate. In PR-1 it defaults to the compressed size (no new compression layer is active).
+- `raw_input_tokens` — pre-compression estimate. In PR-1 it defaults to the compressed size (no new compression layer is active). **Exception (#484): the `entity_detail` phase now passes a TRUE pre-compaction `raw_tokens`** — `format_detail_prompt(..., return_uncompacted=True)` surfaces the prompt built from the full, untrimmed prior entity state alongside the compacted prompt actually sent. So when the existing detail-prompt compaction (volatile digest/cap, relationship filtering/compaction) actually trims content, `raw_input_tokens > compressed_input_tokens` and `compression_ratio < 1.0` for `entity_detail`; when nothing is trimmed they remain equal (no false positive). This is measurement-only: the prompt sent to the model and the extraction output are unchanged. It unblocks the A/B of any prompt-compaction transform (e.g. PR #483's A0 checkpoint-compaction), which was previously invisible because `entity_detail` measured tokens *after* compaction.
 - `compressed_input_tokens` — final assembled prompt size (mirrors `input_tokens`).
 - `compression_ratio` — `compressed / raw` (`1.0` in PR-1).
 - Section drop counters: `catalog_entries_pruned`, `catalog_entries_degraded`, `relationships_pruned`, `volatile_snapshots_dropped`, `turns_dropped` (all `0` in PR-1).

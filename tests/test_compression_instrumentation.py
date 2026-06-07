@@ -389,6 +389,119 @@ def test_estimate_tokens_is_shared():
 
 
 # ---------------------------------------------------------------------------
+# entity_detail raw_tokens captures TRUE pre-compaction size (#484)
+# ---------------------------------------------------------------------------
+
+def _detail_turn():
+    return {"turn_id": "turn-100", "speaker": "dm", "text": "A quiet hallway."}
+
+
+def test_entity_detail_raw_exceeds_compressed_when_compaction_fires():
+    """A heavy entity whose relationships/volatile state get trimmed must
+    record raw_tokens > compressed_tokens at the entity_detail call site (#484).
+
+    Before the fix the call site passed no raw_tokens, so raw defaulted to the
+    compressed size and the ratio was structurally pinned to 1.0.
+    """
+    from semantic_extraction import format_detail_prompt
+
+    sys_tmpl = "entity-detail system template "
+    # Many stale, unmentioned relationships -> scene filtering drops most of
+    # them; many volatile snapshots per key -> digest/cap trims the tail.
+    entry = {
+        "id": "char-npc", "name": "Npc", "type": "character",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-002",
+        "relationships": [
+            {"source_id": "char-npc", "target_id": f"char-old-{i}",
+             "relationship_type": "knows", "status": "active",
+             "last_updated_turn": "turn-001",
+             "notes": "a stale acquaintance from long ago " * 5}
+            for i in range(40)
+        ],
+        "volatile_state": {
+            "mood": [f"feeling number {i} described at length " * 4
+                     for i in range(40)],
+        },
+    }
+    ref = {"name": "Npc", "type": "character", "existing_id": "char-npc",
+           "is_new": False}
+
+    compacted, uncompacted = format_detail_prompt(
+        _detail_turn(), ref, entry, mentioned_ids=set(), return_uncompacted=True,
+    )
+    comp_tokens = _estimate_tokens(sys_tmpl + compacted)
+    raw_tokens = _estimate_tokens(sys_tmpl + uncompacted)
+    assert raw_tokens > comp_tokens
+
+    metrics: dict = {}
+    _record_prompt_tokens(
+        metrics, "entity_detail", sys_tmpl, compacted, raw_tokens=raw_tokens,
+    )
+    out = _finalize_prompt_metrics(metrics)["entity_detail"]
+    assert out["raw_input_tokens"] > out["compressed_input_tokens"]
+    assert out["compression_ratio"] < 1.0
+    tc = _build_turn_compression(_finalize_prompt_metrics(metrics))
+    assert tc["activated_phases"] == ["entity_detail"]
+
+
+def test_entity_detail_raw_equals_compressed_when_nothing_to_compact():
+    """A light entity with nothing to trim records raw == compressed, so
+    the no-op case produces no false-positive compression signal (#484)."""
+    from semantic_extraction import format_detail_prompt
+
+    sys_tmpl = "entity-detail system template "
+    entry = {
+        "id": "char-npc", "name": "Npc", "type": "character",
+        "first_seen_turn": "turn-001", "last_updated_turn": "turn-100",
+        "identity": "a quiet figure",
+        "stable_attributes": {"species": "human"},
+    }
+    ref = {"name": "Npc", "type": "character", "existing_id": "char-npc",
+           "is_new": False}
+
+    compacted, uncompacted = format_detail_prompt(
+        _detail_turn(), ref, entry, mentioned_ids=set(), return_uncompacted=True,
+    )
+    assert compacted == uncompacted
+    comp_tokens = _estimate_tokens(sys_tmpl + compacted)
+    raw_tokens = _estimate_tokens(sys_tmpl + uncompacted)
+    assert raw_tokens == comp_tokens
+
+    metrics: dict = {}
+    _record_prompt_tokens(
+        metrics, "entity_detail", sys_tmpl, compacted, raw_tokens=raw_tokens,
+    )
+    out = _finalize_prompt_metrics(metrics)["entity_detail"]
+    assert out["raw_input_tokens"] == out["compressed_input_tokens"]
+    assert out["compression_ratio"] == 1.0
+
+
+def test_format_detail_prompt_default_returns_str_and_unchanged():
+    """return_uncompacted defaults False -> str return; the sent prompt is
+    byte-identical to the compacted element of the tuple form (no change to
+    what the model receives, #484)."""
+    from semantic_extraction import format_detail_prompt
+
+    entry = {
+        "id": "char-npc", "name": "Npc", "type": "character",
+        "relationships": [
+            {"source_id": "char-npc", "target_id": f"char-old-{i}",
+             "relationship_type": "knows", "status": "active",
+             "last_updated_turn": "turn-001"}
+            for i in range(20)
+        ],
+    }
+    ref = {"name": "Npc", "type": "character", "existing_id": "char-npc",
+           "is_new": False}
+    plain = format_detail_prompt(_detail_turn(), ref, entry, mentioned_ids=set())
+    assert isinstance(plain, str)
+    compacted, _ = format_detail_prompt(
+        _detail_turn(), ref, entry, mentioned_ids=set(), return_uncompacted=True,
+    )
+    assert plain == compacted
+
+
+# ---------------------------------------------------------------------------
 # _parse_args — label-to-path pairing preserves positional order
 # ---------------------------------------------------------------------------
 
