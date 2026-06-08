@@ -25,6 +25,8 @@
   "checkpoint_interval": 25,
   "dedup_audit_interval": 50,
   "skip_response_format": true,
+  "entity_detail_raw_instrumentation": true,
+  "_comment_entity_detail_raw_instrumentation": "Default ON (#484/#485). Measures TRUE pre-compaction raw_tokens for the entity_detail phase by serialising the full uncompacted prior entity state alongside the compacted prompt actually sent (measurement-only; the prompt sent to the model and the extraction output are unchanged). Set false to skip the extra per-entity json.dumps on long sessions with large catalog entries, where it can become a per-turn CPU/memory bottleneck; when off, entity_detail raw_tokens falls back to the compressed size (pre-#484 behaviour) and compression_ratio returns to 1.0 for that phase.",
   "context_optimizations": {
     "relationship_type_tiering": true,
     "_comment": "L1+L4 type-tiered PC relationship cap (epic #477). Default ON: caps PC entity-detail relationships by type: permanent bonds kept uncapped, volatile tail trimmed to pc_rel_volatile_tail_cap. Also promotes permanent-bond types in the relationship-mapper budget trim. Set false to restore pre-#477 behaviour (byte-identical to the pre-#477 baseline -- i.e. main before #477 -- when the flag is absent or false; note that once this default-ON change merges, main itself ships the flag ON); a same-commit flag-OFF run serves as the A/B control.",
