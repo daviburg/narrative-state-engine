@@ -284,6 +284,29 @@ all bands.  A ratio approaching 1.0 in the 51-100 and 101+ bands with
 `activated_phases` empty indicates the compression surfaces were never
 triggered; a ratio well below 1.0 in those bands confirms active compression.
 
+#### Multi-run paired A/B scoring (`tools/ab_paired_score.py`)
+
+The single-pass byte-diff A/B is **deprecated** for the per-turn token metric on
+this non-deterministic Vulkan / MoE stack (see [ab-test-standard.md](ab-test-standard.md) §0).
+To judge a candidate against the noise floor, run **2–3 runs per variant** and
+score the matched-call turns (turns where every run made the same number of
+`entity_detail` calls) with paired deltas of the pre-compaction
+tokens-per-call metric:
+
+```bash
+python tools/ab_paired_score.py \
+    --a framework-ab-a-run1/extraction-log.jsonl \
+    --a framework-ab-a-run2/extraction-log.jsonl \
+    --b framework-ab-b-run1/extraction-log.jsonl \
+    --b framework-ab-b-run2/extraction-log.jsonl \
+    --noise-floor 5.0
+```
+
+It reports the weighted Δ, per-turn mean/median Δ, Cohen's d, and an effect-size
+-vs-noise-floor verdict (`SEPARABLE` / `WITHIN NOISE`). Run it with a variant's
+two control reruns as `--a` / `--b` to (re)measure the noise floor itself. Use
+`--json` for machine-readable output.
+
 ### Timeout Watchdog
 
 The LLM client includes a wall-clock watchdog that prevents indefinite hangs
