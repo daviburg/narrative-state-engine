@@ -1160,6 +1160,33 @@ _SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
 # Entity detail call cap to prevent O(n²) scaling
 _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
+# entity_detail raw-token instrumentation guardrail (#484/#485).
+# Building the uncompacted prompt to measure true pre-compaction raw_tokens
+# adds one extra json.dumps of the full prior entity state per entity per turn.
+# On long sessions with large catalog entries that serialisation can dominate
+# per-turn CPU/memory even though the raw prompt is never sent to the model.
+# This flag (default ON, to preserve the #484 measurement) lets operators
+# disable the extra serialisation so instrumentation cannot become a
+# bottleneck; when disabled, entity_detail raw_tokens falls back to the
+# compressed size (the pre-#484 behaviour).
+_DEFAULT_ENTITY_DETAIL_RAW_INSTRUMENTATION = True
+
+
+def _entity_detail_raw_instrumentation_enabled(config: dict | None) -> bool:
+    """Return whether the entity_detail uncompacted raw-token path is active.
+
+    Reads ``entity_detail_raw_instrumentation`` from *config* (default ON,
+    preserving the #484 measurement).  When disabled, the per-entity uncompacted
+    prompt serialisation is skipped and ``raw_tokens`` falls back to the
+    compressed size, so instrumentation cannot become a per-turn bottleneck on
+    long sessions with large catalog entries (#485 review).
+    """
+    if isinstance(config, dict):
+        return bool(config.get("entity_detail_raw_instrumentation",
+                               _DEFAULT_ENTITY_DETAIL_RAW_INSTRUMENTATION))
+    return _DEFAULT_ENTITY_DETAIL_RAW_INSTRUMENTATION
+
+
 # Arc-aware compression: max volatile snapshots per key (same as PC)
 _ARC_AWARE_MAX_VOLATILE_SNAPSHOTS = 3
 
@@ -3581,25 +3608,43 @@ def extract_and_merge(
     # uncompacted prompt, so raw_tokens reflects the TRUE pre-compaction size
     # rather than defaulting to the compressed size (#484).  This is
     # measurement-only: only _detail_user_prompt / _pc_user_prompt are sent.
+    # The uncompacted serialisation is gated by entity_detail_raw_instrumentation
+    # (default ON) so operators can disable the extra per-entity json.dumps on
+    # long sessions where it would become a bottleneck (#485 review).
+    _raw_instr = _entity_detail_raw_instrumentation_enabled(_cfg)
     _detail_sys_tmpl = load_template("entity-detail")
     for entity_ref, current_entry in _entity_tasks:
         entity_id = get_entity_id(entity_ref)
         _entity_arcs = pc_arcs_data if entity_id == "char-player" else None
-        _detail_user_prompt, _detail_raw_prompt = format_detail_prompt(
-            turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
-            mentioned_ids=_mentioned_ids, return_uncompacted=True,
-        )
-        _detail_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _detail_raw_prompt)
+        if _raw_instr:
+            _detail_user_prompt, _detail_raw_prompt = format_detail_prompt(
+                turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
+                mentioned_ids=_mentioned_ids, return_uncompacted=True,
+            )
+            _detail_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _detail_raw_prompt)
+        else:
+            _detail_user_prompt = format_detail_prompt(
+                turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
+                mentioned_ids=_mentioned_ids,
+            )
+            _detail_raw_tokens = None
         _record_prompt_tokens(
             _prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt,
             raw_tokens=_detail_raw_tokens,
         )
     if _run_pc:
-        _pc_user_prompt, _pc_raw_prompt = format_detail_prompt(
-            turn, _pc_ref, _pc_entry, arcs_data=pc_arcs_data, config=_cfg,
-            mentioned_ids=_mentioned_ids, return_uncompacted=True,
-        )
-        _pc_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _pc_raw_prompt)
+        if _raw_instr:
+            _pc_user_prompt, _pc_raw_prompt = format_detail_prompt(
+                turn, _pc_ref, _pc_entry, arcs_data=pc_arcs_data, config=_cfg,
+                mentioned_ids=_mentioned_ids, return_uncompacted=True,
+            )
+            _pc_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _pc_raw_prompt)
+        else:
+            _pc_user_prompt = format_detail_prompt(
+                turn, _pc_ref, _pc_entry, arcs_data=pc_arcs_data, config=_cfg,
+                mentioned_ids=_mentioned_ids,
+            )
+            _pc_raw_tokens = None
         _record_prompt_tokens(
             _prompt_metrics, "entity_detail", _detail_sys_tmpl, _pc_user_prompt,
             raw_tokens=_pc_raw_tokens,

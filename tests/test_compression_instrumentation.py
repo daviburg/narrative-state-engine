@@ -27,6 +27,7 @@ from semantic_extraction import (  # noqa: E402
     _build_compression_signals,
     _build_turn_compression,
     _collect_existing_relationships,
+    _entity_detail_raw_instrumentation_enabled,
     _finalize_prompt_metrics,
     _format_relationships_budgeted,
     _record_prompt_tokens,
@@ -499,6 +500,58 @@ def test_format_detail_prompt_default_returns_str_and_unchanged():
         _detail_turn(), ref, entry, mentioned_ids=set(), return_uncompacted=True,
     )
     assert plain == compacted
+
+
+def test_entity_detail_raw_instrumentation_flag_default_and_gate():
+    """The raw-token guardrail (#485) defaults ON and respects the config flag.
+
+    The flag lets operators skip the per-entity uncompacted serialisation on
+    long sessions so instrumentation cannot become a bottleneck.
+    """
+    # Default ON (preserves the #484 measurement) for missing/None/empty config.
+    assert _entity_detail_raw_instrumentation_enabled(None) is True
+    assert _entity_detail_raw_instrumentation_enabled({}) is True
+    assert _entity_detail_raw_instrumentation_enabled("not-a-dict") is True
+    # Explicit opt-out disables the uncompacted path.
+    assert _entity_detail_raw_instrumentation_enabled(
+        {"entity_detail_raw_instrumentation": False}) is False
+    # Explicit opt-in stays ON.
+    assert _entity_detail_raw_instrumentation_enabled(
+        {"entity_detail_raw_instrumentation": True}) is True
+
+
+def test_entity_detail_raw_disabled_falls_back_to_compressed():
+    """With the guardrail OFF, omitting raw_tokens records raw == compressed
+    (the pre-#484 behaviour), so a heavy entity no longer signals compression.
+
+    This mirrors the disabled-path call site, which records the compacted
+    prompt without supplying a raw_tokens value.
+    """
+    from semantic_extraction import format_detail_prompt
+
+    sys_tmpl = "entity-detail system template "
+    entry = {
+        "id": "char-npc", "name": "Npc", "type": "character",
+        "relationships": [
+            {"source_id": "char-npc", "target_id": f"char-old-{i}",
+             "relationship_type": "knows", "status": "active",
+             "last_updated_turn": "turn-001",
+             "notes": "a stale acquaintance from long ago " * 5}
+            for i in range(40)
+        ],
+    }
+    ref = {"name": "Npc", "type": "character", "existing_id": "char-npc",
+           "is_new": False}
+
+    # Disabled path: only the compacted (string) prompt is built; no raw_tokens.
+    compacted = format_detail_prompt(_detail_turn(), ref, entry, mentioned_ids=set())
+    assert isinstance(compacted, str)
+
+    metrics: dict = {}
+    _record_prompt_tokens(metrics, "entity_detail", sys_tmpl, compacted)
+    out = _finalize_prompt_metrics(metrics)["entity_detail"]
+    assert out["raw_input_tokens"] == out["compressed_input_tokens"]
+    assert out["compression_ratio"] == 1.0
 
 
 # ---------------------------------------------------------------------------
