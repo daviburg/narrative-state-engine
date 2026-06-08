@@ -17,9 +17,10 @@ Full standard: [ab-test-standard.md](ab-test-standard.md).
 
 > Required for judging the instrumented per-turn token metric (the #484 pre-compaction `entity_detail` tokens-per-call). The single-pass byte-diff is **deprecated** for this non-deterministic stack (standard §0). The entity-retention gate below is unaffected.
 
-- [ ] N = **2–3 runs per variant** (not 5); 4–6 logs total for two variants
-- [ ] Score **matched-call turns only** — turns where every run made the same number of `entity_detail` calls (standard §0.2)
-- [ ] Effect size reported **against the measured noise floor (~5 tok/call weighted)**; report weighted Δ, per-turn mean/median Δ, Cohen's d, and the SEPARABLE / WITHIN-NOISE verdict
+- [ ] N = **2–3 runs per variant, equal on both arms** — for the **token-metric score only**; this does **not** relax the 3-runs-per-variant retention/noise-floor gate below (score the token metric on 2–3 of those same runs). N=1 and unequal arms are rejected by the helper.
+- [ ] Score **matched-call-COUNT turns only** — turns where every run made the same **number** of `entity_detail` calls (the log records the call count, not the call set; standard §0.2)
+- [ ] Check the reported **survivorship** (matched / full 344-turn population + drop rate) and **prior-state-divergence** lower bound — the matched set is a survivor subset and matched count does not guarantee equivalent prior catalog state
+- [ ] Effect size reported **against the measured noise floor (~5 tok/call weighted)** with the documented decision rule: report weighted Δ, per-turn mean/median Δ, Cohen's d, the **95% paired-t CI**, and the SEPARABLE / NOT-SEPARABLE verdict (SEPARABLE needs CI-excludes-0 **and** Δ>noise **and** ≥10 matched turns)
 - [ ] Noise floor (re)measured for this model/backend by running the helper with the variant's two control reruns as `--a` / `--b`
 
 ```bash

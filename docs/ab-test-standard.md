@@ -32,14 +32,16 @@ A0's measured *signal* was ~12 tok/call — the **same order of magnitude** as t
 
 ### 0.2 Multi-run paired methodology
 
-- **N = 2–3 runs PER VARIANT** (not 5). Two variants → 4–6 runs total.
-- **Matched-call scoring (REQUIRED):** score a turn **only** when **every** run across both variants made the **same number of `entity_detail` calls** for that turn (the same call set, so the per-call token metric is comparable). Discard turns where the call sets differ — that divergence is the non-determinism characterized in §0.1, not signal.
-- **Paired comparison:** on the matched-call turns, compute paired deltas (B − A) of the pre-compaction `entity_detail` tokens-per-call metric. Average each variant's runs per turn, then take the per-turn B − A delta.
-- **Effect size vs noise floor (REQUIRED):** report the **weighted Δ** (total raw tokens / total calls, B − A) **against the measured noise floor (~5 tok/call weighted)**, plus the per-turn mean / median Δ and Cohen's d. A result is meaningful **only** if the effect size is *separable* from the noise floor — report both numbers and the verdict.
+- **N = 2–3 runs PER VARIANT, balanced** (not 5; not 1). Two variants → 4–6 runs total, with the **same N on both arms**. This N is for the **token-metric score only**; it does **not** relax the standard's overall **3-runs-per-variant** retention/noise-floor gate (§1.2, §1.4, §3.4–§3.5) — you will typically already have ≥3 runs and can score the token metric on 2–3 of them. `tools/ab_paired_score.py` **rejects** N=1 and unequal arms.
+- **Matched-call-COUNT scoring (REQUIRED):** score a turn **only** when **every** run across both variants made the **same number of `entity_detail` calls** for that turn. The extraction log records only the per-phase call **count** (`prompt_metrics.<phase>.calls`), not which entities were detailed in each call, so this matches on **call COUNT**, not on the call *set* — two turns with the same count may have detailed different entities.
+  - **This is a SURVIVOR subset, not a neutral filter.** The A0 flag changes model output, which changes `entity_detail` call counts, so dropping divergent-count turns **conditions the estimate on a post-treatment variable**. The result describes only the surviving matched-count turns; the dropped turns are **NOT "not signal"** — they are simply un-poolable under this metric. The scorer reports the **drop rate** (matched / full 344-turn population) so a reader can judge how representative the survivor subset is.
+  - **Matched COUNT does NOT imply equivalent PRIOR catalog STATE.** Because the flag desyncs catalog state cumulatively across turns, two turns with the same `(turn, count)` can enter from **different prior catalogs**, so the per-call comparison is only strictly valid **where prior state is equivalent**. The log has no prior-state hash, but it records per-turn `new_entities`; the scorer reports — as a **lower bound** — how many matched turns have a divergent cumulative prior-entity-count proxy across runs (equal proxy does **not** prove equal content). Treat a high prior-state-divergence count as a warning that the matched comparison is **not** cleanly isolating the flag.
+- **Paired comparison:** on the matched-count turns, compute paired deltas (B − A) of the pre-compaction `entity_detail` tokens-per-call metric. Average each variant's runs per turn, then take the per-turn B − A delta.
+- **Effect size vs noise floor + statistical decision rule (REQUIRED):** report the **weighted Δ** (total raw tokens / total calls, B − A) **against the measured noise floor (~5 tok/call weighted)**, plus the per-turn mean / median Δ, Cohen's d, and a **95% paired-t confidence interval** on the per-turn deltas. A result is declared **SEPARABLE** only when **all three** hold (Rule 10 — a documented rule, not a bare 1× cutoff): (1) the **95% paired-t CI excludes zero**, (2) the **|weighted Δ| exceeds the noise floor**, and (3) at least **10 turns were matched** (`MIN_SEPARABLE_MATCHED_TURNS`). Otherwise the verdict is **NOT SEPARABLE**.
 
 ### 0.3 Scoring helper
 
-`tools/ab_paired_score.py` computes the paired matched-call deltas and the significance / effect-size summary across N runs per variant:
+`tools/ab_paired_score.py` computes the paired matched-count deltas and the significance / effect-size summary across N runs per variant:
 
 ```bash
 python tools/ab_paired_score.py \
@@ -50,9 +52,9 @@ python tools/ab_paired_score.py \
     --noise-floor 5.0
 ```
 
-Each `--a` / `--b` accepts an `extraction-log.jsonl` file or a run/framework directory containing one. The tool prints the matched-call turn count (scored / common-to-all-runs), the weighted and per-turn deltas, Cohen's d, the effect-vs-noise ratio, and a `SEPARABLE` / `WITHIN NOISE` verdict (use `--json` for machine-readable output).
+Each `--a` / `--b` accepts an `extraction-log.jsonl` file or a run/framework directory containing one. N must be **2 or 3 per variant and equal on both arms** (N=1 and unequal arms are rejected). The tool prints the matched-count turn count **against the full population** (`matched/population`, the drop count, and the drop %), the **prior-state-divergence lower bound**, the weighted and per-turn deltas, Cohen's d, the **95% paired-t CI**, the effect-vs-noise ratio, and a `SEPARABLE` / `NOT SEPARABLE` verdict (use `--json` for machine-readable output, which also emits `population_turns`, `dropped_turns`, and `prior_state`).
 
-> **Measuring the noise floor.** Run the helper with the **two control reruns of the same variant** as `--a` and `--b` to reproduce the noise floor itself (this is how the ~5 tok/call baseline was derived). Re-measure the floor per model/backend; the `--noise-floor` default (5.0) is *chosen, not inherited* (Rule 10) and must be revalidated when the model or backend changes.
+> **Measuring the noise floor.** Run the helper with **two control reruns per side** of the same variant (e.g. `--a run1 --a run2 --b run3 --b run4`) to reproduce the noise floor itself (this is how the ~5 tok/call baseline was derived); the same balanced N=2–3-per-side enforcement applies. Re-measure the floor per model/backend; the `--noise-floor` default (5.0) is *chosen, not inherited* (Rule 10) and must be revalidated when the model or backend changes.
 
 ---
 
