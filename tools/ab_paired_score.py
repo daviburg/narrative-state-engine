@@ -461,8 +461,8 @@ def format_report(
     if matched == 0:
         lines.append(
             "  No matched-call-COUNT turns: every turn was missing from a run, "
-            "had zero entity_detail phase-calls, or had a divergent "
-            "entity_detail call count across runs. Nothing to score."
+            f"had zero {phase} phase-calls, or had a divergent "
+            f"{phase} call count across runs. Nothing to score."
         )
         return "\n".join(lines)
     nf = summary["noise_floor"]
