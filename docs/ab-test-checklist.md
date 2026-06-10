@@ -153,7 +153,7 @@ python tools/validate_extraction.py \
 ## PR Report
 
 - [ ] A/B Test Results posted as a PR comment (see template in `docs/ab-test-standard.md` §5.1)
-- [ ] Multi-run paired token-metric score reported: matched-call turn count, weighted Δ, effect-size-vs-noise-floor, and SEPARABLE / WITHIN-NOISE verdict (standard §0)
+- [ ] Multi-run paired token-metric score reported: matched-call turn count, weighted Δ, effect-size-vs-noise-floor, and SEPARABLE / NOT SEPARABLE verdict (standard §0)
 - [ ] Noise Floor (A-vs-A) table included in PR comment (§5.1)
 - [ ] All tables filled with mean ± σ values
 - [ ] Zero BLOCK statuses
