@@ -442,7 +442,7 @@ def format_report(
         f"  runs: A={n_a}  B={n_b}   "
         f"matched-call-COUNT turns: {matched}/{population_total} "
         f"({pct:.1f}%); {dropped} dropped (missing from a run, "
-        f"zero phase-calls, or divergent call count)"
+        f"zero {phase} calls, or divergent {phase} call count)"
     )
     lines.append(
         "  NOTE: matched turns are a SURVIVOR subset (matching conditions on a "
