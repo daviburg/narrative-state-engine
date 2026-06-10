@@ -6,6 +6,58 @@ This document defines the required A/B testing gate for any PR that modifies ext
 
 ---
 
+## 0. Token-Metric A/B: Multi-Run Paired Scoring (#487)
+
+> **This is the required methodology for judging the instrumented per-turn token metric** (the #484 pre-compaction `entity_detail` `raw_input_tokens` / `compression_ratio`). It supersedes the single-pass byte-diff for that metric on this stack. The entity-retention gate (§3.4–§3.5) is unaffected and still applies.
+
+### 0.1 Why single-pass byte-diff is DEPRECATED for this stack
+
+A single-pass byte-diff (or single-run token-metric diff) is **deprecated** for the non-deterministic Vulkan / MoE backend used here, because a single run conflates real signal with run-to-run noise. The proof is a clean **A==A determinism test** at full session depth: a control run (`ab-a0-control-flagoff`) and a rerun (`ab-a0-control-flagoff-rerun`) were executed with **identical** git HEAD, sampler (`temperature 0 / top_k 1 / top_p 1 / min_p 0 / seed 42`), flag, mode, and seed. The outputs still diverged:
+
+| Field                          | Turns differing |
+|--------------------------------|-----------------|
+| `new_entities`                 | 84 / 344        |
+| `new_events`                   | 51 / 344        |
+| first stable-output divergence | turn-001        |
+
+The clean noise floor on the instrumented token metric (`entity_detail` avg tokens/call, rerun − control) was:
+
+- **weighted (total tokens / total calls): ~5.0 tok/call**
+- per-turn mean: −2.6 tok/call
+- per-turn median: −9.25 tok/call
+
+A0's measured *signal* was ~12 tok/call — the **same order of magnitude** as this noise floor. A single-pass diff cannot separate the two, but a small paired multi-run comparison can.
+
+> **Scope of the byte-determinism claim in §1.2.** §1.2's "8/8 byte-identical" result holds only for *isolated short completions* (512 tokens, single call, single pinned GPU). It does **not** hold for the full multi-turn extraction pipeline: cumulative batch-state and MoE-routing variation make the 344-turn pipeline non-deterministic even under the deterministic sampler config (the table above). Therefore a single-pass byte-diff over a whole session is invalid for the token metric and is deprecated here.
+
+### 0.2 Multi-run paired methodology
+
+- **N = 2–3 runs PER VARIANT, balanced** (not 5; not 1). Two variants → 4–6 runs total, with the **same N on both arms**. This N is for the **token-metric score only**; it does **not** relax the standard's overall **3-runs-per-variant** retention/noise-floor gate (§1.2, §1.4, §3.4–§3.5) — you will typically already have ≥3 runs and can score the token metric on 2–3 of them. `tools/ab_paired_score.py` **rejects** N=1 and unequal arms.
+- **Matched-call-COUNT scoring (REQUIRED):** score a turn **only** when **every** run across both variants made the **same number of `entity_detail` calls** for that turn. The extraction log records only the per-phase call **count** (`prompt_metrics.<phase>.calls`), not which entities were detailed in each call, so this matches on **call COUNT**, not on the call *set* — two turns with the same count may have detailed different entities.
+  - **This is a SURVIVOR subset, not a neutral filter.** The A0 flag changes model output, which changes `entity_detail` call counts, so dropping divergent-count turns **conditions the estimate on a post-treatment variable**. The result describes only the surviving matched-count turns; the dropped turns are **NOT "not signal"** — they are simply un-poolable under this metric. The scorer reports the **drop rate** (matched / full 344-turn population) so a reader can judge how representative the survivor subset is.
+  - **Matched COUNT does NOT imply equivalent PRIOR catalog STATE.** Because the flag desyncs catalog state cumulatively across turns, two turns with the same `(turn, count)` can enter from **different prior catalogs**, so the per-call comparison is only strictly valid **where prior state is equivalent**. The log has no prior-state hash, but it records per-turn `new_entities`; the scorer reports — as a **lower bound** — how many matched turns have a divergent cumulative prior-entity-count proxy across runs (equal proxy does **not** prove equal content). Treat a high prior-state-divergence count as a warning that the matched comparison is **not** cleanly isolating the flag.
+- **Paired comparison:** on the matched-count turns, compute paired deltas (B − A) of the pre-compaction `entity_detail` tokens-per-call metric. Average each variant's runs per turn, then take the per-turn B − A delta.
+- **Effect size vs noise floor + statistical decision rule (REQUIRED):** report the **weighted Δ** (total raw tokens / total calls, B − A) **against the measured noise floor (~5 tok/call weighted)**, plus the per-turn mean / median Δ, Cohen's d, and a **95% paired-t confidence interval** on the per-turn deltas. A result is declared **SEPARABLE** only when **all three** hold (Rule 10 — a documented rule, not a bare 1× cutoff): (1) the **95% paired-t CI excludes zero**, (2) the **|weighted Δ| exceeds the noise floor**, and (3) at least **10 turns were matched** (`MIN_SEPARABLE_MATCHED_TURNS`). Otherwise the verdict is **NOT SEPARABLE**.
+
+### 0.3 Scoring helper
+
+`tools/ab_paired_score.py` computes the paired matched-count deltas and the significance / effect-size summary across N runs per variant:
+
+```bash
+python tools/ab_paired_score.py \
+    --a framework-ab-a-run1/extraction-log.jsonl \
+    --a framework-ab-a-run2/extraction-log.jsonl \
+    --b framework-ab-b-run1/extraction-log.jsonl \
+    --b framework-ab-b-run2/extraction-log.jsonl \
+    --noise-floor 5.0
+```
+
+Each `--a` / `--b` accepts an `extraction-log.jsonl` file or a run/framework directory containing one. N must be **2 or 3 per variant and equal on both arms** (N=1 and unequal arms are rejected). The tool prints the matched-count turn count **against the full population** (`matched/population`, the drop count, and the drop %), the **prior-state-divergence lower bound**, the weighted and per-turn deltas, Cohen's d, the **95% paired-t CI**, the effect-vs-noise ratio, and a `SEPARABLE` / `NOT SEPARABLE` verdict (use `--json` for machine-readable output, which also emits `population_turns`, `dropped_turns`, and `prior_state`).
+
+> **Measuring the noise floor.** Run the helper with **two control reruns per side** of the same variant (e.g. `--a run1 --a run2 --b run3 --b run4`) to reproduce the noise floor itself (this is how the ~5 tok/call baseline was derived); the same balanced N=2–3-per-side enforcement applies. Re-measure the floor per model/backend; the `--noise-floor` default (5.0) is *chosen, not inherited* (Rule 10) and must be revalidated when the model or backend changes.
+
+---
+
 ## 1. Test Scope
 
 ### 1.1 Turn Selection
@@ -22,7 +74,11 @@ This document defines the required A/B testing gate for any PR that modifies ext
 
 ### 1.2 Runs Per Variant
 
-**With `temperature: 0` and a single pinned GPU endpoint, single-GPU extraction is byte-deterministic** — a live sampler sweep on the arclight llama-server (`Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`, Vulkan, `-np 1`) produced **8/8 byte-identical** completions at 512 tokens with zero residual jitter. The two real sources of run-to-run non-determinism are:
+**With `temperature: 0` and a single pinned GPU endpoint, single-GPU extraction is byte-deterministic** — a live sampler sweep on the arclight llama-server (`Qwen3.6-35B-A3B-UD-Q4_K_M.gguf`, Vulkan, `-np 1`) produced **8/8 byte-identical** completions at 512 tokens with zero residual jitter.
+
+> **Caveat (#487):** This byte-determinism holds only for *isolated short completions*. Across the **full multi-turn extraction pipeline** the backend is **non-deterministic** even under the same deterministic sampler config (a clean 344-turn A==A test diverged on 84/344 turns for `new_entities` and 51/344 for `new_events`; see §0.1). For the per-turn **token metric**, the single-pass byte-diff is therefore **deprecated** — use the multi-run paired scoring in §0 instead.
+
+The two real sources of run-to-run non-determinism are:
 
 1. **Non-zero temperature (or omitted samplers).** Stochastic sampling diverges by design. Note the server's *baked default* is `temperature 1.0` (`top_k 20 / top_p 0.95 / min_p 0.05 / random seed`), so a caller that omits temperature inherits full randomness. Always send the deterministic sampler config (§1.3, `config/llm.json`: `temperature: 0`, `top_k: 1`, `top_p: 1.0`, `min_p: 0.0`, `seed: 42`).
 2. **Cross-GPU round-robin.** Dispatching across non-bit-identical GPUs (e.g. `base_urls` round-robin over `:8000` + `:8001`) breaks byte reproducibility even under identical greedy sampling (GPU0 ≠ GPU1, first divergence observed at char 271). Reproducibility-sensitive runs MUST pin a **single** endpoint.

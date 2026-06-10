@@ -284,6 +284,34 @@ all bands.  A ratio approaching 1.0 in the 51-100 and 101+ bands with
 `activated_phases` empty indicates the compression surfaces were never
 triggered; a ratio well below 1.0 in those bands confirms active compression.
 
+#### Multi-run paired A/B scoring (`tools/ab_paired_score.py`)
+
+The single-pass byte-diff A/B is **deprecated** for the per-turn token metric on
+this non-deterministic Vulkan / MoE stack (see [ab-test-standard.md](ab-test-standard.md) §0).
+To judge a candidate against the noise floor, run **2–3 runs per variant (equal
+on both arms)** and score the matched-call-COUNT turns (turns where every run
+made the same *number* of `entity_detail` calls — the log records the call
+count, not the call set) with paired deltas of the pre-compaction
+tokens-per-call metric:
+
+```bash
+python tools/ab_paired_score.py \
+    --a framework-ab-a-run1/extraction-log.jsonl \
+    --a framework-ab-a-run2/extraction-log.jsonl \
+    --b framework-ab-b-run1/extraction-log.jsonl \
+    --b framework-ab-b-run2/extraction-log.jsonl \
+    --noise-floor 5.0
+```
+
+It reports survivorship (matched turns vs the full 344-turn population plus the
+drop rate), a prior-state-divergence lower bound, the weighted Δ, per-turn
+mean/median Δ, Cohen's d, a 95% paired-t CI, and an
+effect-size-vs-noise-floor verdict (`SEPARABLE` / `NOT SEPARABLE`; SEPARABLE
+needs the CI to exclude 0, the weighted Δ to exceed the noise floor, and ≥10
+matched turns). N=1 and unequal arms are rejected. Run it with two control
+reruns per side of one variant to (re)measure the noise floor itself. Use
+`--json` for machine-readable output.
+
 ### Timeout Watchdog
 
 The LLM client includes a wall-clock watchdog that prevents indefinite hangs

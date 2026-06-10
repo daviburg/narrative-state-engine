@@ -13,6 +13,25 @@ Full standard: [ab-test-standard.md](ab-test-standard.md).
 - [ ] Output directories will be created per-run: `framework-ab-a-run{1,2,3}`, `framework-ab-b-run{1,2,3}`
 - [ ] Plan A-vs-A noise-floor baseline: 3 pairwise diffs of framework-ab-a-run{1,2,3} (see standard §1.4)
 
+## Token-Metric Scoring — Multi-Run Paired (#487)
+
+> Required for judging the instrumented per-turn token metric (the #484 pre-compaction `entity_detail` tokens-per-call). The single-pass byte-diff is **deprecated** for this non-deterministic stack (standard §0). The entity-retention gate below is unaffected.
+
+- [ ] N = **2–3 runs per variant, equal on both arms** — for the **token-metric score only**; this does **not** relax the 3-runs-per-variant retention/noise-floor gate below (score the token metric on 2–3 of those same runs). N=1 and unequal arms are rejected by the helper.
+- [ ] Score **matched-call-COUNT turns only** — turns where every run made the same **number** of `entity_detail` calls (the log records the call count, not the call set; standard §0.2)
+- [ ] Check the reported **survivorship** (matched / full 344-turn population + drop rate) and **prior-state-divergence** lower bound — the matched set is a survivor subset and matched count does not guarantee equivalent prior catalog state
+- [ ] Effect size reported **against the measured noise floor (~5 tok/call weighted)** with the documented decision rule: report weighted Δ, per-turn mean/median Δ, Cohen's d, the **95% paired-t CI**, and the SEPARABLE / NOT-SEPARABLE verdict (SEPARABLE needs CI-excludes-0 **and** Δ>noise **and** ≥10 matched turns)
+- [ ] Noise floor (re)measured for this model/backend by running the helper with the variant's two control reruns as `--a` / `--b`
+
+```bash
+python tools/ab_paired_score.py \
+    --a framework-ab-a-run1/extraction-log.jsonl \
+    --a framework-ab-a-run2/extraction-log.jsonl \
+    --b framework-ab-b-run1/extraction-log.jsonl \
+    --b framework-ab-b-run2/extraction-log.jsonl \
+    --noise-floor 5.0
+```
+
 ## Run A (Baseline — main branch)
 
 ```bash
@@ -134,6 +153,7 @@ python tools/validate_extraction.py \
 ## PR Report
 
 - [ ] A/B Test Results posted as a PR comment (see template in `docs/ab-test-standard.md` §5.1)
+- [ ] Multi-run paired token-metric score reported: matched-call turn count, weighted Δ, effect-size-vs-noise-floor, and SEPARABLE / WITHIN-NOISE verdict (standard §0)
 - [ ] Noise Floor (A-vs-A) table included in PR comment (§5.1)
 - [ ] All tables filled with mean ± σ values
 - [ ] Zero BLOCK statuses
