@@ -264,6 +264,26 @@ Monitor the `prompt_metrics` field in `extraction-log.jsonl` to verify
 budget compliance.  The `turn_compression` field records per-turn raw and
 compressed token totals and lists which phases were active.
 
+#### Feature-flagged context levers (`context_optimizations`)
+
+Beyond the always-active optimizations above, `config/llm.json` houses
+feature-flagged levers under `context_optimizations`. See the config-key
+reference table below for the full list. The most impactful is:
+
+- **`batch_entity_detail`** (L2, #491; **default OFF**): when enabled, the
+  entity-detail system template + the full turn text are sent **once per
+  batch** instead of once per entity, detailing multiple low-salience entities
+  per shared-context call with hard-delimited per-entity blocks. The player
+  character, brand-new entities, and high-confidence entities stay solo to
+  avoid cross-entity attribute bleed; only the lower-salience tail is batched
+  in groups of `batch_size` (default 4). Parse failure or any missing/invalid
+  entity falls back to a solo call, so no entity is dropped. Flag-OFF is
+  byte-identical to the per-entity baseline (the A/B control). Because batching
+  reduces the entity_detail call count by design, score it with the
+  `--per-turn` mode of `tools/ab_paired_score.py` (below), not the default
+  per-call mode, and validate with the #488 paired A/B gate (≥3 runs/arm)
+  before flipping the default.
+
 To aggregate across a session and bucket by turn-index band (1-20, 21-50,
 51-100, 101+), use `tools/agg_compression.py`:
 
@@ -311,6 +331,25 @@ needs the CI to exclude 0, the weighted Δ to exceed the noise floor, and ≥10
 matched turns). N=1 and unequal arms are rejected. Run it with two control
 reruns per side of one variant to (re)measure the noise floor itself. Use
 `--json` for machine-readable output.
+
+**`--per-turn` mode (for L2 batching, #491):** the default per-call /
+matched-call-COUNT scoring is invalid when a candidate **changes the
+entity_detail call count by design** — e.g. `batch_entity_detail`, which sends
+the template+turn once per batch instead of once per entity. Matched-call-COUNT
+would drop every batched turn (the counts differ), and per-call tokens are no
+longer apples-to-apples (a batched call is bigger but there are fewer of them).
+Pass `--per-turn` to instead score the **per-turn TOTAL** sent tokens
+(`prompt_metrics.entity_detail.raw_input_tokens`, already summed across the
+turn's calls — the field that holds the L2 saving) over the matched-TURN
+population (turns present in every run, regardless of call count). The
+`--noise-floor` is then in tok/turn units, so re-measure it for per-turn mode:
+
+```bash
+python tools/ab_paired_score.py \
+    --a ab-control-run1 --a ab-control-run2 --a ab-control-run3 \
+    --b ab-l2-run1 --b ab-l2-run2 --b ab-l2-run3 \
+    --per-turn --noise-floor <per-turn-floor>
+```
 
 ### Timeout Watchdog
 
@@ -759,6 +798,7 @@ have since succeeded.
 | `context_optimizations.relationship_type_tiering` | Boolean. Enables L1+L4 type-tiered PC relationship cap (epic #477). **Default: `true`** (flipped from `false` after the 150t A/B measured the flag-ON arm as merge-ready at quality parity, ~halving the per-call PC-context token slope; the new 344t full-context baseline runs on this default. Set `false` to restore pre-#477 behaviour, which is byte-identical to the pre-#477 baseline (main before #477; note that after this default-ON change merges, main itself ships the flag ON) and serves as the A/B control). When `true`: (L1) `_format_prior_entity_context` applies `_apply_pc_rel_type_tier()` to the PC relationship list — permanent-bond types (see `pc_rel_permanent_types`) are kept uncapped, any relationship whose target is mentioned this turn is force-kept, and the remaining volatile tail is capped at `pc_rel_volatile_tail_cap`. (L4) `_collect_existing_relationships` boosts permanent-bond types so they survive the volatile-tail trim first: a permanent bond that would be omitted (tier 4) is raised to tier 3 to avoid silent omission, and when one endpoint is mentioned this turn it is promoted to at least tier 2. Volatile relationships are degraded/omitted before permanent bonds under budget pressure (a tier-3 permanent bond can still be omitted if the budget is exhausted). Closes the #385 PC gap. |
 | `context_optimizations.pc_rel_permanent_types` | Array of relationship-type strings treated as permanent bonds (never dropped by the volatile tail cap). **Default: `["kinship","adversarial","mentorship","political","partnership"]`** (each value in this default list is a member of the relationship `type` enum in `schemas/entity.schema.json`; the default is a subset of that enum, not all of it). These are structural schema-type enum values (not domain content words — see Rule 9). |
 | `context_optimizations.pc_rel_volatile_tail_cap` | Integer. Maximum number of non-permanent, non-mentioned volatile relationships to retain for the PC after mention-force-keep. **Default: `10`**. A 109-relationship PC web is expected to shrink to ~30–40 total retained entries. |
+| `context_optimizations.batch_entity_detail` | Optional object (L2, epic #477, #491). Batches `entity_detail` LLM calls so the system template + turn text are sent once per batch instead of once per entity. Sub-keys: `enabled` (boolean, **default `false`** — flag-OFF is byte-identical to the per-entity baseline / A/B control; only a real JSON `true` enables it); `batch_size` (integer, **default `4`**, clamped to ≥2 — the lower-salience tail is batched in groups of this size; balances token saving against cross-entity attribute-bleed risk and per-call output growth, Rule 10); `high_confidence_threshold` (number, **default `0.8`** — entities with `confidence` at/above this stay solo). The player character, brand-new entities, and high-confidence entities are always kept solo; parse failure or any missing/invalid entity falls back to a per-entity solo call so no entity is dropped. Score with `tools/ab_paired_score.py --per-turn` (batching changes the call count by design) and gate on the #488 paired A/B (≥3 runs/arm) before flipping the default. |
 
 **PC extraction cooldown:** If PC extraction fails for 20 consecutive turns (`_PC_SKIP_THRESHOLD`), it enters a cooldown cycle: skipping 50 turns, then retrying for 5 turns, repeating until a success resets the counter (#133, #168). An end-of-run summary reports how many turns were skipped.
 

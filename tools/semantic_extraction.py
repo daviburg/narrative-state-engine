@@ -1160,6 +1160,16 @@ _SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
 # Entity detail call cap to prevent O(n²) scaling
 _MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
 
+# Batched entity detail (L2, #491) defaults.  ``_DEFAULT_DETAIL_BATCH_SIZE``
+# of 4 balances the token saving (collapsing the per-call template+turn_text
+# duplication across the low-salience tail) against cross-entity
+# attribute-bleed risk and per-call output growth; it is overridable via
+# ``context_optimizations.batch_entity_detail.batch_size``.
+# ``_DEFAULT_DETAIL_HIGH_CONF`` is the confidence floor at/above which an
+# entity is treated as high-salience and kept SOLO (never batched).
+_DEFAULT_DETAIL_BATCH_SIZE = 4
+_DEFAULT_DETAIL_HIGH_CONF = 0.8
+
 # entity_detail raw-token instrumentation guardrail (#484/#485).
 # Building the uncompacted prompt to measure true pre-compaction raw_tokens
 # adds one extra json.dumps of the full prior entity state per entity per turn.
@@ -1923,6 +1933,147 @@ def format_detail_prompt(
         compact=False,
     )
     return prompt, _assemble(raw_prior_json)
+
+
+def _get_batch_detail_config(config: dict | None) -> tuple[bool, int, float]:
+    """Return ``(enabled, batch_size, high_confidence_threshold)`` for L2.
+
+    Reads ``context_optimizations.batch_entity_detail`` (#491).  Default OFF so
+    the per-entity path stays byte-identical to the pre-#491 baseline (the A/B
+    control).  Every field is parsed defensively so a malformed config can never
+    crash the per-turn read.
+    """
+    raw_ctx = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx_opt = raw_ctx if isinstance(raw_ctx, dict) else {}
+    raw_b = ctx_opt.get("batch_entity_detail", {})
+    bcfg = raw_b if isinstance(raw_b, dict) else {}
+    # Strict bool parse: only a real JSON ``true`` enables batching.
+    enabled = bcfg.get("enabled", False) is True
+    raw_size = bcfg.get("batch_size", _DEFAULT_DETAIL_BATCH_SIZE)
+    try:
+        batch_size = int(raw_size)
+    except (TypeError, ValueError):
+        batch_size = _DEFAULT_DETAIL_BATCH_SIZE
+    if batch_size < 2:
+        batch_size = _DEFAULT_DETAIL_BATCH_SIZE
+    raw_thr = bcfg.get("high_confidence_threshold", _DEFAULT_DETAIL_HIGH_CONF)
+    try:
+        high_conf = float(raw_thr)
+    except (TypeError, ValueError):
+        high_conf = _DEFAULT_DETAIL_HIGH_CONF
+    return enabled, batch_size, high_conf
+
+
+def _partition_detail_tasks(
+    entity_tasks: list, config: dict | None,
+) -> tuple[list, list]:
+    """Split ``(entity_ref, current_entry)`` tasks into solo tasks + batch groups.
+
+    Returns ``(solo_tasks, batch_groups)``.  When batching is OFF, returns
+    ``(list(entity_tasks), [])`` so the caller's per-entity path runs
+    byte-identically (the A/B control).
+
+    Safety tiering (anti attribute-bleed, #491): char-player (PC), brand-new
+    entities, and high-confidence entities are kept SOLO.  Only the
+    lower-salience tail (existing, lower-confidence entities) is batched into
+    groups of ``batch_size``.  A residual group of a single entity is demoted
+    to solo (batching one entity saves nothing and avoids needless template
+    drift on that call).
+    """
+    enabled, batch_size, high_conf = _get_batch_detail_config(config)
+    if not enabled:
+        return list(entity_tasks), []
+    solo: list = []
+    batchable: list = []
+    for ref, entry in entity_tasks:
+        try:
+            conf = float(ref.get("confidence", 0.5))
+        except (TypeError, ValueError):
+            conf = 0.5
+        if (get_entity_id(ref) == "char-player"
+                or ref.get("is_new", True)
+                or conf >= high_conf):
+            solo.append((ref, entry))
+        else:
+            batchable.append((ref, entry))
+    groups: list = []
+    for i in range(0, len(batchable), batch_size):
+        group = batchable[i:i + batch_size]
+        if len(group) == 1:
+            solo.append(group[0])
+        else:
+            groups.append(group)
+    return solo, groups
+
+
+def format_detail_batch_prompt(
+    turn: dict,
+    batch_tasks: list,
+    arcs_data: dict | None = None,
+    config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
+    return_uncompacted: bool = False,
+) -> str | tuple[str, str]:
+    """Format a SHARED-CONTEXT batched user prompt for entity detail (#491).
+
+    The turn header (turn text) is emitted ONCE, followed by hard-delimited
+    per-entity blocks.  Each block preserves the SAME per-entity prior context
+    (stable_attrs / relationships / volatile) that the solo path would send for
+    that entity, so batching does not change extraction semantics — only the
+    call grouping and prompt structure.
+
+    When ``return_uncompacted`` is True, returns ``(prompt, uncompacted_prompt)``
+    where ``uncompacted_prompt`` rebuilds the per-entity blocks from the full
+    pre-compaction prior state.  This mirrors ``format_detail_prompt``'s #484
+    measurement path so the batched ``raw_tokens`` reflects the TRUE
+    pre-compaction size of the batched call (template + turn once + N raw
+    blocks) — the field the paired A/B scorer aggregates.
+    """
+    _current_turn = _parse_turn_number(turn.get('turn_id', ''))
+    _n = len(batch_tasks)
+    header = (
+        f"## Current Turn\n"
+        f"Turn ID: {turn['turn_id']}\n"
+        f"Speaker: {turn['speaker']}\n"
+        f"Text:\n{turn['text']}\n\n"
+        f"## Entities to Extract/Update ({_n} total)\n"
+        f"Process EACH of the {_n} entity blocks below INDEPENDENTLY. Each "
+        f"block is hard-delimited; do not let details from one entity bleed "
+        f"into another. Return one updated object per block.\n"
+    )
+
+    def _block(idx: int, entity_ref: dict, prior_json: str) -> str:
+        entity_id = entity_ref.get('existing_id') or entity_ref.get('proposed_id')
+        return (
+            f"\n===== ENTITY BLOCK {idx} START =====\n"
+            f"Entity ID: {entity_id}\n"
+            f"Entity Name: {entity_ref['name']}\n"
+            f"Entity Type: {entity_ref['type']}\n"
+            f"Prior entity state (for reference, update as needed):\n"
+            f"```json\n{prior_json}\n```\n"
+            f"===== ENTITY BLOCK {idx} END =====\n"
+        )
+
+    compact_blocks: list = []
+    raw_blocks: list = []
+    for i, (entity_ref, current_entry) in enumerate(batch_tasks, start=1):
+        _arcs = arcs_data if get_entity_id(entity_ref) == "char-player" else None
+        prior_json = _format_prior_entity_context(
+            current_entry, arcs_data=_arcs, config=config,
+            mentioned_ids=mentioned_ids, current_turn_num=_current_turn,
+        )
+        compact_blocks.append(_block(i, entity_ref, prior_json))
+        if return_uncompacted:
+            raw_prior_json = _format_prior_entity_context(
+                current_entry, arcs_data=_arcs, config=config,
+                mentioned_ids=mentioned_ids, current_turn_num=_current_turn,
+                compact=False,
+            )
+            raw_blocks.append(_block(i, entity_ref, raw_prior_json))
+    prompt = header + "".join(compact_blocks)
+    if not return_uncompacted:
+        return prompt
+    return prompt, header + "".join(raw_blocks)
 
 
 def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
@@ -2974,6 +3125,97 @@ def _extract_single_entity_detail(
     return entity_ref, None, None
 
 
+def _parse_batch_detail_response(detail_result: object) -> dict:
+    """Split a batched entity-detail response into ``{entity_id: entity_dict}``.
+
+    Accepts the ``{"entities": [...]}`` envelope the batch template requests, a
+    bare top-level list, or a single-entity envelope as a degenerate case.
+    Entities without a usable ``id`` are dropped — the caller falls back to a
+    solo call for any task missing from the returned map, so nothing is lost.
+    """
+    items: object = None
+    if isinstance(detail_result, dict):
+        items = detail_result.get("entities")
+        if items is None and ("id" in detail_result or "entity" in detail_result):
+            single = _unwrap_entity_response(detail_result)
+            items = [single] if single else []
+    elif isinstance(detail_result, list):
+        items = detail_result
+    if not isinstance(items, list):
+        return {}
+    by_id: dict = {}
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        ent = _unwrap_entity_response(item)
+        if ent and ent.get("id"):
+            by_id[ent["id"]] = ent
+    return by_id
+
+
+def _extract_batched_entity_detail(
+    llm: "LLMClient",
+    turn: dict,
+    batch_tasks: list,
+    pc_arcs_data: dict | None,
+    config: dict | None = None,
+    mentioned_ids: set[str] | None = None,
+) -> list:
+    """Run entity-detail for a batch in ONE shared-context call (L2, #491).
+
+    The system template + turn text are sent once; the entities are presented
+    as hard-delimited blocks.  Returns a list of ``(entity_ref, entity_data,
+    error)`` tuples — matching ``_extract_single_entity_detail``'s shape — one
+    per task.  On parse failure, or for any entity missing from / rejected in
+    the batched response, falls back to a per-entity SOLO call so no entity is
+    dropped or merged away.  Designed to run inside a ThreadPoolExecutor.
+    """
+    turn_id = turn["turn_id"]
+    try:
+        detail_result = llm.extract_json(
+            system_prompt=load_template("entity-detail-batch"),
+            user_prompt=format_detail_batch_prompt(
+                turn, batch_tasks, arcs_data=pc_arcs_data,
+                config=config, mentioned_ids=mentioned_ids,
+            ),
+        )
+    except QuotaExhaustedError:
+        raise
+    except LLMExtractionError as e:
+        print(f"  WARNING: Batched detail extraction failed at {turn_id} "
+              f"({len(batch_tasks)} entities), falling back to solo: {e}",
+              file=sys.stderr)
+        detail_result = None
+
+    by_id = _parse_batch_detail_response(detail_result) if detail_result is not None else {}
+
+    results: list = []
+    fallback: list = []
+    for entity_ref, current_entry in batch_tasks:
+        raw = by_id.get(get_entity_id(entity_ref))
+        if raw is None:
+            fallback.append((entity_ref, current_entry))
+            continue
+        entity_data = _coerce_entity_fields(raw)
+        if entity_data and not _filter_concept_prefix_from_items(entity_data):
+            results.append((entity_ref, None, None))
+            continue
+        if entity_data and _validate_entity(entity_data):
+            _filter_pc_attributes(entity_data)
+            results.append((entity_ref, entity_data, None))
+        else:
+            fallback.append((entity_ref, current_entry))
+
+    if fallback:
+        print(f"  INFO: {len(fallback)}/{len(batch_tasks)} batched entities at "
+              f"{turn_id} missing/invalid; retrying solo", file=sys.stderr)
+    for entity_ref, current_entry in fallback:
+        results.append(_extract_single_entity_detail(
+            llm, turn, entity_ref, current_entry, pc_arcs_data, config, mentioned_ids,
+        ))
+    return results
+
+
 def _extract_relationships_parallel(
     llm: "LLMClient",
     turn: dict,
@@ -3613,7 +3855,11 @@ def extract_and_merge(
     # long sessions where it would become a bottleneck (#485 review).
     _raw_instr = _entity_detail_raw_instrumentation_enabled(_cfg)
     _detail_sys_tmpl = load_template("entity-detail")
-    for entity_ref, current_entry in _entity_tasks:
+    # Partition into solo + batched groups (L2, #491).  Flag-OFF returns all
+    # tasks as solo with no groups, so the per-entity path below is
+    # byte-identical to the pre-#491 control.
+    _detail_solo_tasks, _detail_batch_groups = _partition_detail_tasks(_entity_tasks, _cfg)
+    for entity_ref, current_entry in _detail_solo_tasks:
         entity_id = get_entity_id(entity_ref)
         _entity_arcs = pc_arcs_data if entity_id == "char-player" else None
         if _raw_instr:
@@ -3632,6 +3878,31 @@ def extract_and_merge(
             _prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt,
             raw_tokens=_detail_raw_tokens,
         )
+    # Batched detail calls send the template + turn text ONCE per group, then
+    # hard-delimited per-entity blocks (#491).  Recording the ACTUAL batched
+    # prompt (both compacted-sent and uncompacted-raw) is what makes the L2
+    # saving visible to the paired A/B scorer, which aggregates
+    # raw_input_tokens / input_tokens — i.e. this is the NON-BLIND measurement
+    # (the A0 lesson: measure the prompt that L2 actually changes).
+    if _detail_batch_groups:
+        _detail_batch_sys_tmpl = load_template("entity-detail-batch")
+        for _group in _detail_batch_groups:
+            if _raw_instr:
+                _batch_user_prompt, _batch_raw_prompt = format_detail_batch_prompt(
+                    turn, _group, arcs_data=pc_arcs_data, config=_cfg,
+                    mentioned_ids=_mentioned_ids, return_uncompacted=True,
+                )
+                _batch_raw_tokens = _estimate_tokens(_detail_batch_sys_tmpl + _batch_raw_prompt)
+            else:
+                _batch_user_prompt = format_detail_batch_prompt(
+                    turn, _group, arcs_data=pc_arcs_data, config=_cfg,
+                    mentioned_ids=_mentioned_ids,
+                )
+                _batch_raw_tokens = None
+            _record_prompt_tokens(
+                _prompt_metrics, "entity_detail", _detail_batch_sys_tmpl, _batch_user_prompt,
+                raw_tokens=_batch_raw_tokens,
+            )
     if _run_pc:
         if _raw_instr:
             _pc_user_prompt, _pc_raw_prompt = format_detail_prompt(
@@ -3670,14 +3941,23 @@ def extract_and_merge(
         with concurrent.futures.ThreadPoolExecutor(
             max_workers=llm.parallel_workers,
         ) as pool:
-            # Submit entity detail tasks
-            for entity_ref, current_entry in _entity_tasks:
+            # Submit entity detail tasks (solo)
+            for entity_ref, current_entry in _detail_solo_tasks:
                 f = pool.submit(
                     _extract_single_entity_detail,
                     llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
                     _mentioned_ids,
                 )
                 futures_map[f] = ("detail", entity_ref)
+
+            # Submit batched entity detail groups (#491): one shared-context
+            # call per group, returning a list of per-entity result tuples.
+            for _group in _detail_batch_groups:
+                f = pool.submit(
+                    _extract_batched_entity_detail,
+                    llm, turn, _group, pc_arcs_data, _cfg, _mentioned_ids,
+                )
+                futures_map[f] = ("detail_batch", _group)
 
             # Submit PC detail extraction
             if _run_pc:
@@ -3731,12 +4011,17 @@ def extract_and_merge(
                           file=sys.stderr)
                     if tag == "detail":
                         _detail_results.append((data, None, str(exc)))
+                    elif tag == "detail_batch":
+                        for _ref, _ in data:
+                            _detail_results.append((_ref, None, str(exc)))
                     elif tag == "pc":
                         _pc_llm_error = str(exc)
                     continue
 
                 if tag == "detail":
                     _detail_results.append(result)
+                elif tag == "detail_batch":
+                    _detail_results.extend(result)
                 elif tag == "pc":
                     _pc_raw_result = result
                 elif tag == "relationship":
@@ -3896,8 +4181,8 @@ def extract_and_merge(
     else:
         # ---- SEQUENTIAL PATH (existing behaviour, parallel_workers <= 1) ----
 
-        # --- 2. Entity Detail Extraction ---
-        for entity_ref, current_entry in _entity_tasks:
+        # --- 2. Entity Detail Extraction (solo) ---
+        for entity_ref, current_entry in _detail_solo_tasks:
             entity_id = get_entity_id(entity_ref)
             try:
                 entity_arcs = pc_arcs_data if entity_id == "char-player" else None
@@ -3939,6 +4224,43 @@ def extract_and_merge(
                 if entity_data.get("id") == "char-player":
                     _sanitize_pc_catalog_entry(catalogs)
 
+            llm.delay()
+
+        # --- 2a. Batched entity detail (#491, flag-gated) ---
+        # When batching is OFF, _detail_batch_groups is empty and this loop is
+        # a no-op (the solo loop above handled every task) — byte-identical to
+        # the control.  Each group is ONE shared-context call; merge mirrors the
+        # solo merge (uses find_entity_by_id for stub clearing, like the
+        # parallel path, since current_entry is not threaded through the batch
+        # result tuple).
+        for _group in _detail_batch_groups:
+            _batch_results = _extract_batched_entity_detail(
+                llm, turn, _group, pc_arcs_data, _cfg, _mentioned_ids,
+            )
+            for entity_ref, entity_data, _detail_err in _batch_results:
+                if _detail_err:
+                    turn_failed = True
+                    _phase_log["detail_ok"] = False
+                    _phase_log["detail_error"] = _detail_err
+                elif entity_data:
+                    _normalize_entity_location(entity_data, catalogs)
+                    merge_entity(catalogs, entity_data)
+                    if not entity_ref.get("is_new", True):
+                        entity_id = get_entity_id(entity_ref)
+                        _merged_result = find_entity_by_id(catalogs, entity_id)
+                        _merged_entry = _merged_result[1] if _merged_result else None
+                        _effective_identity = entity_data.get("identity")
+                        if not _effective_identity and _merged_entry:
+                            _effective_identity = _merged_entry.get("identity")
+                        if (
+                            _merged_entry
+                            and isinstance(_effective_identity, str)
+                            and _effective_identity.strip()
+                            and "stub" not in _effective_identity.lower()
+                        ):
+                            _clear_stub_notes(_merged_entry)
+                    if entity_data.get("id") == "char-player":
+                        _sanitize_pc_catalog_entry(catalogs)
             llm.delay()
 
         # --- 2b. PC extraction ---
