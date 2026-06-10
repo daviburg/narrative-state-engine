@@ -441,7 +441,8 @@ def format_report(
     lines.append(
         f"  runs: A={n_a}  B={n_b}   "
         f"matched-call-COUNT turns: {matched}/{population_total} "
-        f"({pct:.1f}%); {dropped} dropped due to call-count divergence"
+        f"({pct:.1f}%); {dropped} dropped (missing from a run, "
+        f"zero phase-calls, or divergent call count)"
     )
     lines.append(
         "  NOTE: matched turns are a SURVIVOR subset (matching conditions on a "
@@ -459,7 +460,8 @@ def format_report(
         )
     if matched == 0:
         lines.append(
-            "  No matched-call-COUNT turns: every common turn had a divergent "
+            "  No matched-call-COUNT turns: every turn was missing from a run, "
+            "had zero entity_detail phase-calls, or had a divergent "
             "entity_detail call count across runs. Nothing to score."
         )
         return "\n".join(lines)
