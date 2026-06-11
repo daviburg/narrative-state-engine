@@ -82,6 +82,7 @@ class _FakeLLM:
         self.batch_exc = batch_exc
         self.batch_calls = 0
         self.solo_calls = 0
+        self.delay_calls = 0
 
     def extract_json(self, system_prompt, user_prompt, **kwargs):
         if "ENTITY BLOCK" in user_prompt:
@@ -96,7 +97,7 @@ class _FakeLLM:
         return {"entity": _valid_entity(eid)}
 
     def delay(self):
-        pass
+        self.delay_calls += 1
 
 
 # ===========================================================================
@@ -384,6 +385,46 @@ class TestBatchedExtraction:
         assert {se.get_entity_id(r) for r, _ in fallbacks} == {"char-c"}
         ids = {se.get_entity_id(r) for r, data, err in results if data is not None}
         assert ids == {"char-a", "char-b", "char-c"}
+
+    def test_fallback_spaces_solo_calls_when_requested(self):
+        # Sequential caller passes apply_delay_between_calls=True so a worst-case
+        # full-group fallback (1 batched + N solo) stays rate-spaced like the
+        # control solo loop instead of firing N calls back-to-back (#215, #491).
+        tasks = self._tasks()
+        llm = _FakeLLM(batch_response={"unexpected": True})
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+            apply_delay_between_calls=True,
+        )
+        assert llm.solo_calls == 3
+        assert llm.delay_calls == 3  # one before each solo fallback call
+
+    def test_fallback_no_delay_by_default(self):
+        # Parallel caller leaves apply_delay_between_calls=False (default): no
+        # delays are injected into executor worker threads.
+        tasks = self._tasks()
+        llm = _FakeLLM(batch_response={"unexpected": True})
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+        )
+        assert llm.solo_calls == 3
+        assert llm.delay_calls == 0
+
+    def test_no_delay_when_no_fallback(self):
+        # A clean batched response (no fallback) makes zero solo calls and so
+        # zero delays, even in sequential mode.
+        tasks = self._tasks()
+        resp = {"entities": [
+            _valid_entity("char-a"), _valid_entity("char-b"), _valid_entity("char-c"),
+        ]}
+        llm = _FakeLLM(batch_response=resp)
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+            apply_delay_between_calls=True,
+        )
+        assert llm.solo_calls == 0
+        assert fallbacks == []
+        assert llm.delay_calls == 0
 
     def test_quota_exhausted_propagates(self):
         tasks = self._tasks()

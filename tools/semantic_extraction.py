@@ -3242,7 +3242,8 @@ def _extract_batched_entity_detail(
     pc_arcs_data: dict | None,
     config: dict | None = None,
     mentioned_ids: set[str] | None = None,
-) -> list:
+    apply_delay_between_calls: bool = False,
+) -> tuple[list, list]:
     """Run entity-detail for a batch in ONE shared-context call (L2, #491).
 
     The system template + turn text are sent once; the entities are presented
@@ -3253,6 +3254,15 @@ def _extract_batched_entity_detail(
     re-issued as SOLO calls (so the caller can record their prompt tokens — the
     fallback solo prompts ARE sent to the LLM and must not be omitted from the
     non-blind A/B metric, #491 adversarial review).
+
+    ``apply_delay_between_calls`` controls rate-limit spacing on the fallback
+    path: when True (sequential caller), ``llm.delay()`` is applied before each
+    SOLO fallback call so a worst-case full-group fallback (1 batched + N solo
+    calls) stays spaced like the control solo loop rather than firing N calls
+    back-to-back and tripping a provider's per-minute limit (#215, #491).  The
+    parallel caller leaves it False — its solo tasks already run without delays
+    inside the executor, so injecting sleeps into worker threads would only
+    serialize them.
 
     Structural integrity is enforced to prevent silent cross-entity attribute
     bleed: duplicate ids are dropped by the parser, ids that were never
@@ -3315,6 +3325,11 @@ def _extract_batched_entity_detail(
         print(f"  INFO: {len(fallback)}/{len(batch_tasks)} batched entities at "
               f"{turn_id} missing/invalid/mismatched; retrying solo", file=sys.stderr)
     for entity_ref, current_entry in fallback:
+        if apply_delay_between_calls:
+            # Space the SOLO fallback calls (and the preceding batched call)
+            # like the control solo loop so a full-group fallback does not
+            # spike a cloud provider's request rate (#215, #491).
+            llm.delay()
         results.append(_extract_single_entity_detail(
             llm, turn, entity_ref, current_entry, pc_arcs_data, config, mentioned_ids,
         ))
@@ -4340,6 +4355,7 @@ def extract_and_merge(
         for _group in _detail_batch_groups:
             _batch_results, _batch_fallbacks = _extract_batched_entity_detail(
                 llm, turn, _group, pc_arcs_data, _cfg, _mentioned_ids,
+                apply_delay_between_calls=True,
             )
             # Record SOLO-fallback prompts these batched calls actually sent
             # (#491) so the per-turn A/B metric stays faithful in the fallback
