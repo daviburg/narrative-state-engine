@@ -637,10 +637,14 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help=f"prompt_metrics phase to score (default: {DEFAULT_PHASE})",
     )
     parser.add_argument(
-        "--noise-floor", type=float, default=DEFAULT_NOISE_FLOOR,
+        "--noise-floor", type=float, default=None,
         help=(
-            "weighted tok/call noise floor to judge the effect against "
-            f"(default: {DEFAULT_NOISE_FLOOR}; re-measure per model/backend)"
+            "weighted noise floor to judge the effect against. In per-call "
+            f"mode the default is {DEFAULT_NOISE_FLOOR} tok/call. With "
+            "--per-turn the unit is tok/TURN and there is NO default: you MUST "
+            "pass an explicit value re-measured from an A==A per-turn control, "
+            "otherwise the per-call default would make a tiny floor and yield a "
+            "misleading SEPARABLE verdict (re-measure per model/backend)."
         ),
     )
     parser.add_argument(
@@ -705,12 +709,26 @@ def main(argv: list[str] | None = None) -> int:
         # L2/#491: the call count is a treatment effect, so score per-TURN
         # total sent tokens over the matched-TURN population (turns present in
         # every run), not per-call over matched-call-COUNT.
+        if args.noise_floor is None:
+            print(
+                "error: --per-turn changes the noise-floor unit to tok/TURN, "
+                "so the per-call default does not apply. Pass an explicit "
+                "--noise-floor (tok/turn) re-measured from an A==A per-turn "
+                "control; otherwise the separable verdict would be judged "
+                "against an unrealistically tiny floor.",
+                file=sys.stderr,
+            )
+            return 2
+        noise_floor = args.noise_floor
         matched = matched_population_turns(a_runs, b_runs, args.phase)
         deltas = paired_turn_deltas(a_runs, b_runs, matched, args.phase)
     else:
+        noise_floor = (
+            DEFAULT_NOISE_FLOOR if args.noise_floor is None else args.noise_floor
+        )
         matched = matched_call_turns(a_runs, b_runs, args.phase)
         deltas = paired_deltas(a_runs, b_runs, matched, args.phase)
-    summary = summarize(deltas, noise_floor=args.noise_floor)
+    summary = summarize(deltas, noise_floor=noise_floor)
 
     # Survivorship denominator = the FULL turn population (union across runs),
     # so the drop rate shows how representative the matched survivor subset is.

@@ -282,6 +282,42 @@ class TestParseBatchResponse:
         assert se._parse_batch_detail_response(None) == {}
         assert se._parse_batch_detail_response("oops") == {}
 
+    def test_duplicate_id_dropped(self):
+        # Two objects under the SAME id is ambiguous and a known bleed vector
+        # (the later one would overwrite the earlier, possibly with another
+        # entity's attributes).  The parser must fail closed and drop the id so
+        # the caller re-extracts it solo (#491 adversarial review).
+        e1 = _valid_entity("char-a", name="Char A")
+        e2 = _valid_entity("char-a", name="Bob")  # duplicate id, different body
+        out = se._parse_batch_detail_response({"entities": [e1, e2, _valid_entity("char-b")]})
+        assert "char-a" not in out  # dropped, not silently overwritten
+        assert "char-b" in out  # untainted ids survive
+
+
+# ===========================================================================
+# D2. Consistency guard (anti cross-entity bleed)
+# ===========================================================================
+
+class TestConsistencyGuard:
+    def test_matching_name_and_type_ok(self):
+        ref = _make_ref("char-a")  # name "Char A", type character
+        assert se._batch_entity_consistent(ref, _valid_entity("char-a")) is True
+
+    def test_type_mismatch_rejected(self):
+        ref = _make_ref("char-a", etype="character")
+        ent = _valid_entity("char-a")
+        ent["type"] = "location"  # type can never legitimately change
+        assert se._batch_entity_consistent(ref, ent) is False
+
+    def test_name_mismatch_rejected(self):
+        # A body returned under char-a's id but carrying another entity's name
+        # is a misattribution — reject and fall back solo.
+        ref = _make_ref("char-a")
+        assert se._batch_entity_consistent(ref, _valid_entity("char-a", name="Bob")) is False
+
+    def test_non_dict_rejected(self):
+        assert se._batch_entity_consistent(_make_ref("char-a"), None) is False
+
 
 # ===========================================================================
 # E. Batched extraction + solo fallback
@@ -301,11 +337,12 @@ class TestBatchedExtraction:
             _valid_entity("char-a"), _valid_entity("char-b"), _valid_entity("char-c"),
         ]}
         llm = _FakeLLM(batch_response=resp)
-        results = se._extract_batched_entity_detail(
+        results, fallbacks = se._extract_batched_entity_detail(
             llm, _make_turn(), tasks, None, mentioned_ids=set(),
         )
         assert llm.batch_calls == 1
         assert llm.solo_calls == 0  # no fallback
+        assert fallbacks == []
         got = {se.get_entity_id(r): data for r, data, err in results}
         assert set(got.keys()) == {"char-a", "char-b", "char-c"}
         assert all(data is not None for data in got.values())
@@ -314,22 +351,24 @@ class TestBatchedExtraction:
         tasks = self._tasks()
         # Batched response is empty/garbage -> nothing parses -> all solo.
         llm = _FakeLLM(batch_response={"unexpected": True})
-        results = se._extract_batched_entity_detail(
+        results, fallbacks = se._extract_batched_entity_detail(
             llm, _make_turn(), tasks, None, mentioned_ids=set(),
         )
         assert llm.batch_calls == 1
         assert llm.solo_calls == 3  # every entity retried solo
+        assert len(fallbacks) == 3
         ids = {se.get_entity_id(r) for r, data, err in results if data is not None}
         assert ids == {"char-a", "char-b", "char-c"}  # none dropped
 
     def test_llm_error_falls_back_to_solo(self):
         tasks = self._tasks()
         llm = _FakeLLM(batch_exc=se.LLMExtractionError("boom"))
-        results = se._extract_batched_entity_detail(
+        results, fallbacks = se._extract_batched_entity_detail(
             llm, _make_turn(), tasks, None, mentioned_ids=set(),
         )
         assert llm.batch_calls == 1
         assert llm.solo_calls == 3
+        assert len(fallbacks) == 3
         assert len(results) == 3
 
     def test_missing_entity_falls_back_solo(self):
@@ -337,11 +376,12 @@ class TestBatchedExtraction:
         # Batched response omits char-c -> only char-c retried solo.
         resp = {"entities": [_valid_entity("char-a"), _valid_entity("char-b")]}
         llm = _FakeLLM(batch_response=resp)
-        results = se._extract_batched_entity_detail(
+        results, fallbacks = se._extract_batched_entity_detail(
             llm, _make_turn(), tasks, None, mentioned_ids=set(),
         )
         assert llm.batch_calls == 1
         assert llm.solo_calls == 1  # only the missing one
+        assert {se.get_entity_id(r) for r, _ in fallbacks} == {"char-c"}
         ids = {se.get_entity_id(r) for r, data, err in results if data is not None}
         assert ids == {"char-a", "char-b", "char-c"}
 
@@ -356,6 +396,135 @@ class TestBatchedExtraction:
             pass
         else:
             raise AssertionError("QuotaExhaustedError should propagate")
+
+    def test_duplicate_id_in_batch_falls_back_solo(self):
+        # The model emits char-a twice (the second carrying a different body).
+        # The duplicate id is dropped, so char-a is re-extracted SOLO rather
+        # than silently receiving the overwriting object's attributes.
+        tasks = self._tasks()
+        resp = {"entities": [
+            _valid_entity("char-a", name="Char A"),
+            _valid_entity("char-a", name="Bob"),  # duplicate -> char-a dropped
+            _valid_entity("char-b"), _valid_entity("char-c"),
+        ]}
+        llm = _FakeLLM(batch_response=resp)
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+        )
+        assert {se.get_entity_id(r) for r, _ in fallbacks} == {"char-a"}
+        assert llm.solo_calls == 1
+        got = {se.get_entity_id(r): data for r, data, err in results}
+        # char-a re-extracted solo -> correct name, NOT "Bob".
+        assert got["char-a"]["name"] == "Char A"
+
+    def test_misattributed_body_under_correct_id_rejected(self):
+        # char-a's id carries char-b's body (name "Char B") — schema-valid but
+        # cross-entity bleed.  The name guard rejects it and falls back solo.
+        tasks = self._tasks()
+        bleed = _valid_entity("char-a", name="Char B")
+        resp = {"entities": [bleed, _valid_entity("char-b"), _valid_entity("char-c")]}
+        llm = _FakeLLM(batch_response=resp)
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+        )
+        assert "char-a" in {se.get_entity_id(r) for r, _ in fallbacks}
+        assert llm.solo_calls == 1
+        got = {se.get_entity_id(r): data for r, data, err in results}
+        # Solo re-extraction restores char-a's own body.
+        assert got["char-a"]["name"] == "Char A"
+
+    def test_swapped_bodies_both_fall_back_solo(self):
+        # char-a holds char-b's body and char-b holds char-a's body.  Both name
+        # guards trip -> both re-extracted solo, no silent swap survives.
+        tasks = self._tasks()
+        resp = {"entities": [
+            _valid_entity("char-a", name="Char B"),
+            _valid_entity("char-b", name="Char A"),
+            _valid_entity("char-c"),
+        ]}
+        llm = _FakeLLM(batch_response=resp)
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+        )
+        assert {se.get_entity_id(r) for r, _ in fallbacks} == {"char-a", "char-b"}
+        assert llm.solo_calls == 2
+
+    def test_type_mismatch_falls_back_solo(self):
+        tasks = self._tasks()
+        wrong = _valid_entity("char-a")
+        wrong["type"] = "location"  # char-a is a character
+        resp = {"entities": [wrong, _valid_entity("char-b"), _valid_entity("char-c")]}
+        llm = _FakeLLM(batch_response=resp)
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+        )
+        assert "char-a" in {se.get_entity_id(r) for r, _ in fallbacks}
+        assert llm.solo_calls == 1
+
+    def test_unexpected_id_ignored_not_merged(self):
+        # An id that was never requested must not be accepted/merged, and must
+        # not cause the requested entities to fall back.
+        tasks = self._tasks()
+        resp = {"entities": [
+            _valid_entity("char-a"), _valid_entity("char-b"),
+            _valid_entity("char-c"), _valid_entity("char-z"),  # unexpected
+        ]}
+        llm = _FakeLLM(batch_response=resp)
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, _make_turn(), tasks, None, mentioned_ids=set(),
+        )
+        assert fallbacks == []
+        assert llm.solo_calls == 0
+        got = {se.get_entity_id(r): data for r, data, err in results if data is not None}
+        assert set(got) == {"char-a", "char-b", "char-c"}  # char-z not merged
+
+    def test_fallback_solo_prompts_are_recorded(self):
+        """Worst case (whole-batch parse failure): the recorded entity_detail
+        metric must include the batch prompt AND the N fallback solo prompts.
+
+        Counting only the batch prompt would let the per-turn A/B scorer score
+        an apparent saving even though the variant actually sent 1 batch + N
+        solo prompts — the exact non-blind-measurement bias the adversarial
+        review flagged (#491).
+        """
+        turn = _make_turn("The council fire crackles softly. " * 40)
+        tasks = [
+            (_make_ref("char-a"), _make_entry("char-a")),
+            (_make_ref("char-b"), _make_entry("char-b")),
+            (_make_ref("char-c"), _make_entry("char-c")),
+        ]
+        sys_batch = se.load_template("entity-detail-batch")
+        sys_solo = se.load_template("entity-detail")
+        # Batch parse fails entirely -> all 3 entities fall back solo.
+        llm = _FakeLLM(batch_response={"garbage": True})
+        results, fallbacks = se._extract_batched_entity_detail(
+            llm, turn, tasks, None, mentioned_ids=set(),
+        )
+        assert len(fallbacks) == 3
+        assert llm.solo_calls == 3
+
+        metrics: dict = {}
+        # 1) batch prompt recorded pre-execution (as the pipeline does).
+        b_user, b_raw = se.format_detail_batch_prompt(
+            turn, tasks, mentioned_ids=set(), return_uncompacted=True,
+        )
+        se._record_prompt_tokens(
+            metrics, "entity_detail", sys_batch, b_user,
+            raw_tokens=se._estimate_tokens(sys_batch + b_raw),
+        )
+        batch_only = dict(metrics["entity_detail"])
+        # 2) fallback solo prompts recorded post-execution (the fix).
+        for ref, entry in fallbacks:
+            se._record_solo_detail_prompt(
+                metrics, turn, ref, entry, sys_solo, True, None, set(), None,
+            )
+        final = metrics["entity_detail"]
+        # 1 batch + 3 solo == 4 prompts ACTUALLY sent.
+        assert final["calls"] == 4
+        # The recorded tokens strictly exceed the batch-only undercount on both
+        # the sent (compressed) and #484 raw fields the scorer reads.
+        assert final["input_tokens"] > batch_only["input_tokens"]
+        assert final["raw_input_tokens"] > batch_only["raw_input_tokens"]
 
 
 # ===========================================================================

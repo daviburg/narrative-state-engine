@@ -1321,6 +1321,43 @@ def _record_prompt_tokens(
             entry[k] = entry.get(k, 0) + v
 
 
+def _record_solo_detail_prompt(
+    metrics: dict[str, dict],
+    turn: dict,
+    entity_ref: dict,
+    current_entry: dict | None,
+    sys_tmpl: str,
+    raw_instr: bool,
+    config: dict | None,
+    mentioned_ids: set[str] | None,
+    pc_arcs_data: dict | None,
+) -> None:
+    """Record the token cost of a SOLO entity_detail prompt (#491).
+
+    Shared by the pre-execution solo loop and the batch SOLO-fallback path so
+    that fallback calls — which ARE sent to the LLM — are counted in
+    ``prompt_metrics``.  Omitting them would let the per-turn A/B scorer
+    overstate L2 savings exactly in the error path the safety design relies on.
+    """
+    entity_id = get_entity_id(entity_ref)
+    entity_arcs = pc_arcs_data if entity_id == "char-player" else None
+    if raw_instr:
+        user_prompt, raw_prompt = format_detail_prompt(
+            turn, entity_ref, current_entry, arcs_data=entity_arcs, config=config,
+            mentioned_ids=mentioned_ids, return_uncompacted=True,
+        )
+        raw_tokens = _estimate_tokens(sys_tmpl + raw_prompt)
+    else:
+        user_prompt = format_detail_prompt(
+            turn, entity_ref, current_entry, arcs_data=entity_arcs, config=config,
+            mentioned_ids=mentioned_ids,
+        )
+        raw_tokens = None
+    _record_prompt_tokens(
+        metrics, "entity_detail", sys_tmpl, user_prompt, raw_tokens=raw_tokens,
+    )
+
+
 def _finalize_prompt_metrics(metrics: dict[str, dict]) -> dict[str, dict]:
     """Compute averages and raw-vs-compressed ratios for each phase."""
     result = {}
@@ -3132,6 +3169,14 @@ def _parse_batch_detail_response(detail_result: object) -> dict:
     bare top-level list, or a single-entity envelope as a degenerate case.
     Entities without a usable ``id`` are dropped — the caller falls back to a
     solo call for any task missing from the returned map, so nothing is lost.
+
+    Fails CLOSED on duplicate ids (#491 adversarial review): if the model emits
+    two or more objects under the same ``id`` the result is ambiguous and a
+    known cross-entity attribute-bleed vector (the later object would silently
+    overwrite the earlier one, potentially carrying another entity's
+    attributes).  Any id that appears more than once is therefore dropped
+    entirely so the caller re-extracts that entity with a clean SOLO call rather
+    than accepting a possibly-corrupted body.
     """
     items: object = None
     if isinstance(detail_result, dict):
@@ -3144,13 +3189,50 @@ def _parse_batch_detail_response(detail_result: object) -> dict:
     if not isinstance(items, list):
         return {}
     by_id: dict = {}
+    duplicate_ids: set = set()
     for item in items:
         if not isinstance(item, dict):
             continue
         ent = _unwrap_entity_response(item)
-        if ent and ent.get("id"):
-            by_id[ent["id"]] = ent
+        if not (ent and ent.get("id")):
+            continue
+        eid = ent["id"]
+        if eid in by_id or eid in duplicate_ids:
+            duplicate_ids.add(eid)
+            continue
+        by_id[eid] = ent
+    for eid in duplicate_ids:
+        by_id.pop(eid, None)
     return by_id
+
+
+def _batch_entity_consistent(entity_ref: dict, entity_data: object) -> bool:
+    """Guard a batched entity against cross-entity attribute bleed (#491).
+
+    The batch parser keys responses by ``id``, which handles harmless output
+    reordering but does NOT prevent the model from returning one entity's body
+    under another entity's id (a same-id misattribution / swap).  This guard
+    requires the returned object's ``type`` and ``name`` to match the requested
+    block so a misattributed body is rejected and re-extracted SOLO instead of
+    silently accepted.
+
+    The comparison is case-insensitive and whitespace-trimmed.  Type is stable
+    per entity, so a type mismatch is always a structural error.  Name can
+    legitimately change when a turn reveals a proper name; a name mismatch
+    therefore only costs one redundant solo call (which produces the correct
+    body anyway) — an acceptable price for failing closed on bleed.
+    """
+    if not isinstance(entity_data, dict):
+        return False
+    req_type = (entity_ref.get("type") or "").strip().lower()
+    got_type = (entity_data.get("type") or "").strip().lower()
+    if req_type and got_type and req_type != got_type:
+        return False
+    req_name = (entity_ref.get("name") or "").strip().lower()
+    got_name = (entity_data.get("name") or "").strip().lower()
+    if req_name and got_name and req_name != got_name:
+        return False
+    return True
 
 
 def _extract_batched_entity_detail(
@@ -3164,11 +3246,21 @@ def _extract_batched_entity_detail(
     """Run entity-detail for a batch in ONE shared-context call (L2, #491).
 
     The system template + turn text are sent once; the entities are presented
-    as hard-delimited blocks.  Returns a list of ``(entity_ref, entity_data,
-    error)`` tuples — matching ``_extract_single_entity_detail``'s shape — one
-    per task.  On parse failure, or for any entity missing from / rejected in
-    the batched response, falls back to a per-entity SOLO call so no entity is
-    dropped or merged away.  Designed to run inside a ThreadPoolExecutor.
+    as hard-delimited blocks.  Returns ``(results, fallback_tasks)`` where
+    ``results`` is a list of ``(entity_ref, entity_data, error)`` tuples —
+    matching ``_extract_single_entity_detail``'s shape — one per task, and
+    ``fallback_tasks`` is the list of ``(entity_ref, current_entry)`` that were
+    re-issued as SOLO calls (so the caller can record their prompt tokens — the
+    fallback solo prompts ARE sent to the LLM and must not be omitted from the
+    non-blind A/B metric, #491 adversarial review).
+
+    Structural integrity is enforced to prevent silent cross-entity attribute
+    bleed: duplicate ids are dropped by the parser, ids that were never
+    requested are ignored, and any returned object whose name/type does not
+    match its requested block is rejected.  On parse failure, or for any entity
+    missing from / rejected in the batched response, falls back to a per-entity
+    SOLO call so no entity is dropped, merged away, or silently misattributed.
+    Designed to run inside a ThreadPoolExecutor.
     """
     turn_id = turn["turn_id"]
     try:
@@ -3188,6 +3280,13 @@ def _extract_batched_entity_detail(
         detail_result = None
 
     by_id = _parse_batch_detail_response(detail_result) if detail_result is not None else {}
+    requested_ids = {get_entity_id(entity_ref) for entity_ref, _ in batch_tasks}
+    unexpected_ids = set(by_id) - requested_ids
+    if unexpected_ids:
+        print(f"  WARNING: batched detail response at {turn_id} returned "
+              f"{len(unexpected_ids)} unexpected id(s) {sorted(unexpected_ids)}; "
+              f"ignoring (requested entities re-checked individually)",
+              file=sys.stderr)
 
     results: list = []
     fallback: list = []
@@ -3197,6 +3296,12 @@ def _extract_batched_entity_detail(
             fallback.append((entity_ref, current_entry))
             continue
         entity_data = _coerce_entity_fields(raw)
+        if not _batch_entity_consistent(entity_ref, entity_data):
+            print(f"  WARNING: batched entity {get_entity_id(entity_ref)} at "
+                  f"{turn_id} name/type mismatch vs requested block (possible "
+                  f"cross-entity bleed); retrying solo", file=sys.stderr)
+            fallback.append((entity_ref, current_entry))
+            continue
         if entity_data and not _filter_concept_prefix_from_items(entity_data):
             results.append((entity_ref, None, None))
             continue
@@ -3208,12 +3313,12 @@ def _extract_batched_entity_detail(
 
     if fallback:
         print(f"  INFO: {len(fallback)}/{len(batch_tasks)} batched entities at "
-              f"{turn_id} missing/invalid; retrying solo", file=sys.stderr)
+              f"{turn_id} missing/invalid/mismatched; retrying solo", file=sys.stderr)
     for entity_ref, current_entry in fallback:
         results.append(_extract_single_entity_detail(
             llm, turn, entity_ref, current_entry, pc_arcs_data, config, mentioned_ids,
         ))
-    return results
+    return results, fallback
 
 
 def _extract_relationships_parallel(
@@ -3860,23 +3965,9 @@ def extract_and_merge(
     # byte-identical to the pre-#491 control.
     _detail_solo_tasks, _detail_batch_groups = _partition_detail_tasks(_entity_tasks, _cfg)
     for entity_ref, current_entry in _detail_solo_tasks:
-        entity_id = get_entity_id(entity_ref)
-        _entity_arcs = pc_arcs_data if entity_id == "char-player" else None
-        if _raw_instr:
-            _detail_user_prompt, _detail_raw_prompt = format_detail_prompt(
-                turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
-                mentioned_ids=_mentioned_ids, return_uncompacted=True,
-            )
-            _detail_raw_tokens = _estimate_tokens(_detail_sys_tmpl + _detail_raw_prompt)
-        else:
-            _detail_user_prompt = format_detail_prompt(
-                turn, entity_ref, current_entry, arcs_data=_entity_arcs, config=_cfg,
-                mentioned_ids=_mentioned_ids,
-            )
-            _detail_raw_tokens = None
-        _record_prompt_tokens(
-            _prompt_metrics, "entity_detail", _detail_sys_tmpl, _detail_user_prompt,
-            raw_tokens=_detail_raw_tokens,
+        _record_solo_detail_prompt(
+            _prompt_metrics, turn, entity_ref, current_entry, _detail_sys_tmpl,
+            _raw_instr, _cfg, _mentioned_ids, pc_arcs_data,
         )
     # Batched detail calls send the template + turn text ONCE per group, then
     # hard-delimited per-entity blocks (#491).  Recording the ACTUAL batched
@@ -3932,6 +4023,7 @@ def extract_and_merge(
     if _use_parallel:
         # ---- PARALLEL PATH (#282) ----
         _detail_results: list[tuple[dict, dict | None, str | None]] = []
+        _detail_fallbacks: list = []
         _rel_raw: list | None = None
         _event_raw: list | None = None
         _pc_raw_result = None
@@ -4021,13 +4113,25 @@ def extract_and_merge(
                 if tag == "detail":
                     _detail_results.append(result)
                 elif tag == "detail_batch":
-                    _detail_results.extend(result)
+                    _batch_results, _batch_fallbacks = result
+                    _detail_results.extend(_batch_results)
+                    _detail_fallbacks.extend(_batch_fallbacks)
                 elif tag == "pc":
                     _pc_raw_result = result
                 elif tag == "relationship":
                     _rel_raw = result
                 elif tag == "event":
                     _event_raw = result
+
+        # Record the SOLO-fallback prompts that batched groups actually sent
+        # (#491): these LLM calls are real, so omitting them would let the
+        # per-turn A/B scorer overstate L2 savings in the fallback path.  Done
+        # in the main thread after the pool closes (thread-safe metric write).
+        for entity_ref, current_entry in _detail_fallbacks:
+            _record_solo_detail_prompt(
+                _prompt_metrics, turn, entity_ref, current_entry, _detail_sys_tmpl,
+                _raw_instr, _cfg, _mentioned_ids, pc_arcs_data,
+            )
 
         # --- Merge entity details (deterministic order by entity ID) ---
         _detail_results.sort(key=lambda r: get_entity_id(r[0]) or "")
@@ -4234,9 +4338,17 @@ def extract_and_merge(
         # parallel path, since current_entry is not threaded through the batch
         # result tuple).
         for _group in _detail_batch_groups:
-            _batch_results = _extract_batched_entity_detail(
+            _batch_results, _batch_fallbacks = _extract_batched_entity_detail(
                 llm, turn, _group, pc_arcs_data, _cfg, _mentioned_ids,
             )
+            # Record SOLO-fallback prompts these batched calls actually sent
+            # (#491) so the per-turn A/B metric stays faithful in the fallback
+            # path (matches the parallel path's accounting).
+            for entity_ref, current_entry in _batch_fallbacks:
+                _record_solo_detail_prompt(
+                    _prompt_metrics, turn, entity_ref, current_entry,
+                    _detail_sys_tmpl, _raw_instr, _cfg, _mentioned_ids, pc_arcs_data,
+                )
             for entity_ref, entity_data, _detail_err in _batch_results:
                 if _detail_err:
                     turn_failed = True
