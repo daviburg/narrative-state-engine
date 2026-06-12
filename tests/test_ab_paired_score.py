@@ -343,6 +343,59 @@ def test_main_accepts_n2_and_n3(tmp_path):
 
 
 # ---------------------------------------------------------------------------
+# --per-turn noise-floor unit guard (Copilot review): per-turn changes the
+# floor unit to tok/turn, so the per-call default must NOT silently apply.
+# ---------------------------------------------------------------------------
+
+def _per_turn_logs(tmp_path, n=3, a_calls=6, a_tokens=12000, b_calls=2, b_tokens=6000):
+    """N runs/arm where the same turn has a DIFFERENT call count per arm
+    (the L2 batching shape): A makes a_calls, B makes b_calls."""
+    a_recs = [_rec("turn-010", a_calls, a_tokens), _rec("turn-011", a_calls, a_tokens)]
+    b_recs = [_rec("turn-010", b_calls, b_tokens), _rec("turn-011", b_calls, b_tokens)]
+    argv = []
+    for i in range(n):
+        pa = tmp_path / f"pa{i}.jsonl"
+        pb = tmp_path / f"pb{i}.jsonl"
+        _write_log(pa, a_recs)
+        _write_log(pb, b_recs)
+        argv += ["--a", str(pa), "--b", str(pb)]
+    return argv
+
+
+def test_main_per_turn_requires_explicit_noise_floor(tmp_path, capsys):
+    # No --noise-floor in per-turn mode -> error (the per-call default would be
+    # a misleadingly tiny tok/turn floor).
+    rc = aps.main(_valid_logs(tmp_path, 2, 2) + ["--per-turn", "--json"])
+    assert rc == 2
+    assert "noise-floor" in capsys.readouterr().err.lower()
+
+
+def test_main_per_turn_with_explicit_floor_accepts_3_runs(tmp_path, capsys):
+    # 3 runs/arm, per-turn mode, explicit tok/turn floor -> scores the per-turn
+    # token saving over the matched-TURN population despite differing call
+    # counts (the L2 acceptance scenario).
+    rc = aps.main(_per_turn_logs(tmp_path, n=3) + [
+        "--per-turn", "--noise-floor", "100", "--json",
+    ])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["mode"] == "per_turn"
+    assert out["summary"]["noise_floor"] == 100.0
+    # Per-turn total dropped from 12000 to 6000 -> B saves 6000 tok/turn.
+    assert out["summary"]["weighted_delta"] == -6000.0
+    assert out["summary"]["n_matched"] == 2  # both turns matched by TURN
+
+
+def test_main_per_call_still_defaults_noise_floor(tmp_path, capsys):
+    # Per-call mode keeps the documented tok/call default when none is passed.
+    rc = aps.main(_valid_logs(tmp_path, 2, 2) + ["--json"])
+    assert rc == 0
+    out = json.loads(capsys.readouterr().out)
+    assert out["summary"]["noise_floor"] == aps.DEFAULT_NOISE_FLOOR
+
+
+
+# ---------------------------------------------------------------------------
 # Survivorship / drop-rate reporting against the FULL population
 # ---------------------------------------------------------------------------
 

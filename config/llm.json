@@ -31,6 +31,12 @@
     "relationship_type_tiering": true,
     "_comment": "L1+L4 type-tiered PC relationship cap (epic #477). Default ON: caps PC entity-detail relationships by type: permanent bonds kept uncapped, volatile tail trimmed to pc_rel_volatile_tail_cap. Also promotes permanent-bond types in the relationship-mapper budget trim. Set false to restore pre-#477 behaviour (byte-identical to the pre-#477 baseline -- i.e. main before #477 -- when the flag is absent or false; note that once this default-ON change merges, main itself ships the flag ON); a same-commit flag-OFF run serves as the A/B control.",
     "pc_rel_permanent_types": ["kinship", "adversarial", "mentorship", "political", "partnership"],
-    "pc_rel_volatile_tail_cap": 10
+    "pc_rel_volatile_tail_cap": 10,
+    "batch_entity_detail": {
+      "enabled": false,
+      "batch_size": 4,
+      "high_confidence_threshold": 0.8,
+      "_comment": "L2 batched entity_detail (epic #477, #491). Default OFF: when on, the entity-detail system template + turn text are sent ONCE per batch instead of once per entity, detailing multiple low-salience entities per shared-context call with hard-delimited per-entity blocks. PC (char-player), brand-new entities, and entities with confidence >= high_confidence_threshold stay SOLO to avoid cross-entity attribute bleed; only the lower-salience tail is batched in groups of batch_size. Parse failure or any missing/invalid entity falls back to a solo call (no dropped entities). Flag-OFF is byte-identical to the per-entity baseline (the A/B control)."
+    }
   }
 }

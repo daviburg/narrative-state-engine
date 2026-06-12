@@ -336,6 +336,95 @@ def paired_deltas(
     return rows
 
 
+def matched_population_turns(
+    a_runs: list[dict[str, dict]],
+    b_runs: list[dict[str, dict]],
+    phase: str = DEFAULT_PHASE,
+) -> list[str]:
+    """Turns present with non-zero *phase* calls in EVERY run (per-turn mode).
+
+    Unlike :func:`matched_call_turns`, this does NOT require equal call COUNTS
+    across runs.  L2 batching (#491) deliberately changes the entity_detail
+    call count (template+turn sent once per batch instead of once per entity),
+    so matched-call-COUNT would drop every batched turn and the per-call metric
+    is not apples-to-apples.  Per-turn scoring instead compares the per-turn
+    TOTAL sent tokens (``prompt_metrics.<phase>.raw_input_tokens``, already a
+    per-turn sum across calls) — the field that actually holds the L2 saving —
+    over the turns that simply appear in every run.  Returns the qualifying
+    turn IDs sorted by numeric turn index.
+    """
+    all_runs = list(a_runs) + list(b_runs)
+    if not all_runs:
+        return []
+    common: set[str] | None = None
+    for run in all_runs:
+        ids = set(run.keys())
+        common = ids if common is None else (common & ids)
+    if not common:
+        return []
+    matched: list[str] = []
+    for turn_id in common:
+        if all(
+            phase_call_metric(run[turn_id], phase) is not None
+            for run in all_runs
+        ):
+            matched.append(turn_id)
+    matched.sort(key=_turn_sort_key)
+    return matched
+
+
+def _variant_turn_total(
+    runs: list[dict[str, dict]], turn_id: str, phase: str
+) -> tuple[float, int, int]:
+    """Mean per-turn TOTAL raw tokens for *turn_id* across one variant's *runs*.
+
+    Returns ``(mean_total_raw_per_run, total_raw, n_runs)``.  The per-turn total
+    is the #484 ``raw_input_tokens`` accumulated across the turn's calls, so it
+    captures L2's collapse of the template+turn duplication regardless of how
+    many calls the turn made.  ``n_runs`` (not the call count) is the weight, so
+    the weighted aggregate in :func:`summarize` reads out as mean tokens/turn.
+    """
+    totals: list[float] = []
+    total_raw = 0
+    for run in runs:
+        _calls, raw = phase_call_metric(run[turn_id], phase)  # type: ignore[misc]
+        totals.append(float(raw))
+        total_raw += raw
+    return statistics.fmean(totals), total_raw, len(runs)
+
+
+def paired_turn_deltas(
+    a_runs: list[dict[str, dict]],
+    b_runs: list[dict[str, dict]],
+    matched_turns: list[str],
+    phase: str = DEFAULT_PHASE,
+) -> list[dict]:
+    """Per-turn paired deltas (B - A) of the per-turn TOTAL sent-token metric.
+
+    The weight per turn is the number of runs (``*_calls_total`` is reused as a
+    run count), so :func:`summarize`'s ``weighted = raw / calls`` reads out as
+    mean tokens-per-TURN rather than tokens-per-call.  This is the fair
+    comparison for L2, where the call count is itself a treatment effect.
+    """
+    rows: list[dict] = []
+    for turn_id in matched_turns:
+        a_mean, a_raw, a_n = _variant_turn_total(a_runs, turn_id, phase)
+        b_mean, b_raw, b_n = _variant_turn_total(b_runs, turn_id, phase)
+        rows.append(
+            {
+                "turn_id": turn_id,
+                "a_tokens_per_call": a_mean,
+                "b_tokens_per_call": b_mean,
+                "delta": b_mean - a_mean,
+                "a_raw_total": a_raw,
+                "a_calls_total": a_n,
+                "b_raw_total": b_raw,
+                "b_calls_total": b_n,
+            }
+        )
+    return rows
+
+
 def summarize(deltas: list[dict], noise_floor: float = DEFAULT_NOISE_FLOOR) -> dict:
     """Summarize paired deltas into an effect-size-vs-noise-floor report.
 
@@ -431,24 +520,45 @@ def format_report(
     n_b: int,
     population_total: int,
     prior_state: dict | None = None,
+    per_turn: bool = False,
 ) -> str:
-    """Render the human-readable scoring report."""
+    """Render the human-readable scoring report.
+
+    When *per_turn* is True the report labels the metric as tokens-per-TURN and
+    the matched set as matched-TURN (per-turn mode, used for L2 #491 where the
+    call count is a treatment effect); otherwise it is the default per-call /
+    matched-call-COUNT report.
+    """
     matched = summary["n_matched"]
     dropped = max(0, population_total - matched)
     pct = (matched / population_total * 100.0) if population_total else 0.0
+    _unit = "tok/turn" if per_turn else "tok/call"
+    _match = "matched-TURN" if per_turn else "matched-call-COUNT"
+    _drop_reason = (
+        f"missing from a run or zero {phase} calls"
+        if per_turn
+        else f"missing from a run, zero {phase} calls, or divergent {phase} call count"
+    )
     lines: list[str] = []
     lines.append(f"Paired multi-run A/B score — phase: {phase}")
     lines.append(
         f"  runs: A={n_a}  B={n_b}   "
-        f"matched-call-COUNT turns: {matched}/{population_total} "
-        f"({pct:.1f}%); {dropped} dropped (missing from a run, "
-        f"zero {phase} calls, or divergent {phase} call count)"
+        f"{_match} turns: {matched}/{population_total} "
+        f"({pct:.1f}%); {dropped} dropped ({_drop_reason})"
     )
-    lines.append(
-        "  NOTE: matched turns are a SURVIVOR subset (matching conditions on a "
-        "post-treatment\n"
-        "        call count); dropped turns are NOT 'not signal'."
-    )
+    if per_turn:
+        lines.append(
+            "  MODE: per-TURN total sent tokens (raw_input_tokens summed across "
+            "calls).\n"
+            "        Use for L2/#491 batching, where the call count itself "
+            "changes."
+        )
+    else:
+        lines.append(
+            "  NOTE: matched turns are a SURVIVOR subset (matching conditions on a "
+            "post-treatment\n"
+            "        call count); dropped turns are NOT 'not signal'."
+        )
     if prior_state is not None and prior_state.get("n_checked"):
         div = prior_state["n_divergent"]
         chk = prior_state["n_checked"]
@@ -460,16 +570,18 @@ def format_report(
         )
     if matched == 0:
         lines.append(
-            "  No matched-call-COUNT turns: every turn was missing from a run, "
-            f"had zero {phase} phase-calls, or had a divergent "
-            f"{phase} call count across runs. Nothing to score."
+            f"  No {_match} turns: every turn was missing from a run, "
+            f"had zero {phase} phase-calls"
+            + ("." if per_turn else ", or had a divergent "
+               f"{phase} call count across runs.")
+            + " Nothing to score."
         )
         return "\n".join(lines)
     nf = summary["noise_floor"]
-    lines.append(f"  noise floor (weighted): {nf:.3f} tok/call")
+    lines.append(f"  noise floor (weighted): {nf:.3f} {_unit}")
     lines.append("")
     lines.append(
-        f"  weighted tok/call:  A={summary['weighted_a']:.3f}  "
+        f"  weighted {_unit}:  A={summary['weighted_a']:.3f}  "
         f"B={summary['weighted_b']:.3f}  Δ={summary['weighted_delta']:+.3f}"
     )
     lines.append(
@@ -525,10 +637,24 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         help=f"prompt_metrics phase to score (default: {DEFAULT_PHASE})",
     )
     parser.add_argument(
-        "--noise-floor", type=float, default=DEFAULT_NOISE_FLOOR,
+        "--noise-floor", type=float, default=None,
         help=(
-            "weighted tok/call noise floor to judge the effect against "
-            f"(default: {DEFAULT_NOISE_FLOOR}; re-measure per model/backend)"
+            "weighted noise floor to judge the effect against. In per-call "
+            f"mode the default is {DEFAULT_NOISE_FLOOR} tok/call. With "
+            "--per-turn the unit is tok/TURN and there is NO default: you MUST "
+            "pass an explicit value re-measured from an A==A per-turn control, "
+            "otherwise the per-call default would make a tiny floor and yield a "
+            "misleading SEPARABLE verdict (re-measure per model/backend)."
+        ),
+    )
+    parser.add_argument(
+        "--per-turn", action="store_true",
+        help=(
+            "score per-TURN TOTAL sent tokens (raw_input_tokens summed across "
+            "calls) over matched-TURN population instead of per-call over "
+            "matched-call-COUNT. Use for L2/#491 batching, which changes the "
+            "entity_detail call count by design; --noise-floor is then in "
+            "tok/turn units (re-measure it for per-turn mode)."
         ),
     )
     parser.add_argument(
@@ -579,9 +705,30 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 2
 
-    matched = matched_call_turns(a_runs, b_runs, args.phase)
-    deltas = paired_deltas(a_runs, b_runs, matched, args.phase)
-    summary = summarize(deltas, noise_floor=args.noise_floor)
+    if args.per_turn:
+        # L2/#491: the call count is a treatment effect, so score per-TURN
+        # total sent tokens over the matched-TURN population (turns present in
+        # every run), not per-call over matched-call-COUNT.
+        if args.noise_floor is None:
+            print(
+                "error: --per-turn changes the noise-floor unit to tok/TURN, "
+                "so the per-call default does not apply. Pass an explicit "
+                "--noise-floor (tok/turn) re-measured from an A==A per-turn "
+                "control; otherwise the separable verdict would be judged "
+                "against an unrealistically tiny floor.",
+                file=sys.stderr,
+            )
+            return 2
+        noise_floor = args.noise_floor
+        matched = matched_population_turns(a_runs, b_runs, args.phase)
+        deltas = paired_turn_deltas(a_runs, b_runs, matched, args.phase)
+    else:
+        noise_floor = (
+            DEFAULT_NOISE_FLOOR if args.noise_floor is None else args.noise_floor
+        )
+        matched = matched_call_turns(a_runs, b_runs, args.phase)
+        deltas = paired_deltas(a_runs, b_runs, matched, args.phase)
+    summary = summarize(deltas, noise_floor=noise_floor)
 
     # Survivorship denominator = the FULL turn population (union across runs),
     # so the drop rate shows how representative the matched survivor subset is.
@@ -592,6 +739,7 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(
             {
                 "phase": args.phase,
+                "mode": "per_turn" if args.per_turn else "per_call",
                 "runs_a": len(a_runs),
                 "runs_b": len(b_runs),
                 "population_turns": population_total,
@@ -605,7 +753,7 @@ def main(argv: list[str] | None = None) -> int:
     else:
         print(format_report(
             summary, args.phase, len(a_runs), len(b_runs),
-            population_total, prior_state,
+            population_total, prior_state, per_turn=args.per_turn,
         ))
     return 0
 
