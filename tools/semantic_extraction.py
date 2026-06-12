@@ -1998,6 +1998,13 @@ def _get_batch_detail_config(config: dict | None) -> tuple[bool, int, float]:
         high_conf = float(raw_thr)
     except (TypeError, ValueError):
         high_conf = _DEFAULT_DETAIL_HIGH_CONF
+    # Reject non-finite values (NaN/inf): a NaN threshold makes every
+    # ``conf >= high_conf`` comparison false, silently batching even
+    # high-confidence entities and defeating the safety tiering.
+    if not math.isfinite(high_conf):
+        high_conf = _DEFAULT_DETAIL_HIGH_CONF
+    # Clamp into the valid confidence range [0.0, 1.0].
+    high_conf = min(1.0, max(0.0, high_conf))
     return enabled, batch_size, high_conf
 
 

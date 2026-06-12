@@ -392,7 +392,7 @@ class TestBatchedExtraction:
         # control solo loop instead of firing N calls back-to-back (#215, #491).
         tasks = self._tasks()
         llm = _FakeLLM(batch_response={"unexpected": True})
-        results, fallbacks = se._extract_batched_entity_detail(
+        se._extract_batched_entity_detail(
             llm, _make_turn(), tasks, None, mentioned_ids=set(),
             apply_delay_between_calls=True,
         )
@@ -404,7 +404,7 @@ class TestBatchedExtraction:
         # delays are injected into executor worker threads.
         tasks = self._tasks()
         llm = _FakeLLM(batch_response={"unexpected": True})
-        results, fallbacks = se._extract_batched_entity_detail(
+        se._extract_batched_entity_detail(
             llm, _make_turn(), tasks, None, mentioned_ids=set(),
         )
         assert llm.solo_calls == 3
