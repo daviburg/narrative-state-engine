@@ -455,6 +455,7 @@ def _entity_names(entity: dict) -> list[str]:
 def _find_mentioned_entities(
     all_entities: list[dict],
     turn_text: str,
+    apply_blocklist: bool = True,
 ) -> set[str]:
     """Return IDs of entities whose name or alias appears in *turn_text*.
 
@@ -463,6 +464,15 @@ def _find_mentioned_entities(
     Multi-word names use non-word-character boundaries; single words
     use ``\\b``.  Names shorter than ``_MIN_NAME_LENGTH_FOR_MATCH``
     characters are skipped.
+
+    By default single-word names in ``_COMMON_WORD_BLOCKLIST`` (e.g.
+    ``"shadow"``, ``"magic"``, ``"spirit"``) are skipped to avoid
+    false-positive matches in the selection path.  Pass
+    ``apply_blocklist=False`` to disable that suppression — used by the S0
+    relevance shadow (#494) so its *referenced*-entity safety metric is
+    conservative (over-inclusive): false positives are acceptable there but a
+    literally-named entity the blocklist would hide must never be silently
+    counted as not-referenced.
     """
     if not turn_text:
         return set()
@@ -477,7 +487,7 @@ def _find_mentioned_entities(
             # Strip leading articles so "the land" -> "land" is caught too.
             name_lower = name.lower()
             _stripped = re.sub(r"^(?:the|a|an)\s+", "", name_lower)
-            if " " not in _stripped and _stripped in _COMMON_WORD_BLOCKLIST:
+            if apply_blocklist and " " not in _stripped and _stripped in _COMMON_WORD_BLOCKLIST:
                 continue
             escaped = re.escape(name_lower)
             if " " in name:

@@ -206,6 +206,66 @@ class TestComputeShadow:
         assert shadow["referenced_but_would_drop_count"] == 0
         assert shadow["referenced_but_would_drop_ids"] == []
 
+    def test_safety_metric_catches_blocklisted_reference(self):
+        """A referenced entity hidden by the selection blocklist is still
+        flagged by the safety metric — proving it is NOT zero by construction.
+
+        An entity literally named ``"Shadow"`` (a single-word
+        ``_COMMON_WORD_BLOCKLIST`` member) is present in the turn text, but the
+        selection-path mention detector suppresses it, so relevance would drop
+        it.  The blocklist-free safety detection must still catch the dropped
+        reference, making ``referenced_but_would_drop_count`` non-zero.
+        """
+        catalogs = {"characters.json": [_make_entry("char-shadow", name="Shadow")]}
+        # Existing (not new), low confidence, not the PC -> relevance drops it.
+        pre_cap = [
+            (_make_ref("char-shadow", name="Shadow", is_new=False, confidence=0.1),
+             catalogs["characters.json"][0]),
+        ]
+        turn_text = "A Shadow crept across the wall."
+        shadow = se._compute_relevance_detail_shadow(
+            pre_cap, pre_cap, catalogs, turn_text, 100,
+        )
+        # Selection-path relevance does NOT select it (blocklist hides it).
+        assert "char-shadow" not in shadow["relevance_would_select_ids"]
+        # But the conservative (blocklist-free) safety metric flags the drop.
+        assert shadow["referenced_candidate_count"] == 1
+        assert shadow["referenced_but_would_drop_count"] == 1
+        assert shadow["referenced_but_would_drop_ids"] == ["char-shadow"]
+        # The per-entity record marks it referenced but not selected.
+        rec = {e["id"]: e for e in shadow["per_entity"]}["char-shadow"]
+        assert rec["referenced"] is True
+        assert rec["would_select"] is False
+        assert rec["reason"] == "none"
+
+    def test_per_entity_and_unchanged_fraction(self):
+        catalogs, pre_cap, names = self._catalogs_and_tasks()
+        turn_text = f"{names['char-a']} confronts {names['char-i']} at dawn."
+        actual = pre_cap[:6]
+        shadow = se._compute_relevance_detail_shadow(
+            pre_cap, actual, catalogs, turn_text, 100,
+        )
+        # One per-entity record per pre-cap candidate, with the relevance
+        # "score" (discrete tier reason) and the would-select decision.
+        assert len(shadow["per_entity"]) == len(pre_cap)
+        recs = {e["id"]: e for e in shadow["per_entity"]}
+        # char-a is mentioned -> selected with reason "mentioned".
+        assert recs["char-a"]["reason"] == "mentioned"
+        assert recs["char-a"]["would_select"] is True
+        assert recs["char-a"]["referenced"] is True
+        # char-d is neither mentioned, new, PC, nor adjacent -> reason "none".
+        assert recs["char-d"]["reason"] == "none"
+        assert recs["char-d"]["would_select"] is False
+        assert recs["char-d"]["referenced"] is False
+        # Mentioned-but-unchanged fraction: of the 6 actual detail calls
+        # (char-a..char-f), only char-a is selected by relevance, so the other
+        # five are the relevance-droppable "mentioned-but-unchanged" set.
+        assert shadow["actual_detail_would_drop_count"] == 5
+        assert set(shadow["actual_detail_would_drop_ids"]) == {
+            "char-b", "char-c", "char-d", "char-e", "char-f",
+        }
+        assert abs(shadow["mentioned_but_unchanged_fraction"] - round(5 / 6, 4)) < 1e-9
+
     def test_force_keep_new_and_pc(self):
         catalogs = {"characters.json": [_make_entry("char-x")]}
         pre_cap = [
