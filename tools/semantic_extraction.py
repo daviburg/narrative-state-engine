@@ -44,6 +44,8 @@ from catalog_merger import (
     CATALOG_KEYS,
     _estimate_tokens,
     _find_mentioned_entities,
+    _select_context_aware_entities,
+    _DEFAULT_RECENCY_WINDOW,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
 from temporal_extraction import (
@@ -1271,6 +1273,184 @@ def _get_type_tiering_config(
     if volatile_tail_cap < 0:
         volatile_tail_cap = 0
     return enabled, permanent_types, volatile_tail_cap
+
+
+def _get_relevance_shadow_enabled(config: dict | None) -> bool:
+    """Return whether the S0 relevance-detail shadow logging is enabled (#494).
+
+    Reads the measurement flag
+    ``context_optimizations.relevance_shadow_logging``.  Default OFF so that,
+    when the key is unset or malformed, extraction is byte-identical to the
+    baseline and **no** shadow record is emitted.  Strict bool parse
+    (``is True``) mirrors the type-tiering gate so a truthy non-bool (the
+    string ``"true"``, ``1``, a non-empty list) cannot silently enable it.
+
+    This is a pure measurement gate: when ON it adds a per-turn shadow record
+    to the extraction log but never changes which entities are detailed, the
+    prompts, the LLM calls, or any extracted output (lever (b)/A2a, slice S0).
+    """
+    raw_ctx_opt = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
+    return ctx_opt.get("relevance_shadow_logging", False) is True
+
+
+def _compute_relevance_detail_shadow(
+    pre_cap_tasks: list[tuple[dict, dict | None]],
+    actual_tasks: list[tuple[dict, dict | None]],
+    catalogs: dict,
+    turn_text: str,
+    current_turn: int | None,
+) -> dict:
+    """Compute the S0 relevance-scoped detail shadow record (#494, lever b).
+
+    **MEASUREMENT ONLY.**  This computes — without changing the actual
+    selection — the set of entities the existing relevance signal
+    (``_select_context_aware_entities``, #233) WOULD select for ``entity_detail``
+    this turn, and compares it against the actual cap-6 detail set.  Its purpose
+    is to validate the relevance signal is sound (does not drop entities that
+    are referenced this turn) *before* S1 wires it to behaviour.
+
+    The would-select rule mirrors what S1/A2a will gate on: an entity is
+    selected if it is **new this turn** or the **PC** (force-kept hard floor),
+    or it is in the #233 priority tiers (mentioned -> co-located -> one-hop
+    active relationship).  No new scalar threshold is introduced — selection
+    reuses the discrete tier membership already computed by #233.
+
+    Args:
+        pre_cap_tasks: the qualified ``(entity_ref, current_entry)`` detail
+            candidates *before* the cap-6 truncation.
+        actual_tasks: the detail set actually used this turn (post-cap).
+        catalogs: the current catalogs (read-only; used to compute relevance).
+        turn_text: the current turn's text (for mention detection).
+        current_turn: the numeric turn index, or ``None``.
+
+    Returns:
+        A shadow record dict with the actual / cap-dropped / would-select sets
+        and the comparison metrics — including the per-entity relevance record
+        (``per_entity``), the mentioned-but-unchanged (safely-droppable)
+        fraction of the current detail calls, and the critical safety metric
+        ``referenced_but_would_drop_count`` (entities *referenced* this turn
+        that relevance would drop; a real measurement — see below — not a
+        zero-by-construction tautology).
+    """
+    def _ids(tasks: list[tuple[dict, dict | None]]) -> list[str]:
+        out: list[str] = []
+        for ref, _entry in tasks:
+            eid = get_entity_id(ref)
+            if eid:
+                out.append(eid)
+        return out
+
+    pre_cap_id_set = set(_ids(pre_cap_tasks))
+    actual_ids = set(_ids(actual_tasks))
+
+    # Cap-dropped = candidates discovery qualified but the cap-6 removed.
+    cap_dropped_ids = pre_cap_id_set - actual_ids
+
+    # Relevance signal (#233): the priority tiers (mentioned -> co-located ->
+    # one-hop active relationship).  Reuses the EXISTING scorer; not rewired.
+    all_entities: list[dict] = []
+    for entities in catalogs.values():
+        all_entities.extend(entities)
+    _ordered, priority_ids = _select_context_aware_entities(
+        all_entities, turn_text or None, current_turn, _DEFAULT_RECENCY_WINDOW,
+    )
+    # Tier-1 membership of the #233 signal (blocklist applied — this is what
+    # selection/S1 actually keys on), used to label per-entity reasons.
+    mentioned_ids = _find_mentioned_entities(all_entities, turn_text or "")
+
+    # SAFETY-METRIC reference detection — deliberately conservative.  The
+    # selection-path mention detector suppresses single-word names in
+    # _COMMON_WORD_BLOCKLIST (e.g. "Shadow", "Magic", "Spirit"), so a candidate
+    # entity literally named in the turn could be dropped by relevance AND
+    # counted as not-referenced, falsely zeroing the safety metric.  For the
+    # safety check we re-run detection with the blocklist OFF, so a
+    # literally-named entity is always treated as referenced.  This is
+    # over-inclusive on purpose (false positives acceptable, false negatives
+    # are not), which makes referenced_but_would_drop a real measurement that
+    # CAN be non-zero — not zero by construction.
+    referenced_ids = _find_mentioned_entities(
+        all_entities, turn_text or "", apply_blocklist=False,
+    )
+
+    # What relevance WOULD select for detail: the candidate set gated by the
+    # relevance signal, with new + PC force-kept (the A2a hard floor).  Also
+    # build the per-entity relevance record (S0 AC: "relevance score logged
+    # per entity/turn") — the discrete #233 tier S1 will gate on, recorded so
+    # each turn's would-select decision is auditable entity-by-entity.
+    would_select_ids: set[str] = set()
+    per_entity: list[dict] = []
+    for ref, _entry in pre_cap_tasks:
+        eid = get_entity_id(ref)
+        if not eid:
+            continue
+        is_new = bool(ref.get("is_new", True))
+        is_pc = eid == "char-player"
+        in_priority = eid in priority_ids
+        would = is_new or is_pc or in_priority
+        if would:
+            would_select_ids.add(eid)
+        if is_new:
+            reason = "new"
+        elif is_pc:
+            reason = "pc"
+        elif eid in mentioned_ids:
+            reason = "mentioned"
+        elif in_priority:
+            reason = "adjacent"  # co-located or one-hop active relationship
+        else:
+            reason = "none"
+        per_entity.append({
+            "id": eid,
+            "would_select": would,
+            "reason": reason,
+            "referenced": eid in referenced_ids,
+            "is_new": is_new,
+            "is_pc": is_pc,
+        })
+
+    # Cap dropped but relevance WOULD have included: the silently-dropped
+    # updates the cap loses that relevance recovers.
+    cap_dropped_but_would_include = sorted(cap_dropped_ids & would_select_ids)
+
+    # Mentioned-but-unchanged (safely-droppable) fraction of the CURRENT detail
+    # calls (S0 AC).  Of the entities actually detailed this turn, those the
+    # relevance signal would NOT select are what A2a/S1 would drop as
+    # "mentioned-but-unchanged" (discovery qualified them, but they are neither
+    # referenced this turn, new, the PC, nor scene-adjacent) — quantifying the
+    # detail-call budget A2a expects to reclaim.  NOTE: this is a pre-detail
+    # *relevance* proxy for "unchanged"; S0 runs before detail extraction by
+    # design (no extra LLM pass, per #494), so it reports which current calls
+    # relevance deems droppable, not a post-hoc no-state-change confirmation.
+    actual_would_drop = sorted(actual_ids - would_select_ids)
+    mentioned_but_unchanged_fraction = (
+        len(actual_would_drop) / len(actual_ids) if actual_ids else 0.0
+    )
+
+    # SAFETY METRIC: entities referenced in the turn (conservative,
+    # blocklist-free detection) that relevance would drop.  A referenced
+    # candidate being dropped is the coreference failure mode; this measures
+    # how often it happens, and must be ~0 for the signal to be sound.
+    referenced_candidate_ids = pre_cap_id_set & referenced_ids
+    referenced_but_would_drop = sorted(referenced_candidate_ids - would_select_ids)
+
+    return {
+        "actual_detailed_count": len(actual_ids),
+        "actual_detailed_ids": sorted(actual_ids),
+        "cap_dropped_count": len(cap_dropped_ids),
+        "cap_dropped_ids": sorted(cap_dropped_ids),
+        "relevance_would_select_count": len(would_select_ids),
+        "relevance_would_select_ids": sorted(would_select_ids),
+        "cap_dropped_but_would_include_count": len(cap_dropped_but_would_include),
+        "cap_dropped_but_would_include_ids": cap_dropped_but_would_include,
+        "actual_detail_would_drop_count": len(actual_would_drop),
+        "actual_detail_would_drop_ids": actual_would_drop,
+        "mentioned_but_unchanged_fraction": round(mentioned_but_unchanged_fraction, 4),
+        "referenced_candidate_count": len(referenced_candidate_ids),
+        "referenced_but_would_drop_count": len(referenced_but_would_drop),
+        "referenced_but_would_drop_ids": referenced_but_would_drop,
+        "per_entity": per_entity,
+    }
 
 
 # Per-section drop counters recorded alongside each phase's token metrics.
@@ -3864,6 +4044,7 @@ def extract_and_merge(
     # Priority: PC always included, new entities next, then existing by confidence (descending)
     # Note: is_new defaults to True so entities missing the field (unlikely but possible)
     # are treated as new — this is conservative since new entities need detail extraction.
+    _detail_candidates_pre_cap = list(_entity_tasks)
     _entity_detail_capped_count = 0
     if len(_entity_tasks) > _MAX_DETAIL_ENTITIES_PER_TURN:
         # Exclude char-player from capping — PC is always processed
@@ -3887,6 +4068,18 @@ def extract_and_merge(
         if _entity_detail_capped_count > 0:
             print(f"  INFO: Capped entity detail calls from {len(_pc_tasks) + len(_non_pc_tasks)} to {len(_entity_tasks)} "
                   f"(pc: {len(_pc_tasks)}, new: {len(_kept_new)}, existing: {len(_kept_existing)})", file=sys.stderr)
+
+    # S0 relevance-scoped detail shadow (#494, lever b) — MEASUREMENT ONLY.
+    # Compute (without changing the actual selection) which entities the
+    # existing relevance signal WOULD pick for entity_detail this turn, vs the
+    # cap-6 truncation above.  Behind a default-OFF flag; flag-OFF leaves the
+    # extraction byte-identical to baseline and emits no shadow record.
+    _relevance_detail_shadow = None
+    if _get_relevance_shadow_enabled(_cfg):
+        _relevance_detail_shadow = _compute_relevance_detail_shadow(
+            _detail_candidates_pre_cap, _entity_tasks, catalogs,
+            turn.get("text", ""), _parse_turn_number(turn_id),
+        )
 
     # Build mentioned_entities for relationship / event phases
     mentioned_entities = []
@@ -4657,6 +4850,10 @@ def extract_and_merge(
         "turn_compression": _turn_compression,
         "compression": _compression_signals,
     }
+    # S0 relevance-detail shadow (#494): added only when the measurement flag is
+    # ON, so flag-OFF log records stay byte-identical to the baseline.
+    if _relevance_detail_shadow is not None:
+        _log_record["relevance_detail_shadow"] = _relevance_detail_shadow
     return catalogs, events_list, turn_failed, _log_record
 
 
