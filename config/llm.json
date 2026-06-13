@@ -39,6 +39,12 @@
       "batch_size": 4,
       "high_confidence_threshold": 0.8,
       "_comment": "L2 batched entity_detail (epic #477, #491). Default OFF: when on, the entity-detail system template + turn text are sent ONCE per batch instead of once per entity, detailing multiple low-salience entities per shared-context call with hard-delimited per-entity blocks. PC (char-player), brand-new entities, and entities with confidence >= high_confidence_threshold stay SOLO to avoid cross-entity attribute bleed; only the lower-salience tail is batched in groups of batch_size. Parse failure or any missing/invalid entity falls back to a solo call (no dropped entities). Flag-OFF is byte-identical to the per-entity baseline (the A/B control)."
+    },
+    "relevance_scoped_detail": {
+      "enabled": false,
+      "max_detail_entities": 10,
+      "mode": "recover_only",
+      "_comment": "S1 relevance-scoped entity_detail selection (epic #477, lever (b)/A2a, #498; builds on the S0 shadow #494). Default OFF and byte-identical to the cap-6 baseline when off (the A/B control). When on in mode 'recover_only' (S1a), the detail set becomes the cap-6 set UNION the relevance recoveries -- cap-dropped entities the existing #233 relevance signal (_select_context_aware_entities) marks relevant (PC, new, or mentioned/co-located/one-hop-active) -- so the ~245 real updates the cap-6 silently drops are recovered. Recover-only is a SUPERSET of the cap-6 set: it ADDS recoveries and drops NOTHING currently detailed. max_detail_entities is the ceiling (telemetry-derived from S0 would_select p95 = 10, max = 18; caps the climax spike, binds on < 5% of turns); on bind it trims the lowest-relevance recovery tail, never the cap-6 set and never the floor (PC/new/mentioned). It is clamped >= the hard cap (_MAX_DETAIL_ENTITIES_PER_TURN = 6). The 'mode' field is the forward-compat seam for S1b ('drop_filler', not implemented here); an unrecognised mode normalises to 'recover_only'. S1 is gated on a QUALITY update-retention A/B vs a cap-6 control, NOT the 60h token A/B (its token delta is ~flat by design)."
     }
   }
 }
