@@ -1519,13 +1519,19 @@ def _apply_relevance_ceiling(
     mentioned_ids: set[str],
     ordered_entities: list[dict],
     max_detail_entities: int,
+    referenced_ids: set[str] | None = None,
 ) -> list[tuple[dict, dict | None]]:
     """Bound *detail_set* to *max_detail_entities*, dropping the lowest-relevance tail.
 
-    The **floor** (PC, new, mentioned) and the **cap-6 set** (*cap_ids*) are
-    protected and never dropped.  So (a) the floor may legitimately exceed the
-    ceiling on a busy scene — a hard lower bound the ceiling cannot violate —
-    and (b) the result is always a superset of the cap-6 set (recover-only).
+    The **floor** (PC, new, mentioned, and literally *referenced*) and the
+    **cap-6 set** (*cap_ids*) are protected and never dropped.  So (a) the floor
+    may legitimately exceed the ceiling on a busy scene — a hard lower bound the
+    ceiling cannot violate — and (b) the result is always a superset of the
+    cap-6 set (recover-only).  *referenced_ids* is the coreference-safe mention
+    set computed with the blocklist OFF (e.g. a candidate literally named
+    ``"Shadow"``): single-word names in ``_COMMON_WORD_BLOCKLIST`` are
+    suppressed in *mentioned_ids* but must still be protected here so a
+    literally-named entity is never trimmed by the ceiling (Finding 1, #498).
     Only relevance recoveries *outside* the protected set are trimmed, and they
     are trimmed lowest-relevance-first using *ordered_entities* (the #233
     ranking), which is strictly better than the cap-6 lowest-confidence drop.
@@ -1534,11 +1540,14 @@ def _apply_relevance_ceiling(
     if len(detail_set) <= max_detail_entities:
         return detail_set
 
+    ref_ids = referenced_ids or set()
+
     def _is_protected(ref: dict, eid: str | None) -> bool:
         return (
             eid == "char-player"
             or bool(ref.get("is_new", True))
             or eid in mentioned_ids
+            or eid in ref_ids
             or eid in cap_ids
         )
 
@@ -1570,13 +1579,18 @@ def _select_relevance_scoped_detail_recover(
 
     Returns the cap-6 set (*cap_set_tasks*) UNION the **relevance recoveries** —
     cap-dropped candidates the existing #233 relevance signal marks relevant
-    (PC, new, or in the priority tiers: mentioned -> co-located -> one-hop
-    active relationship) — bounded by *max_detail_entities*.
+    (PC, new, in the priority tiers: mentioned -> co-located -> one-hop active
+    relationship, or **literally referenced** in the turn with the blocklist
+    OFF) — bounded by *max_detail_entities*.
 
     **Recover-only guarantee:** the result is always a SUPERSET of
     *cap_set_tasks* (it drops nothing currently detailed); the ceiling only
     trims the lowest-relevance recovery tail, never the cap-6 set and never the
-    floor (PC/new/mentioned).  Reuses ``_select_context_aware_entities``
+    floor (PC/new/mentioned/referenced).  **Coreference floor:** a candidate
+    literally named in the turn is always recovered and protected even if its
+    single-word name is in ``_COMMON_WORD_BLOCKLIST`` (e.g. "Shadow") — the
+    blocklist only suppresses false positives in ranking, it must never hide a
+    true coreference (Finding 1, #498).  Reuses ``_select_context_aware_entities``
     verbatim — the same signal the S0 shadow measured — so S1a introduces no
     new scorer and no new word list (Rule 9).
     """
@@ -1587,6 +1601,16 @@ def _select_relevance_scoped_detail_recover(
         all_entities, turn_text or None, current_turn, _DEFAULT_RECENCY_WINDOW,
     )
     mentioned_ids = _find_mentioned_entities(all_entities, turn_text or "")
+    # Coreference-safe floor: re-run mention detection with the blocklist OFF
+    # so a cap-dropped candidate literally named in the turn (e.g. "Shadow",
+    # "Magic", "Spirit" — single-word names in _COMMON_WORD_BLOCKLIST) is always
+    # recovered and protected.  The selection-path detector suppresses those
+    # names, so without this a literally-referenced entity could be dropped,
+    # violating the hard coreference floor (Finding 1, #498).  Matches exactly
+    # the over-inclusive `referenced_but_would_drop` set the S0 shadow measures.
+    referenced_ids = _find_mentioned_entities(
+        all_entities, turn_text or "", apply_blocklist=False,
+    )
 
     cap_ids: set[str] = set()
     for ref, _entry in cap_set_tasks:
@@ -1595,7 +1619,9 @@ def _select_relevance_scoped_detail_recover(
             cap_ids.add(eid)
 
     # Union: cap-6 set first (preserve its order/membership), then the
-    # relevance recoveries the cap dropped.
+    # relevance recoveries the cap dropped.  A literally-referenced entity
+    # (`referenced_ids`, blocklist OFF) is always recovered — the coreference
+    # floor takes precedence over the blocklist suppression.
     detail_set: list[tuple[dict, dict | None]] = list(cap_set_tasks)
     for ref, entry in pre_cap_tasks:
         eid = get_entity_id(ref)
@@ -1603,11 +1629,12 @@ def _select_relevance_scoped_detail_recover(
             continue
         is_new = bool(ref.get("is_new", True))
         is_pc = eid == "char-player"
-        if is_new or is_pc or eid in priority_ids:
+        if is_new or is_pc or eid in priority_ids or eid in referenced_ids:
             detail_set.append((ref, entry))
 
     return _apply_relevance_ceiling(
         detail_set, cap_ids, mentioned_ids, _ordered, max_detail_entities,
+        referenced_ids=referenced_ids,
     )
 
 

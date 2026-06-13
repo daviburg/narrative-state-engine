@@ -292,6 +292,63 @@ class TestRecoverSelection:
         assert "char-new" in _ids(out)
         assert "char-i" in _ids(out)  # mentioned
 
+    def test_blocklisted_referenced_entity_recovered(self):
+        """Coreference floor (Finding 1, #498): a cap-dropped entity literally
+        named with a single word in ``_COMMON_WORD_BLOCKLIST`` (e.g. "Shadow")
+        and referenced in the turn must be recovered, even though the
+        selection-path mention detector suppresses that name."""
+        entries = [_make_entry("char-shadow", "Shadow")]
+        entries += [_make_entry(f"char-{c}", f"Char {c.upper()}") for c in "abcdef"]
+        catalogs = {"characters.json": entries}
+        by_id = {e["id"]: e for e in entries}
+        # char-shadow cap-dropped (lowest confidence); a..f kept as cap-6.
+        pre_cap = [(_make_ref("char-shadow", "Shadow", confidence=0.05),
+                    by_id["char-shadow"])]
+        pre_cap += [
+            (_make_ref(f"char-{c}", f"Char {c.upper()}", confidence=0.9),
+             by_id[f"char-{c}"]) for c in "abcdef"
+        ]
+        cap6 = pre_cap[1:]  # a..f
+        # "Shadow" is in _COMMON_WORD_BLOCKLIST: the blocklist-ON detector would
+        # NOT see it, but the coreference floor (blocklist OFF) must.
+        turn_text = "Shadow steps forward."
+        out = se._select_relevance_scoped_detail_recover(
+            pre_cap, cap6, catalogs, turn_text, 100, 10,
+        )
+        assert "char-shadow" in _ids(out)
+        assert _ids(cap6).issubset(_ids(out))  # cap-6 superset preserved
+
+    def test_blocklisted_referenced_entity_protected_by_ceiling(self):
+        """A busy scene exceeding the ceiling must NOT trim a literally-referenced
+        blocklisted-name entity (Finding 1, #498): the coreference floor binds
+        even in the ceiling path."""
+        entries = [_make_entry("char-shadow", "Shadow", location="the-tavern")]
+        # Six co-located relevance recoveries (droppable by the ceiling).
+        entries += [
+            _make_entry(eid, f"Char {eid[-1].upper()}", location="the-tavern",
+                        last_updated_turn=f"turn-{90 + i}")
+            for i, eid in enumerate(["char-d", "char-e", "char-f",
+                                     "char-g", "char-h", "char-j"])
+        ]
+        entries += [_make_entry("char-a", "Char A"), _make_entry("char-b", "Char B")]
+        catalogs = {"characters.json": entries}
+        by_id = {e["id"]: e for e in entries}
+        pre_cap = [
+            (_make_ref(e["id"], e["name"], confidence=0.5), by_id[e["id"]])
+            for e in entries
+        ]
+        # cap-6 = char-a, char-b only (pretend the cap kept these 2).
+        cap6 = [t for t in pre_cap if se.get_entity_id(t[0]) in {"char-a", "char-b"}]
+        # char-shadow referenced (blocklisted name); only it is "mentioned".
+        turn_text = "Shadow surveys the tavern."
+        out = se._select_relevance_scoped_detail_recover(
+            pre_cap, cap6, catalogs, turn_text, 100, 5,
+        )
+        # Ceiling binds at 5, but char-shadow is a protected coreference floor
+        # member and must survive the trim.
+        assert "char-shadow" in _ids(out)
+        assert {"char-a", "char-b"}.issubset(_ids(out))
+
     def test_under_cap_no_recovery(self):
         # < cap candidates -> cap6 == pre_cap, nothing dropped, no recovery.
         catalogs = {"characters.json": [_make_entry("char-a"), _make_entry("char-b")]}
