@@ -1453,6 +1453,191 @@ def _compute_relevance_detail_shadow(
     }
 
 
+# ---------------------------------------------------------------------------
+# S1 relevance-scoped entity_detail selection (#498, lever (b)/A2a)
+# ---------------------------------------------------------------------------
+# Ceiling for the relevance-scoped detail set, calibrated from the S0 shadow
+# telemetry (#494): ``would_select`` p95 = 10 (max = 18, p50 = 3).  A ceiling
+# of 10 caps the climax-scene spike while binding on < 5% of turns, and sits
+# at/above the existing ``_MAX_DETAIL_ENTITIES_PER_TURN = 6`` hard cap so the
+# recover-only union can never have to drop a currently-detailed (cap-6) entity.
+# This is the only genuinely new tuning knob S1 introduces (Rule 10): it is a
+# config default, derived from telemetry, and recalibrated from the
+# ``would_select`` / ceiling-bind-rate histograms — not a hardcoded magic
+# number and not a scalar relevance *score* threshold (selection stays discrete
+# #233 tier membership, Rule 9).
+_DEFAULT_RELEVANCE_DETAIL_MAX = 10
+# Currently-implemented selection modes.  ``recover_only`` is S1a (this PR):
+# detail the cap-6 set UNION the relevance recoveries, drop nothing.  The mode
+# field is the forward-compat seam for S1b (``drop_filler``), which is NOT
+# implemented here; an unrecognised mode normalises to ``recover_only`` so a
+# future-mode config can never silently lose data.
+_RELEVANCE_DETAIL_MODES = ("recover_only",)
+
+
+def _get_relevance_scoped_detail_config(
+    config: dict | None,
+) -> tuple[bool, int, str]:
+    """Return (enabled, max_detail_entities, mode) for S1 relevance-scoped detail.
+
+    Reads ``context_optimizations.relevance_scoped_detail`` (#498, lever
+    (b)/A2a).  Default **OFF** so that, when the key is unset or malformed,
+    extraction is byte-identical to the current cap-6 path (the A/B control).
+    Strict bool parse (``is True``) mirrors the type-tiering / batch-detail /
+    shadow gates so a truthy non-bool (the string ``"true"``, ``1``, a non-empty
+    list) cannot silently enable it.
+
+    ``max_detail_entities`` (the ceiling) is parsed defensively and clamped to
+    be **>= ``_MAX_DETAIL_ENTITIES_PER_TURN``**: recover-only must retain the
+    full cap-6 set, so a ceiling below the hard cap would be self-contradictory.
+    ``mode`` is validated against ``_RELEVANCE_DETAIL_MODES`` and normalised to
+    ``"recover_only"`` (the safe, drops-nothing slice) when unrecognised.
+    """
+    raw_ctx = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx_opt = raw_ctx if isinstance(raw_ctx, dict) else {}
+    raw = ctx_opt.get("relevance_scoped_detail", {})
+    rcfg = raw if isinstance(raw, dict) else {}
+    enabled = rcfg.get("enabled", False) is True
+    raw_max = rcfg.get("max_detail_entities", _DEFAULT_RELEVANCE_DETAIL_MAX)
+    try:
+        max_detail = int(raw_max)
+    except (TypeError, ValueError):
+        max_detail = _DEFAULT_RELEVANCE_DETAIL_MAX
+    # Recover-only keeps the full cap-6 set, so the ceiling sits at/above the
+    # existing hard safety cap.  A smaller value would force dropping a
+    # currently-detailed entity, breaking the superset guarantee.
+    if max_detail < _MAX_DETAIL_ENTITIES_PER_TURN:
+        max_detail = _MAX_DETAIL_ENTITIES_PER_TURN
+    raw_mode = rcfg.get("mode", "recover_only")
+    mode = raw_mode if raw_mode in _RELEVANCE_DETAIL_MODES else "recover_only"
+    return enabled, max_detail, mode
+
+
+def _apply_relevance_ceiling(
+    detail_set: list[tuple[dict, dict | None]],
+    cap_ids: set[str],
+    mentioned_ids: set[str],
+    ordered_entities: list[dict],
+    max_detail_entities: int,
+    referenced_ids: set[str] | None = None,
+) -> list[tuple[dict, dict | None]]:
+    """Bound *detail_set* to *max_detail_entities*, dropping the lowest-relevance tail.
+
+    The **floor** (PC, new, mentioned, and literally *referenced*) and the
+    **cap-6 set** (*cap_ids*) are protected and never dropped.  So (a) the floor
+    may legitimately exceed the ceiling on a busy scene — a hard lower bound the
+    ceiling cannot violate — and (b) the result is always a superset of the
+    cap-6 set (recover-only).  *referenced_ids* is the coreference-safe mention
+    set computed with the blocklist OFF (e.g. a candidate literally named
+    ``"Shadow"``): single-word names in ``_COMMON_WORD_BLOCKLIST`` are
+    suppressed in *mentioned_ids* but must still be protected here so a
+    literally-named entity is never trimmed by the ceiling (Finding 1, #498).
+    Only relevance recoveries *outside* the protected set are trimmed, and they
+    are trimmed lowest-relevance-first using *ordered_entities* (the #233
+    ranking), which is strictly better than the cap-6 lowest-confidence drop.
+    Original ``detail_set`` order is preserved for deterministic output.
+    """
+    if len(detail_set) <= max_detail_entities:
+        return detail_set
+
+    ref_ids = referenced_ids or set()
+
+    def _is_protected(ref: dict, eid: str | None) -> bool:
+        return (
+            eid == "char-player"
+            or bool(ref.get("is_new", True))
+            or eid in mentioned_ids
+            or eid in ref_ids
+            or eid in cap_ids
+        )
+
+    rank = {e.get("id"): i for i, e in enumerate(ordered_entities)}
+    _unranked = len(ordered_entities) + 1
+    droppable = [
+        (ref, entry) for ref, entry in detail_set
+        if not _is_protected(ref, get_entity_id(ref))
+    ]
+    n_protected = len(detail_set) - len(droppable)
+    slots = max(0, max_detail_entities - n_protected)
+    droppable.sort(key=lambda t: rank.get(get_entity_id(t[0]), _unranked))
+    kept_ids = {get_entity_id(t[0]) for t in droppable[:slots]}
+    return [
+        (ref, entry) for ref, entry in detail_set
+        if _is_protected(ref, get_entity_id(ref)) or get_entity_id(ref) in kept_ids
+    ]
+
+
+def _select_relevance_scoped_detail_recover(
+    pre_cap_tasks: list[tuple[dict, dict | None]],
+    cap_set_tasks: list[tuple[dict, dict | None]],
+    catalogs: dict,
+    turn_text: str,
+    current_turn: int | None,
+    max_detail_entities: int,
+) -> list[tuple[dict, dict | None]]:
+    """S1a recover-only relevance-scoped detail selection (#498, lever (b)/A2a).
+
+    Returns the cap-6 set (*cap_set_tasks*) UNION the **relevance recoveries** —
+    cap-dropped candidates the existing #233 relevance signal marks relevant
+    (PC, new, in the priority tiers: mentioned -> co-located -> one-hop active
+    relationship, or **literally referenced** in the turn with the blocklist
+    OFF) — bounded by *max_detail_entities*.
+
+    **Recover-only guarantee:** the result is always a SUPERSET of
+    *cap_set_tasks* (it drops nothing currently detailed); the ceiling only
+    trims the lowest-relevance recovery tail, never the cap-6 set and never the
+    floor (PC/new/mentioned/referenced).  **Coreference floor:** a candidate
+    literally named in the turn is always recovered and protected even if its
+    single-word name is in ``_COMMON_WORD_BLOCKLIST`` (e.g. "Shadow") — the
+    blocklist only suppresses false positives in ranking, it must never hide a
+    true coreference (Finding 1, #498).  Reuses ``_select_context_aware_entities``
+    verbatim — the same signal the S0 shadow measured — so S1a introduces no
+    new scorer and no new word list (Rule 9).
+    """
+    all_entities: list[dict] = []
+    for entities in catalogs.values():
+        all_entities.extend(entities)
+    _ordered, priority_ids = _select_context_aware_entities(
+        all_entities, turn_text or None, current_turn, _DEFAULT_RECENCY_WINDOW,
+    )
+    mentioned_ids = _find_mentioned_entities(all_entities, turn_text or "")
+    # Coreference-safe floor: re-run mention detection with the blocklist OFF
+    # so a cap-dropped candidate literally named in the turn (e.g. "Shadow",
+    # "Magic", "Spirit" — single-word names in _COMMON_WORD_BLOCKLIST) is always
+    # recovered and protected.  The selection-path detector suppresses those
+    # names, so without this a literally-referenced entity could be dropped,
+    # violating the hard coreference floor (Finding 1, #498).  Matches exactly
+    # the over-inclusive `referenced_but_would_drop` set the S0 shadow measures.
+    referenced_ids = _find_mentioned_entities(
+        all_entities, turn_text or "", apply_blocklist=False,
+    )
+
+    cap_ids: set[str] = set()
+    for ref, _entry in cap_set_tasks:
+        eid = get_entity_id(ref)
+        if eid:
+            cap_ids.add(eid)
+
+    # Union: cap-6 set first (preserve its order/membership), then the
+    # relevance recoveries the cap dropped.  A literally-referenced entity
+    # (`referenced_ids`, blocklist OFF) is always recovered — the coreference
+    # floor takes precedence over the blocklist suppression.
+    detail_set: list[tuple[dict, dict | None]] = list(cap_set_tasks)
+    for ref, entry in pre_cap_tasks:
+        eid = get_entity_id(ref)
+        if not eid or eid in cap_ids:
+            continue
+        is_new = bool(ref.get("is_new", True))
+        is_pc = eid == "char-player"
+        if is_new or is_pc or eid in priority_ids or eid in referenced_ids:
+            detail_set.append((ref, entry))
+
+    return _apply_relevance_ceiling(
+        detail_set, cap_ids, mentioned_ids, _ordered, max_detail_entities,
+        referenced_ids=referenced_ids,
+    )
+
+
 # Per-section drop counters recorded alongside each phase's token metrics.
 # In PR-1 (instrumentation only) these stay at zero: no new compression layer
 # is active, so nothing is pruned, degraded, or dropped beyond the existing
@@ -4068,6 +4253,35 @@ def extract_and_merge(
         if _entity_detail_capped_count > 0:
             print(f"  INFO: Capped entity detail calls from {len(_pc_tasks) + len(_non_pc_tasks)} to {len(_entity_tasks)} "
                   f"(pc: {len(_pc_tasks)}, new: {len(_kept_new)}, existing: {len(_kept_existing)})", file=sys.stderr)
+
+    # S1 relevance-scoped entity_detail selection (#498/#494/#477, lever (b)/A2a).
+    # Default OFF -> the cap-6 ``_entity_tasks`` above is used unchanged, so
+    # flag-OFF extraction is byte-identical to the cap-6 baseline (the A/B
+    # control).  When ON in recover-only mode (S1a), the detail set becomes the
+    # UNION of the cap-6 set and the relevance recoveries (cap-dropped entities
+    # the #233 signal marks relevant), bounded by a telemetry-derived ceiling.
+    # It only ADDS to the cap-6 set (superset guarantee) and drops nothing
+    # currently detailed.  Runs BEFORE _partition_detail_tasks (L2 batching) so
+    # L2 composes unchanged on the selected set.
+    _rsd_enabled, _rsd_max, _rsd_mode = _get_relevance_scoped_detail_config(_cfg)
+    if _rsd_enabled and _rsd_mode == "recover_only":
+        _rsd_pre_count = len(_entity_tasks)
+        _entity_tasks = _select_relevance_scoped_detail_recover(
+            _detail_candidates_pre_cap, _entity_tasks, catalogs,
+            turn.get("text", ""), _parse_turn_number(turn_id), _rsd_max,
+        )
+        # Keep the capped-count metric meaningful: it now reflects how many
+        # discovery-qualified candidates the (relevance-bounded) selection still
+        # leaves out, not the cap-6 truncation count.
+        _entity_detail_capped_count = max(
+            0, len(_detail_candidates_pre_cap) - len(_entity_tasks)
+        )
+        if len(_entity_tasks) != _rsd_pre_count:
+            print(f"  INFO: Relevance-scoped detail recovered "
+                  f"{len(_entity_tasks) - _rsd_pre_count} cap-dropped entit"
+                  f"{'y' if len(_entity_tasks) - _rsd_pre_count == 1 else 'ies'} "
+                  f"(cap-6: {_rsd_pre_count} -> selected: {len(_entity_tasks)}, "
+                  f"ceiling: {_rsd_max})", file=sys.stderr)
 
     # S0 relevance-scoped detail shadow (#494, lever b) — MEASUREMENT ONLY.
     # Compute (without changing the actual selection) which entities the
