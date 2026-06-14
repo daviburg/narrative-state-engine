@@ -31,6 +31,12 @@ def _fresh_catalogs():
     return {fn: [] for fn in CATALOG_KEYS}
 
 
+def _read_jsonl(path):
+    """Read a JSONL file fully, closing the handle (avoids CodeQL leak)."""
+    with open(path, encoding="utf-8") as f:
+        return [json.loads(ln) for ln in f if ln.strip()]
+
+
 def _make_rel(target_id, rel_type="ally", status="active",
               last_updated_turn="turn-040", source_id="char-player"):
     return {
@@ -258,7 +264,7 @@ class TestAppender:
         assert se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME == "relationship-demotion-shadow.jsonl"
         # NOT the extraction log
         assert not os.path.isfile(os.path.join(fw, "extraction-log.jsonl"))
-        lines = [json.loads(ln) for ln in open(shadow, encoding="utf-8") if ln.strip()]
+        lines = _read_jsonl(shadow)
         assert len(lines) == 2
         assert {ln["seam"] for ln in lines} == {"A", "B"}
 
@@ -274,7 +280,7 @@ class TestAppender:
         se._append_relationship_demotion_shadow(fw, [{"a": 1}])
         se._append_relationship_demotion_shadow(fw, [{"a": 2}])
         shadow = os.path.join(fw, se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
-        lines = [json.loads(ln) for ln in open(shadow, encoding="utf-8") if ln.strip()]
+        lines = _read_jsonl(shadow)
         assert [ln["a"] for ln in lines] == [1, 2]
 
 
@@ -477,7 +483,7 @@ class TestEndToEndWiring:
         )
         shadow = os.path.join(fw, se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
         assert os.path.isfile(shadow)
-        recs = [json.loads(ln) for ln in open(shadow, encoding="utf-8") if ln.strip()]
+        recs = _read_jsonl(shadow)
         assert recs, "expected shadow records"
         seams = {r["seam"] for r in recs}
         assert seams == {"A", "B"}
@@ -503,7 +509,7 @@ class TestEndToEndWiring:
             framework_dir=fw, prefetched_discovery=_prefetched(_QUALIFIED),
         )
         shadow = os.path.join(fw, se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
-        recs = [json.loads(ln) for ln in open(shadow, encoding="utf-8") if ln.strip()]
+        recs = _read_jsonl(shadow)
         # The PC->mentor relationship should be a real_mention (Mentor named).
         pc_mentor = [r for r in recs if r["owner"] == "char-player"
                      and r["target_id"] == "char-mentor"]
