@@ -861,15 +861,80 @@ def _flush_validation_failures_to_log(extraction_log_path: str | None) -> None:
     })
 
 
+def _sanitize_entity_for_validation(entity_data: dict) -> dict:
+    """Repair recoverable schema violations in an entity_detail completion (#504).
+
+    A single recoverable violation (e.g. ``notes: null`` or one relationship
+    missing ``first_seen_turn``) otherwise makes ``_validate_entity`` reject the
+    WHOLE entity, discarding its valid updates.  This strips ONLY the specific
+    invalid pieces in place so the valid remainder still validates and merges.
+
+    Schema-driven (Rule 9 / Rule 10): optional/required keys and types are read
+    from ``entity.schema.json`` — no hardcoded field or word lists.  Two
+    recoverable repairs:
+
+      (i)  drop null-valued OPTIONAL string-typed top-level keys
+           (e.g. ``notes: null`` -> omit the key); and
+      (ii) drop relationship entries that are missing a REQUIRED sub-field (or
+           have it set to null), keeping the valid relationships.
+
+    Unrepairable violations (a missing/wrong-typed REQUIRED top-level field, an
+    extra property, a bad enum value, etc.) are left intact so validation still
+    rejects them — the recovery never force-merges garbage, and no value is
+    silently mutated elsewhere.  Mutates and returns *entity_data*.
+    """
+    if not isinstance(entity_data, dict):
+        return entity_data
+    schema = _load_schema("entity.schema.json")
+    if not isinstance(schema, dict):
+        return entity_data
+
+    required_top = set(schema.get("required", []))
+    props = schema.get("properties", {})
+    if not isinstance(props, dict):
+        return entity_data
+
+    # (i) Drop null-valued optional string-typed top-level keys.  Required keys
+    # are left so their null/missing value stays an (unrepairable) violation.
+    for key in list(entity_data.keys()):
+        if entity_data.get(key) is not None or key in required_top:
+            continue
+        prop_schema = props.get(key)
+        if isinstance(prop_schema, dict) and prop_schema.get("type") == "string":
+            del entity_data[key]
+
+    # (ii) Drop incomplete relationship entries missing a required sub-field.
+    rels = entity_data.get("relationships")
+    rel_schema = props.get("relationships")
+    rel_item_required = set()
+    if isinstance(rel_schema, dict):
+        rel_items = rel_schema.get("items")
+        if isinstance(rel_items, dict):
+            rel_item_required = set(rel_items.get("required", []))
+    if isinstance(rels, list) and rel_item_required:
+        kept = [
+            rel for rel in rels
+            if isinstance(rel, dict)
+            and all(rel.get(field) is not None for field in rel_item_required)
+        ]
+        if len(kept) != len(rels):
+            entity_data["relationships"] = kept
+
+    return entity_data
+
+
 def _validate_entity_detail(
     entity_data: dict, *, turn: str | None, entity_id: str | None, phase: str,
 ) -> bool:
-    """Validate an entity_detail completion, recording failures (#503).
+    """Validate an entity_detail completion, with recovery and recording.
 
-    On validation failure, record a structured entry (turn / entity_id / phase /
-    error-path) for the per-turn extraction log.  Observability only: this does
-    not change whether the entity is dropped or merged.  Returns True if valid.
+    First applies the schema-driven pre-validate sanitizer (#504), which repairs
+    recoverable violations in place so the entity's valid remainder can still
+    merge.  Then validates; on (unrepairable) failure, records a structured
+    entry (turn / entity_id / phase / error-path) for the per-turn extraction
+    log (#503).  Returns True if the (sanitized) entity is valid.
     """
+    _sanitize_entity_for_validation(entity_data)
     ok, detail = _validate_entity_detailed(entity_data)
     if not ok:
         _record_validation_failure(turn, entity_id, phase, detail)

@@ -116,3 +116,165 @@ class TestValidationFailureObservability:
             if "failed schema validation" in line
         ]
         assert len(log.get("validation_failures", [])) == len(warnings) == 1
+
+
+# ---------------------------------------------------------------------------
+# Part B — #504 schema-driven sanitize + recover
+# ---------------------------------------------------------------------------
+
+def _valid_relationship(target_id="char-foe"):
+    return {
+        "target_id": target_id,
+        "current_relationship": "allies",
+        "type": "social",
+        "first_seen_turn": "turn-001",
+    }
+
+
+class TestSanitizeForValidation:
+    def test_drops_null_optional_string_keys(self):
+        """null-valued optional string keys are omitted; other fields intact."""
+        entity = {
+            "id": "char-ally",
+            "name": "Ally",
+            "type": "character",
+            "identity": "An ally.",
+            "current_status": None,  # optional string -> drop
+            "notes": None,           # optional string -> drop
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+        }
+        out = se._sanitize_entity_for_validation(entity)
+        assert "notes" not in out
+        assert "current_status" not in out
+        # Unaffected fields are not mutated.
+        assert out["identity"] == "An ally."
+        assert out["name"] == "Ally"
+        # The sanitized remainder validates.
+        ok, _ = se._validate_entity_detailed(out)
+        assert ok is True
+
+    def test_keeps_required_null_so_validation_rejects(self):
+        """A required field set to null is NOT stripped (unrepairable)."""
+        entity = {
+            "id": "char-ally",
+            "name": "Ally",
+            "type": "character",
+            "identity": None,  # required string -> must remain (unrepairable)
+            "first_seen_turn": "turn-001",
+        }
+        out = se._sanitize_entity_for_validation(entity)
+        assert "identity" in out  # not stripped
+        ok, _ = se._validate_entity_detailed(out)
+        assert ok is False
+
+    def test_drops_incomplete_relationship_keeps_valid(self):
+        """Incomplete relationship entries are dropped; valid ones + status kept."""
+        good = _valid_relationship("char-player")
+        incomplete = {
+            "target_id": "char-foe",
+            "current_relationship": "enemies",
+            "type": "adversarial",
+            # missing required first_seen_turn
+        }
+        entity = {
+            "id": "char-ally",
+            "name": "Ally",
+            "type": "character",
+            "identity": "An ally.",
+            "current_status": "Standing guard.",
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+            "relationships": [good, incomplete],
+        }
+        out = se._sanitize_entity_for_validation(entity)
+        assert out["relationships"] == [good]  # only the valid one survives
+        assert out["current_status"] == "Standing guard."  # status preserved
+        ok, _ = se._validate_entity_detailed(out)
+        assert ok is True
+
+    def test_does_not_mutate_valid_entity(self):
+        """A fully valid entity is returned unchanged."""
+        entity = {
+            "id": "char-ally",
+            "name": "Ally",
+            "type": "character",
+            "identity": "An ally.",
+            "current_status": "Active.",
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+            "relationships": [_valid_relationship()],
+        }
+        import copy
+        before = copy.deepcopy(entity)
+        out = se._sanitize_entity_for_validation(entity)
+        assert out == before
+
+
+class TestValidateEntityDetailRecovery:
+    def test_recoverable_violation_validates_and_records_nothing(self, monkeypatch):
+        """A recoverable entity passes validation and records no failure."""
+        se._drain_validation_failures()
+        entity = {
+            "id": "char-ally",
+            "name": "Ally",
+            "type": "character",
+            "identity": "An ally.",
+            "notes": None,  # recoverable
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+            "relationships": [
+                _valid_relationship("char-player"),
+                {"target_id": "char-foe", "current_relationship": "enemies",
+                 "type": "adversarial"},  # incomplete -> dropped
+            ],
+        }
+        ok = se._validate_entity_detail(
+            entity, turn="turn-005", entity_id="char-ally", phase="entity_detail",
+        )
+        assert ok is True
+        assert "notes" not in entity
+        assert len(entity["relationships"]) == 1
+        assert se._drain_validation_failures() == []
+
+    def test_unrepairable_violation_rejected_and_recorded(self, monkeypatch):
+        """A missing required top-level field is still rejected and recorded."""
+        se._drain_validation_failures()
+        entity = {
+            "id": "char-ally",
+            "name": "Ally",
+            "type": "character",
+            # identity (required) missing -> unrepairable
+            "first_seen_turn": "turn-001",
+        }
+        ok = se._validate_entity_detail(
+            entity, turn="turn-006", entity_id="char-ally", phase="entity_detail",
+        )
+        assert ok is False
+        recorded = se._drain_validation_failures()
+        assert len(recorded) == 1
+        assert recorded[0]["turn"] == "turn-006"
+        assert recorded[0]["entity_id"] == "char-ally"
+        assert "identity" in recorded[0]["error"]
+
+
+class TestRecoveryEndToEnd:
+    def test_notes_null_pc_merges_without_recording(self, monkeypatch):
+        """A notes:null char-player detail now merges instead of being dropped."""
+        pc = {
+            "id": "char-player",
+            "name": "Player Character",
+            "type": "character",
+            "identity": "The player character.",
+            "notes": None,  # recoverable violation
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+        }
+        catalogs, log = _run_turn(monkeypatch, pc)
+        # No failure recorded (it was recovered).
+        assert "validation_failures" not in log
+        # The PC entity merged into the characters catalog.
+        pcs = [e for e in catalogs["characters.json"] if e.get("id") == "char-player"]
+        assert len(pcs) == 1
+        assert pcs[0].get("notes") in (None, "") or "notes" not in pcs[0]
+
