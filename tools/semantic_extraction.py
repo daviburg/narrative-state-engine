@@ -15,11 +15,14 @@ Works in both batch (bootstrap) and incremental (ingest) modes.
 """
 
 import concurrent.futures
+import contextvars
+import functools
 import json
 import math
 import os
 import re
 import sys
+import threading
 import time
 from datetime import datetime, timezone
 
@@ -761,17 +764,373 @@ def _filter_concept_prefix_from_items(entity_data: dict) -> bool:
 
 
 
-def _validate_entity(entity_data: dict) -> bool:
-    """Validate an entity dict against entity.schema.json. Returns True if valid."""
+def _format_validation_error(error: "jsonschema.ValidationError") -> str:
+    """Render a jsonschema validation error as ``<json-path>: <message>``.
+
+    The JSON path is built from the error's ``absolute_path`` so the offending
+    location is identifiable, e.g. ``['notes']: None is not of type 'string'``
+    or ``['relationships'][1]: 'first_seen_turn' is a required property``.
+    Returns ``(root): <message>`` for top-level failures (empty path).
+    """
+    path_parts = list(error.absolute_path)
+    if path_parts:
+        path_str = "".join(f"[{p!r}]" for p in path_parts)
+    else:
+        path_str = "(root)"
+    return f"{path_str}: {error.message}"
+
+
+def _validate_entity_detailed(entity_data: dict) -> tuple[bool, str | None]:
+    """Validate an entity dict against entity.schema.json.
+
+    Returns ``(True, None)`` when valid, or ``(False, error_detail)`` where
+    ``error_detail`` is ``'<json-path>: <message>'`` identifying the offending
+    JSON path and the jsonschema validation message.
+    """
     schema = _load_schema("entity.schema.json")
     if schema is None:
-        return True  # Skip validation if jsonschema not available
+        return True, None  # Skip validation if jsonschema not available
     try:
         jsonschema.validate(entity_data, schema)
-        return True
+        return True, None
     except jsonschema.ValidationError as e:
+        detail = _format_validation_error(e)
         print(f"  WARNING: Entity failed schema validation: {e.message}", file=sys.stderr)
-        return False
+        return False, detail
+
+
+def _validate_entity(entity_data: dict) -> bool:
+    """Validate an entity dict against entity.schema.json. Returns True if valid."""
+    ok, _ = _validate_entity_detailed(entity_data)
+    return ok
+
+
+# ---------------------------------------------------------------------------
+# entity_detail validation-failure observability (#503)
+# ---------------------------------------------------------------------------
+# When an entity_detail completion fails schema validation the offending update
+# is dropped (the existing behaviour).  Historically that drop was stderr-only,
+# leaving per-turn metrics blind to it.  These helpers capture each failure as a
+# structured record (turn / entity_id / phase / error-path) so the per-turn
+# extraction-log.jsonl can surface it.  Recording is measurement-only and does
+# not change drop/merge behaviour.
+#
+# Concurrency (Copilot review): the buffer must NOT be a single process-global
+# list.  ``tools/retry_failed_turns.py`` drives several ``extract_and_merge()``
+# calls concurrently through a ThreadPoolExecutor; a shared global would let one
+# turn drain/clear another turn's failures or mis-attribute them.  The buffer is
+# therefore held in a ``ContextVar`` so each ``extract_and_merge`` / backfill /
+# refresh call gets its own per-call buffer.  ``extract_and_merge`` itself fans
+# the detail phase out across an inner ThreadPoolExecutor, so submissions are
+# wrapped with ``contextvars.copy_context()`` (see ``_submit_in_context``) to
+# share that one call's buffer with its workers while staying isolated from
+# other concurrent calls.
+_validation_failures_lock = threading.Lock()
+_validation_failures_var: "contextvars.ContextVar[list[dict] | None]" = (
+    contextvars.ContextVar("entity_detail_validation_failures", default=None)
+)
+
+
+def _current_validation_buffer() -> list[dict]:
+    """Return the current call's failure buffer, creating it on first use."""
+    buf = _validation_failures_var.get()
+    if buf is None:
+        buf = []
+        _validation_failures_var.set(buf)
+    return buf
+
+
+def _reset_validation_failures() -> None:
+    """Install a fresh, empty per-call failure buffer in the current context.
+
+    Called at the start of each top-level entry point (``extract_and_merge``,
+    ``backfill_stubs``, ``refresh_entities``) so a buffer left behind by an
+    earlier task on a reused worker thread can never leak into this call.
+    """
+    _validation_failures_var.set([])
+
+
+def _submit_in_context(pool, fn, *args, **kwargs):
+    """Submit ``fn`` to ``pool`` carrying a copy of the caller's context.
+
+    ThreadPoolExecutor workers otherwise start with their own empty context, so
+    a worker would record validation failures into a buffer the submitting call
+    never drains.  Copying the context shares the submitting call's buffer (the
+    same list object) with the worker while keeping it isolated from other
+    concurrent ``extract_and_merge`` calls.
+    """
+    ctx = contextvars.copy_context()
+    return pool.submit(ctx.run, functools.partial(fn, *args, **kwargs))
+
+
+def _record_validation_failure(
+    turn: str | None, entity_id: str | None, phase: str, error: str | None,
+) -> None:
+    """Append a structured entity_detail validation-failure record (#503).
+
+    Thread-safe: entity_detail runs across a ThreadPoolExecutor, so appends to
+    the per-call buffer are guarded by a lock.
+    """
+    buf = _current_validation_buffer()
+    with _validation_failures_lock:
+        buf.append({
+            "turn": turn,
+            "entity_id": entity_id,
+            "phase": phase,
+            "error": error,
+        })
+
+
+def _drain_validation_failures() -> list[dict]:
+    """Return and clear the current call's validation-failure records (#503)."""
+    with _validation_failures_lock:
+        buf = _validation_failures_var.get()
+        if not buf:
+            return []
+        drained = list(buf)
+        buf.clear()
+    return drained
+
+
+# ---------------------------------------------------------------------------
+# entity_detail recovery/repair observability (#504 recovery logging)
+# ---------------------------------------------------------------------------
+# The sanitizer (#504) REPAIRS recoverable schema violations (drops a null
+# optional key, drops an incomplete array item) BEFORE validation, so a
+# recovered entity never reaches ``_record_validation_failure`` — the repair
+# would otherwise leave NO audit trail (a silently-wrong repair would be
+# undetectable).  These helpers capture each repair the SAME structured,
+# per-call, thread-safe way as ``validation_failures`` so the per-turn
+# extraction-log.jsonl surfaces recoveries (``validation_repairs``) distinctly
+# from unrepairable drops (``validation_failures``).  Recording is
+# measurement-only: it does NOT change which entities merge or the extraction
+# output — it only logs repairs that already happen.  The repairs buffer reuses
+# the validation_failures ContextVar+lock pattern, so concurrent
+# ``extract_and_merge`` calls and their inner ThreadPoolExecutor workers (which
+# share the call's context via ``_submit_in_context``) cannot drain, lose, or
+# mis-attribute each other's repairs.
+_validation_repairs_lock = threading.Lock()
+_validation_repairs_var: "contextvars.ContextVar[list[dict] | None]" = (
+    contextvars.ContextVar("entity_detail_validation_repairs", default=None)
+)
+
+
+def _current_repairs_buffer() -> list[dict]:
+    """Return the current call's repair buffer, creating it on first use."""
+    buf = _validation_repairs_var.get()
+    if buf is None:
+        buf = []
+        _validation_repairs_var.set(buf)
+    return buf
+
+
+def _reset_validation_repairs() -> None:
+    """Install a fresh, empty per-call repair buffer in the current context.
+
+    Called alongside ``_reset_validation_failures`` at each top-level entry
+    point so a buffer left behind by an earlier task on a reused worker thread
+    can never leak into this call.
+    """
+    _validation_repairs_var.set([])
+
+
+def _record_validation_repairs(
+    turn: str | None, entity_id: str | None, phase: str, repairs: list[dict],
+) -> None:
+    """Append structured entity_detail repair records (#504 recovery logging).
+
+    Each entry in *repairs* describes one repair the sanitizer performed (a
+    ``repair`` action + json-``path``, plus an optional ``missing`` sub-field);
+    this stamps each with the turn/entity_id/phase so the flattened record
+    mirrors the ``validation_failures`` shape.  Thread-safe: entity_detail runs
+    across a ThreadPoolExecutor, so appends to the per-call buffer are guarded
+    by a lock.  No-op when *repairs* is empty (no false positives).
+    """
+    if not repairs:
+        return
+    buf = _current_repairs_buffer()
+    with _validation_repairs_lock:
+        for rep in repairs:
+            rec = {"turn": turn, "entity_id": entity_id, "phase": phase}
+            rec.update(rep)
+            buf.append(rec)
+
+
+def _drain_validation_repairs() -> list[dict]:
+    """Return and clear the current call's repair records (#504 recovery logging)."""
+    with _validation_repairs_lock:
+        buf = _validation_repairs_var.get()
+        if not buf:
+            return []
+        drained = list(buf)
+        buf.clear()
+    return drained
+
+
+def _flush_validation_records_to_log(extraction_log_path: str | None) -> None:
+    """Drain entity_detail validation failures AND repairs to extraction-log.
+
+    Used by post-turn passes (backfill, refresh) that build no per-turn log
+    record.  The drained failures (#503) and repairs (#504 recovery logging) are
+    written as a single standalone record that carries no top-level ``turn_id``
+    and no ``discovery_ok`` flag, so every extraction-log consumer (resume,
+    retry, A/B paired scorer, compression aggregator) safely ignores it; the
+    originating turn is preserved inside each ``validation_failures`` /
+    ``validation_repairs`` entry.  Always drains BOTH buffers (even with no path)
+    so a pass's records never leak into a later turn's per-turn log record.  Each
+    key is added only when non-empty so a clean pass writes nothing.
+    """
+    failures = _drain_validation_failures()
+    repairs = _drain_validation_repairs()
+    if not extraction_log_path or (not failures and not repairs):
+        return
+    record: dict = {
+        "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+    }
+    if failures:
+        record["validation_failures"] = failures
+    if repairs:
+        record["validation_repairs"] = repairs
+    _write_extraction_log(extraction_log_path, record)
+
+
+def _sanitize_entity_for_validation(
+    entity_data: dict, repairs: list[dict] | None = None,
+) -> dict:
+    """Repair recoverable schema violations in an entity_detail completion (#504).
+
+    A single recoverable violation (e.g. ``notes: null`` or one relationship
+    missing ``first_seen_turn``) otherwise makes ``_validate_entity`` reject the
+    WHOLE entity, discarding its valid updates.  This strips ONLY the specific
+    invalid pieces in place so the valid remainder still validates and merges.
+
+    Schema-driven (Rule 9 / Rule 10): optional/required keys and types are read
+    from ``entity.schema.json`` — no hardcoded field or word lists.  Two
+    recoverable repairs:
+
+      (i)  drop null-valued OPTIONAL string-typed top-level keys
+           (e.g. ``notes: null`` -> omit the key); and
+      (ii) drop array-item entries that are missing a REQUIRED sub-field (or
+           have it set to null), keeping the valid items.  This is discovered
+           generically for EVERY top-level array property whose ``items``
+           declare required sub-fields (e.g. ``relationships``), so no domain
+           field name is hardcoded.
+
+    Unrepairable violations (a missing/wrong-typed REQUIRED top-level field, an
+    extra property, a bad enum value, etc.) are left intact so validation still
+    rejects them — the recovery never force-merges garbage, and no value is
+    silently mutated elsewhere.  Mutates and returns *entity_data*.
+
+    Recovery logging (#504): when *repairs* is provided, every repair performed
+    is appended to it as a structured descriptor reporting WHAT was repaired —
+    the schema-derived action and the json-``path`` (plus the ``missing``
+    sub-field for an incomplete array item).  This is measurement-only: the list
+    only records repairs that already happen; it never changes WHICH pieces are
+    stripped.  Callers stamp these with turn/entity_id/phase (see
+    ``_validate_entity_detail``) so a recovered violation leaves an audit trail
+    distinct from the unrepairable ``validation_failures`` (#503).
+    """
+    if not isinstance(entity_data, dict):
+        return entity_data
+    schema = _load_schema("entity.schema.json")
+    if not isinstance(schema, dict):
+        return entity_data
+
+    required_top = set(schema.get("required", []))
+    props = schema.get("properties", {})
+    if not isinstance(props, dict):
+        return entity_data
+
+    # (i) Drop null-valued optional string-typed top-level keys.  Required keys
+    # are left so their null/missing value stays an (unrepairable) violation.
+    for key in list(entity_data.keys()):
+        if entity_data.get(key) is not None or key in required_top:
+            continue
+        prop_schema = props.get(key)
+        if isinstance(prop_schema, dict) and prop_schema.get("type") == "string":
+            del entity_data[key]
+            if repairs is not None:
+                repairs.append({
+                    "repair": "dropped null optional-string key",
+                    "path": key,
+                })
+
+    # (ii) Drop incomplete array-item entries missing a required sub-field.
+    # Schema-driven (Rule 9 / Rule 10): rather than hardcoding the
+    # ``relationships`` field, discover EVERY top-level array property whose
+    # ``items`` declare required sub-fields and apply the same incomplete-item
+    # drop to each.  This keeps the recovery purely schema-driven — it adapts if
+    # the schema field is renamed or another required-item array is added — and
+    # never strips valid data (only entries missing a schema-required sub-field
+    # are removed).  ``item_required`` is kept in schema (list) order so the
+    # reported ``missing`` sub-field is deterministic.
+    for key, prop_schema in props.items():
+        if not isinstance(prop_schema, dict) or prop_schema.get("type") != "array":
+            continue
+        items_schema = prop_schema.get("items")
+        if not isinstance(items_schema, dict):
+            continue
+        item_required = items_schema.get("required", [])
+        if not item_required:
+            continue
+        value = entity_data.get(key)
+        if not isinstance(value, list):
+            continue
+        kept: list = []
+        dropped: list[tuple[int, object]] = []
+        for idx, item in enumerate(value):
+            if isinstance(item, dict) and all(
+                item.get(field) is not None for field in item_required
+            ):
+                kept.append(item)
+            else:
+                dropped.append((idx, item))
+        if dropped:
+            entity_data[key] = kept
+            if repairs is not None:
+                for idx, item in dropped:
+                    if isinstance(item, dict):
+                        missing = next(
+                            (f for f in item_required if item.get(f) is None),
+                            None,
+                        )
+                    else:
+                        missing = item_required[0] if item_required else None
+                    rec = {
+                        "repair": "dropped incomplete array item missing required subfield",
+                        "path": f"{key}[{idx}]",
+                    }
+                    if missing is not None:
+                        rec["missing"] = missing
+                    repairs.append(rec)
+
+    return entity_data
+
+
+def _validate_entity_detail(
+    entity_data: dict, *, turn: str | None, entity_id: str | None, phase: str,
+) -> bool:
+    """Validate an entity_detail completion, with recovery and recording.
+
+    First applies the schema-driven pre-validate sanitizer (#504), which repairs
+    recoverable violations in place so the entity's valid remainder can still
+    merge.  Each repair it performs is recorded as a structured
+    ``validation_repairs`` entry (turn / entity_id / phase / repair-action /
+    json-path) so recoveries leave an audit trail (#504 recovery logging) —
+    distinct from the unrepairable ``validation_failures`` (#503).  Then
+    validates; on (unrepairable) failure, records a structured failure entry
+    (turn / entity_id / phase / error-path) for the per-turn extraction log
+    (#503).  Both records are measurement-only and do not change drop/merge
+    behaviour.  Returns True if the (sanitized) entity is valid.
+    """
+    repairs: list[dict] = []
+    _sanitize_entity_for_validation(entity_data, repairs)
+    if repairs:
+        _record_validation_repairs(turn, entity_id, phase, repairs)
+    ok, detail = _validate_entity_detailed(entity_data)
+    if not ok:
+        _record_validation_failure(turn, entity_id, phase, detail)
+    return ok
 
 
 # Valid event types from event.schema.json / event-extractor template
@@ -3504,7 +3863,9 @@ def _extract_single_entity_detail(
         entity_data = _coerce_entity_fields(entity_data)
     if entity_data and not _filter_concept_prefix_from_items(entity_data):
         return entity_ref, None, None
-    if entity_data and _validate_entity(entity_data):
+    if entity_data and _validate_entity_detail(
+        entity_data, turn=turn_id, entity_id=entity_id, phase="entity_detail",
+    ):
         _filter_pc_attributes(entity_data)
         return entity_ref, entity_data, None
     return entity_ref, None, None
@@ -3670,7 +4031,10 @@ def _extract_batched_entity_detail(
         if entity_data and not _filter_concept_prefix_from_items(entity_data):
             results.append((entity_ref, None, None))
             continue
-        if entity_data and _validate_entity(entity_data):
+        if entity_data and _validate_entity_detail(
+            entity_data, turn=turn_id,
+            entity_id=get_entity_id(entity_ref), phase="entity_detail_batch",
+        ):
             _filter_pc_attributes(entity_data)
             results.append((entity_ref, entity_data, None))
         else:
@@ -4121,6 +4485,14 @@ def extract_and_merge(
     global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
     _t0 = time.monotonic()
+    # Install a fresh per-call entity_detail validation-failure buffer so this
+    # turn's log captures only failures recorded during this turn, and so a
+    # concurrent turn (retry_failed_turns ThreadPoolExecutor) can never drain or
+    # mis-attribute another turn's failures (#503).
+    _reset_validation_failures()
+    # Same isolation for the parallel recovery/repair buffer (#504 recovery
+    # logging) so recoveries are attributed to this turn only.
+    _reset_validation_repairs()
     _entities_before = sum(len(v) for v in catalogs.values())
     _events_before = len(events_list)
 
@@ -4454,7 +4826,8 @@ def extract_and_merge(
         ) as pool:
             # Submit entity detail tasks (solo)
             for entity_ref, current_entry in _detail_solo_tasks:
-                f = pool.submit(
+                f = _submit_in_context(
+                    pool,
                     _extract_single_entity_detail,
                     llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
                     _mentioned_ids,
@@ -4464,7 +4837,8 @@ def extract_and_merge(
             # Submit batched entity detail groups (#491): one shared-context
             # call per group, returning a list of per-entity result tuples.
             for _group in _detail_batch_groups:
-                f = pool.submit(
+                f = _submit_in_context(
+                    pool,
                     _extract_batched_entity_detail,
                     llm, turn, _group, pc_arcs_data, _cfg, _mentioned_ids,
                 )
@@ -4592,7 +4966,10 @@ def extract_and_merge(
                 entity_data = _unwrap_entity_response(_pc_raw_result)
                 if entity_data:
                     entity_data = _coerce_entity_fields(entity_data)
-                if entity_data and _validate_entity(entity_data):
+                if entity_data and _validate_entity_detail(
+                    entity_data, turn=turn_id, entity_id="char-player",
+                    phase="entity_detail",
+                ):
                     _filter_pc_attributes(entity_data)
                     _normalize_entity_location(entity_data, catalogs)
                     merge_entity(catalogs, entity_data)
@@ -4734,7 +5111,10 @@ def extract_and_merge(
                 entity_data = _coerce_entity_fields(entity_data)
             if entity_data and not _filter_concept_prefix_from_items(entity_data):
                 continue
-            if entity_data and _validate_entity(entity_data):
+            if entity_data and _validate_entity_detail(
+                entity_data, turn=turn_id, entity_id=entity_id,
+                phase="entity_detail",
+            ):
                 _filter_pc_attributes(entity_data)
                 _normalize_entity_location(entity_data, catalogs)
                 merge_entity(catalogs, entity_data)
@@ -4816,7 +5196,10 @@ def extract_and_merge(
                 entity_data = _unwrap_entity_response(detail_result)
                 if entity_data:
                     entity_data = _coerce_entity_fields(entity_data)
-                if entity_data and _validate_entity(entity_data):
+                if entity_data and _validate_entity_detail(
+                    entity_data, turn=turn_id, entity_id="char-player",
+                    phase="entity_detail",
+                ):
                     _filter_pc_attributes(entity_data)
                     _normalize_entity_location(entity_data, catalogs)
                     merge_entity(catalogs, entity_data)
@@ -5069,6 +5452,22 @@ def extract_and_merge(
     # ON, so flag-OFF log records stay byte-identical to the baseline.
     if _relevance_detail_shadow is not None:
         _log_record["relevance_detail_shadow"] = _relevance_detail_shadow
+    # entity_detail schema-validation failures (#503): record any failures that
+    # occurred during this turn's detail phases so per-turn metrics are no longer
+    # blind to silently-dropped entity updates.  Added only when non-empty so a
+    # successful turn's log stays byte-identical to the baseline (no false
+    # positives).
+    _detail_validation_failures = _drain_validation_failures()
+    if _detail_validation_failures:
+        _log_record["validation_failures"] = _detail_validation_failures
+    # entity_detail recoveries (#504 recovery logging): record any repairs the
+    # sanitizer performed this turn so a recovered violation leaves an audit
+    # trail, distinct from the unrepairable validation_failures above.  Added
+    # only when non-empty so a turn with no repairs stays byte-identical to the
+    # baseline (no false positives).
+    _detail_validation_repairs = _drain_validation_repairs()
+    if _detail_validation_repairs:
+        _log_record["validation_repairs"] = _detail_validation_repairs
     return catalogs, events_list, turn_failed, _log_record
 
 
@@ -5714,10 +6113,15 @@ def backfill_stubs(
     catalogs: dict,
     events_list: list,
     llm: "LLMClient",
+    extraction_log_path: str | None = None,
 ) -> int:
     """Re-extract stub entities using gathered context (#128).
 
     Returns the number of stubs successfully backfilled.
+
+    Any entity_detail schema-validation failures (#503) and recovery repairs
+    (#504 recovery logging) encountered are flushed to *extraction_log_path*
+    when provided.
     """
     stubs: list[tuple[str, dict, str]] = []  # (catalog_file, entity, entity_id)
     for filename, entities in catalogs.items():
@@ -5727,6 +6131,11 @@ def backfill_stubs(
 
     if not stubs:
         return 0
+
+    # Isolate this pass's validation-failure buffer so a reused worker thread
+    # cannot leak failures from a prior turn into this backfill (#503).
+    _reset_validation_failures()
+    _reset_validation_repairs()  # parallel recovery buffer (#504 recovery logging)
 
     print(f"  Backfill: found {len(stubs)} stub(s) to re-extract")
     backfilled = 0
@@ -5766,7 +6175,10 @@ def backfill_stubs(
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
                 entity_data = _coerce_entity_fields(entity_data)
-            if entity_data and _validate_entity(entity_data):
+            if entity_data and _validate_entity_detail(
+                entity_data, turn=first_seen, entity_id=entity_id,
+                phase="entity_detail_backfill",
+            ):
                 # Preserve first_seen_turn from original stub
                 entity_data["first_seen_turn"] = first_seen
                 _normalize_entity_location(entity_data, catalogs)
@@ -5790,6 +6202,7 @@ def backfill_stubs(
             if _has_real_identity(entity) and _clear_stub_notes(entity):
                 print(f"  Cleared stub notes from enriched entity: {entity.get('id', 'unknown')}")
 
+    _flush_validation_records_to_log(extraction_log_path)
     return backfilled
 
 
@@ -6167,6 +6580,7 @@ def refresh_entities(
     turn_dicts: list,
     catalogs: dict,
     llm: "LLMClient",
+    extraction_log_path: str | None = None,
 ) -> int:
     """Re-extract detail for stale entities using recent transcript context.
 
@@ -6178,6 +6592,10 @@ def refresh_entities(
     Returns the number of entities successfully refreshed.
     """
     refreshed = 0
+    # Isolate this pass's validation-failure buffer so a reused worker thread
+    # cannot leak failures from a prior turn into this refresh (#503).
+    _reset_validation_failures()
+    _reset_validation_repairs()  # parallel recovery buffer (#504 recovery logging)
     for _catalog_file, entity in stale_entities:
         entity_id = entity.get("id", "")
         if not entity_id:
@@ -6226,7 +6644,10 @@ def refresh_entities(
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
                 entity_data = _coerce_entity_fields(entity_data)
-            if entity_data and _validate_entity(entity_data):
+            if entity_data and _validate_entity_detail(
+                entity_data, turn=current_turn_id, entity_id=entity_id,
+                phase="entity_detail_refresh",
+            ):
                 # Preserve first_seen_turn from original entity
                 entity_data["first_seen_turn"] = entity.get("first_seen_turn",
                                                              current_turn_id)
@@ -6257,6 +6678,7 @@ def refresh_entities(
 
         llm.delay()
 
+    _flush_validation_records_to_log(extraction_log_path)
     return refreshed
 
 
@@ -7064,7 +7486,10 @@ def _extract_segmented(
                     print(f"  REFRESH: {len(stale)} stale entity/entities at {turn_id}")
                     refreshed = refresh_entities(stale, turn_id,
                                                  segment_turns[:i + 1],
-                                                 seg_catalogs, llm)
+                                                 seg_catalogs, llm,
+                                                 extraction_log_path=(
+                                                     None if dry_run
+                                                     else extraction_log_path))
                     if refreshed:
                         print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
@@ -7115,7 +7540,10 @@ def _extract_segmented(
                 if seg_final_stale:
                     print(f"  REFRESH: {len(seg_final_stale)} stale entity/entities at end of {segment_id}")
                     refreshed = refresh_entities(seg_final_stale, segment_turns[-1]["turn_id"],
-                                                 segment_turns, seg_catalogs, llm)
+                                                 segment_turns, seg_catalogs, llm,
+                                                 extraction_log_path=(
+                                                     None if dry_run
+                                                     else extraction_log_path))
                     if refreshed:
                         print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities at end of {segment_id}")
 
@@ -7741,7 +8169,10 @@ def extract_semantic_batch(
             if stale:
                 print(f"  REFRESH: {len(stale)} stale entity/entities at {turn_id}")
                 refreshed = refresh_entities(stale, turn_id, turn_dicts[:i + 1],
-                                             catalogs, llm)
+                                             catalogs, llm,
+                                             extraction_log_path=(
+                                                 None if dry_run
+                                                 else extraction_log_path))
                 if refreshed:
                     print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities")
 
@@ -7792,7 +8223,10 @@ def extract_semantic_batch(
             if final_stale:
                 print(f"\n  REFRESH: {len(final_stale)} stale entity/entities at end-of-run (after {turn_dicts[-1]['turn_id']})")
                 refreshed = refresh_entities(final_stale, turn_dicts[-1]["turn_id"],
-                                             turn_dicts, catalogs, llm)
+                                             turn_dicts, catalogs, llm,
+                                             extraction_log_path=(
+                                                 None if dry_run
+                                                 else extraction_log_path))
                 if refreshed:
                     print(f"  REFRESH: Successfully refreshed {refreshed} entity/entities at end-of-run")
             else:

@@ -800,7 +800,11 @@ def main() -> None:
             catalogs = load_catalogs(catalog_dir)
             events_list = load_events(catalog_dir)
             llm = LLMClient("config/llm.json", overrides=llm_overrides or None)
-            count = backfill_stubs(turn_dicts, catalogs, events_list, llm)
+            count = backfill_stubs(
+                turn_dicts, catalogs, events_list, llm,
+                extraction_log_path=os.path.join(
+                    args.framework, "extraction-log.jsonl"),
+            )
             if count:
                 save_catalogs(catalog_dir, catalogs)
                 save_events(catalog_dir, events_list)
