@@ -225,6 +225,36 @@ class TestCaptureRecord:
         assert rec["input_tokens_estimated"] is True
         assert rec["output_tokens"] >= 1
 
+    def test_estimate_empty_text_is_zero(self):
+        # An empty completion/prompt really decoded/consumed nothing; the
+        # fallback estimate must record 0 (not a spurious 1) so the empty /
+        # truncated failure modes this instrument measures stay honest.
+        assert _estimate_tokens("") == 0
+        # A non-empty string still floors at 1 (never zero output tokens).
+        assert _estimate_tokens("a") == 1
+        assert _estimate_tokens("abc") == 1
+
+    def test_empty_completion_estimates_zero_output_tokens(self, tmp_path):
+        # Empty completion with no usage field → estimated 0 output tokens.
+        resp = _FakeResponse("", usage=None)
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+
+        # Empty response raises after the record is teed (#501 finding 1).
+        with pytest.raises(LLMExtractionError):
+            client.extract_json(
+                system_prompt="s",
+                user_prompt="u",
+                capture={"turn": "turn-009", "phase": "event",
+                         "entity_id": None},
+            )
+
+        rec = self._read_records(artifact)[0]
+        assert rec["raw_completion"] == ""
+        assert rec["output_tokens"] == 0
+        assert rec["output_tokens_estimated"] is True
+
     def test_per_entity_isolation(self, tmp_path):
         """Each entity_detail call records its own entity_id (PC isolable)."""
         client = LLMClient(config_path=_write_config(tmp_path))

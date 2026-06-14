@@ -34,7 +34,15 @@ def _estimate_tokens(text: str) -> int:
     Used by the raw-IO capture (#477 step 1) ONLY as a fallback when the
     backend response does not expose a usage/token-count field; such counts
     are flagged ``*_tokens_estimated: true`` in the capture record.
+
+    Empty text estimates to 0 tokens (an empty completion or prompt really did
+    decode/consume nothing); this keeps the measurement honest for the exact
+    empty/truncated failure modes the instrumentation exists to capture.  A
+    non-empty string still floors at 1 so a short completion is never recorded
+    as zero output tokens.
     """
+    if not text:
+        return 0
     return max(1, len(text) // 3)
 
 
