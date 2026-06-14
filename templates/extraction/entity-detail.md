@@ -25,7 +25,9 @@ Return a single JSON object conforming to this V2 structure:
   - Additional fields allowed as needed.
 - "first_seen_turn": string — the turn ID when this entity was first seen (preserve from existing entry, or use current turn for new entities)
 - "last_updated_turn": string — set to the current turn ID
-- "notes": string (optional) — any open questions or ambiguities about this entity
+- "notes": string (optional) — any open questions or ambiguities about this entity. Omit the `notes` field entirely when there is nothing to record. Never emit `"notes": null` — either provide a non-empty string or leave the field out completely.
+
+Do NOT emit a `relationships` array. Relationships between entities are NOT this extractor's responsibility — they are handled by a separate relationship-mapping phase. Even though the prior-catalog context may show existing relationships, do not echo them back and do not invent new ones here. Any `relationships` field you include will be discarded.
 
 PLAYER CHARACTER NAME:
 - If the turn reveals the player character's name, add it to `char-player`'s 

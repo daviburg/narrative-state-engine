@@ -378,6 +378,14 @@ def _coerce_entity_fields(entity_data) -> dict | None:
               file=sys.stderr)
         return None
 
+    # Drop notes when null (#505). The schema requires notes to be a string;
+    # the template instructs the model to OMIT notes when empty, but a null may
+    # still slip through. Removing the key (notes is optional) avoids a hard
+    # validation failure that would drop the whole entity update.
+    if "notes" in entity_data and entity_data["notes"] is None:
+        entity_data.pop("notes")
+        print("  COERCE: removed notes=null (notes is optional)", file=sys.stderr)
+
     # Top-level string fields that the LLM sometimes wraps in arrays
     string_fields = ["name", "description", "identity", "current_status",
                      "type", "proposed_id", "first_seen_turn", "last_updated_turn"]
@@ -431,12 +439,6 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             else:
                 attrs[key] = str(val)
             print(f"  COERCE: attributes.{key} {type(val).__name__} → string", file=sys.stderr)
-
-    # Relationships: should be an array of objects, but sometimes a single dict
-    rels = entity_data.get("relationships")
-    if isinstance(rels, dict):
-        entity_data["relationships"] = [rels]
-        print("  COERCE: relationships dict → single-element array", file=sys.stderr)
 
     # --- LLM output normalization ---
     # Strip "_new" suffix from non-schema keys (#172) BEFORE field mapping
@@ -629,21 +631,6 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             vs["equipment"] = val
         print("  COERCE: additional_items_equipped → volatile_state.equipment (appended)", file=sys.stderr)
 
-    # Relationship key variants → relationships
-    _rel_keys = ["relations", "character_relations", "faction_relations",
-                 "item_relations", "items_relations", "social_connections",
-                 "current_relationships"]
-    for rk in _rel_keys:
-        if rk in entity_data:
-            val = entity_data.pop(rk)
-            # Only adopt if no relationships already present
-            if "relationships" not in entity_data:
-                if isinstance(val, list):
-                    entity_data["relationships"] = val
-                elif isinstance(val, dict):
-                    entity_data["relationships"] = [val]
-            print(f"  COERCE: {rk} → relationships", file=sys.stderr)
-
     # Discard known noise keys that carry no recoverable structured data
     _discard_keys = {
         "current_activity", "actions", "last_activity", "recent_events",
@@ -725,67 +712,6 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 if attr_key.lower() in _ITEM_INVALID_ATTRS:
                     del sa[attr_key]
 
-    # Coerce LLM relationship fields to V2 format
-    for rel in entity_data.get("relationships", []):
-        if "relationship" in rel and "current_relationship" not in rel:
-            rel["current_relationship"] = rel.pop("relationship")
-        # Always remove source_turn (not in V2 schema which has
-        # additionalProperties: false on relationships), mapping it
-        # into first_seen_turn / last_updated_turn as needed.
-        if "source_turn" in rel:
-            source_turn = rel.pop("source_turn")
-            if "first_seen_turn" not in rel:
-                rel["first_seen_turn"] = source_turn
-            if "last_updated_turn" not in rel:
-                rel["last_updated_turn"] = source_turn
-
-    # Coerce relationship type values to schema enum (#218)
-    _REL_TYPE_MAP = {
-        "knowledge exchange": "mentorship",
-        "knowledge sharing": "mentorship",
-        "teaching": "mentorship",
-        "learning": "mentorship",
-        "trade": "social",
-        "trading": "social",
-        "alliance": "political",
-        "rivalry": "adversarial",
-        "enemy": "adversarial",
-        "friend": "social",
-        "friendship": "social",
-        "family": "kinship",
-        "parent": "kinship",
-        "child": "kinship",
-        "sibling": "kinship",
-        "spouse": "romantic",
-        "lover": "romantic",
-        "companion": "social",
-        "follower": "factional",
-        "leader": "political",
-        "subordinate": "factional",
-        "protector": "social",
-        "caretaker": "social",
-    }
-    _VALID_REL_TYPES = {"kinship", "partnership", "mentorship", "political", "factional", "social", "adversarial", "romantic", "spatial", "other"}
-    for rel in entity_data.get("relationships", []):
-        rt = rel.get("type", "")
-        if isinstance(rt, str):
-            normalized_rt = rt.strip().lower()
-            if normalized_rt in _VALID_REL_TYPES:
-                mapped = normalized_rt
-            elif normalized_rt:
-                mapped = _REL_TYPE_MAP.get(normalized_rt, "other")
-            else:
-                mapped = "other"
-        else:
-            mapped = "other"
-
-        if rel.get("type") != mapped:
-            rel["type"] = mapped
-            if mapped == "other":
-                print(f"  COERCE: relationship type '{rt}' → 'other' (unmapped)", file=sys.stderr)
-            else:
-                print(f"  COERCE: relationship type '{rt}' → '{mapped}'", file=sys.stderr)
-
     # Normalize attribute key casing (#336)
     for attr_dict_key in ("stable_attributes", "volatile_state"):
         attr_dict = entity_data.get(attr_dict_key)
@@ -794,6 +720,27 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             for k, v in attr_dict.items():
                 normalized[k.lower()] = v
             entity_data[attr_dict_key] = normalized
+
+    # Strip relationship data from entity_detail output (#505).
+    # Relationships are owned by the separate relationship_mapper phase. The
+    # prior-catalog context passed to entity_detail contains relationships, so
+    # the model echoes them back and invents new ones (often without the
+    # required first_seen_turn), causing hard schema-validation failures that
+    # silently drop the whole entity update. Drop any relationships the model
+    # emits here — relationship_mapper handles them independently. This runs
+    # last so it also catches variant keys revived via the "_new" suffix
+    # normalization above (e.g. "relations_new" → "relations").
+    _REL_OUTPUT_KEYS = (
+        "relationships", "relations", "character_relations", "faction_relations",
+        "item_relations", "items_relations", "social_connections",
+        "current_relationships",
+    )
+    _stripped_rel_keys = [k for k in _REL_OUTPUT_KEYS if k in entity_data]
+    for _rk in _stripped_rel_keys:
+        entity_data.pop(_rk, None)
+    if _stripped_rel_keys:
+        print(f"  STRIP: dropped relationship keys from entity_detail output "
+              f"(owned by relationship_mapper): {_stripped_rel_keys}", file=sys.stderr)
 
     return entity_data
 
