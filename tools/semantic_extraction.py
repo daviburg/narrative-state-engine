@@ -3089,6 +3089,11 @@ def _append_relationship_demotion_shadow(framework_dir: str, records: list[dict]
     """
     if not records:
         return
+    # Defensive: extract_and_merge() accepts framework_dir and may be called
+    # independently of the batch/single wrappers, so the directory is not
+    # guaranteed to exist.  Create it before opening so the measurement flag
+    # never causes a hard FileNotFoundError.
+    os.makedirs(framework_dir, exist_ok=True)
     path = os.path.join(framework_dir, _RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
     with open(path, "a", encoding="utf-8") as f:
         for rec in records:
@@ -4898,9 +4903,15 @@ def extract_and_merge(
         # Build the in-memory relationship index once for core_degree lookups.
         _rd_index = generate_relationship_index(catalogs)
         # Real transcript mentions this turn (text-detected only; excludes the
-        # char-player injected floor) — used to label mention_source.
+        # char-player injected floor) — used to label mention_source.  Pass
+        # apply_blocklist=False so a literally-named entity whose name sits in
+        # _COMMON_WORD_BLOCKLIST (e.g. "Shadow") is still counted as a real
+        # mention; the real-mention set must be conservative (over-inclusive)
+        # so the shadow never undercounts genuine transcript mentions.
         _rd_all_entities = [e for entities in catalogs.values() for e in entities]
-        _rd_real_mentioned = _find_mentioned_entities(_rd_all_entities, _rd_turn_text)
+        _rd_real_mentioned = _find_mentioned_entities(
+            _rd_all_entities, _rd_turn_text, apply_blocklist=False,
+        )
         _rd_records: list[dict] = []
 
         # Seam A — entity_detail prior-context: the RAW relationship list
