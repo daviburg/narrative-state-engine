@@ -13,7 +13,18 @@ import re
 import sys
 import threading
 import time
+from collections import namedtuple
 from datetime import datetime, timezone
+
+
+# Result of an Ollama native streaming call (#501): the assembled visible
+# completion plus the REAL backend token counts and stop reason from the final
+# stream frame.  Surfaced to the caller (instead of discarded) so raw-IO
+# capture records real decode/prompt tokens for streaming runs and can tee a
+# record for truncated/empty completions before the caller raises.
+_StreamResult = namedtuple(
+    "_StreamResult", ["text", "eval_count", "prompt_eval_count", "done_reason"]
+)
 
 
 def _estimate_tokens(text: str) -> int:
@@ -413,20 +424,35 @@ class LLMClient:
             # Capture is best-effort: a dir-creation failure must never break
             # extraction.  The per-record writer also guards its own IO.
             pass
+        # Propagate to the fallback provider so completions served by fallback
+        # (after the primary exhausts its retries) are ALSO captured (#501
+        # finding 5 — fallback-served catalogs must not be a blind spot).  The
+        # fallback shares the primary's lock so concurrent appends to the one
+        # shared artifact stay mutually exclusive (no interleaved JSONL lines).
+        if getattr(self, "_fallback_client", None) is not None:
+            self._fallback_client.enable_raw_io_capture(path)
+            self._fallback_client._raw_io_capture_lock = self._raw_io_capture_lock
 
     def _write_raw_io_record(
-        self, capture: dict, messages: list, raw_text: str, response
+        self, capture: dict, messages: list, raw_text: str, response,
+        output_tokens: int | None = None, input_tokens: int | None = None,
     ) -> None:
         """Append one raw-IO capture record (#477 step 1) — best-effort.
 
         Records the verbatim system+user prompt, the verbatim un-parsed
         completion, and the per-call input/output token counts so a downstream
         analysis can verify (on real data, not a parsed-catalog proxy) what the
-        entity_detail phase truly emits.  Output (decode) tokens are taken from
-        the backend's ``usage.completion_tokens`` when present; otherwise a
-        char-heuristic estimate of the raw completion is used and the record is
-        flagged ``output_tokens_estimated: true``.  Input tokens follow the same
-        rule via ``usage.prompt_tokens``.
+        entity_detail phase truly emits.  Output (decode) tokens come from the
+        backend's REAL count in priority order: an explicit ``output_tokens``
+        override (the Ollama streaming ``eval_count`` from the final frame),
+        then ``usage.completion_tokens`` (non-streaming OpenAI-compatible);
+        only when neither is present is a char-heuristic estimate used and the
+        record flagged ``output_tokens_estimated: true``.  Input tokens follow
+        the same rule via ``input_tokens`` / ``usage.prompt_tokens`` (#501 F3).
+
+        This is called once per LLM call BEFORE JSON parse / empty / truncation
+        handling, so failed, truncated, parse-rejected, and retried completions
+        are all captured (#501 finding 1 — one JSONL record per LLM call).
 
         Never raises: any serialisation or IO error is swallowed so capture can
         never interrupt extraction.
@@ -444,24 +470,35 @@ class LLMClient:
                 elif role == "user":
                     user_prompt = m.get("content", "") or ""
 
-            output_tokens = None
-            input_tokens = None
+            output_tokens_val = None
+            input_tokens_val = None
             output_tokens_estimated = True
             input_tokens_estimated = True
+            # 1) Explicit real backend counts (Ollama streaming final frame).
+            if isinstance(output_tokens, int):
+                output_tokens_val = output_tokens
+                output_tokens_estimated = False
+            if isinstance(input_tokens, int):
+                input_tokens_val = input_tokens
+                input_tokens_estimated = False
+            # 2) OpenAI-compatible usage object (non-streaming path).
             usage = getattr(response, "usage", None) if response is not None else None
             if usage is not None:
-                ct = getattr(usage, "completion_tokens", None)
-                pt = getattr(usage, "prompt_tokens", None)
-                if isinstance(ct, int):
-                    output_tokens = ct
-                    output_tokens_estimated = False
-                if isinstance(pt, int):
-                    input_tokens = pt
-                    input_tokens_estimated = False
-            if output_tokens is None:
-                output_tokens = _estimate_tokens(raw_text or "")
-            if input_tokens is None:
-                input_tokens = _estimate_tokens(
+                if output_tokens_val is None:
+                    ct = getattr(usage, "completion_tokens", None)
+                    if isinstance(ct, int):
+                        output_tokens_val = ct
+                        output_tokens_estimated = False
+                if input_tokens_val is None:
+                    pt = getattr(usage, "prompt_tokens", None)
+                    if isinstance(pt, int):
+                        input_tokens_val = pt
+                        input_tokens_estimated = False
+            # 3) Char-heuristic estimate (flagged) when no real count exists.
+            if output_tokens_val is None:
+                output_tokens_val = _estimate_tokens(raw_text or "")
+            if input_tokens_val is None:
+                input_tokens_val = _estimate_tokens(
                     (system_prompt + "\n" + user_prompt) if (system_prompt or user_prompt) else ""
                 )
 
@@ -470,14 +507,20 @@ class LLMClient:
                 "turn": capture.get("turn"),
                 "phase": capture.get("phase"),
                 "entity_id": capture.get("entity_id"),
+                # All entity ids a single batched call covers (#501 finding 3);
+                # None for non-batched calls so each batched record stays
+                # attributable to the entities its prompt actually presented.
+                "entity_ids": capture.get("entity_ids"),
                 "raw_prompt": {"system": system_prompt, "user": user_prompt},
                 "raw_completion": raw_text,
-                "input_tokens": input_tokens,
-                "output_tokens": output_tokens,
+                "input_tokens": input_tokens_val,
+                "output_tokens": output_tokens_val,
                 "input_tokens_estimated": input_tokens_estimated,
                 "output_tokens_estimated": output_tokens_estimated,
             }
-            line = json.dumps(record, default=str) + "\n"
+            # ensure_ascii=False keeps non-ASCII prompt/completion text verbatim
+            # and human-readable in the JSONL artifact (still valid UTF-8 JSON).
+            line = json.dumps(record, default=str, ensure_ascii=False) + "\n"
             with self._raw_io_capture_lock:
                 with open(path, "a", encoding="utf-8") as fh:
                     fh.write(line)
@@ -521,11 +564,15 @@ class LLMClient:
         max_tokens: int | None = None,
         timeout: int | None = None,
         temperature: float | None = None,
-    ) -> str:
+    ) -> "_StreamResult":
         """Call Ollama's native /api/chat with streaming.
 
-        Returns the assembled visible content (with <think> blocks stripped).
-        Raises LLMExtractionError on empty response or timeout.
+        Returns a ``_StreamResult`` carrying the assembled visible content
+        (with <think> blocks stripped) plus the REAL ``eval_count`` /
+        ``prompt_eval_count`` and ``done_reason`` from the final stream frame.
+        Empty-response and ``done_reason == "length"`` truncation are NOT raised
+        here (the caller handles them after teeing a capture record, #501);
+        only a watchdog abort (no completion at all) raises.
         """
         import httpx
 
@@ -649,16 +696,15 @@ class LLMClient:
                 f"  THINKING: {thinking_preview}",
                 file=sys.stderr,
             )
-            raise LLMExtractionError("Empty response from LLM.")
 
-        # Detect token-limit truncation in streaming path
-        if done_reason == "length":
-            raise LLMTruncationError(
-                f"Response truncated (done_reason=length, "
-                f"num_predict={max_tokens or self.max_tokens})",
-                partial_text=raw,
-            )
-        return raw
+        # Empty-response and token-limit truncation (done_reason == "length")
+        # are surfaced to the caller via the returned text / done_reason rather
+        # than raised here (#501): the caller tees ONE raw-IO capture record
+        # carrying the real eval/prompt token counts BEFORE raising the
+        # identical LLMExtractionError / LLMTruncationError, so empty and
+        # truncated streaming completions are not dropped from the measurement
+        # set.  Behaviour is otherwise unchanged.
+        return _StreamResult(raw, eval_count, prompt_eval_count, done_reason)
 
     def _call_with_deadline(self, fn, deadline_seconds: float):
         """Call fn() with a hard wall-clock deadline.
@@ -893,16 +939,25 @@ class LLMClient:
                 effective_temp = temperature if temperature is not None else self.temperature
 
                 # response stays None on the Ollama streaming path (no usage
-                # object); the raw-IO capture handles that by estimating tokens.
+                # object); real token counts ride in stream_out/in_tokens
+                # instead so capture records them (not estimates, #501 F3).
                 response = None
+                stream_out_tokens = None
+                stream_in_tokens = None
+                used_streaming = self._use_ollama_streaming
                 # Ollama streaming path — uses native /api/chat with
                 # format=json to avoid the non-streaming empty-response
                 # problem on thinking-mode models (qwen3.5).
-                if self._use_ollama_streaming:
-                    raw_text = self._ollama_streaming_chat(
+                if used_streaming:
+                    stream_result = self._ollama_streaming_chat(
                         messages, max_tokens=effective_max, timeout=timeout,
                         temperature=effective_temp,
                     )
+                    raw_text = stream_result.text
+                    # 0 means "not reported by backend" → fall back to estimate.
+                    stream_out_tokens = stream_result.eval_count or None
+                    stream_in_tokens = stream_result.prompt_eval_count or None
+                    finish_reason = stream_result.done_reason
                 else:
                     kwargs = {
                         "model": self.model,
@@ -966,16 +1021,36 @@ class LLMClient:
                     raw_text = response.choices[0].message.content
                     finish_reason = getattr(response.choices[0], "finish_reason", None)
 
-                    if not raw_text:
-                        raise LLMExtractionError("Empty response from LLM.")
+                # One raw-IO capture record per LLM call (#501 finding 1): tee
+                # the verbatim completion BEFORE parse / empty / truncation
+                # handling so failed, truncated, parse-rejected, and retried
+                # completions are not dropped from the measurement set.  Real
+                # backend token counts are used (streaming eval/prompt counts or
+                # the usage object); measurement-only, skipped at zero cost when
+                # capture is disabled.
+                if capture is not None and self._raw_io_capture_path is not None:
+                    self._write_raw_io_record(
+                        capture, messages, raw_text or "", response,
+                        output_tokens=stream_out_tokens,
+                        input_tokens=stream_in_tokens,
+                    )
 
-                    # Detect token-limit truncation before attempting JSON parse
-                    if finish_reason == "length":
+                if not raw_text:
+                    raise LLMExtractionError("Empty response from LLM.")
+
+                # Detect token-limit truncation before attempting JSON parse.
+                if finish_reason == "length":
+                    if used_streaming:
                         raise LLMTruncationError(
-                            f"Response truncated (finish_reason=length, "
-                            f"max_tokens={effective_max})",
+                            f"Response truncated (done_reason=length, "
+                            f"num_predict={effective_max or self.max_tokens})",
                             partial_text=raw_text,
                         )
+                    raise LLMTruncationError(
+                        f"Response truncated (finish_reason=length, "
+                        f"max_tokens={effective_max})",
+                        partial_text=raw_text,
+                    )
 
                 parsed = self._parse_json_response(raw_text)
 
@@ -993,8 +1068,6 @@ class LLMClient:
                     jsonschema.validate(parsed, schema)
 
                 self.stats.record_success()
-                if capture is not None and self._raw_io_capture_path is not None:
-                    self._write_raw_io_record(capture, messages, raw_text, response)
                 return parsed
 
             except LLMTruncationError:
@@ -1154,12 +1227,18 @@ class LLMClient:
         for attempt in range(self.retry_attempts):
             try:
                 # response stays None on the Ollama streaming path (no usage
-                # object); the raw-IO capture handles that by estimating tokens.
+                # object); real token counts ride in stream_out/in_tokens so
+                # capture records them (not estimates, #501 F3).
                 response = None
+                stream_out_tokens = None
+                stream_in_tokens = None
                 if self._use_ollama_streaming:
-                    raw_text = self._ollama_streaming_chat(
+                    stream_result = self._ollama_streaming_chat(
                         messages, timeout=timeout,
                     )
+                    raw_text = stream_result.text
+                    stream_out_tokens = stream_result.eval_count or None
+                    stream_in_tokens = stream_result.prompt_eval_count or None
                 else:
                     kwargs = {
                         "model": self.model,
@@ -1212,12 +1291,21 @@ class LLMClient:
                     )
                     raw_text = response.choices[0].message.content
 
-                    if not raw_text:
-                        raise LLMExtractionError("Empty response from LLM.")
+                # One raw-IO capture record per LLM call (#501 finding 1): tee
+                # BEFORE the empty-response check so failed/retried calls are
+                # captured too.  Real backend token counts are used; skipped at
+                # zero cost when capture is disabled.
+                if capture is not None and self._raw_io_capture_path is not None:
+                    self._write_raw_io_record(
+                        capture, messages, raw_text or "", response,
+                        output_tokens=stream_out_tokens,
+                        input_tokens=stream_in_tokens,
+                    )
+
+                if not raw_text:
+                    raise LLMExtractionError("Empty response from LLM.")
 
                 self.stats.record_success()
-                if capture is not None and self._raw_io_capture_path is not None:
-                    self._write_raw_io_record(capture, messages, raw_text, response)
                 return raw_text.strip()
 
             except Exception as e:

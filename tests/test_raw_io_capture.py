@@ -18,7 +18,7 @@ import json
 import os
 import sys
 
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, PropertyMock, patch
 
 import pytest
 
@@ -30,10 +30,18 @@ if "openai" not in sys.modules:
     _mock_openai.OpenAI = MagicMock
     sys.modules["openai"] = _mock_openai
 
-from llm_client import LLMClient, _estimate_tokens
+from llm_client import (
+    LLMClient,
+    LLMExtractionError,
+    LLMTruncationError,
+    _estimate_tokens,
+    _StreamResult,
+)
 from semantic_extraction import (
     _RAW_IO_CAPTURE_FILENAME,
     _raw_io_capture_enabled,
+    backfill_stubs,
+    refresh_entities,
 )
 
 
@@ -293,6 +301,330 @@ class TestRobustness:
             {"turn": "t"}, [{"role": "user", "content": "x"}], "y", None)
         artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
         assert not os.path.exists(artifact)
+
+
+# ---------------------------------------------------------------------------
+# Finding 1 — one record per LLM call: failed / truncated / parse-rejected /
+# retried completions must NOT be dropped from the measurement set.
+# ---------------------------------------------------------------------------
+
+class TestCaptureFailurePaths:
+    def _read_records(self, path):
+        with open(path, "r", encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def test_unparseable_completion_is_captured(self, tmp_path):
+        """A completion that fails JSON parsing still produces a record."""
+        resp = _FakeResponse("this is not json {", usage=_FakeUsage(30, 12))
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        with pytest.raises(LLMExtractionError):
+            client.extract_json(
+                system_prompt="s", user_prompt="u",
+                capture={"turn": "turn-001", "phase": "entity_detail",
+                         "entity_id": "e1"},
+            )
+        records = self._read_records(artifact)
+        assert len(records) == 1
+        assert records[0]["raw_completion"] == "this is not json {"
+        # Real backend tokens preserved even on the failed call.
+        assert records[0]["output_tokens"] == 12
+        assert records[0]["output_tokens_estimated"] is False
+
+    def test_truncated_completion_is_captured(self, tmp_path):
+        """A token-limit truncation captures the partial completion."""
+        resp = _FakeResponse('{"partial": "abc',
+                             usage=_FakeUsage(40, 20), finish_reason="length")
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        with pytest.raises(LLMTruncationError):
+            client.extract_json(
+                system_prompt="s", user_prompt="u",
+                capture={"turn": "turn-001", "phase": "entity_detail",
+                         "entity_id": "e1"},
+            )
+        records = self._read_records(artifact)
+        assert len(records) == 1
+        assert records[0]["raw_completion"] == '{"partial": "abc'
+
+    def test_empty_completion_is_captured(self, tmp_path):
+        """An empty completion still produces a (one-per-call) record."""
+        resp = _FakeResponse("", usage=_FakeUsage(15, 0))
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        with pytest.raises(LLMExtractionError):
+            client.extract_json(
+                system_prompt="s", user_prompt="u",
+                capture={"turn": "turn-001", "phase": "discovery",
+                         "entity_id": None},
+            )
+        records = self._read_records(artifact)
+        assert len(records) == 1
+        assert records[0]["raw_completion"] == ""
+
+    def test_one_record_per_retry_attempt(self, tmp_path):
+        """Each retried call that produced a completion is recorded."""
+        resp = _FakeResponse("still not json", usage=_FakeUsage(10, 5))
+        client = LLMClient(
+            config_path=_write_config(tmp_path, {"retry_attempts": 2}))
+        client.client.chat.completions.create = MagicMock(return_value=resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        with pytest.raises(LLMExtractionError):
+            client.extract_json(
+                system_prompt="s", user_prompt="u",
+                capture={"turn": "turn-001", "phase": "entity_detail",
+                         "entity_id": "e1"},
+            )
+        # Two attempts → two records (one per LLM call).
+        assert len(self._read_records(artifact)) == 2
+
+
+# ---------------------------------------------------------------------------
+# Finding 2 / F3 — Ollama native streaming must record REAL eval_count /
+# prompt_eval_count, not char-heuristic estimates.
+# ---------------------------------------------------------------------------
+
+class TestStreamingTokenFidelity:
+    def _read_records(self, path):
+        with open(path, "r", encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def _streaming_client(self, tmp_path, stream_result):
+        client = LLMClient(config_path=_write_config(tmp_path))
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        client._ollama_streaming_chat = MagicMock(return_value=stream_result)
+        return client, artifact
+
+    def test_streaming_real_tokens_not_estimated(self, tmp_path):
+        # eval_count=123 (output/decode), prompt_eval_count=456 (input).
+        sr = _StreamResult('{"ok": true}', 123, 456, "stop")
+        client, artifact = self._streaming_client(tmp_path, sr)
+        with patch.object(type(client), "_use_ollama_streaming",
+                          new_callable=PropertyMock, return_value=True):
+            client.extract_json(
+                system_prompt="s", user_prompt="u",
+                capture={"turn": "turn-001", "phase": "entity_detail",
+                         "entity_id": "e1"},
+            )
+        rec = self._read_records(artifact)[0]
+        assert rec["output_tokens"] == 123
+        assert rec["input_tokens"] == 456
+        assert rec["output_tokens_estimated"] is False
+        assert rec["input_tokens_estimated"] is False
+
+    def test_streaming_zero_counts_fall_back_to_estimate(self, tmp_path):
+        # 0 == "not reported by backend" → estimate, flagged true.
+        completion = '{"x": 1}'
+        sr = _StreamResult(completion, 0, 0, "stop")
+        client, artifact = self._streaming_client(tmp_path, sr)
+        with patch.object(type(client), "_use_ollama_streaming",
+                          new_callable=PropertyMock, return_value=True):
+            client.extract_json(
+                system_prompt="s", user_prompt="u",
+                capture={"turn": "turn-001", "phase": "entity_detail",
+                         "entity_id": "e1"},
+            )
+        rec = self._read_records(artifact)[0]
+        assert rec["output_tokens"] == _estimate_tokens(completion)
+        assert rec["output_tokens_estimated"] is True
+
+    def test_streaming_truncation_captures_partial_with_real_tokens(self, tmp_path):
+        sr = _StreamResult('{"partial', 50, 80, "length")
+        client, artifact = self._streaming_client(tmp_path, sr)
+        with patch.object(type(client), "_use_ollama_streaming",
+                          new_callable=PropertyMock, return_value=True):
+            with pytest.raises(LLMTruncationError):
+                client.extract_json(
+                    system_prompt="s", user_prompt="u",
+                    capture={"turn": "turn-001", "phase": "entity_detail",
+                             "entity_id": "e1"},
+                )
+        rec = self._read_records(artifact)[0]
+        assert rec["raw_completion"] == '{"partial'
+        assert rec["output_tokens"] == 50
+        assert rec["output_tokens_estimated"] is False
+
+
+# ---------------------------------------------------------------------------
+# Finding 3 — batched entity_detail records the full entity-id list so the
+# call stays per-entity attributable.
+# ---------------------------------------------------------------------------
+
+class TestBatchedEntityIds:
+    def _read_records(self, path):
+        with open(path, "r", encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def test_batch_record_carries_entity_ids(self, tmp_path):
+        resp = _FakeResponse('{"ok": true}', usage=_FakeUsage(80, 40))
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        client.extract_json(
+            system_prompt="s", user_prompt="u",
+            capture={"turn": "turn-050", "phase": "entity_detail_batch",
+                     "entity_id": None,
+                     "entity_ids": ["char-player", "char-npc-001", "loc-keep"]},
+        )
+        rec = self._read_records(artifact)[0]
+        assert rec["entity_id"] is None
+        assert rec["entity_ids"] == ["char-player", "char-npc-001", "loc-keep"]
+
+    def test_non_batch_record_entity_ids_is_none(self, tmp_path):
+        resp = _FakeResponse('{"ok": true}', usage=_FakeUsage(80, 40))
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        client.extract_json(
+            system_prompt="s", user_prompt="u",
+            capture={"turn": "turn-050", "phase": "entity_detail",
+                     "entity_id": "char-player"},
+        )
+        rec = self._read_records(artifact)[0]
+        assert rec["entity_ids"] is None
+        assert rec["entity_id"] == "char-player"
+
+
+# ---------------------------------------------------------------------------
+# Finding 4 — auxiliary entity-detail call paths (backfill / refresh) must
+# pass capture context so they are not measurement blind spots.
+# ---------------------------------------------------------------------------
+
+class _CaptureRecordingLLM:
+    """Fake LLMClient that records the ``capture`` tag of each call."""
+
+    def __init__(self):
+        self.captures = []
+
+    def extract_json(self, system_prompt=None, user_prompt=None,
+                     capture=None, **kwargs):
+        self.captures.append(capture)
+        # Empty entity → caller skips merge; only the capture tag matters here.
+        return {"entity": {}}
+
+    def delay(self):
+        pass
+
+
+class TestAuxiliaryCallPathsTagged:
+    def test_backfill_stubs_passes_capture(self):
+        llm = _CaptureRecordingLLM()
+        catalogs = {
+            "characters.json": [
+                {"id": "char-x", "name": "Xara", "type": "character",
+                 "notes": "", "identity": "", "first_seen_turn": "turn-001"},
+            ]
+        }
+        turn_dicts = [
+            {"turn_id": "turn-001", "speaker": "DM", "text": "Xara appears."},
+        ]
+        backfill_stubs(turn_dicts, catalogs, [], llm)
+        assert len(llm.captures) == 1
+        assert llm.captures[0] == {
+            "turn": "turn-001",
+            "phase": "entity_detail_backfill",
+            "entity_id": "char-x",
+        }
+
+    def test_refresh_entities_passes_capture(self):
+        llm = _CaptureRecordingLLM()
+        entity = {"id": "char-y", "name": "Yara", "type": "character",
+                  "last_updated_turn": "turn-001", "first_seen_turn": "turn-001"}
+        catalogs = {"characters.json": [entity]}
+        turn_dicts = [
+            {"turn_id": "turn-005", "speaker": "DM", "text": "Yara returns."},
+        ]
+        refresh_entities([("characters.json", entity)], "turn-010",
+                         turn_dicts, catalogs, llm)
+        assert len(llm.captures) == 1
+        assert llm.captures[0] == {
+            "turn": "turn-010",
+            "phase": "entity_detail_refresh",
+            "entity_id": "char-y",
+        }
+
+
+# ---------------------------------------------------------------------------
+# Finding 5 — fallback-provider completions must also be captured.
+# ---------------------------------------------------------------------------
+
+class TestFallbackCapture:
+    def _read_records(self, path):
+        with open(path, "r", encoding="utf-8") as fh:
+            return [json.loads(line) for line in fh if line.strip()]
+
+    def _fallback_config(self, tmp_dir):
+        return _write_config(tmp_dir, {
+            "retry_attempts": 1,
+            "fallback": {
+                "provider": "openai",
+                "base_url": "https://fallback.example/v1",
+                "model": "fallback-model",
+                "skip_response_format": True,
+            },
+        })
+
+    def test_enable_propagates_to_fallback(self, tmp_path):
+        client = LLMClient(config_path=self._fallback_config(tmp_path))
+        assert client._fallback_client is not None
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        assert client._fallback_client._raw_io_capture_path == artifact
+        # Shared lock so concurrent appends to the one artifact are serialized.
+        assert (client._fallback_client._raw_io_capture_lock
+                is client._raw_io_capture_lock)
+
+    def test_fallback_served_completion_is_captured(self, tmp_path):
+        client = LLMClient(config_path=self._fallback_config(tmp_path))
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        # Primary always fails; fallback succeeds.
+        client.client.chat.completions.create = MagicMock(
+            side_effect=RuntimeError("primary down"))
+        fb_resp = _FakeResponse('{"served_by": "fallback"}',
+                                usage=_FakeUsage(70, 33))
+        client._fallback_client.client.chat.completions.create = MagicMock(
+            return_value=fb_resp)
+        result = client.extract_json(
+            system_prompt="s", user_prompt="u",
+            capture={"turn": "turn-001", "phase": "entity_detail",
+                     "entity_id": "char-player"},
+        )
+        assert result == {"served_by": "fallback"}
+        records = self._read_records(artifact)
+        assert len(records) == 1
+        assert records[0]["raw_completion"] == '{"served_by": "fallback"}'
+        assert records[0]["entity_id"] == "char-player"
+        assert records[0]["output_tokens"] == 33
+
+
+# ---------------------------------------------------------------------------
+# Verbatim, human-readable artifact — non-ASCII text must not be \\uXXXX-escaped.
+# ---------------------------------------------------------------------------
+
+class TestVerbatimNonAscii:
+    def test_non_ascii_written_unescaped(self, tmp_path):
+        completion = '{"name": "Café déjà — élan"}'
+        resp = _FakeResponse(completion, usage=_FakeUsage(20, 10))
+        client = _make_client(tmp_path, resp)
+        artifact = os.path.join(str(tmp_path), _RAW_IO_CAPTURE_FILENAME)
+        client.enable_raw_io_capture(artifact)
+        client.extract_json(
+            system_prompt="systèm prômpt", user_prompt="usér prömpt",
+            capture={"turn": "turn-001", "phase": "entity_detail",
+                     "entity_id": "e1"},
+        )
+        with open(artifact, "r", encoding="utf-8") as fh:
+            raw_line = fh.read()
+        # File text is verbatim UTF-8, not \\u-escaped.
+        assert "Café déjà — élan" in raw_line
+        assert "systèm prômpt" in raw_line
+        assert "\\u" not in raw_line
 
 
 if __name__ == "__main__":

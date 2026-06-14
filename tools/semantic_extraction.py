@@ -3674,6 +3674,11 @@ def _extract_batched_entity_detail(
     Designed to run inside a ThreadPoolExecutor.
     """
     turn_id = turn["turn_id"]
+    # Per-entity attribution for the batched call (#501 finding 3): a single
+    # batched record covers every entity in the batch, so record the full id
+    # list (entity_id stays None — no single owner) instead of leaving the
+    # call non-attributable.
+    batch_entity_ids = [get_entity_id(entity_ref) for entity_ref, _ in batch_tasks]
     try:
         detail_result = llm.extract_json(
             system_prompt=load_template("entity-detail-batch"),
@@ -3682,7 +3687,7 @@ def _extract_batched_entity_detail(
                 config=config, mentioned_ids=mentioned_ids,
             ),
             capture={"turn": turn_id, "phase": "entity_detail_batch",
-                     "entity_id": None},
+                     "entity_id": None, "entity_ids": batch_entity_ids},
         )
     except QuotaExhaustedError:
         raise
@@ -5808,6 +5813,8 @@ def backfill_stubs(
             detail_result = llm.extract_json(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
+                capture={"turn": first_seen, "phase": "entity_detail_backfill",
+                         "entity_id": entity_id},
             )
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
@@ -6266,6 +6273,8 @@ def refresh_entities(
             detail_result = llm.extract_json(
                 system_prompt=load_template("entity-detail"),
                 user_prompt=format_detail_prompt(synthetic_turn, entity_ref, entity),
+                capture={"turn": current_turn_id, "phase": "entity_detail_refresh",
+                         "entity_id": entity_id},
             )
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
