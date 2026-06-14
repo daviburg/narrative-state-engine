@@ -50,6 +50,7 @@ def _run_turn(monkeypatch, pc_entity, turn_id="turn-001"):
     monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
     se._reset_pc_failure_tracking()
     se._drain_validation_failures()  # ensure a clean buffer
+    se._drain_validation_repairs()  # ensure a clean recovery buffer (#504)
     llm = _make_stub_llm(pc_entity)
     catalogs = _fresh_catalogs()
     turn = {"turn_id": turn_id, "speaker": "dm", "text": "The DM speaks."}
@@ -370,20 +371,28 @@ class TestSchemaDrivenGenericArrayRecovery:
 # ---------------------------------------------------------------------------
 
 def _recoverable_entity(entity_id="char-foe", name="Foe"):
-    """A char entity with a recoverable violation (null notes + one incomplete
-    relationship) that validates after sanitizing."""
+    """A char entity with recoverable violations that validate after sanitizing.
+
+    Includes ``current_status: None`` — an optional string-typed top-level key
+    the #505 ``_coerce_entity_fields`` step does **not** pre-strip, so it
+    survives to the #504 sanitizer and exercises (and logs) a genuine recovery
+    at the real call sites.  ``notes: None`` and the incomplete relationship are
+    also recoverable but are now handled upstream by #505's coerce (notes-null
+    removal + relationship-key strip) before the sanitizer sees them.
+    """
     return {
         "id": entity_id,
         "name": name,
         "type": "character",
         "identity": "A rival adventurer.",
-        "notes": None,  # recoverable
+        "current_status": None,  # recoverable, survives coerce -> sanitizer drops + logs
+        "notes": None,  # recoverable; #505 coerce removes notes=null upstream
         "first_seen_turn": "turn-001",
         "last_updated_turn": "turn-001",
         "relationships": [
             _valid_relationship("char-player"),
             {"target_id": "char-ally", "current_relationship": "wary",
-             "type": "social"},  # missing first_seen_turn -> dropped
+             "type": "social"},  # missing first_seen_turn; #505 coerce strips rels
         ],
     }
 
@@ -431,9 +440,11 @@ class TestRecoveryCallSites:
         )
         assert err is None
         assert data is not None
-        assert "notes" not in data
-        assert len(data["relationships"]) == 1
+        assert "notes" not in data  # #505 coerce removed notes=null
+        assert "relationships" not in data  # #505 coerce stripped rel keys
+        assert "current_status" not in data  # #504 sanitizer recovered the null
         assert se._drain_validation_failures() == []
+        se._drain_validation_repairs()
 
     def test_solo_records_unrepairable(self, monkeypatch):
         _patch_detail_prompts(monkeypatch)
@@ -462,9 +473,11 @@ class TestRecoveryCallSites:
         assert len(results) == 1
         _ref, data, err = results[0]
         assert err is None and data is not None
-        assert "notes" not in data
-        assert len(data["relationships"]) == 1
+        assert "notes" not in data  # #505 coerce removed notes=null
+        assert "relationships" not in data  # #505 coerce stripped rel keys
+        assert "current_status" not in data  # #504 sanitizer recovered the null
         assert se._drain_validation_failures() == []
+        se._drain_validation_repairs()
 
     def test_batched_records_unrepairable(self, monkeypatch):
         _patch_detail_prompts(monkeypatch)
@@ -654,3 +667,296 @@ class TestValidationFailureConcurrency:
                 f"{turn_id}: expected exactly its own failure, got {failures}")
             assert failures[0]["turn"] == turn_id
             assert failures[0]["entity_id"] == "char-player"
+
+
+# ---------------------------------------------------------------------------
+# Part F — Recovery logging (#504): repairs are surfaced as validation_repairs,
+# distinct from validation_failures, thread-safe, and measurement-only.
+# ---------------------------------------------------------------------------
+
+class TestRecoveryLogging:
+    def test_optional_null_emits_repair_and_merges(self, monkeypatch):
+        """A current_status:null PC emits a validation_repairs record AND still
+        merges (the recovery is unchanged — only newly logged).  current_status
+        is an optional string-typed top-level key that #505's coerce does NOT
+        pre-strip, so it reaches the #504 sanitizer at the real call site."""
+        pc = {
+            "id": "char-player",
+            "name": "Player Character",
+            "type": "character",
+            "identity": "The player character.",
+            "current_status": None,  # recoverable -> dropped + logged
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+        }
+        catalogs, log = _run_turn(monkeypatch, pc)
+
+        assert "validation_repairs" in log
+        repairs = log["validation_repairs"]
+        assert len(repairs) == 1
+        rec = repairs[0]
+        assert rec["turn"] == "turn-001"
+        assert rec["entity_id"] == "char-player"
+        assert rec["phase"] == "entity_detail"
+        assert rec["repair"] == "dropped null optional-string key"
+        assert rec["path"] == "current_status"
+        assert "missing" not in rec
+        # Recovered -> NOT recorded as a failure.
+        assert "validation_failures" not in log
+        # The entity still merged (recovery unchanged).
+        pcs = [e for e in catalogs["characters.json"] if e.get("id") == "char-player"]
+        assert len(pcs) == 1
+        assert "current_status" not in pcs[0]
+
+    def test_incomplete_relationship_emits_repair_record(self):
+        """An incomplete array item -> a repairs record with the dropped item
+        path + the missing required sub-field.  Driven through
+        ``_validate_entity_detail()`` directly (the #504 sanitizer) because
+        #505's coerce strips relationship keys wholesale before the call
+        sites — the per-item recovery + logging still applies to any
+        required-item array the schema declares."""
+        se._reset_validation_failures()
+        se._reset_validation_repairs()
+        entity = {
+            "id": "char-eldorman",
+            "name": "Eldorman",
+            "type": "character",
+            "identity": "A rival.",
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+            "relationships": [
+                _valid_relationship("char-player"),
+                # missing required first_seen_turn -> dropped + logged
+                {"target_id": "char-ally", "current_relationship": "wary",
+                 "type": "social"},
+            ],
+        }
+        ok = se._validate_entity_detail(
+            entity, turn="turn-029", entity_id="char-eldorman",
+            phase="entity_detail",
+        )
+        assert ok is True
+        assert len(entity["relationships"]) == 1  # the incomplete one was dropped
+
+        repairs = se._drain_validation_repairs()
+        assert len(repairs) == 1
+        rec = repairs[0]
+        assert rec["turn"] == "turn-029"
+        assert rec["entity_id"] == "char-eldorman"
+        assert rec["phase"] == "entity_detail"
+        assert rec["repair"] == (
+            "dropped incomplete array item missing required subfield")
+        assert rec["path"] == "relationships[1]"
+        assert rec["missing"] == "first_seen_turn"
+        # Recovered -> NOT recorded as a failure.
+        assert se._drain_validation_failures() == []
+
+    def test_clean_entity_emits_no_repair_record(self, monkeypatch):
+        """A clean entity (no repair needed) -> NO validation_repairs key."""
+        good_pc = {
+            "id": "char-player",
+            "name": "Player Character",
+            "type": "character",
+            "identity": "The player character.",
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+        }
+        _catalogs, log = _run_turn(monkeypatch, good_pc)
+        assert "validation_repairs" not in log
+        assert "validation_failures" not in log
+
+    def test_repair_logging_does_not_change_repair_output(self):
+        """Measurement-only: sanitizing WITH vs WITHOUT the repairs out-param
+        yields a byte-identical repaired entity (logging never changes the
+        repair).  Uses the real entity schema."""
+        import copy
+
+        base = {
+            "id": "char-foe",
+            "name": "Foe",
+            "type": "character",
+            "identity": "A rival.",
+            "notes": None,  # recoverable
+            "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+            "relationships": [
+                _valid_relationship("char-player"),
+                {"target_id": "char-ally", "current_relationship": "wary",
+                 "type": "social"},  # incomplete -> dropped
+            ],
+        }
+        without = copy.deepcopy(base)
+        with_log = copy.deepcopy(base)
+
+        out_without = se._sanitize_entity_for_validation(without)  # no logging
+        captured: list[dict] = []
+        out_with = se._sanitize_entity_for_validation(with_log, captured)
+
+        assert json.dumps(out_without, sort_keys=True) == \
+            json.dumps(out_with, sort_keys=True)
+        # Repairs were captured ONLY in the logging path (two: null key + rel).
+        assert len(captured) == 2
+
+    def test_unrepairable_records_failure_not_repair(self, monkeypatch):
+        """Distinct: an unrepairable entity -> validation_failures (NOT a
+        repairs record)."""
+        _patch_detail_prompts(monkeypatch)
+        se._reset_validation_failures()
+        se._reset_validation_repairs()
+        llm = _detail_llm({"entity": _unrepairable_entity()})
+        _rref, data, _err = se._extract_single_entity_detail(
+            llm, {"turn_id": "turn-040"}, _foe_ref(), None, None,
+        )
+        assert data is None
+        assert len(se._drain_validation_failures()) == 1
+        assert se._drain_validation_repairs() == []
+
+    def test_recoverable_records_repair_not_failure(self, monkeypatch):
+        """Distinct: a recoverable entity -> validation_repairs (NOT a failures
+        record).  At the call site #505's coerce removes notes=null and strips
+        the relationship keys, so the #504 sanitizer's surviving recovery is the
+        current_status null-drop — which is what gets logged."""
+        _patch_detail_prompts(monkeypatch)
+        se._reset_validation_failures()
+        se._reset_validation_repairs()
+        llm = _detail_llm({"entity": _recoverable_entity()})
+        _rref, data, _err = se._extract_single_entity_detail(
+            llm, {"turn_id": "turn-041"}, _foe_ref(), None, None,
+        )
+        assert data is not None
+        assert se._drain_validation_failures() == []
+        repairs = se._drain_validation_repairs()
+        assert len(repairs) == 1
+        rec = repairs[0]
+        assert rec["repair"] == "dropped null optional-string key"
+        assert rec["path"] == "current_status"
+        assert rec["turn"] == "turn-041"
+        assert rec["entity_id"] == "char-foe"
+
+
+class TestRecoveryLoggingConcurrency:
+    def test_worker_records_repair_into_submitting_call_buffer(self):
+        """A ThreadPoolExecutor worker's repair lands in the SUBMITTING call's
+        per-call repairs buffer (contextvars propagation, no cross-attribution)."""
+        import concurrent.futures
+
+        se._reset_validation_repairs()
+
+        def _worker(turn_id):
+            se._record_validation_repairs(
+                turn_id, "e", "entity_detail",
+                [{"repair": "dropped null optional-string key", "path": "notes"}],
+            )
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            futures = [se._submit_in_context(pool, _worker, f"turn-{i:03d}")
+                       for i in range(8)]
+            for f in futures:
+                f.result()
+
+        drained = se._drain_validation_repairs()
+        assert len(drained) == 8
+        assert {r["turn"] for r in drained} == {f"turn-{i:03d}" for i in range(8)}
+        assert all(r["path"] == "notes" for r in drained)
+
+    def test_concurrent_recovery_no_cross_attribution(self, monkeypatch):
+        """Concurrent extract_and_merge() calls (retry_failed_turns'
+        ThreadPoolExecutor) attribute each turn's recovery to that turn only."""
+        import concurrent.futures
+
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+
+        def _recoverable_pc(turn_id):
+            return {
+                "id": "char-player",
+                "name": "Player Character",
+                "type": "character",
+                "identity": "The player character.",
+                "current_status": None,  # recoverable, survives coerce -> logged
+                "first_seen_turn": turn_id,
+                "last_updated_turn": turn_id,
+            }
+
+        def _run(turn_id):
+            se._reset_pc_failure_tracking()
+            llm = _make_stub_llm(_recoverable_pc(turn_id))
+            catalogs = _fresh_catalogs()
+            turn = {"turn_id": turn_id, "speaker": "dm", "text": "The DM speaks."}
+            _c, _e, _f, log = se.extract_and_merge(
+                turn, catalogs, [], llm, min_confidence=0.6,
+            )
+            return turn_id, log
+
+        turn_ids = [f"turn-{i:03d}" for i in range(12)]
+        # Fewer workers than tasks forces thread reuse, exercising reset-on-reuse.
+        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
+            results = list(pool.map(_run, turn_ids))
+
+        for turn_id, log in results:
+            repairs = log.get("validation_repairs", [])
+            assert len(repairs) == 1, (
+                f"{turn_id}: expected exactly its own repair, got {repairs}")
+            assert repairs[0]["turn"] == turn_id
+            assert repairs[0]["entity_id"] == "char-player"
+            assert repairs[0]["path"] == "current_status"
+            # Recovered -> no failure for this turn.
+            assert "validation_failures" not in log
+
+
+class TestRecoveryLoggingPostTurnPasses:
+    def test_backfill_flushes_repairs(self, monkeypatch, tmp_path):
+        """The backfill pass flushes recoveries as validation_repairs and still
+        backfills the recovered stub."""
+        _patch_detail_prompts(monkeypatch)
+        catalogs = _fresh_catalogs()
+        stub = {
+            "id": "char-foe", "name": "Foe", "type": "character",
+            "identity": "", "first_seen_turn": "turn-001",
+            "notes": "Stub - needs backfill.",
+        }
+        catalogs["characters.json"].append(stub)
+        turn_dicts = [{"turn_id": "turn-001", "speaker": "dm",
+                       "text": "Foe appears in the hall."}]
+        llm = _detail_llm({"entity": _recoverable_entity()})
+        log_path = tmp_path / "extraction-log.jsonl"
+
+        n = se.backfill_stubs(turn_dicts, catalogs, [], llm,
+                              extraction_log_path=str(log_path))
+        assert n == 1  # recovered + merged
+        lines = [json.loads(line) for line in
+                 log_path.read_text().splitlines() if line.strip()]
+        repairs = [r for rec in lines for r in rec.get("validation_repairs", [])]
+        assert len(repairs) == 1  # current_status null-drop (notes+rels handled by #505 coerce)
+        assert all(r["turn"] == "turn-001" for r in repairs)
+        assert all(r["entity_id"] == "char-foe" for r in repairs)
+        assert all(r["phase"] == "entity_detail_backfill" for r in repairs)
+        assert all(r["path"] == "current_status" for r in repairs)
+        # Recovered -> no failures flushed.
+        assert all("validation_failures" not in rec for rec in lines)
+
+    def test_refresh_flushes_repairs(self, monkeypatch, tmp_path):
+        """The refresh pass flushes recoveries as validation_repairs."""
+        _patch_detail_prompts(monkeypatch)
+        catalogs = _fresh_catalogs()
+        stale = {
+            "id": "char-foe", "name": "Foe", "type": "character",
+            "identity": "A rival.", "first_seen_turn": "turn-001",
+            "last_updated_turn": "turn-001",
+        }
+        catalogs["characters.json"].append(stale)
+        turn_dicts = [{"turn_id": "turn-005", "speaker": "dm",
+                       "text": "char-foe returns to the hall."}]
+        llm = _detail_llm({"entity": _recoverable_entity()})
+        log_path = tmp_path / "extraction-log.jsonl"
+
+        n = se.refresh_entities([("characters.json", stale)], "turn-005",
+                                turn_dicts, catalogs, llm,
+                                extraction_log_path=str(log_path))
+        assert n == 1
+        lines = [json.loads(line) for line in
+                 log_path.read_text().splitlines() if line.strip()]
+        repairs = [r for rec in lines for r in rec.get("validation_repairs", [])]
+        assert len(repairs) == 1  # current_status null-drop (notes+rels handled by #505 coerce)
+        assert all(r["phase"] == "entity_detail_refresh" for r in repairs)
+        assert all(r["path"] == "current_status" for r in repairs)
+        assert all("validation_failures" not in rec for rec in lines)

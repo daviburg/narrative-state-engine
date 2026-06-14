@@ -892,27 +892,111 @@ def _drain_validation_failures() -> list[dict]:
     return drained
 
 
+# ---------------------------------------------------------------------------
+# entity_detail recovery/repair observability (#504 recovery logging)
+# ---------------------------------------------------------------------------
+# The sanitizer (#504) REPAIRS recoverable schema violations (drops a null
+# optional key, drops an incomplete array item) BEFORE validation, so a
+# recovered entity never reaches ``_record_validation_failure`` — the repair
+# would otherwise leave NO audit trail (a silently-wrong repair would be
+# undetectable).  These helpers capture each repair the SAME structured,
+# per-call, thread-safe way as ``validation_failures`` so the per-turn
+# extraction-log.jsonl surfaces recoveries (``validation_repairs``) distinctly
+# from unrepairable drops (``validation_failures``).  Recording is
+# measurement-only: it does NOT change which entities merge or the extraction
+# output — it only logs repairs that already happen.  The repairs buffer reuses
+# the validation_failures ContextVar+lock pattern, so concurrent
+# ``extract_and_merge`` calls and their inner ThreadPoolExecutor workers (which
+# share the call's context via ``_submit_in_context``) cannot drain, lose, or
+# mis-attribute each other's repairs.
+_validation_repairs_lock = threading.Lock()
+_validation_repairs_var: "contextvars.ContextVar[list[dict] | None]" = (
+    contextvars.ContextVar("entity_detail_validation_repairs", default=None)
+)
+
+
+def _current_repairs_buffer() -> list[dict]:
+    """Return the current call's repair buffer, creating it on first use."""
+    buf = _validation_repairs_var.get()
+    if buf is None:
+        buf = []
+        _validation_repairs_var.set(buf)
+    return buf
+
+
+def _reset_validation_repairs() -> None:
+    """Install a fresh, empty per-call repair buffer in the current context.
+
+    Called alongside ``_reset_validation_failures`` at each top-level entry
+    point so a buffer left behind by an earlier task on a reused worker thread
+    can never leak into this call.
+    """
+    _validation_repairs_var.set([])
+
+
+def _record_validation_repairs(
+    turn: str | None, entity_id: str | None, phase: str, repairs: list[dict],
+) -> None:
+    """Append structured entity_detail repair records (#504 recovery logging).
+
+    Each entry in *repairs* describes one repair the sanitizer performed (a
+    ``repair`` action + json-``path``, plus an optional ``missing`` sub-field);
+    this stamps each with the turn/entity_id/phase so the flattened record
+    mirrors the ``validation_failures`` shape.  Thread-safe: entity_detail runs
+    across a ThreadPoolExecutor, so appends to the per-call buffer are guarded
+    by a lock.  No-op when *repairs* is empty (no false positives).
+    """
+    if not repairs:
+        return
+    buf = _current_repairs_buffer()
+    with _validation_repairs_lock:
+        for rep in repairs:
+            rec = {"turn": turn, "entity_id": entity_id, "phase": phase}
+            rec.update(rep)
+            buf.append(rec)
+
+
+def _drain_validation_repairs() -> list[dict]:
+    """Return and clear the current call's repair records (#504 recovery logging)."""
+    with _validation_repairs_lock:
+        buf = _validation_repairs_var.get()
+        if not buf:
+            return []
+        drained = list(buf)
+        buf.clear()
+    return drained
+
+
 def _flush_validation_failures_to_log(extraction_log_path: str | None) -> None:
-    """Drain accumulated entity_detail validation failures to extraction-log (#503).
+    """Drain entity_detail validation failures AND repairs to extraction-log.
 
     Used by post-turn passes (backfill, refresh) that build no per-turn log
-    record.  The drained failures are written as a single standalone record that
-    carries no top-level ``turn_id`` and no ``discovery_ok`` flag, so every
-    extraction-log consumer (resume, retry, A/B paired scorer, compression
-    aggregator) safely ignores it; the originating turn is preserved inside each
-    ``validation_failures`` entry.  Always drains (even with no path) so a pass's
-    failures never leak into a later turn's per-turn log record.
+    record.  The drained failures (#503) and repairs (#504 recovery logging) are
+    written as a single standalone record that carries no top-level ``turn_id``
+    and no ``discovery_ok`` flag, so every extraction-log consumer (resume,
+    retry, A/B paired scorer, compression aggregator) safely ignores it; the
+    originating turn is preserved inside each ``validation_failures`` /
+    ``validation_repairs`` entry.  Always drains BOTH buffers (even with no path)
+    so a pass's records never leak into a later turn's per-turn log record.  Each
+    key is added only when non-empty so a clean pass writes nothing.
     """
     failures = _drain_validation_failures()
-    if not extraction_log_path or not failures:
+    repairs = _drain_validation_repairs()
+    if not extraction_log_path or (not failures and not repairs):
         return
-    _write_extraction_log(extraction_log_path, {
+    record: dict = {
         "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
-        "validation_failures": failures,
-    })
+    }
+    if failures:
+        record["validation_failures"] = failures
+    if repairs:
+        record["validation_repairs"] = repairs
+    _write_extraction_log(extraction_log_path, record)
 
 
-def _sanitize_entity_for_validation(entity_data: dict) -> dict:
+def _sanitize_entity_for_validation(
+    entity_data: dict, repairs: list[dict] | None = None,
+) -> dict:
     """Repair recoverable schema violations in an entity_detail completion (#504).
 
     A single recoverable violation (e.g. ``notes: null`` or one relationship
@@ -936,6 +1020,15 @@ def _sanitize_entity_for_validation(entity_data: dict) -> dict:
     extra property, a bad enum value, etc.) are left intact so validation still
     rejects them — the recovery never force-merges garbage, and no value is
     silently mutated elsewhere.  Mutates and returns *entity_data*.
+
+    Recovery logging (#504): when *repairs* is provided, every repair performed
+    is appended to it as a structured descriptor reporting WHAT was repaired —
+    the schema-derived action and the json-``path`` (plus the ``missing``
+    sub-field for an incomplete array item).  This is measurement-only: the list
+    only records repairs that already happen; it never changes WHICH pieces are
+    stripped.  Callers stamp these with turn/entity_id/phase (see
+    ``_validate_entity_detail``) so a recovered violation leaves an audit trail
+    distinct from the unrepairable ``validation_failures`` (#503).
     """
     if not isinstance(entity_data, dict):
         return entity_data
@@ -956,6 +1049,11 @@ def _sanitize_entity_for_validation(entity_data: dict) -> dict:
         prop_schema = props.get(key)
         if isinstance(prop_schema, dict) and prop_schema.get("type") == "string":
             del entity_data[key]
+            if repairs is not None:
+                repairs.append({
+                    "repair": "dropped null optional-string key",
+                    "path": key,
+                })
 
     # (ii) Drop incomplete array-item entries missing a required sub-field.
     # Schema-driven (Rule 9 / Rule 10): rather than hardcoding the
@@ -964,26 +1062,47 @@ def _sanitize_entity_for_validation(entity_data: dict) -> dict:
     # drop to each.  This keeps the recovery purely schema-driven — it adapts if
     # the schema field is renamed or another required-item array is added — and
     # never strips valid data (only entries missing a schema-required sub-field
-    # are removed).
+    # are removed).  ``item_required`` is kept in schema (list) order so the
+    # reported ``missing`` sub-field is deterministic.
     for key, prop_schema in props.items():
         if not isinstance(prop_schema, dict) or prop_schema.get("type") != "array":
             continue
         items_schema = prop_schema.get("items")
         if not isinstance(items_schema, dict):
             continue
-        item_required = set(items_schema.get("required", []))
+        item_required = items_schema.get("required", [])
         if not item_required:
             continue
         value = entity_data.get(key)
         if not isinstance(value, list):
             continue
-        kept = [
-            item for item in value
-            if isinstance(item, dict)
-            and all(item.get(field) is not None for field in item_required)
-        ]
-        if len(kept) != len(value):
+        kept: list = []
+        dropped: list[tuple[int, object]] = []
+        for idx, item in enumerate(value):
+            if isinstance(item, dict) and all(
+                item.get(field) is not None for field in item_required
+            ):
+                kept.append(item)
+            else:
+                dropped.append((idx, item))
+        if dropped:
             entity_data[key] = kept
+            if repairs is not None:
+                for idx, item in dropped:
+                    if isinstance(item, dict):
+                        missing = next(
+                            (f for f in item_required if item.get(f) is None),
+                            None,
+                        )
+                    else:
+                        missing = item_required[0] if item_required else None
+                    rec = {
+                        "repair": "dropped incomplete array item missing required subfield",
+                        "path": f"{key}[{idx}]",
+                    }
+                    if missing is not None:
+                        rec["missing"] = missing
+                    repairs.append(rec)
 
     return entity_data
 
@@ -995,11 +1114,19 @@ def _validate_entity_detail(
 
     First applies the schema-driven pre-validate sanitizer (#504), which repairs
     recoverable violations in place so the entity's valid remainder can still
-    merge.  Then validates; on (unrepairable) failure, records a structured
-    entry (turn / entity_id / phase / error-path) for the per-turn extraction
-    log (#503).  Returns True if the (sanitized) entity is valid.
+    merge.  Each repair it performs is recorded as a structured
+    ``validation_repairs`` entry (turn / entity_id / phase / repair-action /
+    json-path) so recoveries leave an audit trail (#504 recovery logging) —
+    distinct from the unrepairable ``validation_failures`` (#503).  Then
+    validates; on (unrepairable) failure, records a structured failure entry
+    (turn / entity_id / phase / error-path) for the per-turn extraction log
+    (#503).  Both records are measurement-only and do not change drop/merge
+    behaviour.  Returns True if the (sanitized) entity is valid.
     """
-    _sanitize_entity_for_validation(entity_data)
+    repairs: list[dict] = []
+    _sanitize_entity_for_validation(entity_data, repairs)
+    if repairs:
+        _record_validation_repairs(turn, entity_id, phase, repairs)
     ok, detail = _validate_entity_detailed(entity_data)
     if not ok:
         _record_validation_failure(turn, entity_id, phase, detail)
@@ -4363,6 +4490,9 @@ def extract_and_merge(
     # concurrent turn (retry_failed_turns ThreadPoolExecutor) can never drain or
     # mis-attribute another turn's failures (#503).
     _reset_validation_failures()
+    # Same isolation for the parallel recovery/repair buffer (#504 recovery
+    # logging) so recoveries are attributed to this turn only.
+    _reset_validation_repairs()
     _entities_before = sum(len(v) for v in catalogs.values())
     _events_before = len(events_list)
 
@@ -5330,6 +5460,14 @@ def extract_and_merge(
     _detail_validation_failures = _drain_validation_failures()
     if _detail_validation_failures:
         _log_record["validation_failures"] = _detail_validation_failures
+    # entity_detail recoveries (#504 recovery logging): record any repairs the
+    # sanitizer performed this turn so a recovered violation leaves an audit
+    # trail, distinct from the unrepairable validation_failures above.  Added
+    # only when non-empty so a turn with no repairs stays byte-identical to the
+    # baseline (no false positives).
+    _detail_validation_repairs = _drain_validation_repairs()
+    if _detail_validation_repairs:
+        _log_record["validation_repairs"] = _detail_validation_repairs
     return catalogs, events_list, turn_failed, _log_record
 
 
@@ -5996,6 +6134,7 @@ def backfill_stubs(
     # Isolate this pass's validation-failure buffer so a reused worker thread
     # cannot leak failures from a prior turn into this backfill (#503).
     _reset_validation_failures()
+    _reset_validation_repairs()  # parallel recovery buffer (#504 recovery logging)
 
     print(f"  Backfill: found {len(stubs)} stub(s) to re-extract")
     backfilled = 0
@@ -6455,6 +6594,7 @@ def refresh_entities(
     # Isolate this pass's validation-failure buffer so a reused worker thread
     # cannot leak failures from a prior turn into this refresh (#503).
     _reset_validation_failures()
+    _reset_validation_repairs()  # parallel recovery buffer (#504 recovery logging)
     for _catalog_file, entity in stale_entities:
         entity_id = entity.get("id", "")
         if not entity_id:
