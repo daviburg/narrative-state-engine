@@ -474,9 +474,13 @@ class TestRecoveryCallSites:
         results, fallback = se._extract_batched_entity_detail(
             llm, {"turn_id": "turn-021"}, [(ref, None)], None,
         )
-        # Invalid -> batch records a failure, then falls back to a solo retry
-        # (which records again).  Both carry the batched turn id; assert the
-        # batched-phase record is present and correctly attributed.
+        # Invalid -> batch records a failure, falls back to a solo retry (which
+        # also rejects + records).  The entity ends up in fallback and yields no
+        # merged data in results.
+        assert len(fallback) == 1
+        assert all(data is None for _ref, data, _err in results)
+        # Both records carry the batched turn id; assert the batched-phase
+        # record is present and correctly attributed.
         recorded = se._drain_validation_failures()
         assert recorded, "expected at least one recorded failure"
         phases = {r["phase"] for r in recorded}
