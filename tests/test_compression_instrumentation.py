@@ -602,7 +602,7 @@ def _make_stub_llm():
     llm.config = {}
 
     def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None,
-                      schema=None, temperature=None):
+                      schema=None, temperature=None, capture=None):
         p = system_prompt.lower()
         if "discover" in p:
             return {"entities": []}

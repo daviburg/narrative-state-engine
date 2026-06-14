@@ -1294,6 +1294,33 @@ def _get_relevance_shadow_enabled(config: dict | None) -> bool:
     return ctx_opt.get("relevance_shadow_logging", False) is True
 
 
+# Raw-IO capture artifact filename (#477 step 1).  Written alongside
+# extraction-log.jsonl in the framework dir when the default-OFF
+# ``raw_io_capture`` flag is on; kept separate from extraction-log.jsonl
+# because the raw prompt/completion text is large.
+_RAW_IO_CAPTURE_FILENAME = "raw-io-capture.jsonl"
+
+
+def _raw_io_capture_enabled(config: dict | None) -> bool:
+    """Return whether raw-IO capture is enabled (#477 step 1, epic #477).
+
+    Reads the measurement flag ``context_optimizations.raw_io_capture``.
+    Default OFF so that, when the key is unset or malformed, extraction is
+    byte-identical to the baseline and **no** raw-IO artifact is written.
+    Strict bool parse (``is True``) mirrors the other measurement gates so a
+    truthy non-bool (the string ``"true"``, ``1``, a non-empty list) cannot
+    silently enable it.
+
+    Pure measurement gate: when ON it tees the verbatim prompt + completion and
+    per-call token counts to ``raw-io-capture.jsonl`` but never changes which
+    entities are detailed, the prompts, the LLM calls, or any extracted output.
+    """
+    raw_ctx_opt = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
+    return ctx_opt.get("raw_io_capture", False) is True
+
+
+
 def _compute_relevance_detail_shadow(
     pre_cap_tasks: list[tuple[dict, dict | None]],
     actual_tasks: list[tuple[dict, dict | None]],
@@ -3516,6 +3543,8 @@ def _extract_single_entity_detail(
             user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                              arcs_data=entity_arcs, config=config,
                                              mentioned_ids=mentioned_ids),
+            capture={"turn": turn_id, "phase": "entity_detail",
+                     "entity_id": entity_id},
         )
     except QuotaExhaustedError:
         raise
@@ -3652,6 +3681,8 @@ def _extract_batched_entity_detail(
                 turn, batch_tasks, arcs_data=pc_arcs_data,
                 config=config, mentioned_ids=mentioned_ids,
             ),
+            capture={"turn": turn_id, "phase": "entity_detail_batch",
+                     "entity_id": None},
         )
     except QuotaExhaustedError:
         raise
@@ -3729,6 +3760,8 @@ def _extract_relationships_parallel(
             system_prompt=_sys_prompt,
             user_prompt=_user_prompt,
             max_tokens=max_tokens,
+            capture={"turn": turn_id, "phase": "relationship_mapper",
+                     "entity_id": None},
         )
         return rel_result.get("relationships", [])
     except LLMTruncationError as trunc_err:
@@ -3741,6 +3774,8 @@ def _extract_relationships_parallel(
                 system_prompt=_sys_prompt,
                 user_prompt=_user_prompt,
                 max_tokens=_retry_max,
+                capture={"turn": turn_id, "phase": "relationship_mapper",
+                         "entity_id": None},
             )
             return rel_result.get("relationships", [])
         except LLMTruncationError as retry_trunc:
@@ -3790,6 +3825,7 @@ def _extract_events_parallel(
         event_result = llm.extract_json(
             system_prompt=load_template("event-extractor"),
             user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
+            capture={"turn": turn_id, "phase": "event", "entity_id": None},
         )
         return event_result.get("events", [])
     except QuotaExhaustedError:
@@ -3840,6 +3876,7 @@ def _run_discovery_phase(
             user_prompt=_disc_user_prompt,
             temperature=_discovery_temp,
             max_tokens=_discovery_max_tokens,
+            capture={"turn": turn_id, "phase": "discovery", "entity_id": None},
         )
     except LLMTruncationError as trunc_err:
         _retry_max = (_discovery_max_tokens or llm.max_tokens) * 2
@@ -3852,6 +3889,7 @@ def _run_discovery_phase(
                 user_prompt=_disc_user_prompt,
                 temperature=_discovery_temp,
                 max_tokens=_retry_max,
+                capture={"turn": turn_id, "phase": "discovery", "entity_id": None},
             )
         except LLMTruncationError as retry_trunc:
             partial = retry_trunc.partial_text
@@ -4499,6 +4537,8 @@ def extract_and_merge(
                         ),
                         timeout=_timeout,
                         max_tokens=llm.pc_max_tokens,
+                        capture={"turn": turn_id, "phase": "entity_detail",
+                                 "entity_id": "char-player"},
                     )
 
                 f = pool.submit(_pc_llm_call)
@@ -4724,6 +4764,8 @@ def extract_and_merge(
                     user_prompt=format_detail_prompt(turn, entity_ref, current_entry,
                                                      arcs_data=entity_arcs, config=_cfg,
                                                      mentioned_ids=_mentioned_ids),
+                    capture={"turn": turn_id, "phase": "entity_detail",
+                             "entity_id": entity_id},
                 )
             except QuotaExhaustedError:
                 raise
@@ -4816,6 +4858,8 @@ def extract_and_merge(
                                                      mentioned_ids=_mentioned_ids),
                     timeout=_pc_timeout,
                     max_tokens=llm.pc_max_tokens,
+                    capture={"turn": turn_id, "phase": "entity_detail",
+                             "entity_id": "char-player"},
                 )
                 entity_data = _unwrap_entity_response(detail_result)
                 if entity_data:
@@ -4907,6 +4951,8 @@ def extract_and_merge(
                     user_prompt=format_relationship_prompt(turn, mentioned_entities,
                                                            existing_rels_json),
                     max_tokens=_rel_max_tokens,
+                    capture={"turn": turn_id, "phase": "relationship_mapper",
+                             "entity_id": None},
                 )
                 relationships = rel_result.get("relationships", [])
                 if relationships:
@@ -4924,6 +4970,8 @@ def extract_and_merge(
                         user_prompt=format_relationship_prompt(turn, mentioned_entities,
                                                                existing_rels_json),
                         max_tokens=_retry_max,
+                        capture={"turn": turn_id, "phase": "relationship_mapper",
+                                 "entity_id": None},
                     )
                     relationships = rel_result.get("relationships", [])
                     if relationships:
@@ -4971,6 +5019,7 @@ def extract_and_merge(
             event_result = llm.extract_json(
                 system_prompt=load_template("event-extractor"),
                 user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
+                capture={"turn": turn_id, "phase": "event", "entity_id": None},
             )
             new_events = event_result.get("events", [])
             _fix_event_source_turns(new_events, turn_id)
@@ -7412,6 +7461,15 @@ def extract_semantic_batch(
     catalog_dir = os.path.join(framework_dir, "catalogs")
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
 
+    # Raw-IO capture (#477 step 1) — measurement-only, default-OFF.  Enabled
+    # only when the context_optimizations.raw_io_capture flag is on; tees the
+    # verbatim prompt + completion and per-call token counts to a separate
+    # artifact without changing any extraction behaviour or output.
+    if _raw_io_capture_enabled(llm.config):
+        llm.enable_raw_io_capture(
+            os.path.join(framework_dir, _RAW_IO_CAPTURE_FILENAME))
+        print(f"  Raw-IO capture ON -> {_RAW_IO_CAPTURE_FILENAME}", file=sys.stderr)
+
     # Build set of turns already successfully extracted (#191) so re-runs
     # skip them instead of overwriting good data from earlier passes.
     _already_extracted: set[str] = set()
@@ -7900,6 +7958,14 @@ def extract_semantic_single(
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
+
+    # Raw-IO capture (#477 step 1) — measurement-only, default-OFF.  See
+    # extract_semantic_batch for the rationale.
+    if _raw_io_capture_enabled(llm.config):
+        llm.enable_raw_io_capture(
+            os.path.join(framework_dir, _RAW_IO_CAPTURE_FILENAME))
+        print(f"  Raw-IO capture ON -> {_RAW_IO_CAPTURE_FILENAME}", file=sys.stderr)
+
     catalogs = load_catalogs(catalog_dir)
     events_list = load_events(catalog_dir)
     timeline = load_timeline(catalog_dir)

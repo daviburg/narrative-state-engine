@@ -32,7 +32,7 @@ def _make_parallel_llm(discovery_entities=None, parallel_workers=4):
     call_lock = threading.Lock()
 
     def _extract_json(system_prompt, user_prompt, timeout=None, max_tokens=None,
-                      schema=None, temperature=None):
+                      schema=None, temperature=None, capture=None):
         with call_lock:
             call_threads.append(threading.current_thread().ident)
 
@@ -190,7 +190,8 @@ class TestParallelExtraction:
         call_count = {"n": 0}
 
         def _failing_extract(system_prompt, user_prompt, timeout=None,
-                             max_tokens=None, schema=None, temperature=None):
+                             max_tokens=None, schema=None, temperature=None,
+                             capture=None):
             call_count["n"] += 1
             prompt_lower = system_prompt.lower()
             if "discover" in prompt_lower:

@@ -13,6 +13,18 @@ import re
 import sys
 import threading
 import time
+from datetime import datetime, timezone
+
+
+def _estimate_tokens(text: str) -> int:
+    """Rough token estimate: ~3 characters per token.
+
+    BPE tokenizers (Qwen, Llama, GPT) average 2.5–3.5 characters per token.
+    Used by the raw-IO capture (#477 step 1) ONLY as a fallback when the
+    backend response does not expose a usage/token-count field; such counts
+    are flagged ``*_tokens_estimated: true`` in the capture record.
+    """
+    return max(1, len(text) // 3)
 
 
 class LLMExtractionError(Exception):
@@ -194,6 +206,16 @@ class LLMClient:
             "consecutive_rate_limit_threshold", 10)
         self.stats = RetryStats()
 
+        # Raw-IO capture (#477 step 1) — measurement-only, default-OFF.
+        # Remains None unless an extraction entry point explicitly calls
+        # enable_raw_io_capture(path) (which it does ONLY when the default-OFF
+        # context_optimizations.raw_io_capture flag is on).  While None,
+        # extract_json/generate_text do ZERO capture work — no record is built,
+        # serialised, or written — so a flag-OFF run is byte-identical to the
+        # baseline with no added overhead.
+        self._raw_io_capture_path: str | None = None
+        self._raw_io_capture_lock = threading.Lock()
+
         # Fallback LLM provider — used when primary exhausts retries.
         # Configured via a "fallback" block in llm.json.
         self._fallback_client = None
@@ -368,6 +390,101 @@ class LLMClient:
             client = self._clients[self._client_index]
             self._client_index = (self._client_index + 1) % len(self._clients)
             return client
+
+    def enable_raw_io_capture(self, path: str) -> None:
+        """Enable raw-IO capture (#477 step 1), teeing one JSONL record per
+        LLM call to *path*.
+
+        MEASUREMENT-ONLY: this never changes the prompts, the calls, the
+        parsing, or any extracted output.  It only WRITES an extra artifact
+        containing the verbatim prompt + completion (plus per-call input/output
+        token counts) the client already holds, so a downstream analysis can
+        verify what the entity_detail phase actually emits — closing the
+        parsed-catalog-proxy gap.  Called by the extraction entry points only
+        when the default-OFF ``raw_io_capture`` flag is on; while it is never
+        called, the client does no capture work at all.
+        """
+        self._raw_io_capture_path = path
+        try:
+            d = os.path.dirname(os.path.abspath(path))
+            if d:
+                os.makedirs(d, exist_ok=True)
+        except OSError:
+            # Capture is best-effort: a dir-creation failure must never break
+            # extraction.  The per-record writer also guards its own IO.
+            pass
+
+    def _write_raw_io_record(
+        self, capture: dict, messages: list, raw_text: str, response
+    ) -> None:
+        """Append one raw-IO capture record (#477 step 1) — best-effort.
+
+        Records the verbatim system+user prompt, the verbatim un-parsed
+        completion, and the per-call input/output token counts so a downstream
+        analysis can verify (on real data, not a parsed-catalog proxy) what the
+        entity_detail phase truly emits.  Output (decode) tokens are taken from
+        the backend's ``usage.completion_tokens`` when present; otherwise a
+        char-heuristic estimate of the raw completion is used and the record is
+        flagged ``output_tokens_estimated: true``.  Input tokens follow the same
+        rule via ``usage.prompt_tokens``.
+
+        Never raises: any serialisation or IO error is swallowed so capture can
+        never interrupt extraction.
+        """
+        path = self._raw_io_capture_path
+        if not path:
+            return
+        try:
+            system_prompt = ""
+            user_prompt = ""
+            for m in messages:
+                role = m.get("role")
+                if role == "system":
+                    system_prompt = m.get("content", "") or ""
+                elif role == "user":
+                    user_prompt = m.get("content", "") or ""
+
+            output_tokens = None
+            input_tokens = None
+            output_tokens_estimated = True
+            input_tokens_estimated = True
+            usage = getattr(response, "usage", None) if response is not None else None
+            if usage is not None:
+                ct = getattr(usage, "completion_tokens", None)
+                pt = getattr(usage, "prompt_tokens", None)
+                if isinstance(ct, int):
+                    output_tokens = ct
+                    output_tokens_estimated = False
+                if isinstance(pt, int):
+                    input_tokens = pt
+                    input_tokens_estimated = False
+            if output_tokens is None:
+                output_tokens = _estimate_tokens(raw_text or "")
+            if input_tokens is None:
+                input_tokens = _estimate_tokens(
+                    (system_prompt + "\n" + user_prompt) if (system_prompt or user_prompt) else ""
+                )
+
+            record = {
+                "timestamp": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "turn": capture.get("turn"),
+                "phase": capture.get("phase"),
+                "entity_id": capture.get("entity_id"),
+                "raw_prompt": {"system": system_prompt, "user": user_prompt},
+                "raw_completion": raw_text,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "input_tokens_estimated": input_tokens_estimated,
+                "output_tokens_estimated": output_tokens_estimated,
+            }
+            line = json.dumps(record, default=str) + "\n"
+            with self._raw_io_capture_lock:
+                with open(path, "a", encoding="utf-8") as fh:
+                    fh.write(line)
+        except Exception:
+            # Best-effort measurement: never let capture break extraction.
+            return
+
 
     @property
     def _is_ollama(self) -> bool:
@@ -709,6 +826,7 @@ class LLMClient:
         timeout: int | None = None,
         max_tokens: int | None = None,
         temperature: float | None = None,
+        capture: dict | None = None,
     ) -> dict | list:
         """Send a chat completion request and parse the JSON response.
 
@@ -722,6 +840,13 @@ class LLMClient:
                 overrides ``self.max_tokens`` for this call only.
             temperature: Optional per-call temperature override. When provided,
                 overrides ``self.temperature`` for this call only (#251).
+            capture: Optional raw-IO capture tag dict (#477 step 1) with keys
+                ``turn``, ``phase``, and ``entity_id``.  When raw-IO capture is
+                enabled (see ``enable_raw_io_capture``) AND this is provided, the
+                verbatim prompt + completion and per-call token counts are teed
+                to the capture artifact.  Measurement-only: it never affects the
+                request, parsing, or return value; when capture is disabled this
+                argument is ignored at zero cost.
 
         Returns:
             Parsed JSON object/array.
@@ -767,6 +892,9 @@ class LLMClient:
             try:
                 effective_temp = temperature if temperature is not None else self.temperature
 
+                # response stays None on the Ollama streaming path (no usage
+                # object); the raw-IO capture handles that by estimating tokens.
+                response = None
                 # Ollama streaming path — uses native /api/chat with
                 # format=json to avoid the non-streaming empty-response
                 # problem on thinking-mode models (qwen3.5).
@@ -865,6 +993,8 @@ class LLMClient:
                     jsonschema.validate(parsed, schema)
 
                 self.stats.record_success()
+                if capture is not None and self._raw_io_capture_path is not None:
+                    self._write_raw_io_record(capture, messages, raw_text, response)
                 return parsed
 
             except LLMTruncationError:
@@ -891,6 +1021,7 @@ class LLMClient:
                     timeout=timeout,
                     max_tokens=max_tokens,
                     temperature=temperature,
+                    capture=capture,
                 )
                 self.stats.record_success()
                 return result
@@ -991,6 +1122,7 @@ class LLMClient:
         system_prompt: str,
         user_prompt: str,
         timeout: int | None = None,
+        capture: dict | None = None,
     ) -> str:
         """Send a chat completion request and return the raw text response.
 
@@ -1002,6 +1134,9 @@ class LLMClient:
             system_prompt: Role instructions for the model.
             user_prompt: The user message / task description.
             timeout: Optional per-call timeout in seconds.
+            capture: Optional raw-IO capture tag dict (#477 step 1); see
+                ``extract_json``.  Measurement-only and ignored at zero cost
+                when capture is disabled.
 
         Returns:
             The raw text content from the LLM response.
@@ -1018,6 +1153,9 @@ class LLMClient:
         last_error = None
         for attempt in range(self.retry_attempts):
             try:
+                # response stays None on the Ollama streaming path (no usage
+                # object); the raw-IO capture handles that by estimating tokens.
+                response = None
                 if self._use_ollama_streaming:
                     raw_text = self._ollama_streaming_chat(
                         messages, timeout=timeout,
@@ -1078,6 +1216,8 @@ class LLMClient:
                         raise LLMExtractionError("Empty response from LLM.")
 
                 self.stats.record_success()
+                if capture is not None and self._raw_io_capture_path is not None:
+                    self._write_raw_io_record(capture, messages, raw_text, response)
                 return raw_text.strip()
 
             except Exception as e:
