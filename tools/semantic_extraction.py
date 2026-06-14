@@ -24,6 +24,7 @@ import re
 import sys
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from catalog_merger import (
@@ -85,10 +86,59 @@ PC_ALLOWED_ATTRS = {
     "condition", "equipment", "quest", "allegiance", "status", "aliases",
 }
 
-# Consecutive PC extraction failure tracking (#133)
-_pc_consecutive_failures = 0  # noqa — used via `global` in extract_and_merge / _reset_pc_failure_tracking
-_pc_skipped_turns = 0
-_pc_turns_since_cooldown = 0  # Tracks turns since cooldown started (increments every turn, skip or attempt)
+# Consecutive PC extraction failure tracking (#133, #508)
+#
+# The PC cooldown is INTENTIONALLY cross-turn state: it counts consecutive
+# PC-detail failures ACROSS the sequential turns of a run to drive the
+# skip/cooldown cycle.  It must therefore persist across the run's sequential
+# ``extract_and_merge()`` calls while staying ISOLATED between concurrent
+# runs/workers.  ``tools/retry_failed_turns.py`` drives several
+# ``extract_and_merge()`` calls concurrently through a ThreadPoolExecutor; the
+# previous three module-level counters were shared across those runs, so one run
+# could corrupt another run's skip/cooldown decisions (#508, follow-up of #507).
+#
+# The three counters are now held in a single per-run ``_PCFailureState`` object
+# stored in a ContextVar.  Unlike the per-CALL #503/#504 buffers (reset at every
+# ``extract_and_merge`` call), this object is set ONCE per run — at the
+# top-level entry points and once per ``retry_failed_turns`` worker — and is
+# NEVER reset per call, so the cross-turn cooldown is preserved byte-identically
+# at the production default ``parallel_workers: 1`` while concurrent runs each
+# get their own isolated state.
+@dataclass
+class _PCFailureState:
+    """Per-run player-character extraction failure counters (#508).
+
+    ``consecutive_failures`` counts back-to-back PC-detail failures,
+    ``skipped_turns`` counts turns where PC extraction was skipped during a
+    cooldown, and ``turns_since_cooldown`` advances every turn (skip or attempt)
+    once the skip threshold is reached to position the cooldown cycle.
+    """
+
+    consecutive_failures: int = 0
+    skipped_turns: int = 0
+    turns_since_cooldown: int = 0
+
+
+_pc_state_var: "contextvars.ContextVar[_PCFailureState | None]" = (
+    contextvars.ContextVar("pc_failure_state", default=None)
+)
+
+
+def _get_pc_state() -> "_PCFailureState":
+    """Return the current run's PC failure state, creating it on first use.
+
+    The state is lazily created per context so any call path that never
+    explicitly reset still gets its OWN isolated object rather than mutating a
+    shared module-level counter (#508).  Within a run the SAME object is reused
+    across the run's sequential turns, preserving the cross-turn cooldown.
+    """
+    state = _pc_state_var.get()
+    if state is None:
+        state = _PCFailureState()
+        _pc_state_var.set(state)
+    return state
+
+
 _PC_FAILURE_WARN_THRESHOLD = 10
 _PC_SKIP_COOLDOWN = 50       # Skip PC extraction for this many turns after threshold failures
 _PC_RETRY_WINDOW = 5         # Retry for this many turns before entering cooldown again
@@ -104,22 +154,26 @@ _PC_DEBUG_LOG = os.path.join(
 _TURN_ID_RE = re.compile(r"^turn-[0-9]{3,}$")
 
 
-def _reset_pc_failure_tracking() -> None:
-    """Reset per-run char-player extraction failure state.
+def _reset_pc_failure_tracking() -> "_PCFailureState":
+    """Install a fresh per-run PC extraction failure state in the current context.
 
-    This counter is module-level state, so top-level extraction entry points
-    must call this at the start of each new batch/single run to avoid
-    carrying failure counts across unrelated invocations in long-lived
-    processes.
+    This is called once at the start of each top-level extraction entry point
+    (``extract_semantic_batch``, ``extract_semantic_single``) and once per
+    ``retry_failed_turns`` worker task, so failure counts never carry across
+    unrelated runs in long-lived processes and each concurrent run/worker gets
+    its OWN isolated ``_PCFailureState`` object (#508).  It must NOT be called
+    per ``extract_and_merge`` call: within a run the SAME object is reused across
+    the run's sequential turns so the cross-turn cooldown cycle is preserved.
 
     After ``_PC_SKIP_THRESHOLD`` consecutive failures, PC extraction enters
     a cooldown cycle: it skips ``_PC_SKIP_COOLDOWN`` turns then retries for
     ``_PC_RETRY_WINDOW`` turns, repeating until a success resets the counter.
+
+    Returns the fresh state object (callers may ignore it).
     """
-    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
-    _pc_consecutive_failures = 0
-    _pc_skipped_turns = 0
-    _pc_turns_since_cooldown = 0
+    state = _PCFailureState()
+    _pc_state_var.set(state)
+    return state
 
 
 def _should_skip_pc(consecutive_failures: int, turns_since_cooldown: int) -> bool:
@@ -4679,12 +4733,15 @@ def extract_and_merge(
         Tuple of (catalogs, events_list, turn_failed, log_record) where
         turn_failed is True when a non-PC extraction agent encountered an
         LLM error (e.g. 429, quota exhaustion, timeout).  PC extraction
-        failures are tracked separately via ``_pc_consecutive_failures``
-        and the ``pc_ok`` / ``pc_error`` fields in log_record.
+        failures are tracked separately via the per-run ``_PCFailureState``
+        (``_get_pc_state()``) and the ``pc_ok`` / ``pc_error`` fields in
+        log_record.
         log_record is a dict summarising per-phase outcomes for this turn;
         phases that were skipped have their ``*_ok`` field set to None.
     """
-    global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
+    # Per-run PC failure state (#508): isolated across concurrent runs/workers,
+    # persistent across this run's sequential turns so the cooldown is preserved.
+    _pc = _get_pc_state()
     turn_id = turn["turn_id"]
     _t0 = time.monotonic()
     # Install a fresh per-call entity_detail validation-failure buffer so this
@@ -4998,11 +5055,11 @@ def extract_and_merge(
     _pc_ref = None
     _pc_timeout = None
     if not pc_already_extracted:
-        _skip_pc = _should_skip_pc(_pc_consecutive_failures, _pc_turns_since_cooldown)
-        if _pc_consecutive_failures >= _PC_SKIP_THRESHOLD:
-            _pc_turns_since_cooldown += 1  # lgtm[py/unused-global-variable]
+        _skip_pc = _should_skip_pc(_pc.consecutive_failures, _pc.turns_since_cooldown)
+        if _pc.consecutive_failures >= _PC_SKIP_THRESHOLD:
+            _pc.turns_since_cooldown += 1
             if _skip_pc:
-                _pc_skipped_turns += 1
+                _pc.skipped_turns += 1
         if not _skip_pc:
             _run_pc = True
             pc_result = find_entity_by_id(catalogs, "char-player")
@@ -5281,7 +5338,7 @@ def extract_and_merge(
                 else:
                     print(
                         f"  WARNING: PC detail extraction returned None at {turn_id}. "
-                        f"Consecutive failures: {_pc_consecutive_failures + 1}",
+                        f"Consecutive failures: {_pc.consecutive_failures + 1}",
                         file=sys.stderr,
                     )
                     _write_pc_debug_record(
@@ -5291,23 +5348,23 @@ def extract_and_merge(
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
                 _phase_log["pc_ok"] = True
-                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
-                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
+                _pc.consecutive_failures = 0
+                _pc.turns_since_cooldown = 0
             else:
                 _phase_log["pc_ok"] = False
                 if not _phase_log["pc_error"]:
                     _phase_log["pc_error"] = "validation_failed_or_none"
-                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
-                if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
+                _pc.consecutive_failures += 1
+                if _pc.consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
                     print(
                         f"  WARNING: PC extraction has failed for "
-                        f"{_pc_consecutive_failures} consecutive turns "
+                        f"{_pc.consecutive_failures} consecutive turns "
                         f"(last update: "
                         f"{_pc_entry.get('last_updated_turn', 'unknown')}). "
                         f"Context may be too large for reliable extraction.",
                         file=sys.stderr,
                     )
-                elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
+                elif _pc.consecutive_failures == _PC_SKIP_THRESHOLD:
                     print(
                         f"  WARNING: PC extraction entering cooldown after "
                         f"{_PC_SKIP_THRESHOLD} consecutive failures "
@@ -5511,7 +5568,7 @@ def extract_and_merge(
                 else:
                     print(
                         f"  WARNING: PC detail extraction returned None at {turn_id}. "
-                        f"Consecutive failures: {_pc_consecutive_failures + 1}",
+                        f"Consecutive failures: {_pc.consecutive_failures + 1}",
                         file=sys.stderr,
                     )
                     _write_pc_debug_record(
@@ -5528,23 +5585,23 @@ def extract_and_merge(
             # Track consecutive PC extraction failures (#133)
             if pc_updated:
                 _phase_log["pc_ok"] = True
-                _pc_consecutive_failures = 0  # lgtm[py/unused-global-variable]
-                _pc_turns_since_cooldown = 0  # lgtm[py/unused-global-variable]
+                _pc.consecutive_failures = 0
+                _pc.turns_since_cooldown = 0
             else:
                 _phase_log["pc_ok"] = False
                 if not _phase_log["pc_error"]:
                     _phase_log["pc_error"] = "validation_failed_or_none"
-                _pc_consecutive_failures += 1  # lgtm[py/unused-global-variable]
-                if _pc_consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
+                _pc.consecutive_failures += 1
+                if _pc.consecutive_failures == _PC_FAILURE_WARN_THRESHOLD:
                     print(
                         f"  WARNING: PC extraction has failed for "
-                        f"{_pc_consecutive_failures} consecutive turns "
+                        f"{_pc.consecutive_failures} consecutive turns "
                         f"(last update: "
                         f"{_pc_entry.get('last_updated_turn', 'unknown')}). "
                         f"Context may be too large for reliable extraction.",
                         file=sys.stderr,
                     )
-                elif _pc_consecutive_failures == _PC_SKIP_THRESHOLD:
+                elif _pc.consecutive_failures == _PC_SKIP_THRESHOLD:
                     print(
                         f"  WARNING: PC extraction entering cooldown after "
                         f"{_PC_SKIP_THRESHOLD} consecutive failures "
@@ -8565,9 +8622,10 @@ def extract_semantic_batch(
         print(f"  Removed {total_removed} dangling relationship target(s) from {len(dangling_removed)} entit(ies)")
 
     # Report if PC extraction was skipped due to consecutive failures (#149)
-    if _pc_skipped_turns > 0:
+    _pc_state = _get_pc_state()
+    if _pc_state.skipped_turns > 0:
         print(
-            f"  PC extraction skipped for {_pc_skipped_turns} turn(s) "
+            f"  PC extraction skipped for {_pc_state.skipped_turns} turn(s) "
             f"(cooldown after {_PC_SKIP_THRESHOLD} consecutive failures, "
             f"retrying for {_PC_RETRY_WINDOW} turn(s) every "
             f"{_PC_SKIP_COOLDOWN + _PC_RETRY_WINDOW} turns)",

@@ -131,6 +131,12 @@ def extract_single_turn(
 
     Returns: (turn_id, catalogs, events, timeline, failed, log_record)
     """
+    # Install this worker's own per-run PC failure state (#508).  ThreadPool
+    # workers start with their own (empty) contextvars context, and threads are
+    # reused across tasks, so resetting here gives each retried turn an isolated
+    # PC skip/cooldown counter that cannot corrupt — or be corrupted by — a
+    # concurrently running worker's PC state.
+    _reset_pc_failure_tracking()
     # Each thread gets its own LLM client (own HTTP session)
     llm = LLMClient(config_path, overrides=overrides)
     # Deep copy catalogs so merge operations don't interfere between threads
