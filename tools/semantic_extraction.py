@@ -48,6 +48,7 @@ from catalog_merger import (
     _estimate_tokens,
     _find_mentioned_entities,
     _select_context_aware_entities,
+    generate_relationship_index,
     _DEFAULT_RECENCY_WINDOW,
 )
 from llm_client import LLMClient, LLMExtractionError, LLMTruncationError, QuotaExhaustedError
@@ -1626,6 +1627,36 @@ def _raw_io_capture_enabled(config: dict | None) -> bool:
     return ctx_opt.get("raw_io_capture", False) is True
 
 
+# Relationship-demotion shadow artifact filename (#495 step 1, epic #477).
+# Written alongside extraction-log.jsonl in the framework dir when the
+# default-OFF ``relationship_demotion_shadow`` flag is on; kept separate from
+# extraction-log.jsonl because it emits one record per relationship per seam
+# per turn (large).
+_RELATIONSHIP_DEMOTION_SHADOW_FILENAME = "relationship-demotion-shadow.jsonl"
+
+
+def _relationship_demotion_shadow_enabled(config: dict | None) -> bool:
+    """Return whether relationship-demotion shadow logging is enabled (#495 step 1).
+
+    Reads the measurement flag
+    ``context_optimizations.relationship_demotion_shadow``.  Default OFF so
+    that, when the key is unset or malformed, extraction is byte-identical to
+    the baseline and **no** relationship-demotion-shadow artifact is written.
+    Strict bool parse (``is True``) mirrors the other measurement gates so a
+    truthy non-bool (the string ``"true"``, ``1``, a non-empty list) cannot
+    silently enable it.
+
+    Pure measurement gate: when ON it computes — without changing any
+    extraction behavior — the *would-demote* relationship set at both
+    relationship serialization seams (A = entity_detail prior-context,
+    B = relationship_mapper existing-rels) and appends one record per
+    relationship to ``relationship-demotion-shadow.jsonl``.  It never changes
+    the prompts, LLM calls, tiering, caps, or any extracted output.
+    """
+    raw_ctx_opt = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx_opt: dict = raw_ctx_opt if isinstance(raw_ctx_opt, dict) else {}
+    return ctx_opt.get("relationship_demotion_shadow", False) is True
+
 
 def _compute_relevance_detail_shadow(
     pre_cap_tasks: list[tuple[dict, dict | None]],
@@ -2894,6 +2925,181 @@ def _trim_entry_for_scene(entry: dict, mentioned_ids: set[str] | None = None,
     return trimmed
 
 
+def _score_relationship_tier(
+    rel: dict,
+    owner_id: str,
+    mentioned_ids: set[str],
+    current_turn_num: int | None,
+    tiering_on: bool,
+    permanent_types: frozenset[str],
+) -> int:
+    """Return the discrete relationship tier (1=full .. 4=omit) for ``rel``.
+
+    Shared scoring used by both the relationship-mapper budget path
+    (:func:`_collect_existing_relationships`, seam B) and the #495 measurement
+    shadow.  Tier is derived from endpoint mention, recency, and status, with
+    the optional L4 permanent-bond promotion (#477).  Pure and read-only — it
+    never mutates ``rel``.  Tier 4 is the relationship the current scoring would
+    OMIT under budget pressure (the would-demote candidate).
+    """
+    source_id = rel.get("source_id", owner_id)
+    target_id = rel.get("target_id", "")
+    both_mentioned = source_id in mentioned_ids and target_id in mentioned_ids
+    one_mentioned = source_id in mentioned_ids or target_id in mentioned_ids
+    status = rel.get("status", "active")
+    rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
+    turn_dist = (current_turn_num - rel_turn) if (current_turn_num and rel_turn is not None) else 9999
+
+    if both_mentioned:
+        tier = 1  # full
+    elif one_mentioned and turn_dist <= _REL_RECENCY_WINDOW:
+        tier = 2  # recent
+    elif one_mentioned and status == "active":
+        tier = 3  # summary
+    else:
+        tier = 4  # omit
+
+    # L4: boost permanent-bond types so the volatile tail is trimmed
+    # first (tiers 3/4 degrade first under budget pressure).
+    # - One endpoint mentioned: promote to at least tier 2 — the strong
+    #   guarantee; tier 2 survives the tier-3 → omit degradation pass.
+    # - Neither endpoint mentioned: the tier 4 → 3 boost keeps it as a
+    #   summary only when within budget; the degradation pass still
+    #   degrades tier 3 → omit, so an unmentioned permanent bond CAN
+    #   still be omitted under budget pressure.
+    if tiering_on:
+        rel_type = rel.get("type", rel.get("relationship_type", ""))
+        if rel_type in permanent_types:
+            if tier == 4:
+                tier = 3  # prevent silent omit
+            if one_mentioned and tier >= 3:
+                tier = 2  # volatile tail drops first; permanent survives
+
+    return tier
+
+
+def _rel_index_endpoint_degree(rel_index: dict | None, endpoint_id: str) -> int | None:
+    """Return endpoint connectivity (``len(forward)+len(reverse)``) from the index.
+
+    ``rel_index`` is the in-memory bidirectional relationship index produced by
+    :func:`generate_relationship_index` (keyed by entity id, each entry holding
+    ``forward``/``reverse`` edge lists).  Returns ``None`` when the index is
+    absent or the endpoint does not participate in any relationship — the shadow
+    records ``core_degree: null`` rather than failing.
+    """
+    if not isinstance(rel_index, dict) or not endpoint_id:
+        return None
+    entry = rel_index.get(endpoint_id)
+    if not isinstance(entry, dict):
+        return None
+    fwd = entry.get("forward") or []
+    rev = entry.get("reverse") or []
+    fwd_n = len(fwd) if isinstance(fwd, list) else 0
+    rev_n = len(rev) if isinstance(rev, list) else 0
+    return fwd_n + rev_n
+
+
+def _compute_relationship_demotion_shadow_records(
+    rels_by_owner: dict[str, list],
+    tier_mentioned_ids: set[str],
+    real_mentioned_ids: set[str],
+    current_turn_num: int | None,
+    turn_id: str,
+    seam: str,
+    config: dict | None,
+    rel_index: dict | None,
+) -> list[dict]:
+    """Compute the #495 relationship-demotion shadow records (MEASUREMENT ONLY).
+
+    For each relationship serialized at a seam, emit one read-only record
+    describing what a contemplated demotion policy *would* do.  ``would_demote``
+    reuses the existing discrete tier-4-OMIT scoring
+    (:func:`_score_relationship_tier`) — it does **not** introduce a new tuned
+    scalar threshold (Rule 10).  The function never mutates any relationship,
+    catalog, prompt, or scoring state used by the real pipeline.
+
+    Args:
+        rels_by_owner: owner-entity-id -> list of its relationships, as
+            serialized at the seam.
+        tier_mentioned_ids: the full mentioned set the seam's tier scoring keys
+            on (includes the ``char-player`` injected floor).
+        real_mentioned_ids: entity ids genuinely mentioned in the turn text
+            this turn (text-detected only — excludes the floor).
+        current_turn_num: numeric turn index, or ``None``.
+        turn_id: the current turn id string.
+        seam: ``"A"`` (entity_detail prior-context) or ``"B"``
+            (relationship_mapper existing-rels).
+        config: llm config (for the L4 type-tiering parameters).
+        rel_index: in-memory relationship index for ``core_degree`` (or
+            ``None``).
+
+    Returns:
+        A list of per-relationship record dicts.
+    """
+    tiering_on, perm_types, _ = _get_type_tiering_config(config)
+    records: list[dict] = []
+    for owner_id, rels in rels_by_owner.items():
+        if not rels:
+            continue
+        for rel in rels:
+            source_id = rel.get("source_id", owner_id)
+            target_id = rel.get("target_id", "")
+            tier = _score_relationship_tier(
+                rel, owner_id, tier_mentioned_ids, current_turn_num,
+                tiering_on, perm_types,
+            )
+            rel_turn = _parse_turn_number(rel.get("last_updated_turn"))
+            staleness = (
+                current_turn_num - rel_turn
+                if (current_turn_num is not None and rel_turn is not None)
+                else None
+            )
+            # mention_source: a REAL transcript mention this turn (either
+            # endpoint genuinely named in the turn text) beats a char-player
+            # INJECTED-FLOOR keep (PC relationship retained only because it
+            # sits on the PC floor, not because it was mentioned this turn).
+            if source_id in real_mentioned_ids or target_id in real_mentioned_ids:
+                mention_source = "real_mention"
+            elif owner_id == "char-player":
+                mention_source = "injected_floor"
+            else:
+                mention_source = "none"
+            records.append({
+                "turn": turn_id,
+                "owner": owner_id,
+                "target_id": target_id,
+                "type": rel.get("type", rel.get("relationship_type", "")),
+                "status": rel.get("status", "active"),
+                "staleness": staleness,
+                "core_degree": _rel_index_endpoint_degree(rel_index, target_id),
+                "mention_source": mention_source,
+                "would_demote": (tier == 4),
+                "seam": seam,
+            })
+    return records
+
+
+def _append_relationship_demotion_shadow(framework_dir: str, records: list[dict]) -> None:
+    """Append #495 shadow records to ``relationship-demotion-shadow.jsonl``.
+
+    One JSON line per record, under ``framework_dir`` and kept separate from
+    ``extraction-log.jsonl`` (one record per relationship per seam per turn is
+    large).  No-op on empty ``records``.  Mirrors the raw-IO capture artifact's
+    append semantics.
+    """
+    if not records:
+        return
+    # Defensive: extract_and_merge() accepts framework_dir and may be called
+    # independently of the batch/single wrappers, so the directory is not
+    # guaranteed to exist.  Create it before opening so the measurement flag
+    # never causes a hard FileNotFoundError.
+    os.makedirs(framework_dir, exist_ok=True)
+    path = os.path.join(framework_dir, _RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
+    with open(path, "a", encoding="utf-8") as f:
+        for rec in records:
+            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+
+
 def _collect_existing_relationships(
     catalogs: dict,
     entity_ids: list[str],
@@ -2955,39 +3161,10 @@ def _collect_existing_relationships(
     scored: list[tuple[int, str, dict]] = []  # (tier, owner_id, rel)
     for owner_id, rels in result.items():
         for rel in rels:
-            source_id = rel.get("source_id", owner_id)
-            target_id = rel.get("target_id", "")
-            both_mentioned = source_id in mentioned_ids and target_id in mentioned_ids
-            one_mentioned = source_id in mentioned_ids or target_id in mentioned_ids
-            status = rel.get("status", "active")
-            rel_turn = _parse_turn_number(rel.get("last_updated_turn", "turn-0"))
-            turn_dist = (current_turn_num - rel_turn) if (current_turn_num and rel_turn is not None) else 9999
-
-            if both_mentioned:
-                tier = 1  # full
-            elif one_mentioned and turn_dist <= _REL_RECENCY_WINDOW:
-                tier = 2  # recent
-            elif one_mentioned and status == "active":
-                tier = 3  # summary
-            else:
-                tier = 4  # omit
-
-            # L4: boost permanent-bond types so the volatile tail is trimmed
-            # first (tiers 3/4 degrade first under budget pressure).
-            # - One endpoint mentioned: promote to at least tier 2 — the strong
-            #   guarantee; tier 2 survives the tier-3 → omit degradation pass.
-            # - Neither endpoint mentioned: the tier 4 → 3 boost keeps it as a
-            #   summary only when within budget; the degradation pass still
-            #   degrades tier 3 → omit, so an unmentioned permanent bond CAN
-            #   still be omitted under budget pressure.
-            if _l4_tiering_on:
-                rel_type = rel.get("type", rel.get("relationship_type", ""))
-                if rel_type in _l4_perm_types:
-                    if tier == 4:
-                        tier = 3  # prevent silent omit
-                    if one_mentioned and tier >= 3:
-                        tier = 2  # volatile tail drops first; permanent survives
-
+            tier = _score_relationship_tier(
+                rel, owner_id, mentioned_ids, current_turn_num,
+                _l4_tiering_on, _l4_perm_types,
+            )
             scored.append((tier, owner_id, rel))
 
     # Compute token budget
@@ -4450,6 +4627,7 @@ def extract_and_merge(
     timeline: list | None = None,
     prefetched_discovery: dict | None = None,
     on_discovery_done: "callable | None" = None,
+    framework_dir: str | None = None,
 ) -> tuple[dict, list, bool, dict]:
     """Process one turn through all extraction agents.
 
@@ -4472,6 +4650,10 @@ def extract_and_merge(
             (or prefetched result is consumed) but before phases 2-4 start.
             Used by the batch loop to submit the next turn's discovery prefetch
             so it overlaps with this turn's detail/relationship/event phases.
+        framework_dir: Optional path to the framework directory.  Used only as
+            the sink for the default-OFF relationship-demotion shadow (#495);
+            when ``None`` (or the flag is off) no shadow work is done and no
+            artifact is written, keeping extraction byte-identical to baseline.
 
     Returns:
         Tuple of (catalogs, events_list, turn_failed, log_record) where
@@ -4706,6 +4888,79 @@ def extract_and_merge(
             current_turn_num=_current_turn_num,
             context_length=_ctx_len if isinstance(_ctx_len, int) else None,
         )
+
+    # Relationship-demotion shadow (#495 step 1, epic #477) — MEASUREMENT ONLY.
+    # When the default-OFF flag is on (and a framework_dir sink is available),
+    # compute the would-demote relationship set at BOTH serialization seams —
+    # A = entity_detail prior-context (entities detailed this turn; the PC block
+    # is the #495 driver), B = relationship_mapper existing-rels — and append
+    # one record per relationship to relationship-demotion-shadow.jsonl.  This
+    # changes NO prompt, LLM call, tiering, cap, or extracted output; flag-OFF
+    # does zero work and writes no artifact (byte-identical to baseline).
+    if framework_dir and _relationship_demotion_shadow_enabled(_cfg):
+        _rd_turn_num = _parse_turn_number(turn_id)
+        _rd_turn_text = turn.get("text", "")
+        # Build the in-memory relationship index once for core_degree lookups.
+        _rd_index = generate_relationship_index(catalogs)
+        # Real transcript mentions this turn (text-detected only; excludes the
+        # char-player injected floor) — used to label mention_source.  Pass
+        # apply_blocklist=False so a literally-named entity whose name sits in
+        # _COMMON_WORD_BLOCKLIST (e.g. "Shadow") is still counted as a real
+        # mention; the real-mention set must be conservative (over-inclusive)
+        # so the shadow never undercounts genuine transcript mentions.
+        _rd_all_entities = [e for entities in catalogs.values() for e in entities]
+        _rd_real_mentioned = _find_mentioned_entities(
+            _rd_all_entities, _rd_turn_text, apply_blocklist=False,
+        )
+        _rd_records: list[dict] = []
+
+        # Seam A — entity_detail prior-context: the RAW relationship list
+        # (pre type-tier cap / pre scene-filter) of each entity detailed this
+        # turn — i.e. the unbounded SOURCE list, NOT the already-capped block
+        # that _format_prior_entity_context actually injects when
+        # relationship_type_tiering is on (which caps the PC block via
+        # _apply_pc_rel_type_tier and scene-filters non-PC entities). This is
+        # intentional per #495 spec: we measure the full would-demote candidate
+        # set, so seam-A telemetry reflects the unbounded source, not the
+        # injected subset.
+        _rd_seam_a_owners: dict[str, list] = {}
+        for _ref, _entry in _entity_tasks:
+            _oid = get_entity_id(_ref)
+            if _oid and _entry and _entry.get("relationships"):
+                _rd_seam_a_owners[_oid] = _entry["relationships"]
+        if _rd_seam_a_owners:
+            _rd_seam_a_mentioned = set(_rd_seam_a_owners.keys()) | _rd_real_mentioned
+            _rd_records.extend(_compute_relationship_demotion_shadow_records(
+                _rd_seam_a_owners, _rd_seam_a_mentioned, _rd_real_mentioned,
+                _rd_turn_num, turn_id, "A", _cfg, _rd_index,
+            ))
+
+        # Seam B — relationship_mapper existing-rels: mirror the exact owner set
+        # and tier mention set _collect_existing_relationships uses so that
+        # would_demote == the tier-4-OMIT that seam B's scoring would assign.
+        if _run_rels:
+            _rd_seam_b_owners: dict[str, list] = {}
+            _rd_seam_b_entities: list[dict] = []
+            for _eid in entity_id_list:
+                _found = find_entity_by_id(catalogs, _eid)
+                if _found:
+                    _rd_seam_b_entities.append(_found[1])
+                    _brels = _found[1].get("relationships", [])
+                    if _brels:
+                        _rd_seam_b_owners[_eid] = _brels
+            # Seam B tier mention set: entity_id_list plus name/alias mentions
+            # detected among those same entities (exactly as seam B builds it).
+            _rd_seam_b_mentioned = set(entity_id_list)
+            if _rd_turn_text:
+                _rd_seam_b_mentioned |= _find_mentioned_entities(
+                    _rd_seam_b_entities, _rd_turn_text,
+                )
+            _rd_records.extend(_compute_relationship_demotion_shadow_records(
+                _rd_seam_b_owners, _rd_seam_b_mentioned, _rd_real_mentioned,
+                _rd_turn_num, turn_id, "B", _cfg, _rd_index,
+            ))
+
+        _append_relationship_demotion_shadow(framework_dir, _rd_records)
 
     # Pre-compute event inputs
     next_evt_id = get_next_event_id(events_list)
@@ -7424,6 +7679,7 @@ def _extract_segmented(
                     turn, seg_catalogs, seg_events, llm, min_confidence,
                     catalog_dir=None,
                     timeline=seg_timeline,
+                    framework_dir=framework_dir,
                 )
             except QuotaExhaustedError as e:
                 print(f"\n  QUOTA EXHAUSTED at {turn_id}: {e}", file=sys.stderr)
@@ -8065,6 +8321,7 @@ def extract_semantic_batch(
             _eam_kwargs = dict(
                 catalog_dir=catalog_dir,
                 timeline=timeline,
+                framework_dir=framework_dir,
             )
             if _prefetched is not None:
                 _eam_kwargs["prefetched_discovery"] = _prefetched
@@ -8371,6 +8628,7 @@ def extract_semantic_single(
             turn, catalogs, events_list, llm, min_confidence,
             catalog_dir=catalog_dir,
             timeline=timeline,
+            framework_dir=framework_dir,
         )
     except Exception as e:
         _turn_log = {

@@ -41,7 +41,7 @@ def _setup_session(tmp_path):
 def _make_noop_extract(add_temporal=None):
     """Create a mock extract_and_merge that optionally adds temporal signals."""
     def mock_extract(turn, catalogs, events, llm, min_conf,
-                     catalog_dir=None, timeline=None):
+                     catalog_dir=None, timeline=None, **kwargs):
         if timeline is not None and add_temporal:
             for sig in add_temporal(turn):
                 timeline.append(sig)
@@ -245,7 +245,7 @@ class TestBatchExtractionTimeline:
         session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
 
         def mock_extract(turn, catalogs, events, llm, min_conf,
-                         catalog_dir=None, timeline=None):
+                         catalog_dir=None, timeline=None, **kwargs):
             if timeline is not None and "snow" in turn["text"].lower():
                 timeline.append({
                     "source_turn": turn["turn_id"],
@@ -297,7 +297,7 @@ class TestBatchExtractionTimeline:
         loaded_timelines = []
 
         def mock_extract(turn, catalogs, events, llm, min_conf,
-                         catalog_dir=None, timeline=None):
+                         catalog_dir=None, timeline=None, **kwargs):
             if timeline is not None:
                 loaded_timelines.append(len(timeline))
             return catalogs, events, False, {"turn_id": turn["turn_id"]}
@@ -337,7 +337,7 @@ class TestSingleTurnTimeline:
         session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
 
         def mock_extract(turn, catalogs, events, llm, min_conf,
-                         catalog_dir=None, timeline=None):
+                         catalog_dir=None, timeline=None, **kwargs):
             if timeline is not None:
                 timeline.append({
                     "id": "time-001",
@@ -381,7 +381,7 @@ class TestSegmentedTimeline:
         session_dir, framework_dir, catalog_dir = _setup_session(tmp_path)
 
         def mock_extract(turn, catalogs, events, llm, min_conf,
-                         catalog_dir=None, timeline=None):
+                         catalog_dir=None, timeline=None, **kwargs):
             if timeline is not None:
                 turn_num = int(turn["turn_id"].split("-")[1])
                 if turn_num <= 3:
