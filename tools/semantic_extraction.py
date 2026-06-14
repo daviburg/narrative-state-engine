@@ -15,6 +15,8 @@ Works in both batch (bootstrap) and incremental (ingest) modes.
 """
 
 import concurrent.futures
+import contextvars
+import functools
 import json
 import math
 import os
@@ -812,8 +814,53 @@ def _validate_entity(entity_data: dict) -> bool:
 # structured record (turn / entity_id / phase / error-path) so the per-turn
 # extraction-log.jsonl can surface it.  Recording is measurement-only and does
 # not change drop/merge behaviour.
+#
+# Concurrency (Copilot review): the buffer must NOT be a single process-global
+# list.  ``tools/retry_failed_turns.py`` drives several ``extract_and_merge()``
+# calls concurrently through a ThreadPoolExecutor; a shared global would let one
+# turn drain/clear another turn's failures or mis-attribute them.  The buffer is
+# therefore held in a ``ContextVar`` so each ``extract_and_merge`` / backfill /
+# refresh call gets its own per-call buffer.  ``extract_and_merge`` itself fans
+# the detail phase out across an inner ThreadPoolExecutor, so submissions are
+# wrapped with ``contextvars.copy_context()`` (see ``_submit_in_context``) to
+# share that one call's buffer with its workers while staying isolated from
+# other concurrent calls.
 _validation_failures_lock = threading.Lock()
-_validation_failures: list[dict] = []
+_validation_failures_var: "contextvars.ContextVar[list[dict] | None]" = (
+    contextvars.ContextVar("entity_detail_validation_failures", default=None)
+)
+
+
+def _current_validation_buffer() -> list[dict]:
+    """Return the current call's failure buffer, creating it on first use."""
+    buf = _validation_failures_var.get()
+    if buf is None:
+        buf = []
+        _validation_failures_var.set(buf)
+    return buf
+
+
+def _reset_validation_failures() -> None:
+    """Install a fresh, empty per-call failure buffer in the current context.
+
+    Called at the start of each top-level entry point (``extract_and_merge``,
+    ``backfill_stubs``, ``refresh_entities``) so a buffer left behind by an
+    earlier task on a reused worker thread can never leak into this call.
+    """
+    _validation_failures_var.set([])
+
+
+def _submit_in_context(pool, fn, *args, **kwargs):
+    """Submit ``fn`` to ``pool`` carrying a copy of the caller's context.
+
+    ThreadPoolExecutor workers otherwise start with their own empty context, so
+    a worker would record validation failures into a buffer the submitting call
+    never drains.  Copying the context shares the submitting call's buffer (the
+    same list object) with the worker while keeping it isolated from other
+    concurrent ``extract_and_merge`` calls.
+    """
+    ctx = contextvars.copy_context()
+    return pool.submit(ctx.run, functools.partial(fn, *args, **kwargs))
 
 
 def _record_validation_failure(
@@ -821,11 +868,12 @@ def _record_validation_failure(
 ) -> None:
     """Append a structured entity_detail validation-failure record (#503).
 
-    Thread-safe: entity_detail runs across a ThreadPoolExecutor, so appends are
-    guarded by a lock.
+    Thread-safe: entity_detail runs across a ThreadPoolExecutor, so appends to
+    the per-call buffer are guarded by a lock.
     """
+    buf = _current_validation_buffer()
     with _validation_failures_lock:
-        _validation_failures.append({
+        buf.append({
             "turn": turn,
             "entity_id": entity_id,
             "phase": phase,
@@ -834,10 +882,13 @@ def _record_validation_failure(
 
 
 def _drain_validation_failures() -> list[dict]:
-    """Return and clear the accumulated validation-failure records (#503)."""
+    """Return and clear the current call's validation-failure records (#503)."""
     with _validation_failures_lock:
-        drained = list(_validation_failures)
-        _validation_failures.clear()
+        buf = _validation_failures_var.get()
+        if not buf:
+            return []
+        drained = list(buf)
+        buf.clear()
     return drained
 
 
@@ -875,8 +926,11 @@ def _sanitize_entity_for_validation(entity_data: dict) -> dict:
 
       (i)  drop null-valued OPTIONAL string-typed top-level keys
            (e.g. ``notes: null`` -> omit the key); and
-      (ii) drop relationship entries that are missing a REQUIRED sub-field (or
-           have it set to null), keeping the valid relationships.
+      (ii) drop array-item entries that are missing a REQUIRED sub-field (or
+           have it set to null), keeping the valid items.  This is discovered
+           generically for EVERY top-level array property whose ``items``
+           declare required sub-fields (e.g. ``relationships``), so no domain
+           field name is hardcoded.
 
     Unrepairable violations (a missing/wrong-typed REQUIRED top-level field, an
     extra property, a bad enum value, etc.) are left intact so validation still
@@ -903,22 +957,33 @@ def _sanitize_entity_for_validation(entity_data: dict) -> dict:
         if isinstance(prop_schema, dict) and prop_schema.get("type") == "string":
             del entity_data[key]
 
-    # (ii) Drop incomplete relationship entries missing a required sub-field.
-    rels = entity_data.get("relationships")
-    rel_schema = props.get("relationships")
-    rel_item_required = set()
-    if isinstance(rel_schema, dict):
-        rel_items = rel_schema.get("items")
-        if isinstance(rel_items, dict):
-            rel_item_required = set(rel_items.get("required", []))
-    if isinstance(rels, list) and rel_item_required:
+    # (ii) Drop incomplete array-item entries missing a required sub-field.
+    # Schema-driven (Rule 9 / Rule 10): rather than hardcoding the
+    # ``relationships`` field, discover EVERY top-level array property whose
+    # ``items`` declare required sub-fields and apply the same incomplete-item
+    # drop to each.  This keeps the recovery purely schema-driven — it adapts if
+    # the schema field is renamed or another required-item array is added — and
+    # never strips valid data (only entries missing a schema-required sub-field
+    # are removed).
+    for key, prop_schema in props.items():
+        if not isinstance(prop_schema, dict) or prop_schema.get("type") != "array":
+            continue
+        items_schema = prop_schema.get("items")
+        if not isinstance(items_schema, dict):
+            continue
+        item_required = set(items_schema.get("required", []))
+        if not item_required:
+            continue
+        value = entity_data.get(key)
+        if not isinstance(value, list):
+            continue
         kept = [
-            rel for rel in rels
-            if isinstance(rel, dict)
-            and all(rel.get(field) is not None for field in rel_item_required)
+            item for item in value
+            if isinstance(item, dict)
+            and all(item.get(field) is not None for field in item_required)
         ]
-        if len(kept) != len(rels):
-            entity_data["relationships"] = kept
+        if len(kept) != len(value):
+            entity_data[key] = kept
 
     return entity_data
 
@@ -4293,9 +4358,11 @@ def extract_and_merge(
     global _pc_consecutive_failures, _pc_skipped_turns, _pc_turns_since_cooldown
     turn_id = turn["turn_id"]
     _t0 = time.monotonic()
-    # Clear any stray entity_detail validation-failure records so this turn's
-    # log captures only failures recorded during this turn (#503).
-    _drain_validation_failures()
+    # Install a fresh per-call entity_detail validation-failure buffer so this
+    # turn's log captures only failures recorded during this turn, and so a
+    # concurrent turn (retry_failed_turns ThreadPoolExecutor) can never drain or
+    # mis-attribute another turn's failures (#503).
+    _reset_validation_failures()
     _entities_before = sum(len(v) for v in catalogs.values())
     _events_before = len(events_list)
 
@@ -4629,7 +4696,8 @@ def extract_and_merge(
         ) as pool:
             # Submit entity detail tasks (solo)
             for entity_ref, current_entry in _detail_solo_tasks:
-                f = pool.submit(
+                f = _submit_in_context(
+                    pool,
                     _extract_single_entity_detail,
                     llm, turn, entity_ref, current_entry, pc_arcs_data, _cfg,
                     _mentioned_ids,
@@ -4639,7 +4707,8 @@ def extract_and_merge(
             # Submit batched entity detail groups (#491): one shared-context
             # call per group, returning a list of per-entity result tuples.
             for _group in _detail_batch_groups:
-                f = pool.submit(
+                f = _submit_in_context(
+                    pool,
                     _extract_batched_entity_detail,
                     llm, turn, _group, pc_arcs_data, _cfg, _mentioned_ids,
                 )
@@ -5924,6 +5993,10 @@ def backfill_stubs(
     if not stubs:
         return 0
 
+    # Isolate this pass's validation-failure buffer so a reused worker thread
+    # cannot leak failures from a prior turn into this backfill (#503).
+    _reset_validation_failures()
+
     print(f"  Backfill: found {len(stubs)} stub(s) to re-extract")
     backfilled = 0
 
@@ -6379,6 +6452,9 @@ def refresh_entities(
     Returns the number of entities successfully refreshed.
     """
     refreshed = 0
+    # Isolate this pass's validation-failure buffer so a reused worker thread
+    # cannot leak failures from a prior turn into this refresh (#503).
+    _reset_validation_failures()
     for _catalog_file, entity in stale_entities:
         entity_id = entity.get("id", "")
         if not entity_id:
