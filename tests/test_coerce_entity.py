@@ -1346,7 +1346,6 @@ def test_coerce_event_type_strip_lower_normalization():
 import copy
 
 from semantic_extraction import (
-    _record_validation_repairs,
     _drain_validation_repairs,
     _reset_validation_repairs,
 )
