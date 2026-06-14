@@ -967,7 +967,7 @@ def _drain_validation_repairs() -> list[dict]:
     return drained
 
 
-def _flush_validation_failures_to_log(extraction_log_path: str | None) -> None:
+def _flush_validation_records_to_log(extraction_log_path: str | None) -> None:
     """Drain entity_detail validation failures AND repairs to extraction-log.
 
     Used by post-turn passes (backfill, refresh) that build no per-turn log
@@ -6119,8 +6119,9 @@ def backfill_stubs(
 
     Returns the number of stubs successfully backfilled.
 
-    Any entity_detail schema-validation failures encountered are flushed to
-    *extraction_log_path* when provided (#503).
+    Any entity_detail schema-validation failures (#503) and recovery repairs
+    (#504 recovery logging) encountered are flushed to *extraction_log_path*
+    when provided.
     """
     stubs: list[tuple[str, dict, str]] = []  # (catalog_file, entity, entity_id)
     for filename, entities in catalogs.items():
@@ -6201,7 +6202,7 @@ def backfill_stubs(
             if _has_real_identity(entity) and _clear_stub_notes(entity):
                 print(f"  Cleared stub notes from enriched entity: {entity.get('id', 'unknown')}")
 
-    _flush_validation_failures_to_log(extraction_log_path)
+    _flush_validation_records_to_log(extraction_log_path)
     return backfilled
 
 
@@ -6677,7 +6678,7 @@ def refresh_entities(
 
         llm.delay()
 
-    _flush_validation_failures_to_log(extraction_log_path)
+    _flush_validation_records_to_log(extraction_log_path)
     return refreshed
 
 

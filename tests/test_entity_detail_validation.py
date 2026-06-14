@@ -214,9 +214,10 @@ class TestSanitizeForValidation:
 
 
 class TestValidateEntityDetailRecovery:
-    def test_recoverable_violation_validates_and_records_nothing(self, monkeypatch):
-        """A recoverable entity passes validation and records no failure."""
+    def test_recoverable_violation_validates_and_records_repair_not_failure(self, monkeypatch):
+        """A recoverable entity passes validation, recording a repair but no failure."""
         se._drain_validation_failures()
+        se._drain_validation_repairs()
         entity = {
             "id": "char-ally",
             "name": "Ally",
@@ -238,10 +239,14 @@ class TestValidateEntityDetailRecovery:
         assert "notes" not in entity
         assert len(entity["relationships"]) == 1
         assert se._drain_validation_failures() == []
+        # The recovery IS recorded as a repair (#504), not a failure; draining
+        # here also keeps the per-call buffer from leaking into later tests.
+        assert se._drain_validation_repairs() != []
 
     def test_unrepairable_violation_rejected_and_recorded(self, monkeypatch):
         """A missing required top-level field is still rejected and recorded."""
         se._drain_validation_failures()
+        se._drain_validation_repairs()
         entity = {
             "id": "char-ally",
             "name": "Ally",
