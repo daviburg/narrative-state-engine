@@ -595,7 +595,9 @@ def _coerce_entity_fields(
             # Only set if target slot is empty (don't overwrite existing data)
             if vs_key not in vs:
                 vs[vs_key] = val
-            _rec(f"remapped to volatile_state.{vs_key}", src_key)
+                _rec(f"remapped to volatile_state.{vs_key}", src_key)
+            else:
+                _rec(f"discarded (volatile_state.{vs_key} already set)", src_key)
             print(f"  COERCE: {src_key} → volatile_state.{vs_key}", file=sys.stderr)
 
     # Keys that should become stable_attributes entries
@@ -631,7 +633,10 @@ def _coerce_entity_fields(
                 if has_valid_turn:
                     entry["source_turn"] = turn_id
                 sa[sa_key] = entry
-            _rec(f"remapped to stable_attributes.{sa_key}", src_key)
+                _rec(f"remapped to stable_attributes.{sa_key}", src_key)
+            else:
+                _rec(f"discarded (stable_attributes.{sa_key} already set or empty)",
+                     src_key)
             print(f"  COERCE: {src_key} → stable_attributes.{sa_key}", file=sys.stderr)
 
     # abilities_and_traits → stable_attributes.abilities (Run 11 variant)
@@ -651,7 +656,10 @@ def _coerce_entity_fields(
             if has_valid_turn:
                 entry["source_turn"] = turn_id
             sa["abilities"] = entry
-        _rec("remapped to stable_attributes.abilities", "abilities_and_traits")
+            _rec("remapped to stable_attributes.abilities", "abilities_and_traits")
+        else:
+            _rec("discarded (stable_attributes.abilities already set or empty)",
+                 "abilities_and_traits")
         print("  COERCE: abilities_and_traits → stable_attributes.abilities", file=sys.stderr)
 
     # additional_items_equipped → volatile_state.equipment (append, don't overwrite)
