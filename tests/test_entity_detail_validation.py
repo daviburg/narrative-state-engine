@@ -819,8 +819,9 @@ class TestRecoveryLogging:
     def test_recoverable_records_repair_not_failure(self, monkeypatch):
         """Distinct: a recoverable entity -> validation_repairs (NOT a failures
         record).  At the call site #505's coerce removes notes=null and strips
-        the relationship keys, so the #504 sanitizer's surviving recovery is the
-        current_status null-drop — which is what gets logged."""
+        the relationship keys — now (#509) those coerce strips are ALSO logged as
+        ``layer="coerce"`` records — while the #504 sanitizer's surviving
+        recovery is the current_status null-drop (the ``sanitize`` layer)."""
         _patch_detail_prompts(monkeypatch)
         se._reset_validation_failures()
         se._reset_validation_repairs()
@@ -831,12 +832,18 @@ class TestRecoveryLogging:
         assert data is not None
         assert se._drain_validation_failures() == []
         repairs = se._drain_validation_repairs()
-        assert len(repairs) == 1
-        rec = repairs[0]
-        assert rec["repair"] == "dropped null optional-string key"
-        assert rec["path"] == "current_status"
-        assert rec["turn"] == "turn-041"
-        assert rec["entity_id"] == "char-foe"
+        # All records carry the correct attribution.
+        assert all(r["turn"] == "turn-041" for r in repairs)
+        assert all(r["entity_id"] == "char-foe" for r in repairs)
+        # The #504 sanitize-layer recovery (no "layer" tag): current_status drop.
+        sanitize = [r for r in repairs if r.get("layer") is None]
+        assert len(sanitize) == 1
+        assert sanitize[0]["repair"] == "dropped null optional-string key"
+        assert sanitize[0]["path"] == "current_status"
+        # The #509 coerce-layer strips: notes=null drop + relationship-key strip.
+        coerce = [r for r in repairs if r.get("layer") == "coerce"]
+        assert {r["path"] for r in coerce} == {"notes", "relationships"}
+        assert any(r["repair"] == "dropped notes=null" for r in coerce)
 
 
 class TestRecoveryLoggingConcurrency:
@@ -931,11 +938,16 @@ class TestRecoveryLoggingPostTurnPasses:
         lines = [json.loads(line) for line in
                  log_path.read_text().splitlines() if line.strip()]
         repairs = [r for rec in lines for r in rec.get("validation_repairs", [])]
-        assert len(repairs) == 1  # current_status null-drop (notes+rels handled by #505 coerce)
+        # #504 sanitize-layer recovery: current_status null-drop.
+        sanitize = [r for r in repairs if r.get("layer") is None]
+        assert len(sanitize) == 1
+        assert sanitize[0]["path"] == "current_status"
+        # #509 coerce-layer strips: notes=null + relationship keys.
+        coerce = [r for r in repairs if r.get("layer") == "coerce"]
+        assert {r["path"] for r in coerce} == {"notes", "relationships"}
         assert all(r["turn"] == "turn-001" for r in repairs)
         assert all(r["entity_id"] == "char-foe" for r in repairs)
         assert all(r["phase"] == "entity_detail_backfill" for r in repairs)
-        assert all(r["path"] == "current_status" for r in repairs)
         # Recovered -> no failures flushed.
         assert all("validation_failures" not in rec for rec in lines)
 
@@ -961,7 +973,11 @@ class TestRecoveryLoggingPostTurnPasses:
         lines = [json.loads(line) for line in
                  log_path.read_text().splitlines() if line.strip()]
         repairs = [r for rec in lines for r in rec.get("validation_repairs", [])]
-        assert len(repairs) == 1  # current_status null-drop (notes+rels handled by #505 coerce)
+        # #504 sanitize-layer recovery + #509 coerce-layer strips.
+        sanitize = [r for r in repairs if r.get("layer") is None]
+        assert len(sanitize) == 1
+        assert sanitize[0]["path"] == "current_status"
+        coerce = [r for r in repairs if r.get("layer") == "coerce"]
+        assert {r["path"] for r in coerce} == {"notes", "relationships"}
         assert all(r["phase"] == "entity_detail_refresh" for r in repairs)
-        assert all(r["path"] == "current_status" for r in repairs)
         assert all("validation_failures" not in rec for rec in lines)

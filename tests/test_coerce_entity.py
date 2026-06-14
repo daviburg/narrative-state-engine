@@ -1335,3 +1335,110 @@ def test_coerce_event_type_strip_lower_normalization():
     result = _coerce_event_fields(event)
     assert result["type"] == "encounter"
 
+
+
+# ---------------------------------------------------------------------------
+# #509 — coerce-layer observability: each _coerce_entity_fields strip is ALSO
+# recorded as a validation_repairs entry tagged layer="coerce", distinct from
+# the #504 sanitize-layer records, WITHOUT changing what coerce strips.
+# ---------------------------------------------------------------------------
+
+import copy
+
+from semantic_extraction import (
+    _record_validation_repairs,
+    _drain_validation_repairs,
+    _reset_validation_repairs,
+)
+
+
+def test_coerce_notes_null_emits_coerce_layer_repair():
+    """A notes=null entity emits a layer='coerce' repair record stamped with the
+    call site's turn/entity_id/phase, describing the notes drop (#509)."""
+    _reset_validation_repairs()
+    entity = {
+        "id": "char-foe", "name": "Foe", "type": "character",
+        "identity": "A rival.", "notes": None,
+    }
+    result = _coerce_entity_fields(
+        entity, turn="turn-007", entity_id="char-foe", phase="entity_detail",
+    )
+    # Strip still happened (output behaviour unchanged).
+    assert "notes" not in result
+    repairs = _drain_validation_repairs()
+    notes_recs = [r for r in repairs if r["path"] == "notes"]
+    assert len(notes_recs) == 1
+    rec = notes_recs[0]
+    assert rec["layer"] == "coerce"
+    assert rec["repair"] == "dropped notes=null"
+    assert rec["turn"] == "turn-007"
+    assert rec["entity_id"] == "char-foe"
+    assert rec["phase"] == "entity_detail"
+
+
+def test_coerce_relationship_key_emits_coerce_layer_repair():
+    """An entity carrying a relationship key emits a layer='coerce' repair record
+    naming the stripped key in its path (#509)."""
+    _reset_validation_repairs()
+    entity = {
+        "id": "char-foe", "name": "Foe", "type": "character",
+        "identity": "A rival.",
+        "relationships": [{"target_id": "char-player", "current_relationship": "ally"}],
+    }
+    result = _coerce_entity_fields(
+        entity, turn="turn-008", entity_id="char-foe",
+        phase="entity_detail_batch",
+    )
+    # Relationship key still stripped (behaviour unchanged).
+    assert "relationships" not in result
+    repairs = _drain_validation_repairs()
+    rel_recs = [r for r in repairs if r["path"] == "relationships"]
+    assert len(rel_recs) == 1
+    rec = rel_recs[0]
+    assert rec["layer"] == "coerce"
+    assert "relationship" in rec["repair"]
+    assert rec["turn"] == "turn-008"
+    assert rec["entity_id"] == "char-foe"
+    assert rec["phase"] == "entity_detail_batch"
+
+
+def test_coerce_output_byte_identical_with_and_without_recording():
+    """Measurement-only: coercing WITH attribution (records repairs) yields a
+    byte-identical entity to coercing WITHOUT attribution (no recording).  Only
+    a log record is added alongside each existing pop (#509)."""
+    _reset_validation_repairs()
+    base = {
+        "id": "char-foe", "name": "Foe", "type": "character",
+        "identity": "A rival.", "notes": None,
+        "relationships": [{"target_id": "char-player", "current_relationship": "ally"}],
+        "attributes": {"mood": ["tense", "wary"]},
+    }
+    without = _coerce_entity_fields(copy.deepcopy(base))  # no phase -> no recording
+    assert _drain_validation_repairs() == []
+
+    with_rec = _coerce_entity_fields(
+        copy.deepcopy(base), turn="turn-009", entity_id="char-foe",
+        phase="entity_detail",
+    )
+    repairs = _drain_validation_repairs()
+
+    # Stripped entity output is byte-identical regardless of recording.
+    assert json.dumps(without, sort_keys=True) == json.dumps(with_rec, sort_keys=True)
+    # Recording happened only in the attributed call, all tagged coerce.
+    assert repairs
+    assert all(r["layer"] == "coerce" for r in repairs)
+    assert {"notes", "relationships"}.issubset({r["path"] for r in repairs})
+
+
+def test_coerce_clean_entity_emits_no_coerce_record():
+    """A clean entity needing no coercion records nothing (no false positives)."""
+    _reset_validation_repairs()
+    entity = {
+        "id": "char-foe", "name": "Foe", "type": "character",
+        "identity": "A rival.", "first_seen_turn": "turn-001",
+        "last_updated_turn": "turn-001",
+    }
+    _coerce_entity_fields(
+        entity, turn="turn-010", entity_id="char-foe", phase="entity_detail",
+    )
+    assert _drain_validation_repairs() == []
