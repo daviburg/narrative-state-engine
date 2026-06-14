@@ -14,6 +14,7 @@ from semantic_extraction import (
     _format_prior_entity_context,
     _collect_existing_relationships,
     format_relationship_prompt,
+    _validate_entity,
 )
 
 
@@ -51,15 +52,78 @@ def test_stringifies_dict_attribute():
     assert isinstance(result["stable_attributes"]["relationship"]["value"], str)
 
 
-def test_wraps_single_relationship_dict():
+def test_strips_relationships_array_from_entity_detail():
+    """entity_detail does not own relationships (#505): a relationships array
+    emitted by the model is stripped, not merged or validation-failed."""
+    entity = {
+        "id": "char-elder",
+        "name": "The Elder",
+        "type": "character",
+        "identity": "An elder.",
+        "current_status": "Speaking.",
+        "relationships": [
+            {"target_id": "char-younger-woman", "type": "social"},
+        ],
+        "first_seen_turn": "turn-019",
+        "last_updated_turn": "turn-019",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "relationships" not in result
+
+
+def test_strips_single_relationship_dict_from_entity_detail():
+    """A single relationship dict (not array) is also stripped (#505)."""
     entity = {
         "name": "Kael",
         "type": "character",
-        "relationships": {"target_id": "loc-camp", "type": "located_at"},
+        "relationships": {"target_id": "loc-camp", "type": "spatial"},
     }
     result = _coerce_entity_fields(entity)
-    assert isinstance(result["relationships"], list)
-    assert len(result["relationships"]) == 1
+    assert "relationships" not in result
+
+
+def test_strips_relationship_variant_keys_from_entity_detail():
+    """Relationship-variant keys (relations, social_connections, etc.) are
+    also stripped from entity_detail output (#505)."""
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "relations": [{"target_id": "char-mom", "type": "kinship"}],
+        "social_connections": [{"target_id": "char-rival", "type": "adversarial"}],
+    }
+    result = _coerce_entity_fields(entity)
+    assert "relations" not in result
+    assert "social_connections" not in result
+    assert "relationships" not in result
+
+
+def test_removes_notes_null_from_entity_detail():
+    """A null notes field is dropped (notes is optional) so it does not cause a
+    hard schema-validation failure (#505)."""
+    entity = {
+        "id": "char-elder",
+        "name": "The Elder",
+        "type": "character",
+        "identity": "An elder.",
+        "current_status": "Speaking.",
+        "notes": None,
+        "first_seen_turn": "turn-019",
+        "last_updated_turn": "turn-019",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "notes" not in result
+
+
+def test_preserves_non_empty_notes():
+    """A non-empty notes string is preserved (#505)."""
+    entity = {
+        "name": "Kael",
+        "type": "character",
+        "notes": "Open question: true allegiance unclear.",
+    }
+    result = _coerce_entity_fields(entity)
+    assert result["notes"] == "Open question: true allegiance unclear."
+
 
 
 def test_leaves_valid_entity_unchanged():
@@ -188,6 +252,43 @@ def test_coerces_none_attribute_to_empty_string():
     assert result["stable_attributes"]["notes"]["value"] == ""
 
 
+def test_entity_with_notes_null_and_relationships_validates_after_coercion():
+    """End-to-end (#505): an entity_detail completion emitting both
+    `notes: null` and an invented `relationships` array (without the required
+    first_seen_turn) no longer hard-fails schema validation. After coercion
+    both triggers are gone and the entity validates."""
+    entity = {
+        "id": "char-elder",
+        "name": "The Elder",
+        "type": "character",
+        "identity": "An elderly authority figure in the tribal community.",
+        "current_status": "Speaking with the player at the council fire.",
+        "status_updated_turn": "turn-019",
+        "stable_attributes": {
+            "role": {"value": "tribal leader", "inference": True,
+                     "confidence": 0.8, "source_turn": "turn-019"},
+        },
+        "volatile_state": {
+            "condition": "alert",
+            "location": "loc-council-fire",
+            "last_updated_turn": "turn-019",
+        },
+        # Invented relationship missing required first_seen_turn — would have
+        # been a HARD validation failure before #505.
+        "relationships": [
+            {"target_id": "char-younger-woman", "current_relationship": "acquaintance"},
+        ],
+        "notes": None,
+        "first_seen_turn": "turn-019",
+        "last_updated_turn": "turn-019",
+    }
+    result = _coerce_entity_fields(entity)
+    assert "relationships" not in result
+    assert "notes" not in result
+    assert _validate_entity(result) is True
+
+
+
 # --- LLM field normalization tests ---
 
 def test_description_fallback_coercion():
@@ -306,8 +407,9 @@ def test_stable_volatile_attributes_in_output():
     assert result["volatile_state"]["condition"] == "healthy"
 
 
-def test_relationship_fields_coerced_to_v2():
-    """Relationship with 'relationship' and 'source_turn' gets V2 fields."""
+def test_relationship_fields_stripped_from_entity_detail():
+    """entity_detail no longer owns relationships (#505): a relationships array
+    is stripped rather than coerced to V2 fields."""
     entity = {
         "id": "char-elder",
         "name": "The Elder",
@@ -325,12 +427,7 @@ def test_relationship_fields_coerced_to_v2():
         "last_updated_turn": "turn-019",
     }
     result = _coerce_entity_fields(entity)
-    rel = result["relationships"][0]
-    assert "current_relationship" in rel
-    assert rel["current_relationship"] == "mentor of"
-    assert "relationship" not in rel
-    assert rel["first_seen_turn"] == "turn-019"
-    assert rel["last_updated_turn"] == "turn-019"
+    assert "relationships" not in result
 
 
 # --- Concept prefix filtering tests ---
@@ -700,8 +797,8 @@ def test_coerce_name_aliases_to_stable_aliases():
     assert result["stable_attributes"]["aliases"]["value"] == "Fenouille Moonwind"
 
 
-def test_coerce_relations_to_relationships():
-    """Top-level 'relations' remapped to 'relationships'."""
+def test_coerce_relations_stripped_from_entity_detail():
+    """Top-level 'relations' is stripped from entity_detail output (#505)."""
     entity = {
         "id": "char-player", "name": "PC", "type": "character",
         "identity": "The player.",
@@ -711,12 +808,11 @@ def test_coerce_relations_to_relationships():
     }
     result = _coerce_entity_fields(entity)
     assert "relations" not in result
-    assert len(result["relationships"]) == 1
-    assert result["relationships"][0]["target_id"] == "char-kael"
+    assert "relationships" not in result
 
 
-def test_coerce_character_relations_to_relationships():
-    """Top-level 'character_relations' remapped to 'relationships'."""
+def test_coerce_character_relations_stripped_from_entity_detail():
+    """Top-level 'character_relations' is stripped from entity_detail output (#505)."""
     entity = {
         "id": "char-player", "name": "PC", "type": "character",
         "identity": "The player.",
@@ -726,7 +822,7 @@ def test_coerce_character_relations_to_relationships():
     }
     result = _coerce_entity_fields(entity)
     assert "character_relations" not in result
-    assert len(result["relationships"]) == 1
+    assert "relationships" not in result
 
 
 def test_coerce_discards_noise_keys():
@@ -783,8 +879,8 @@ def test_coerce_multiple_nonstandard_keys_combined():
     assert result["stable_attributes"]["abilities"]["value"] == ["darkvision"]
 
 
-def test_coerce_relations_dict_wrapped_to_list():
-    """Single dict under a relationship key variant is wrapped in a list."""
+def test_coerce_relations_dict_stripped_from_entity_detail():
+    """Single dict under a relationship key variant is stripped (#505)."""
     entity = {
         "id": "char-player", "name": "PC", "type": "character",
         "identity": "The player.",
@@ -794,9 +890,7 @@ def test_coerce_relations_dict_wrapped_to_list():
     }
     result = _coerce_entity_fields(entity)
     assert "relations" not in result
-    assert isinstance(result["relationships"], list)
-    assert len(result["relationships"]) == 1
-    assert result["relationships"][0]["target_id"] == "char-kael"
+    assert "relationships" not in result
 
 
 def test_coerce_rejects_malformed_turn_id_for_source_turn():
@@ -933,8 +1027,8 @@ def test_coerce_weaknesses_to_stable():
     assert result["stable_attributes"]["weaknesses"]["value"] == "fire vulnerability"
 
 
-def test_coerce_items_relations_to_relationships():
-    """Top-level 'items_relations' remapped to 'relationships'."""
+def test_coerce_items_relations_stripped_from_entity_detail():
+    """Top-level 'items_relations' is stripped from entity_detail output (#505)."""
     entity = {
         "id": "char-player", "name": "PC", "type": "character",
         "identity": "The player.",
@@ -944,11 +1038,11 @@ def test_coerce_items_relations_to_relationships():
     }
     result = _coerce_entity_fields(entity)
     assert "items_relations" not in result
-    assert len(result["relationships"]) == 1
+    assert "relationships" not in result
 
 
-def test_coerce_current_relationships_to_relationships():
-    """Top-level 'current_relationships' remapped to 'relationships'."""
+def test_coerce_current_relationships_stripped_from_entity_detail():
+    """Top-level 'current_relationships' is stripped from entity_detail output (#505)."""
     entity = {
         "id": "char-player", "name": "PC", "type": "character",
         "identity": "The player.",
@@ -958,7 +1052,7 @@ def test_coerce_current_relationships_to_relationships():
     }
     result = _coerce_entity_fields(entity)
     assert "current_relationships" not in result
-    assert len(result["relationships"]) == 1
+    assert "relationships" not in result
 
 
 def test_coerce_discards_extended_noise_keys():
@@ -1011,7 +1105,8 @@ def test_coerce_strips_new_suffix_to_base_key():
 
 
 def test_coerce_new_suffix_discards_when_base_exists():
-    """Delta key is discarded when the base key already exists."""
+    """Delta key is discarded when the base key already exists; relationship
+    variant keys are stripped from entity_detail output (#505)."""
     entity = {
         "id": "char-player", "name": "PC", "type": "character",
         "identity": "The player.",
@@ -1023,9 +1118,8 @@ def test_coerce_new_suffix_discards_when_base_exists():
     }
     result = _coerce_entity_fields(entity)
     assert "relations_new" not in result
-    assert "relations" not in result  # base processed by rel remap
-    assert len(result["relationships"]) == 1
-    assert result["relationships"][0]["target_id"] == "char-a"
+    assert "relations" not in result  # stripped (#505)
+    assert "relationships" not in result
 
 
 def test_coerce_new_suffix_remapped_through_volatile():
@@ -1118,72 +1212,6 @@ def test_coerce_event_type_non_string_falls_back_to_other():
         event = {"type": bad_type, "description": "Something happened"}
         result = _coerce_event_fields(event)
         assert result["type"] == "other"
-
-
-def test_relationship_type_coercion_known_phrase():
-    """'knowledge exchange' should map to 'mentorship' (#218)."""
-    entity = {
-        "id": "char-test", "name": "Test", "type": "character",
-        "identity": "Test", "first_seen_turn": "turn-001",
-        "last_updated_turn": "turn-001",
-        "relationships": [{"target_id": "char-other", "type": "knowledge exchange",
-                           "current_relationship": "shares knowledge"}]
-    }
-    result = _coerce_entity_fields(entity)
-    assert result["relationships"][0]["type"] == "mentorship"
-
-
-def test_relationship_type_coercion_unknown_fallback():
-    """Unknown relationship types should fall back to 'other' (#218)."""
-    entity = {
-        "id": "char-test", "name": "Test", "type": "character",
-        "identity": "Test", "first_seen_turn": "turn-001",
-        "last_updated_turn": "turn-001",
-        "relationships": [{"target_id": "char-other", "type": "cosmic alignment",
-                           "current_relationship": "aligned"}]
-    }
-    result = _coerce_entity_fields(entity)
-    assert result["relationships"][0]["type"] == "other"
-
-
-def test_relationship_type_valid_unchanged():
-    """Valid relationship types should not be modified (#218)."""
-    entity = {
-        "id": "char-test", "name": "Test", "type": "character",
-        "identity": "Test", "first_seen_turn": "turn-001",
-        "last_updated_turn": "turn-001",
-        "relationships": [{"target_id": "char-other", "type": "social",
-                           "current_relationship": "friend"}]
-    }
-    result = _coerce_entity_fields(entity)
-    assert result["relationships"][0]["type"] == "social"
-
-
-def test_relationship_type_coercion_trims_and_normalizes_case():
-    """Relationship types should be normalized for common LLM casing/whitespace variants."""
-    entity = {
-        "id": "char-test", "name": "Test", "type": "character",
-        "identity": "Test", "first_seen_turn": "turn-001",
-        "last_updated_turn": "turn-001",
-        "relationships": [{"target_id": "char-other", "type": " Social ",
-                           "current_relationship": "friend"}]
-    }
-    result = _coerce_entity_fields(entity)
-    assert result["relationships"][0]["type"] == "social"
-
-
-def test_relationship_type_non_string_falls_back_to_other():
-    """Non-string relationship types should safely fall back to 'other'."""
-    for bad_type in (["social"], {"kind": "social"}, 123, None):
-        entity = {
-            "id": "char-test", "name": "Test", "type": "character",
-            "identity": "Test", "first_seen_turn": "turn-001",
-            "last_updated_turn": "turn-001",
-            "relationships": [{"target_id": "char-other", "type": bad_type,
-                               "current_relationship": "friend"}]
-        }
-        result = _coerce_entity_fields(entity)
-        assert result["relationships"][0]["type"] == "other"
 
 
 def test_stable_attributes_list_wrapped():

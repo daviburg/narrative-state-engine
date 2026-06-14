@@ -121,6 +121,44 @@ Correct rule:
 
 ---
 
+## 1.8 One Phase, One Responsibility — Ambiguous Templates Cause Schema Drops
+
+A prompt template that is ambiguous about a field, or that invites a phase to
+emit data another phase owns, silently drops whole entity updates when the
+resulting object fails schema validation.
+
+Failures observed (raw-IO capture, #505):
+
+* `entity_detail` emitted `"notes": null` because the template documented
+  `notes` as "(optional)" without saying to **omit** it when empty — the
+  schema requires a string, so the whole entity update was dropped. Proof it
+  was ambiguity, not capability: in the same turn the model wrote
+  `"notes": ""` (valid) for another entity.
+* `entity_detail` echoed back and **invented** `relationships` (e.g.
+  `char-younger-woman`) without the required `first_seen_turn`, because the
+  prior-catalog context contained relationships — even though relationships are
+  owned by the separate `relationship_mapper` phase and `entity-detail.md`
+  never documented the field.
+
+Correct rules:
+
+> Tell the model to **omit** optional fields when empty; never leave "emit null"
+> as an implicit option.
+>
+> Give each phase **exactly one** responsibility. If context unavoidably leaks
+> another phase's data (e.g. relationships in the prior-entity context), forbid
+> re-emitting it in the template **and** strip it in the parser as a
+> cause-independent net, so an echoed/invented value neither merges nor fails
+> validation.
+
+Fix (#505): `entity-detail.md` now instructs omit-`notes`-when-empty (never
+`null`) and forbids a `relationships` array; `_coerce_entity_fields()` strips
+any `relationships`/relationship-variant keys and a `null` `notes` from
+`entity_detail` output. The `relationship_mapper` phase is untouched, so real
+relationship data still flows through it.
+
+---
+
 # 2. Core Design Principles
 
 1. **Entity persistence over narrative compression**
