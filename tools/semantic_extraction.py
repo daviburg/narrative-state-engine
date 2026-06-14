@@ -3084,20 +3084,40 @@ def _append_relationship_demotion_shadow(framework_dir: str, records: list[dict]
 
     One JSON line per record, under ``framework_dir`` and kept separate from
     ``extraction-log.jsonl`` (one record per relationship per seam per turn is
-    large).  No-op on empty ``records``.  Mirrors the raw-IO capture artifact's
-    append semantics.
+    large).  No-op on empty ``records``.  Follows the SAME best-effort principle
+    as the raw-IO capture writer (``LLMClient._write_raw_io_record``) — a
+    measurement write must never abort extraction — without claiming exact
+    parity: this catch is intentionally narrower (``(OSError, TypeError)``, no
+    ``default=str``) so it hardens against filesystem/type failures while still
+    surfacing genuine programming errors.  Any caught failure is swallowed (a
+    single stderr warning, then return) so this MEASUREMENT-ONLY flag can never
+    abort a real extraction turn.
     """
     if not records:
         return
     # Defensive: extract_and_merge() accepts framework_dir and may be called
     # independently of the batch/single wrappers, so the directory is not
     # guaranteed to exist.  Create it before opening so the measurement flag
-    # never causes a hard FileNotFoundError.
-    os.makedirs(framework_dir, exist_ok=True)
-    path = os.path.join(framework_dir, _RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
-    with open(path, "a", encoding="utf-8") as f:
-        for rec in records:
-            f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    # never causes a hard FileNotFoundError.  Best-effort by the same principle
+    # as the raw-IO capture writer (tools/llm_client.py), though deliberately
+    # stricter: a shadow-write failure (PermissionError, disk-full OSError,
+    # framework_dir existing as a FILE, a bad framework_dir type) must NEVER
+    # propagate out and abort extraction, so the makedirs + open/write are
+    # wrapped together; on failure we warn once to stderr and return, leaving
+    # the real extraction output untouched.
+    try:
+        os.makedirs(framework_dir, exist_ok=True)
+        path = os.path.join(framework_dir, _RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
+        with open(path, "a", encoding="utf-8") as f:
+            for rec in records:
+                f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    except (OSError, TypeError) as e:
+        print(
+            f"  [warn] relationship-demotion shadow write failed "
+            f"({type(e).__name__}: {e}); extraction unaffected",
+            file=sys.stderr,
+        )
+        return
 
 
 def _collect_existing_relationships(
