@@ -187,7 +187,12 @@ class TestOllamaStreamingWatchdog:
                 [{"role": "user", "content": "test"}],
                 timeout=10,
             )
-            assert result == "hello world"
+            # Streaming now returns a _StreamResult surfacing the REAL backend
+            # token counts (#501 finding 2) instead of bare text.
+            assert result.text == "hello world"
+            assert result.eval_count == 2
+            assert result.prompt_eval_count == 5
+            assert result.done_reason == "stop"
 
     def test_partial_content_aborted_raises_error(self, tmp_path):
         """Watchdog abort with partial content must NOT return truncated data."""
