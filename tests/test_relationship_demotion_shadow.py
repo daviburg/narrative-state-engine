@@ -520,3 +520,209 @@ class TestEndToEndWiring:
         assert pc_stranger and all(
             r["mention_source"] == "injected_floor" for r in pc_stranger
         )
+
+
+# ---------------------------------------------------------------------------
+# 1d. Whole-extraction byte-identity ON vs OFF (#511 — reviewer-flagged gap)
+# ---------------------------------------------------------------------------
+
+# Wall-clock fields that legitimately differ run-to-run; excluded from the
+# log-record byte-identity comparison (everything else must match exactly).
+_VOLATILE_LOG_KEYS = frozenset(
+    {"timestamp", "elapsed_ms", "discovery_ms", "parallel_ms", "temporal_ms"}
+)
+
+
+def _strip_volatile(log_record):
+    return {k: v for k, v in log_record.items() if k not in _VOLATILE_LOG_KEYS}
+
+
+class TestWholeExtractionByteIdentity:
+    """The shadow flag must not change ANY real extraction output.
+
+    Runs the full extract_and_merge pipeline twice with identical stubbed
+    (deterministic) LLM responses — once flag-OFF, once flag-ON — and asserts
+    the returned catalogs, events, turn-failed flag, and the extraction-log
+    record (minus volatile wall-clock timings) are EQUAL.  The ONLY allowed
+    difference is the extra relationship-demotion-shadow.jsonl artifact when ON.
+    """
+
+    def _run(self, monkeypatch, tmp_path, flag_on):
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+        fw = str(tmp_path / ("on" if flag_on else "off"))
+        os.makedirs(fw, exist_ok=True)
+        llm = _make_stub_llm(
+            {"context_optimizations": {"relationship_demotion_shadow": flag_on}}
+        )
+        turn = {"turn_id": "turn-100", "speaker": "dm",
+                "text": "The Mentor speaks to the hero."}
+        catalogs, events, turn_failed, log_record = se.extract_and_merge(
+            turn, _seeded_catalogs(), [], llm, min_confidence=0.6,
+            framework_dir=fw, prefetched_discovery=_prefetched(_QUALIFIED),
+        )
+        return fw, catalogs, events, turn_failed, log_record
+
+    def test_flag_does_not_alter_extraction_output(self, monkeypatch, tmp_path):
+        fw_off, cat_off, ev_off, failed_off, log_off = self._run(
+            monkeypatch, tmp_path, flag_on=False)
+        fw_on, cat_on, ev_on, failed_on, log_on = self._run(
+            monkeypatch, tmp_path, flag_on=True)
+
+        # Core extraction output is byte-identical (compare via canonical JSON
+        # so ordering/structure is exact).
+        assert json.dumps(cat_off, sort_keys=True) == json.dumps(cat_on, sort_keys=True)
+        assert json.dumps(ev_off, sort_keys=True) == json.dumps(ev_on, sort_keys=True)
+        assert failed_off == failed_on
+        assert _strip_volatile(log_off) == _strip_volatile(log_on)
+
+        # The ONLY difference: the shadow artifact exists ON, absent OFF.
+        shadow_off = os.path.join(fw_off, se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
+        shadow_on = os.path.join(fw_on, se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
+        assert not os.path.isfile(shadow_off)
+        assert os.path.isfile(shadow_on)
+        # And the OFF run wrote no files at all into its sink dir.
+        assert os.listdir(fw_off) == []
+
+
+# ---------------------------------------------------------------------------
+# 1e. _score_relationship_tier golden table (#511 — guards live scoring code)
+# ---------------------------------------------------------------------------
+
+class TestScoreRelationshipTierGolden:
+    """Direct table-driven test of the discrete tier scoring helper.
+
+    This is the SAME function the live relationship-mapper budget path uses, so
+    the table pins its observable behaviour against refactors.  current_turn=100;
+    _REL_RECENCY_WINDOW is 15 turns.
+    """
+
+    PERM = se._PC_REL_PERMANENT_TYPES_DEFAULT
+
+    def _rel(self, target="char-mentor", rel_type="ally",
+             status="active", last_updated_turn="turn-090"):
+        return _make_rel(target, rel_type=rel_type, status=status,
+                         last_updated_turn=last_updated_turn)
+
+    def test_golden_table(self):
+        owner = "char-player"
+        both = {"char-player", "char-mentor"}
+        one = {"char-mentor"}
+        none = set()
+        # (description, rel, mentioned_ids, tiering_on, expected_tier)
+        cases = [
+            # 1. both endpoints mentioned -> tier 1 (full)
+            ("both_mentioned",
+             self._rel(last_updated_turn="turn-090"), both, False, 1),
+            # 2. one mentioned + recent (dist 10 <= 15) -> tier 2
+            ("one_recent",
+             self._rel(last_updated_turn="turn-090"), one, False, 2),
+            # 3. one mentioned + old (dist 50) + active -> tier 3 (summary)
+            ("one_old_active",
+             self._rel(last_updated_turn="turn-050", status="active"),
+             one, False, 3),
+            # 4. one mentioned + old + dormant -> tier 4 (omit)
+            ("one_old_dormant",
+             self._rel(last_updated_turn="turn-050", status="dormant"),
+             one, False, 4),
+            # 5. neither endpoint mentioned -> tier 4 (omit)
+            ("neither_mentioned",
+             self._rel(last_updated_turn="turn-090"), none, False, 4),
+            # 6. unparseable last_updated_turn: dist = 9999 (not recent); one
+            #    mentioned + active -> tier 3.
+            ("one_unparseable_active",
+             self._rel(last_updated_turn="not-a-turn", status="active"),
+             one, False, 3),
+            # 6b. unparseable + neither mentioned -> tier 4.
+            ("neither_unparseable",
+             self._rel(last_updated_turn="not-a-turn"), none, False, 4),
+            # 7a. permanent bond, neither mentioned, would be tier 4: tiering
+            #     promotes tier4 -> 3, but one_mentioned is False so it STAYS 3.
+            ("perm_neither_promote_to_3",
+             self._rel(rel_type="mentorship", last_updated_turn="turn-050",
+                       status="dormant"),
+             none, True, 3),
+            # 7b. permanent bond, one mentioned, would be tier 4 (old+dormant):
+            #     tier4 -> 3 (permanent), then one_mentioned & tier>=3 -> 2.
+            ("perm_one_tier4_promote_to_2",
+             self._rel(rel_type="mentorship", last_updated_turn="turn-050",
+                       status="dormant"),
+             one, True, 2),
+            # 7c. permanent bond, one mentioned, base tier 3 (old+active):
+            #     one_mentioned & tier>=3 -> 2.
+            ("perm_one_tier3_promote_to_2",
+             self._rel(rel_type="kinship", last_updated_turn="turn-050",
+                       status="active"),
+             one, True, 2),
+            # 7d. CONTROL: permanent type but tiering OFF -> no promotion (the
+            #     tiering_on gate guards the L4 block).
+            ("perm_tiering_off_no_promote",
+             self._rel(rel_type="mentorship", last_updated_turn="turn-050",
+                       status="dormant"),
+             none, False, 4),
+        ]
+        for desc, rel, mentioned, tiering_on, expected in cases:
+            got = se._score_relationship_tier(
+                rel, owner, mentioned, 100, tiering_on, self.PERM,
+            )
+            assert got == expected, f"{desc}: expected tier {expected}, got {got}"
+
+
+# ---------------------------------------------------------------------------
+# 3. Appender failure best-effort (#511 — measurement flag must never abort)
+# ---------------------------------------------------------------------------
+
+class TestAppenderBestEffort:
+    """A shadow-write failure must NEVER propagate / abort extraction."""
+
+    _RECS = [{"turn": "turn-100", "owner": "char-player", "seam": "A"}]
+
+    def test_framework_dir_is_existing_file_does_not_raise(self, tmp_path):
+        # framework_dir points at an existing FILE -> os.makedirs raises
+        # FileExistsError (an OSError).  Best-effort: must be swallowed.
+        bogus = tmp_path / "not-a-dir"
+        bogus.write_text("i am a file", encoding="utf-8")
+        # Must not raise.
+        se._append_relationship_demotion_shadow(str(bogus), self._RECS)
+
+    def test_makedirs_permission_error_does_not_raise(self, tmp_path, monkeypatch):
+        def _boom(*a, **k):
+            raise PermissionError("denied")
+
+        monkeypatch.setattr(se.os, "makedirs", _boom)
+        # Must not raise.
+        se._append_relationship_demotion_shadow(str(tmp_path), self._RECS)
+        # And nothing was written.
+        assert not os.path.isfile(
+            os.path.join(str(tmp_path), se._RELATIONSHIP_DEMOTION_SHADOW_FILENAME)
+        )
+
+    def test_bad_framework_dir_type_does_not_raise(self):
+        # A non-str framework_dir (TypeError from os.path.join/makedirs) is
+        # swallowed too.
+        se._append_relationship_demotion_shadow(None, self._RECS)
+
+    def test_flag_on_unwritable_shadow_still_returns_output(
+            self, monkeypatch, tmp_path):
+        # End-to-end: flag ON but the shadow sink is unwritable (framework_dir
+        # is an existing file).  extract_and_merge must still return normal
+        # extraction output, NOT abort the turn.
+        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
+        se._reset_pc_failure_tracking()
+        bogus = tmp_path / "sink-is-a-file"
+        bogus.write_text("not a directory", encoding="utf-8")
+        llm = _make_stub_llm(
+            {"context_optimizations": {"relationship_demotion_shadow": True}}
+        )
+        turn = {"turn_id": "turn-100", "speaker": "dm",
+                "text": "The Mentor speaks to the hero."}
+        catalogs, events, turn_failed, log_record = se.extract_and_merge(
+            turn, _seeded_catalogs(), [], llm, min_confidence=0.6,
+            framework_dir=str(bogus), prefetched_discovery=_prefetched(_QUALIFIED),
+        )
+        # Normal extraction output survives a shadow-write failure.
+        assert catalogs["characters.json"], "expected characters in catalog"
+        assert log_record["turn_id"] == "turn-100"
+        # The shadow artifact could not be created (sink is a file).
+        assert os.path.isfile(str(bogus))
+
