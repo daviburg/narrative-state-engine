@@ -282,3 +282,111 @@ class TestConcurrentRunIsolation:
         assert results["a"].skipped_turns == turns_a - se._PC_SKIP_THRESHOLD
         assert results["b"].consecutive_failures == turns_b
         assert results["b"].skipped_turns == 0
+
+
+class TestRetryFailedTurnsWorkerLifetime:
+    """Exercise the production ``retry_failed_turns`` path (#508).
+
+    These regressions fail if the per-run PC state is reset per *task* (per
+    retried turn) instead of once per *worker thread*.  They drive the real
+    ``extract_single_turn`` through a ``ThreadPoolExecutor`` configured exactly
+    like production — ``initializer=_init_pc_worker`` — so the PC state lifetime
+    matches what ``run_retry`` builds.
+    """
+
+    @staticmethod
+    def _import_rft(monkeypatch):
+        import retry_failed_turns as rft
+
+        # Avoid constructing a real LLM client / doing real extraction.
+        monkeypatch.setattr(rft, "LLMClient", lambda *a, **k: MagicMock())
+        return rft
+
+    @staticmethod
+    def _make_counting_extract(observations, lock, barrier=None):
+        """Stub ``extract_and_merge`` that mutates the current worker's PC state
+        the way a failing turn would and records which state object it saw."""
+        def _stub(turn, catalogs, events, llm, min_confidence,
+                  catalog_dir=None, timeline=None):
+            # When a barrier is supplied, block until every worker is active so
+            # each task is guaranteed to run on a distinct worker thread.
+            if barrier is not None:
+                barrier.wait()
+            state = se._get_pc_state()
+            state.consecutive_failures += 1
+            with lock:
+                observations.append(
+                    (turn["turn_id"], id(state), state.consecutive_failures)
+                )
+            log_record = {"turn_id": turn["turn_id"], "elapsed_ms": 0}
+            return catalogs, events, True, log_record
+        return _stub
+
+    def _run_through_pool(self, rft, turns, num_workers, use_barrier=False):
+        observations = []
+        lock = threading.Lock()
+        barrier = threading.Barrier(num_workers) if use_barrier else None
+        rft.extract_and_merge = self._make_counting_extract(
+            observations, lock, barrier
+        )
+        catalogs = _fresh_catalogs()
+        events = []
+        timeline = []
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+
+        with ThreadPoolExecutor(
+            max_workers=num_workers, initializer=rft._init_pc_worker
+        ) as pool:
+            futures = [
+                pool.submit(
+                    rft.extract_single_turn,
+                    turn, catalogs, events, timeline,
+                    "config.json", None, 0.6, "catalog_dir",
+                )
+                for turn in turns
+            ]
+            for f in as_completed(futures):
+                f.result()
+        return observations
+
+    def test_sequential_worker_accumulates_failures_across_turns(self, monkeypatch):
+        """With ``--workers 1`` the sequential retried turns share ONE state
+        object whose ``consecutive_failures`` accumulates 1, 2, 3, ... — the
+        pre-#508 cross-turn cooldown semantics.  A per-task reset would make
+        every turn report a fresh object with count 1."""
+        rft = self._import_rft(monkeypatch)
+        turns = [
+            {"turn_id": f"turn-{i:03d}", "speaker": "dm", "text": f"t{i}"}
+            for i in range(1, 4)
+        ]
+        observations = self._run_through_pool(rft, turns, num_workers=1)
+
+        # Sequential execution on a single worker preserves submission order.
+        counts = [c for (_tid, _sid, c) in observations]
+        assert counts == [1, 2, 3], (
+            "consecutive_failures must accumulate across sequential retry turns; "
+            f"got {counts} (a per-turn reset would yield [1, 1, 1])"
+        )
+        # All three turns saw the SAME state object.
+        state_ids = {sid for (_tid, sid, _c) in observations}
+        assert len(state_ids) == 1
+
+    def test_concurrent_workers_do_not_share_state_object(self, monkeypatch):
+        """Production workers must each get their OWN ``_PCFailureState`` so a
+        failing worker cannot corrupt a concurrent worker's counters."""
+        rft = self._import_rft(monkeypatch)
+        num_workers = 3
+        turns = [
+            {"turn_id": f"turn-{i:03d}", "speaker": "dm", "text": f"t{i}"}
+            for i in range(1, num_workers + 1)
+        ]
+        observations = self._run_through_pool(
+            rft, turns, num_workers=num_workers, use_barrier=True
+        )
+
+        # Each turn ran on its own worker thread, so each must have observed a
+        # distinct state object that had not already accumulated failures.
+        state_ids = {sid for (_tid, sid, _c) in observations}
+        assert len(state_ids) == num_workers
+        counts = sorted(c for (_tid, _sid, c) in observations)
+        assert counts == [1, 1, 1]
