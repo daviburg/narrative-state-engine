@@ -421,7 +421,13 @@ def _normalize_entity_location(entity_data: dict, catalogs: dict) -> None:
               f"{matches} — skipping normalization", file=sys.stderr)
 
 
-def _coerce_entity_fields(entity_data) -> dict | None:
+def _coerce_entity_fields(
+    entity_data,
+    *,
+    turn: str | None = None,
+    entity_id: str | None = None,
+    phase: str | None = None,
+) -> dict | None:
     """Auto-coerce common LLM output quirks before schema validation.
 
     Fixes:
@@ -430,7 +436,24 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     - Multi-element arrays → join with ', '
     - Empty arrays → empty string
     - Dict/list/numeric/bool/None values in attributes → stringify
+
+    Observability (#509): every strip/repair this function performs is ALSO
+    recorded as a structured ``validation_repairs`` entry tagged
+    ``layer="coerce"`` (distinct from the ``sanitize``-layer #504 records), so
+    the per-turn extraction-log surfaces coerce-layer repairs that previously
+    left NO audit trail.  This is measurement-only: the records never change
+    WHAT is stripped — the returned entity is byte-identical to before.  When
+    *phase* is provided (every real call site supplies turn/entity_id/phase),
+    the collected records are stamped and handed to
+    ``_record_validation_repairs`` exactly like ``_validate_entity_detail``.
     """
+    _coerce_repairs: list[dict] = []
+
+    def _rec(action: str, path: str, **extra) -> None:
+        rec = {"repair": action, "path": path, "layer": "coerce"}
+        rec.update(extra)
+        _coerce_repairs.append(rec)
+
     if not isinstance(entity_data, dict):
         print(f"  WARNING: entity_data is {type(entity_data).__name__}, expected dict — skipping",
               file=sys.stderr)
@@ -442,6 +465,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     # validation failure that would drop the whole entity update.
     if "notes" in entity_data and entity_data["notes"] is None:
         entity_data.pop("notes")
+        _rec("dropped notes=null", "notes")
         print("  COERCE: removed notes=null (notes is optional)", file=sys.stderr)
 
     # Top-level string fields that the LLM sometimes wraps in arrays
@@ -456,6 +480,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 entity_data[field] = ", ".join(str(v) for v in val)
             else:
                 entity_data[field] = ""
+            _rec("unwrapped array to string", field)
             print(f"  COERCE: {field} array → string: {val!r}", file=sys.stderr)
 
     # Repair empty first_seen_turn / last_updated_turn (#241)
@@ -466,6 +491,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         val = entity_data.get(turn_field)
         if isinstance(val, str) and not _TURN_ID_RE.match(val):
             entity_data.pop(turn_field)
+            _rec("removed invalid turn id", turn_field)
             if val:
                 print(f"  COERCE: removed invalid {turn_field}: {val!r}", file=sys.stderr)
 
@@ -479,6 +505,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             parts = [p.strip() for p in pid.split(",") if p.strip()]
             matched = [p for p in parts if etype and validate_id_prefix(p, etype)]
             chosen = matched[0] if matched else parts[0] if parts else pid
+            _rec("comma-split id", id_field)
             print(f"  COERCE: {id_field} comma-split: {pid!r} → {chosen!r}", file=sys.stderr)
             entity_data[id_field] = chosen
 
@@ -496,6 +523,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 attrs[key] = ""
             else:
                 attrs[key] = str(val)
+            _rec("stringified attribute value", f"attributes.{key}")
             print(f"  COERCE: attributes.{key} {type(val).__name__} → string", file=sys.stderr)
 
     # --- LLM output normalization ---
@@ -512,10 +540,12 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             base = key[:-4]  # strip "_new"
             if base not in entity_data:
                 entity_data[base] = entity_data.pop(key)
+                _rec("stripped _new suffix", key, renamed_to=base)
                 print(f"  COERCE: {key} → {base} (stripped _new suffix)", file=sys.stderr)
             else:
                 # base key already present — discard the delta variant
                 entity_data.pop(key)
+                _rec("discarded delta key (base exists)", key)
                 print(f"  COERCE: discarded delta key '{key}' (base '{base}' exists)", file=sys.stderr)
 
     # If LLM returned "description" but not "identity", map description → identity.
@@ -526,8 +556,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             entity_data["identity"] = entity_data["description"]
             if "current_status" not in entity_data:
                 entity_data["current_status"] = ""
+            _rec("mapped description to identity", "identity")
             print("  COERCE: description → identity (LLM field normalization)", file=sys.stderr)
         entity_data.pop("description", None)
+        _rec("dropped non-schema description", "description")
 
     # If LLM returned flat "attributes" but not "stable_attributes", classify them.
     # Always strip the non-schema "attributes" field afterward so the entity
@@ -569,7 +601,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 if has_valid_turn:
                     volatile["last_updated_turn"] = turn_id
                 entity_data["volatile_state"] = volatile
+            _rec("normalized flat attributes to stable/volatile", "attributes")
             print("  COERCE: flat attributes → stable_attributes/volatile_state (LLM normalization)", file=sys.stderr)
+        else:
+            _rec("dropped non-schema attributes", "attributes")
 
     # --- Remap non-standard top-level keys into V2 slots (#170, #172) ---
     # The LLM often returns useful data under keys that don't exist in the
@@ -614,6 +649,9 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             # Only set if target slot is empty (don't overwrite existing data)
             if vs_key not in vs:
                 vs[vs_key] = val
+                _rec(f"remapped to volatile_state.{vs_key}", src_key)
+            else:
+                _rec(f"discarded (volatile_state.{vs_key} already set)", src_key)
             print(f"  COERCE: {src_key} → volatile_state.{vs_key}", file=sys.stderr)
 
     # Keys that should become stable_attributes entries
@@ -649,6 +687,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 if has_valid_turn:
                     entry["source_turn"] = turn_id
                 sa[sa_key] = entry
+                _rec(f"remapped to stable_attributes.{sa_key}", src_key)
+            else:
+                _rec(f"discarded (stable_attributes.{sa_key} already set or empty)",
+                     src_key)
             print(f"  COERCE: {src_key} → stable_attributes.{sa_key}", file=sys.stderr)
 
     # abilities_and_traits → stable_attributes.abilities (Run 11 variant)
@@ -668,6 +710,10 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             if has_valid_turn:
                 entry["source_turn"] = turn_id
             sa["abilities"] = entry
+            _rec("remapped to stable_attributes.abilities", "abilities_and_traits")
+        else:
+            _rec("discarded (stable_attributes.abilities already set or empty)",
+                 "abilities_and_traits")
         print("  COERCE: abilities_and_traits → stable_attributes.abilities", file=sys.stderr)
 
     # additional_items_equipped → volatile_state.equipment (append, don't overwrite)
@@ -687,6 +733,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             vs["equipment"] = existing + [v for v in val if v not in existing]
         else:
             vs["equipment"] = val
+        _rec("remapped to volatile_state.equipment (appended)", "additional_items_equipped")
         print("  COERCE: additional_items_equipped → volatile_state.equipment (appended)", file=sys.stderr)
 
     # Discard known noise keys that carry no recoverable structured data
@@ -709,6 +756,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     for dk in list(entity_data.keys()):
         if dk in _discard_keys:
             entity_data.pop(dk)
+            _rec("discarded non-schema key", dk)
             print(f"  COERCE: discarded non-schema key '{dk}'", file=sys.stderr)
 
     # Strip status_updated_turn from volatile_state if present — it belongs at top level only.
@@ -718,8 +766,12 @@ def _coerce_entity_fields(entity_data) -> dict | None:
         nested_status_updated_turn = vs.pop("status_updated_turn")
         if "status_updated_turn" not in entity_data:
             entity_data["status_updated_turn"] = nested_status_updated_turn
+            _rec("promoted volatile_state.status_updated_turn to top-level",
+                 "volatile_state.status_updated_turn")
             print("  COERCE: promoted volatile_state.status_updated_turn → top-level status_updated_turn", file=sys.stderr)
         else:
+            _rec("stripped status_updated_turn from volatile_state",
+                 "volatile_state.status_updated_turn")
             print("  COERCE: stripped status_updated_turn from volatile_state (top-level only)", file=sys.stderr)
 
     # Strip stable_attributes entries where the LLM returned null for value (#178).
@@ -730,6 +782,7 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                      if isinstance(v, dict) and v.get("value") is None]
         for k in null_keys:
             del sa[k]
+            _rec("removed stable_attribute with null value", f"stable_attributes.{k}")
             print(f"  COERCE: stable_attributes.{k}.value was null — removed", file=sys.stderr)
 
     # Coerce non-object stable_attributes values to proper attribute objects (#219)
@@ -754,12 +807,15 @@ def _coerce_entity_fields(entity_data) -> dict | None:
                 if has_valid_turn:
                     wrapped["source_turn"] = turn_id
                 sa[k] = wrapped
+                _rec("wrapped stable_attribute to attribute object",
+                     f"stable_attributes.{k}")
                 print(f"  COERCE: stable_attributes.{k} was {type(v).__name__} — wrapped to attribute object", file=sys.stderr)
 
     # Ensure volatile_state has last_updated_turn if we populated it
     vs = entity_data.get("volatile_state")
     if isinstance(vs, dict) and "last_updated_turn" not in vs and has_valid_turn:
         vs["last_updated_turn"] = turn_id
+        _rec("added volatile_state.last_updated_turn", "volatile_state.last_updated_turn")
 
     # Strip character-only schema fields from items (#339)
     if entity_data.get("type") == "item":
@@ -769,6 +825,8 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             for attr_key in list(sa.keys()):
                 if attr_key.lower() in _ITEM_INVALID_ATTRS:
                     del sa[attr_key]
+                    _rec("stripped character-only attribute from item",
+                         f"stable_attributes.{attr_key}")
 
     # Normalize attribute key casing (#336)
     for attr_dict_key in ("stable_attributes", "volatile_state"):
@@ -777,6 +835,8 @@ def _coerce_entity_fields(entity_data) -> dict | None:
             normalized = {}
             for k, v in attr_dict.items():
                 normalized[k.lower()] = v
+            if normalized != attr_dict:
+                _rec("lowercased attribute keys", attr_dict_key)
             entity_data[attr_dict_key] = normalized
 
     # Strip relationship data from entity_detail output (#505).
@@ -796,9 +856,13 @@ def _coerce_entity_fields(entity_data) -> dict | None:
     _stripped_rel_keys = [k for k in _REL_OUTPUT_KEYS if k in entity_data]
     for _rk in _stripped_rel_keys:
         entity_data.pop(_rk, None)
+        _rec("dropped relationship key (owned by relationship_mapper)", _rk)
     if _stripped_rel_keys:
         print(f"  STRIP: dropped relationship keys from entity_detail output "
               f"(owned by relationship_mapper): {_stripped_rel_keys}", file=sys.stderr)
+
+    if phase is not None:
+        _record_validation_repairs(turn, entity_id, phase, _coerce_repairs)
 
     return entity_data
 
@@ -4111,7 +4175,9 @@ def _extract_single_entity_detail(
 
     entity_data = _unwrap_entity_response(detail_result)
     if entity_data:
-        entity_data = _coerce_entity_fields(entity_data)
+        entity_data = _coerce_entity_fields(
+            entity_data, turn=turn_id, entity_id=entity_id, phase="entity_detail",
+        )
     if entity_data and not _filter_concept_prefix_from_items(entity_data):
         return entity_ref, None, None
     if entity_data and _validate_entity_detail(
@@ -4272,7 +4338,10 @@ def _extract_batched_entity_detail(
         if raw is None:
             fallback.append((entity_ref, current_entry))
             continue
-        entity_data = _coerce_entity_fields(raw)
+        entity_data = _coerce_entity_fields(
+            raw, turn=turn_id, entity_id=get_entity_id(entity_ref),
+            phase="entity_detail_batch",
+        )
         if not _batch_entity_consistent(entity_ref, entity_data):
             print(f"  WARNING: batched entity {get_entity_id(entity_ref)} at "
                   f"{turn_id} name/type mismatch vs requested block (possible "
@@ -5297,7 +5366,10 @@ def extract_and_merge(
             elif _pc_raw_result is not None:
                 entity_data = _unwrap_entity_response(_pc_raw_result)
                 if entity_data:
-                    entity_data = _coerce_entity_fields(entity_data)
+                    entity_data = _coerce_entity_fields(
+                        entity_data, turn=turn_id, entity_id="char-player",
+                        phase="entity_detail",
+                    )
                 if entity_data and _validate_entity_detail(
                     entity_data, turn=turn_id, entity_id="char-player",
                     phase="entity_detail",
@@ -5440,7 +5512,10 @@ def extract_and_merge(
 
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
-                entity_data = _coerce_entity_fields(entity_data)
+                entity_data = _coerce_entity_fields(
+                    entity_data, turn=turn_id, entity_id=entity_id,
+                    phase="entity_detail",
+                )
             if entity_data and not _filter_concept_prefix_from_items(entity_data):
                 continue
             if entity_data and _validate_entity_detail(
@@ -5527,7 +5602,10 @@ def extract_and_merge(
                 )
                 entity_data = _unwrap_entity_response(detail_result)
                 if entity_data:
-                    entity_data = _coerce_entity_fields(entity_data)
+                    entity_data = _coerce_entity_fields(
+                        entity_data, turn=turn_id, entity_id="char-player",
+                        phase="entity_detail",
+                    )
                 if entity_data and _validate_entity_detail(
                     entity_data, turn=turn_id, entity_id="char-player",
                     phase="entity_detail",
@@ -6506,7 +6584,10 @@ def backfill_stubs(
             )
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
-                entity_data = _coerce_entity_fields(entity_data)
+                entity_data = _coerce_entity_fields(
+                    entity_data, turn=first_seen, entity_id=entity_id,
+                    phase="entity_detail_backfill",
+                )
             if entity_data and _validate_entity_detail(
                 entity_data, turn=first_seen, entity_id=entity_id,
                 phase="entity_detail_backfill",
@@ -6975,7 +7056,10 @@ def refresh_entities(
             )
             entity_data = _unwrap_entity_response(detail_result)
             if entity_data:
-                entity_data = _coerce_entity_fields(entity_data)
+                entity_data = _coerce_entity_fields(
+                    entity_data, turn=current_turn_id, entity_id=entity_id,
+                    phase="entity_detail_refresh",
+                )
             if entity_data and _validate_entity_detail(
                 entity_data, turn=current_turn_id, entity_id=entity_id,
                 phase="entity_detail_refresh",
