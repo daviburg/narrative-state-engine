@@ -145,50 +145,41 @@ class TestPCConsecutiveFailureTracking:
 
     def test_reset_clears_counter(self):
         """_reset_pc_failure_tracking should set counter to 0."""
-        original = se._pc_consecutive_failures
-        try:
-            se._pc_consecutive_failures = 7
-            _reset_pc_failure_tracking()
-            assert se._pc_consecutive_failures == 0
-        finally:
-            se._pc_consecutive_failures = original
+        se._get_pc_state().consecutive_failures = 7
+        fresh = _reset_pc_failure_tracking()
+        assert fresh.consecutive_failures == 0
+        assert se._get_pc_state().consecutive_failures == 0
 
     def test_warning_at_threshold(self, capsys):
         """WARNING should fire at 10 consecutive failures."""
-        original = se._pc_consecutive_failures
-        try:
-            # Simulate 10 failures
-            se._pc_consecutive_failures = _PC_FAILURE_WARN_THRESHOLD - 1
-            pc_entry = {"last_updated_turn": "turn-050"}
+        state = _reset_pc_failure_tracking()
+        # Simulate 10 failures
+        state.consecutive_failures = _PC_FAILURE_WARN_THRESHOLD - 1
+        pc_entry = {"last_updated_turn": "turn-050"}
 
-            # Simulate one more failure
-            se._pc_consecutive_failures += 1
-            if se._pc_consecutive_failures >= _PC_FAILURE_WARN_THRESHOLD:
-                print(
-                    f"  WARNING: PC extraction has failed for {se._pc_consecutive_failures} "
-                    f"consecutive turns (last update: "
-                    f"{pc_entry.get('last_updated_turn', 'unknown')}). "
-                    f"Context may be too large for reliable extraction.",
-                    file=sys.stderr,
-                )
-            captured = capsys.readouterr()
-            assert "WARNING" in captured.err
-            assert "10" in captured.err
-            assert "consecutive turns" in captured.err
-            assert "turn-050" in captured.err
-        finally:
-            se._pc_consecutive_failures = original
+        # Simulate one more failure
+        state.consecutive_failures += 1
+        if state.consecutive_failures >= _PC_FAILURE_WARN_THRESHOLD:
+            print(
+                f"  WARNING: PC extraction has failed for {state.consecutive_failures} "
+                f"consecutive turns (last update: "
+                f"{pc_entry.get('last_updated_turn', 'unknown')}). "
+                f"Context may be too large for reliable extraction.",
+                file=sys.stderr,
+            )
+        captured = capsys.readouterr()
+        assert "WARNING" in captured.err
+        assert "10" in captured.err
+        assert "consecutive turns" in captured.err
+        assert "turn-050" in captured.err
 
     def test_counter_resets_on_success(self):
         """Counter should reset to 0 on successful extraction."""
-        original = se._pc_consecutive_failures
-        try:
-            se._pc_consecutive_failures = 5
-            # Simulate success
-            se._pc_consecutive_failures = 0
-            assert se._pc_consecutive_failures == 0
-        finally:
-            se._pc_consecutive_failures = original
+        state = _reset_pc_failure_tracking()
+        state.consecutive_failures = 5
+        # Simulate success
+        state.consecutive_failures = 0
+        assert state.consecutive_failures == 0
 
     def test_partial_merge_returns_true_on_success(self):
         """_pc_partial_merge should return True when fields are merged."""

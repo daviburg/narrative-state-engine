@@ -185,22 +185,17 @@ class TestPCSkipThreshold:
         assert se._PC_FAILURE_WARN_THRESHOLD < se._PC_SKIP_THRESHOLD
 
     def test_reset_clears_all_counters(self):
-        """_reset_pc_failure_tracking clears all counters."""
-        original_f = se._pc_consecutive_failures
-        original_s = se._pc_skipped_turns
-        original_c = se._pc_turns_since_cooldown
-        try:
-            se._pc_consecutive_failures = 25
-            se._pc_skipped_turns = 10
-            se._pc_turns_since_cooldown = 30
-            se._reset_pc_failure_tracking()
-            assert se._pc_consecutive_failures == 0
-            assert se._pc_skipped_turns == 0
-            assert se._pc_turns_since_cooldown == 0
-        finally:
-            se._pc_consecutive_failures = original_f
-            se._pc_skipped_turns = original_s
-            se._pc_turns_since_cooldown = original_c
+        """_reset_pc_failure_tracking installs a fresh zeroed per-run state."""
+        state = se._get_pc_state()
+        state.consecutive_failures = 25
+        state.skipped_turns = 10
+        state.turns_since_cooldown = 30
+        fresh = se._reset_pc_failure_tracking()
+        assert fresh.consecutive_failures == 0
+        assert fresh.skipped_turns == 0
+        assert fresh.turns_since_cooldown == 0
+        # The current-context state now reflects the fresh object.
+        assert se._get_pc_state() is fresh
 
 
 class TestPCSkipIntegration:
@@ -230,8 +225,8 @@ class TestPCSkipIntegration:
         self._run_turns(llm, 5)
 
         # extract_json should be called for each turn (discovery + PC detail + events)
-        assert se._pc_consecutive_failures == 5
-        assert se._pc_skipped_turns == 0
+        assert se._get_pc_state().consecutive_failures == 5
+        assert se._get_pc_state().skipped_turns == 0
 
     def test_pc_extraction_skipped_after_threshold(self, monkeypatch):
         """After _PC_SKIP_THRESHOLD failures, PC extraction should stop."""
@@ -242,8 +237,8 @@ class TestPCSkipIntegration:
         total_turns = se._PC_SKIP_THRESHOLD + 10
         self._run_turns(llm, total_turns)
 
-        assert se._pc_consecutive_failures == se._PC_SKIP_THRESHOLD
-        assert se._pc_skipped_turns == 10
+        assert se._get_pc_state().consecutive_failures == se._PC_SKIP_THRESHOLD
+        assert se._get_pc_state().skipped_turns == 10
 
     def test_pc_max_tokens_passed_to_extract_json(self, monkeypatch):
         """PC extraction should pass llm.pc_max_tokens to extract_json."""
@@ -274,7 +269,7 @@ class TestPCSkipIntegration:
             catalogs, events, _failed, _log = se.extract_and_merge(
                 turn, catalogs, events, llm_fail, min_confidence=0.6,
             )
-        assert se._pc_consecutive_failures == 5
+        assert se._get_pc_state().consecutive_failures == 5
 
         # Now succeed — use a LLM that returns a valid PC entity
         llm_ok = MagicMock()
@@ -306,7 +301,7 @@ class TestPCSkipIntegration:
         se.extract_and_merge(
             turn, catalogs, events, llm_ok, min_confidence=0.6,
         )
-        assert se._pc_consecutive_failures == 0
+        assert se._get_pc_state().consecutive_failures == 0
 
     def test_validation_failure_logs_raw_preview_and_debug_record(self, monkeypatch, tmp_path, capsys):
         """Validation failures should log a preview and write a JSONL debug record."""

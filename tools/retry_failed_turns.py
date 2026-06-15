@@ -117,6 +117,20 @@ def load_turn_dicts(session_dir: str) -> list[dict]:
     return turn_dicts
 
 
+def _init_pc_worker() -> None:
+    """ThreadPoolExecutor initializer: install one PC failure state per worker.
+
+    Runs once in each worker thread when the pool starts it.  ThreadPool workers
+    begin with their own empty contextvars context and are reused across tasks
+    without copying context per task, so setting the state here gives each worker
+    a single ``_PCFailureState`` that PERSISTS across every turn that worker
+    processes.  This preserves the cross-turn PC cooldown within a worker (at
+    ``--workers 1`` all turns share one state, matching pre-#508 sequential
+    semantics) while keeping concurrent workers isolated from one another (#508).
+    """
+    _reset_pc_failure_tracking()
+
+
 def extract_single_turn(
     turn: dict,
     catalogs_snapshot: dict,
@@ -130,6 +144,14 @@ def extract_single_turn(
     """Extract a single turn in isolation. Thread-safe.
 
     Returns: (turn_id, catalogs, events, timeline, failed, log_record)
+
+    Per-run PC failure state is installed ONCE per worker thread via the
+    ThreadPoolExecutor ``initializer`` (``_init_pc_worker``), not here per task.
+    Resetting per task would give every retried turn a fresh state object, so
+    ``consecutive_failures`` could never accumulate across the sequential turns a
+    single worker processes and the cross-turn PC cooldown could never trip at
+    ``--workers 1`` — breaking the pre-#508 sequential semantics this refactor
+    must preserve (#508).
     """
     # Each thread gets its own LLM client (own HTTP session)
     llm = LLMClient(config_path, overrides=overrides)
@@ -285,7 +307,9 @@ def main():
     succeeded = 0
     still_failed = 0
 
-    with ThreadPoolExecutor(max_workers=num_workers) as pool:
+    with ThreadPoolExecutor(
+        max_workers=num_workers, initializer=_init_pc_worker
+    ) as pool:
         future_to_turn = {}
         for turn in retry_turns:
             future = pool.submit(
