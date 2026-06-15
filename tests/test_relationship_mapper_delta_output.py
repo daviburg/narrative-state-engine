@@ -13,6 +13,7 @@ byte-identical to baseline. Covers:
 """
 
 import copy
+import inspect
 import json
 import os
 import sys
@@ -157,6 +158,38 @@ class TestPromptMetricsMatchesExtraction:
         extraction_name = se._relationship_mapper_template_name(cfg)
         prompt_metrics_name = se._relationship_mapper_template_name(cfg)
         assert extraction_name == prompt_metrics_name == "relationship-mapper-delta"
+
+    def test_single_resolution_and_all_call_sites_use_it(self):
+        """Source-wiring guard: the relationship-mapper template name is
+
+        resolved exactly once (from the single helper) and every production
+        call site — prompt metrics, parallel, serial, and retry — consumes
+        that one resolved variable rather than a hardcoded template string.
+        This closes the coverage gap where helper-determinism was asserted but
+        the call-site wiring was not.
+        """
+        src = inspect.getsource(se.extract_and_merge)
+
+        # Resolved exactly once, from the single selector helper.
+        assert src.count(
+            "_rel_template_name = _relationship_mapper_template_name("
+        ) == 1
+
+        # No call site bypasses the resolved variable with a hardcoded name.
+        for hardcoded in (
+            'load_template("relationship-mapper")',
+            "load_template('relationship-mapper')",
+            'load_template("relationship-mapper-delta")',
+            "load_template('relationship-mapper-delta')",
+        ):
+            assert hardcoded not in src, (
+                f"hardcoded template bypass found: {hardcoded}"
+            )
+
+        # Prompt-metrics + serial + retry load via the resolved variable.
+        assert src.count("load_template(_rel_template_name)") >= 3
+        # Parallel path forwards the same resolved variable to the worker.
+        assert "_rel_max_tokens, _rel_template_name," in src
 
 
 # ---------------------------------------------------------------------------
