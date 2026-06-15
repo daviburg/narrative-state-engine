@@ -1776,6 +1776,35 @@ def _relationship_demotion_shadow_enabled(config: dict | None) -> bool:
     return ctx_opt.get("relationship_demotion_shadow", False) is True
 
 
+def _relationship_mapper_template_name(config: dict | None) -> str:
+    """Return the relationship-mapper template name for this config (#495).
+
+    'relationship-mapper-delta' iff context_optimizations.relationship_mapper_delta_output
+    is literally true; else 'relationship-mapper' (byte-identical-OFF default). Strict bool
+    parse (`is True`) mirrors the other measurement gates so a truthy non-bool cannot enable it.
+    """
+    raw = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx = raw if isinstance(raw, dict) else {}
+    return ("relationship-mapper-delta"
+            if ctx.get("relationship_mapper_delta_output", False) is True
+            else "relationship-mapper")
+
+
+def _relationship_mapper_drop_history_enabled(config: dict | None) -> bool:
+    """Return whether the relationship-mapper drop-history flag is on (#495).
+
+    Reads ``context_optimizations.relationship_mapper_drop_history``. Default OFF
+    so the relationship-mapper input block is byte-identical to baseline when the
+    key is unset or malformed. Strict bool parse (``is True``) mirrors the other
+    measurement gates so a truthy non-bool cannot silently enable it. When ON, the
+    ``history`` key is dropped from read-only copies of the input relationships;
+    the catalog is never mutated.
+    """
+    raw = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx = raw if isinstance(raw, dict) else {}
+    return ctx.get("relationship_mapper_drop_history", False) is True
+
+
 def _compute_relevance_detail_shadow(
     pre_cap_tasks: list[tuple[dict, dict | None]],
     actual_tasks: list[tuple[dict, dict | None]],
@@ -3246,6 +3275,7 @@ def _collect_existing_relationships(
     current_turn_num: int | None = None,
     context_length: int | None = None,
     return_stats: bool = False,
+    drop_history: bool = False,
 ) -> str | tuple[str, dict]:
     """Gather existing relationships for the given entities and format as JSON.
 
@@ -3310,7 +3340,7 @@ def _collect_existing_relationships(
 
     if return_stats:
         formatted, effective = _format_relationships_budgeted(
-            scored, budget, return_effective=True
+            scored, budget, return_effective=True, drop_history=drop_history,
         )
         raw_tokens = _estimate_tokens(json.dumps(result, indent=2))
         opt_tokens = _estimate_tokens(formatted)
@@ -3324,20 +3354,29 @@ def _collect_existing_relationships(
             "relationships_degraded": sum(1 for t, _, _ in effective if t in (2, 3)),
         }
         return formatted, stats
-    return _format_relationships_budgeted(scored, budget)
+    return _format_relationships_budgeted(scored, budget, drop_history=drop_history)
 
 
-def _format_rel_by_tier(tier: int, rel: dict) -> dict:
-    """Format a single relationship according to its tier."""
+def _format_rel_by_tier(tier: int, rel: dict, drop_history: bool = False) -> dict:
+    """Format a single relationship according to its tier.
+
+    When ``drop_history`` is True (#495), the ``history`` key is omitted from the
+    returned dict in every tier. The returned dict is always a copy / filtered
+    dict, so dropping history here never mutates the source relationship.
+    """
     if tier == 1:
         # Full — return as-is
-        return dict(rel)
+        out = dict(rel)
+        if drop_history:
+            out.pop("history", None)
+        return out
     elif tier == 2:
         # Recent — current state + last history entry
         trimmed = {k: v for k, v in rel.items() if k != "history"}
-        history = rel.get("history", [])
-        if history:
-            trimmed["history"] = history[-1:]
+        if not drop_history:
+            history = rel.get("history", [])
+            if history:
+                trimmed["history"] = history[-1:]
         return trimmed
     elif tier == 3:
         # Summary — one-line compact form
@@ -3353,6 +3392,7 @@ def _format_rel_by_tier(tier: int, rel: dict) -> dict:
 def _format_relationships_budgeted(
     scored: list[tuple[int, str, dict]], budget: int,
     return_effective: bool = False,
+    drop_history: bool = False,
 ) -> str | tuple[str, list[tuple[int, str, dict]]]:
     """Format scored relationships within a token budget.
 
@@ -3363,6 +3403,10 @@ def _format_relationships_budgeted(
     ``effective`` is the tier list actually used to build the output (after any
     budget-driven degradation), so callers can report accurate pruned/degraded
     counts rather than counts from the pre-budget tier assignment.
+
+    When *drop_history* is True (#495), the ``history`` key is omitted from every
+    formatted relationship via :func:`_format_rel_by_tier`. The source dicts are
+    never mutated.
     """
     # Group by owner for output structure
     def _build_output(items: list[tuple[int, str, dict]]) -> dict[str, list]:
@@ -3370,7 +3414,7 @@ def _format_relationships_budgeted(
         for tier, owner_id, rel in items:
             if tier >= 4:
                 continue
-            formatted = _format_rel_by_tier(tier, rel)
+            formatted = _format_rel_by_tier(tier, rel, drop_history=drop_history)
             if formatted:
                 out.setdefault(owner_id, []).append(formatted)
         return out
@@ -4381,15 +4425,20 @@ def _extract_relationships_parallel(
     mentioned_entities: list,
     existing_rels_json: str,
     max_tokens: int | None = None,
+    template_name: str = "relationship-mapper",
 ) -> list | None:
     """Run relationship-mapper extraction.  Returns list of relationships or
     None on failure.  Designed to run inside a ThreadPoolExecutor.
+
+    ``template_name`` is resolved by the caller via
+    :func:`_relationship_mapper_template_name` (#495) so the parallel path uses
+    the same template the serial/retry/prompt-metrics sites select.
 
     Handles truncation by retrying with 2× max_tokens, then attempting
     lossy JSON repair as a last resort.
     """
     turn_id = turn["turn_id"]
-    _sys_prompt = load_template("relationship-mapper")
+    _sys_prompt = load_template(template_name)
     _user_prompt = format_relationship_prompt(turn, mentioned_entities, existing_rels_json)
     try:
         rel_result = llm.extract_json(
@@ -5022,6 +5071,12 @@ def extract_and_merge(
 
     # Pre-compute relationship context
     _run_rels = len(mentioned_entities) >= 2
+    # Resolve the relationship-mapper template name + drop-history flag ONCE so
+    # extraction, prompt-metrics, the parallel path, and the serial/retry sites
+    # all use the same template and input block (#495). OFF ⇒ byte-identical to
+    # baseline ("relationship-mapper", history retained).
+    _rel_template_name = _relationship_mapper_template_name(_cfg)
+    _rel_drop_history = _relationship_mapper_drop_history_enabled(_cfg)
     existing_rels_json = None
     if _run_rels:
         entity_id_list = [e["id"] for e in mentioned_entities]
@@ -5033,6 +5088,7 @@ def extract_and_merge(
             turn_text=turn.get("text", ""),
             current_turn_num=_current_turn_num,
             context_length=_ctx_len if isinstance(_ctx_len, int) else None,
+            drop_history=_rel_drop_history,
         )
 
     # Relationship-demotion shadow (#495 step 1, epic #477) — MEASUREMENT ONLY.
@@ -5204,7 +5260,7 @@ def extract_and_merge(
             raw_tokens=_pc_raw_tokens,
         )
     if _run_rels:
-        _rel_sys_tmpl = load_template("relationship-mapper")
+        _rel_sys_tmpl = load_template(_rel_template_name)
         _rel_user_prompt = format_relationship_prompt(turn, mentioned_entities, existing_rels_json)
         _record_prompt_tokens(_prompt_metrics, "relationship_mapper", _rel_sys_tmpl, _rel_user_prompt)
     _evt_sys_tmpl = load_template("event-extractor")
@@ -5276,7 +5332,7 @@ def extract_and_merge(
                 f = pool.submit(
                     _extract_relationships_parallel,
                     llm, turn, mentioned_entities, existing_rels_json,
-                    _rel_max_tokens,
+                    _rel_max_tokens, _rel_template_name,
                 )
                 futures_map[f] = ("relationship", None)
 
@@ -5692,7 +5748,7 @@ def extract_and_merge(
         if _run_rels:
             try:
                 rel_result = llm.extract_json(
-                    system_prompt=load_template("relationship-mapper"),
+                    system_prompt=load_template(_rel_template_name),
                     user_prompt=format_relationship_prompt(turn, mentioned_entities,
                                                            existing_rels_json),
                     max_tokens=_rel_max_tokens,
@@ -5711,7 +5767,7 @@ def extract_and_merge(
                       f"max_tokens={_retry_max}...", file=sys.stderr)
                 try:
                     rel_result = llm.extract_json(
-                        system_prompt=load_template("relationship-mapper"),
+                        system_prompt=load_template(_rel_template_name),
                         user_prompt=format_relationship_prompt(turn, mentioned_entities,
                                                                existing_rels_json),
                         max_tokens=_retry_max,
