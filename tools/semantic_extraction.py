@@ -2414,7 +2414,9 @@ def _event_first_turn(event: dict) -> str:
     serialised/reconciled, which previously produced stub entities with an
     empty ``first_seen_turn`` (schema-invalid).  This helper prefers the
     earliest valid ``turn-NNN`` from ``source_turns`` and falls back to
-    ``turn_id``, guaranteeing callers can set a real turn id.
+    ``turn_id``.  It returns a real schema-valid turn id when any provenance can
+    be resolved, or ``''`` when none can; callers must treat ``''`` as "no valid
+    source turn" and skip stub emission rather than writing an invalid stub.
 
     Only schema-valid ``turn-NNN`` strings (anchored ``^turn-[0-9]{3,}$``, the
     same ``_TURN_ID_RE`` the callers enforce) are considered, so a malformed but
