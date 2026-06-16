@@ -2405,6 +2405,42 @@ def _parse_turn_number(turn_id: str | None) -> int | None:
     return None
 
 
+def _event_first_turn(event: dict) -> str:
+    """Return the provenance turn-ID for an *event*, or '' if undeterminable.
+
+    Events carry their turn provenance in ``source_turns`` (a list); only some
+    in-memory events also carry a transient ``turn_id`` key.  Post-batch passes
+    that read ``turn_id`` directly therefore see '' once events have been
+    serialised/reconciled, which previously produced stub entities with an
+    empty ``first_seen_turn`` (schema-invalid).  This helper prefers the
+    earliest valid ``turn-NNN`` from ``source_turns`` and falls back to
+    ``turn_id``, guaranteeing callers can set a real turn id.
+
+    Only schema-valid ``turn-NNN`` strings (anchored ``^turn-[0-9]{3,}$``, the
+    same ``_TURN_ID_RE`` the callers enforce) are considered, so a malformed but
+    numerically-parseable candidate like ``bad-turn-001`` can never out-rank a
+    valid later turn such as ``turn-005``.
+    """
+    candidates: list[str] = []
+    source_turns = event.get("source_turns")
+    if isinstance(source_turns, list):
+        candidates.extend(t for t in source_turns if isinstance(t, str))
+    tid = event.get("turn_id")
+    if isinstance(tid, str) and tid:
+        candidates.append(tid)
+
+    best: str | None = None
+    best_num: int | None = None
+    for cand in candidates:
+        if not _TURN_ID_RE.match(cand):
+            continue
+        num = _parse_turn_number(cand)
+        if num is not None and (best_num is None or num < best_num):
+            best_num = num
+            best = cand
+    return best or ""
+
+
 def _extract_turn_number(item) -> int | None:
     """Try to extract a turn number from a volatile state entry."""
     if isinstance(item, dict):
@@ -6220,7 +6256,10 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
     # Count references per orphan ID
     orphan_counts: dict[str, list[str]] = {}  # id -> list of turn_ids
     for event in events_list:
-        turn_id = event.get("turn_id", "")
+        # Events store provenance in source_turns; turn_id is only present on
+        # transient in-memory events.  Derive the real turn so post-batch stubs
+        # never get an empty first_seen_turn (#241 invariant).
+        turn_id = _event_first_turn(event)
         for eid in event.get("related_entities", []):
             if not eid or eid in _SKIP_STUB_IDS:
                 continue
@@ -6262,6 +6301,12 @@ def _post_batch_orphan_sweep(catalogs: dict, events_list: list) -> int:
             first_turn = min(valid_turns, key=lambda t: int(t.split("-")[1]) if "-" in t and t.split("-")[1].isdigit() else 0)
         else:
             first_turn = ""
+        # Invariant: never emit a stub with an empty/invalid first_seen_turn
+        # (schema pattern ^turn-[0-9]{3,}$). Without a real provenance turn the
+        # stub cannot be validated, so skip it rather than write invalid data.
+        if not _TURN_ID_RE.match(first_turn):
+            print(f"  POST-BATCH STUB SKIP: '{eid}' has no valid source turn", file=sys.stderr)
+            continue
         stub = {
             "id": eid,
             "name": inferred_name,
@@ -6472,11 +6517,19 @@ def _name_mention_discovery(catalogs: dict, events_list: list) -> int:
         for event in events_list:
             eid = event.get("id", event.get("turn_id", ""))
             if eid in event_ids:
-                turn = event.get("turn_id", "")
+                # Events store provenance in source_turns; turn_id is only
+                # present transiently. Derive the real turn (#241 invariant).
+                turn = _event_first_turn(event)
                 t_num = _parse_turn_number(turn) if turn else None
                 if t_num is not None and (first_num is None or t_num < first_num):
                     first_num = t_num
                     first_turn = turn
+
+        # Invariant: never emit a stub with an empty/invalid first_seen_turn
+        # (schema pattern ^turn-[0-9]{3,}$). Skip when no real source turn exists.
+        if not _TURN_ID_RE.match(first_turn):
+            print(f"  NAME-MENTION STUB SKIP: '{char_id}' has no valid source turn", file=sys.stderr)
+            continue
 
         stub = {
             "id": char_id,
