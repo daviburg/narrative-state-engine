@@ -132,7 +132,11 @@ class TestRelevanceScopedDetailFlag:
         cfg = {"context_optimizations": {"relevance_scoped_detail": {"enabled": True}}}
         enabled, max_detail, mode = se._get_relevance_scoped_detail_config(cfg)
         assert enabled is True
-        assert max_detail == se._DEFAULT_RELEVANCE_DETAIL_MAX == 10
+        # The default ceiling (_DEFAULT_RELEVANCE_DETAIL_MAX = 10) is below the
+        # raised hard cap, so it is clamped up to _MAX_DETAIL_ENTITIES_PER_TURN
+        # (recover-only must retain the full cap set).
+        assert se._DEFAULT_RELEVANCE_DETAIL_MAX == 10
+        assert max_detail == se._MAX_DETAIL_ENTITIES_PER_TURN
         assert mode == "recover_only"
 
     def test_strict_bool(self):
@@ -151,20 +155,23 @@ class TestRelevanceScopedDetailFlag:
         cfg = {"context_optimizations": {"relevance_scoped_detail": []}}
         enabled, max_detail, mode = se._get_relevance_scoped_detail_config(cfg)
         assert enabled is False
-        assert max_detail == 10
+        # Default ceiling (10) is clamped up to the raised hard cap.
+        assert max_detail == se._MAX_DETAIL_ENTITIES_PER_TURN
         assert mode == "recover_only"
 
     def test_ceiling_parsed_and_clamped(self):
         cfg = {"context_optimizations": {
-            "relevance_scoped_detail": {"enabled": True, "max_detail_entities": 14}}}
-        assert se._get_relevance_scoped_detail_config(cfg)[1] == 14
+            "relevance_scoped_detail": {"enabled": True, "max_detail_entities": 25}}}
+        # Above the hard cap (22) -> kept as configured.
+        assert se._get_relevance_scoped_detail_config(cfg)[1] == 25
         # Below the hard cap -> clamped up to _MAX_DETAIL_ENTITIES_PER_TURN.
         cfg["context_optimizations"]["relevance_scoped_detail"]["max_detail_entities"] = 2
         assert se._get_relevance_scoped_detail_config(cfg)[1] == \
             se._MAX_DETAIL_ENTITIES_PER_TURN
-        # Malformed -> default.
+        # Malformed -> default ceiling (10), itself clamped up to the hard cap.
         cfg["context_optimizations"]["relevance_scoped_detail"]["max_detail_entities"] = "ten"
-        assert se._get_relevance_scoped_detail_config(cfg)[1] == 10
+        assert se._get_relevance_scoped_detail_config(cfg)[1] == \
+            se._MAX_DETAIL_ENTITIES_PER_TURN
 
     def test_unknown_mode_normalises_to_recover_only(self):
         cfg = {"context_optimizations": {
@@ -181,7 +188,8 @@ class TestRelevanceScopedDetailFlag:
             cfg = json.load(fh)
         enabled, max_detail, mode = se._get_relevance_scoped_detail_config(cfg)
         assert enabled is False
-        assert max_detail == 10
+        # Shipped ceiling (10) is clamped up to the raised hard cap at runtime.
+        assert max_detail == se._MAX_DETAIL_ENTITIES_PER_TURN
         assert mode == "recover_only"
 
 
@@ -414,21 +422,22 @@ class TestRecoverSelection:
 
 class TestEndToEnd:
     def _scenario(self):
-        ids = [f"char-{c}" for c in "abcdefghi"]
+        # 24 non-PC entities (a..x) + PC = 25 qualified, exceeding the raised
+        # cap (22) so the cap truncation fires: PC + the top-21 non-PC by
+        # confidence (char-a..char-u) are kept; char-v/char-w/char-x are
+        # dropped.  The mentioned low-confidence entity (char-x) is therefore
+        # cap-dropped and available for relevance recovery.
+        ids = [f"char-{c}" for c in "abcdefghijklmnopqrstuvwx"]
         names = {eid: eid.replace("-", " ").title() for eid in ids}
         catalogs = {"characters.json": [_make_entry(eid, names[eid]) for eid in ids]}
         catalogs["characters.json"].append(_make_entry("char-player", "Player Character"))
-        conf = {
-            "char-a": 0.95, "char-b": 0.9, "char-c": 0.85, "char-d": 0.8,
-            "char-e": 0.75, "char-f": 0.7, "char-g": 0.3, "char-h": 0.2,
-            "char-i": 0.1,
-        }
+        conf = {eid: round(0.95 - i * 0.03, 4) for i, eid in enumerate(ids)}
         qualified = [_make_ref(eid, names[eid], confidence=conf[eid]) for eid in ids]
         qualified.append(_make_ref("char-player", "Player Character", confidence=0.9))
         turn = {
             "turn_id": "turn-100",
             "speaker": "DM",
-            "text": f"{names['char-a']} confronts {names['char-i']} at dawn.",
+            "text": f"{names['char-a']} confronts {names['char-x']} at dawn.",
         }
         return catalogs, qualified, turn
 
@@ -467,11 +476,11 @@ class TestEndToEnd:
         _, _, _, _, ids_off = self._run(None)
         _, _, _, log_on, ids_on = self._run(
             {"enabled": True, "max_detail_entities": 10, "mode": "recover_only"})
-        # Recover-only: flag-ON detail set is a SUPERSET of the cap-6 set.
+        # Recover-only: flag-ON detail set is a SUPERSET of the cap set.
         assert set(ids_off).issubset(set(ids_on))
-        # char-i (mentioned, cap-dropped) is recovered by the flag-ON run.
-        assert "char-i" in set(ids_on)
-        assert "char-i" not in set(ids_off)
+        # char-x (mentioned, cap-dropped) is recovered by the flag-ON run.
+        assert "char-x" in set(ids_on)
+        assert "char-x" not in set(ids_off)
         # The recovery reduced the leftover (capped) count vs the cap-6 control.
         assert log_on.get("entity_detail_capped_count") < \
             self._run(None)[3].get("entity_detail_capped_count")

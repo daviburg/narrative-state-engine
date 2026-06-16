@@ -1584,8 +1584,52 @@ _REL_TOKEN_BUDGET_FRACTION = 0.2  # Fraction of context_length for relationship 
 _SCENE_REL_RECENCY_WINDOW = 10   # Relationships updated within this many turns are kept
 _SCENE_MAX_RELATIONSHIPS = 8     # Max relationships after trimming
 
-# Entity detail call cap to prevent O(n²) scaling
-_MAX_DETAIL_ENTITIES_PER_TURN = 6  # Cap non-PC entity detail calls per turn
+# Entity detail call cap to prevent O(n²) scaling.  Despite the historical
+# "non-PC" wording, this is the per-turn cap on the TOTAL number of
+# entity_detail calls INCLUDING the always-kept PC (char-player): the cap logic
+# subtracts the PC tasks from this budget (``_available = cap - len(_pc_tasks)``),
+# so cap=N means PC + up to (N - 1) others detailed.
+#
+# Raised from the historical 6 to 22 to stop the cap from suppressing
+# this-turn-active entities on dense council turns.  The shadow-495 344-turn
+# analysis put the central-entity high watermark at 21 active entities
+# (turn-342, confirmed by 3 independent signals); the cap-6 ceiling silently
+# dropped ~249 this-turn-active entity_detail updates run-wide (164 late-game),
+# causing PERMANENT catalog data loss on the ~70 capping turns (e.g.
+# char-rune's / char-faelan's turn-342 developments never reached the catalog).
+# 22 = high watermark 21 + 1 margin, which eliminates all capping on that
+# dataset.  Per-detail cost is ~flat (~384 tok/call), so the added cost is
+# self-limiting: extra calls occur only on the turns that actually have that
+# many active entities, not run-wide.  Because the right ceiling is
+# campaign-density dependent, it is tunable via
+# ``context_optimizations.max_detail_entities_per_turn`` (see
+# ``_get_max_detail_entities_per_turn``); this constant is the default.
+_MAX_DETAIL_ENTITIES_PER_TURN = 22  # Default per-turn TOTAL (incl-PC) entity_detail cap
+
+
+def _get_max_detail_entities_per_turn(config: dict | None) -> int:
+    """Return the per-turn TOTAL (incl-PC) entity_detail call cap.
+
+    Reads ``context_optimizations.max_detail_entities_per_turn`` (default
+    ``_MAX_DETAIL_ENTITIES_PER_TURN`` = 22).  The value is the TOTAL number of
+    entity_detail calls allowed per turn including the always-kept PC, so a cap
+    of 22 means PC + up to 21 others.  Made config-tunable because the right
+    ceiling is campaign-density dependent: 22 was calibrated from one campaign's
+    central-entity high watermark (21), and a denser council scene may need a
+    higher value.  Strict ``int`` parse with a floor of 1 so a malformed or
+    non-positive override cannot silently suppress detail extraction — it falls
+    back to the default instead.
+    """
+    raw_ctx = (config or {}).get("context_optimizations", {}) if isinstance(config, dict) else {}
+    ctx_opt = raw_ctx if isinstance(raw_ctx, dict) else {}
+    raw = ctx_opt.get("max_detail_entities_per_turn", _MAX_DETAIL_ENTITIES_PER_TURN)
+    try:
+        cap = int(raw)
+    except (TypeError, ValueError):
+        cap = _MAX_DETAIL_ENTITIES_PER_TURN
+    if cap < 1:
+        cap = _MAX_DETAIL_ENTITIES_PER_TURN
+    return cap
 
 # Batched entity detail (L2, #491) defaults.  ``_DEFAULT_DETAIL_BATCH_SIZE``
 # of 4 balances the token saving (collapsing the per-call template+turn_text
@@ -4970,7 +5014,8 @@ def extract_and_merge(
     # are treated as new — this is conservative since new entities need detail extraction.
     _detail_candidates_pre_cap = list(_entity_tasks)
     _entity_detail_capped_count = 0
-    if len(_entity_tasks) > _MAX_DETAIL_ENTITIES_PER_TURN:
+    _max_detail_cap = _get_max_detail_entities_per_turn(_cfg)
+    if len(_entity_tasks) > _max_detail_cap:
         # Exclude char-player from capping — PC is always processed
         _pc_tasks = [(ref, entry) for ref, entry in _entity_tasks
                      if get_entity_id(ref) == "char-player"]
@@ -4982,7 +5027,7 @@ def extract_and_merge(
         _new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
         _existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
         # Enforce hard cap: PC slots + new slots + existing slots <= cap
-        _available = _MAX_DETAIL_ENTITIES_PER_TURN - len(_pc_tasks)
+        _available = _max_detail_cap - len(_pc_tasks)
         _kept_new = _new_tasks[:_available]
         _remaining = max(0, _available - len(_kept_new))
         _kept_existing = _existing_tasks[:_remaining]

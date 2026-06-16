@@ -769,9 +769,9 @@ class TestEntityDetailCapping:
     def test_cap_enforced_new_entities_exceed_cap(self):
         """When new entities exceed cap, total is still bounded."""
         from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN, get_entity_id
-        # Simulate 8 new entities (exceeds cap of 6)
-        tasks = [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.9-i*0.05), None)
-                 for i in range(8)]
+        # Simulate 25 new entities (exceeds the raised cap of 22)
+        tasks = [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.9-i*0.01), None)
+                 for i in range(25)]
         # Apply capping logic inline (mirrors the code)
         pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
         non_pc = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) != "char-player"]
@@ -789,11 +789,11 @@ class TestEntityDetailCapping:
     def test_cap_prioritizes_new_over_existing(self):
         """New entities are kept before existing ones."""
         from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN, get_entity_id
-        # 4 new + 4 existing = 8 total, cap=6
+        # 12 new + 14 existing = 26 total, cap=22 -> all 12 new kept, 10 existing
         new_refs = [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.8), None)
-                    for i in range(4)]
+                    for i in range(12)]
         existing_refs = [(self._make_entity_ref(f"char-old-{i}", is_new=False, confidence=0.9), None)
-                         for i in range(4)]
+                         for i in range(14)]
         tasks = new_refs + existing_refs
         # Apply capping
         pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
@@ -807,18 +807,18 @@ class TestEntityDetailCapping:
         remaining = max(0, available - len(kept_new))
         kept_existing = existing_tasks[:remaining]
         result = pc_tasks + kept_new + kept_existing
-        # All 4 new should be kept, only 2 existing
+        # All 12 new should be kept, only 10 existing (cap 22)
         assert len(result) == _MAX_DETAIL_ENTITIES_PER_TURN
         new_ids = {get_entity_id(ref) for ref, _ in kept_new}
-        assert len(new_ids) == 4  # all new kept
+        assert len(new_ids) == 12  # all new kept
 
     def test_pc_never_capped(self):
         """char-player is never dropped by capping."""
         from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN, get_entity_id
-        # PC + 8 new entities = 9 total
+        # PC + 24 new entities = 25 total (exceeds the raised cap of 22)
         pc_ref = self._make_entity_ref("char-player", is_new=False, confidence=1.0)
         tasks = [(pc_ref, None)] + [(self._make_entity_ref(f"char-new-{i}", is_new=True, confidence=0.8), None)
-                                     for i in range(8)]
+                                     for i in range(24)]
         # Apply capping
         pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
         non_pc = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) != "char-player"]
@@ -833,4 +833,132 @@ class TestEntityDetailCapping:
         result = pc_tasks + kept_new + kept_existing
         result_ids = {get_entity_id(ref) for ref, _ in result}
         assert "char-player" in result_ids
-        assert len(result) <= _MAX_DETAIL_ENTITIES_PER_TURN + 1  # +1 for PC which is always included
+        # The constant is the TOTAL-incl-PC budget (cap = PC + others), so the
+        # kept set never exceeds it even though PC is force-kept.
+        assert len(result) <= _MAX_DETAIL_ENTITIES_PER_TURN
+
+
+class TestRaisedEntityDetailCap:
+    """Tests for the raised entity_detail cap (shadow-495 high watermark 21 ->
+    cap 22) and its config override ``_get_max_detail_entities_per_turn``.
+
+    The cap is the TOTAL number of entity_detail calls per turn INCLUDING the
+    always-kept PC, so cap=22 means PC + up to 21 others.
+    """
+
+    def _make_entity_ref(self, entity_id, is_new=True, confidence=0.8):
+        return {
+            "name": entity_id.replace("char-", ""),
+            "type": "character",
+            "is_new": is_new,
+            "proposed_id": entity_id if is_new else None,
+            "existing_id": None if is_new else entity_id,
+            "confidence": confidence,
+        }
+
+    def _apply_cap(self, tasks, cap):
+        """Mirror the production capping logic for a given cap value."""
+        from tools.semantic_extraction import get_entity_id
+        pc_tasks = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) == "char-player"]
+        non_pc = [(ref, entry) for ref, entry in tasks if get_entity_id(ref) != "char-player"]
+        new_tasks = [(ref, entry) for ref, entry in non_pc if ref.get("is_new", True)]
+        existing_tasks = [(ref, entry) for ref, entry in non_pc if not ref.get("is_new", True)]
+        new_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        existing_tasks.sort(key=lambda x: x[0].get("confidence", 0.5), reverse=True)
+        available = cap - len(pc_tasks)
+        kept_new = new_tasks[:available]
+        remaining = max(0, available - len(kept_new))
+        kept_existing = existing_tasks[:remaining]
+        return pc_tasks + kept_new + kept_existing
+
+    def test_default_constant_is_22(self):
+        """The hard-cap default is the high-watermark-derived 22 (was 6)."""
+        from tools.semantic_extraction import _MAX_DETAIL_ENTITIES_PER_TURN
+        assert _MAX_DETAIL_ENTITIES_PER_TURN == 22
+
+    def test_twenty_one_candidates_all_detailed_under_default_cap(self):
+        """21 candidates are ALL detailed under the default cap (22 does not bind).
+
+        This is the core quality-restoration assertion: a dense council turn at
+        the observed high watermark (21) no longer drops any this-turn-active
+        entity, because 21 is strictly below the default cap of 22. The
+        assertion is load-bearing: it runs the production capping logic and
+        proves the cap does NOT bind (no entity dropped) at the high watermark.
+        """
+        from tools.semantic_extraction import _get_max_detail_entities_per_turn
+        cap = _get_max_detail_entities_per_turn(None)
+        assert cap == 22 and 21 < cap  # high watermark sits below the default cap
+        tasks = [(self._make_entity_ref(f"char-{i}", confidence=0.9), None) for i in range(21)]
+        # Always run the production capping logic (not an `else tasks` shortcut),
+        # so the assertion proves capping leaves all 21 when it does not bind.
+        result = self._apply_cap(tasks, cap)
+        assert len(result) == 21  # cap did not bind: nothing dropped
+
+    def test_twenty_one_candidates_cap_binds_when_lowered(self):
+        """When the configured cap is lowered below 21, capping BINDS and drops the tail.
+
+        Load-bearing counterpart to the default-cap case: with 21 candidates
+        (PC + 20 others) and an override cap of 20, the cap binds and exactly 20
+        are detailed (PC + 19), proving the capping path actually fires.
+        """
+        from tools.semantic_extraction import _get_max_detail_entities_per_turn, get_entity_id
+        cfg = {"context_optimizations": {"max_detail_entities_per_turn": 20}}
+        cap = _get_max_detail_entities_per_turn(cfg)
+        assert cap == 20
+        pc = self._make_entity_ref("char-player", is_new=False, confidence=1.0)
+        tasks = [(pc, None)] + [(self._make_entity_ref(f"char-{i}", confidence=0.9), None)
+                                for i in range(20)]
+        assert len(tasks) == 21 and len(tasks) > cap  # cap binds
+        result = self._apply_cap(tasks, cap)
+        assert len(result) == 20  # PC + 19: one entity dropped by the binding cap
+        assert len(result) < len(tasks)  # capping actually fired
+        assert "char-player" in {get_entity_id(ref) for ref, _ in result}  # PC force-kept
+
+    def test_cap_allows_22_total_incl_pc(self):
+        """With 25 candidates (PC + 24), exactly 22 are detailed (PC always kept)."""
+        from tools.semantic_extraction import _get_max_detail_entities_per_turn, get_entity_id
+        cap = _get_max_detail_entities_per_turn(None)
+        pc = self._make_entity_ref("char-player", is_new=False, confidence=1.0)
+        tasks = [(pc, None)] + [(self._make_entity_ref(f"char-{i}"), None) for i in range(24)]
+        result = self._apply_cap(tasks, cap)
+        assert len(result) == 22  # TOTAL-incl-PC ceiling honored, not 6-7
+        assert "char-player" in {get_entity_id(ref) for ref, _ in result}
+
+    def test_config_override_defaults_to_constant(self):
+        """Unset / empty config falls back to the module default (22)."""
+        from tools.semantic_extraction import (
+            _get_max_detail_entities_per_turn,
+            _MAX_DETAIL_ENTITIES_PER_TURN,
+        )
+        assert _get_max_detail_entities_per_turn(None) == _MAX_DETAIL_ENTITIES_PER_TURN
+        assert _get_max_detail_entities_per_turn({}) == _MAX_DETAIL_ENTITIES_PER_TURN
+        assert _get_max_detail_entities_per_turn(
+            {"context_optimizations": {}}
+        ) == _MAX_DETAIL_ENTITIES_PER_TURN
+
+    def test_config_override_honored(self):
+        """An explicit override is used (tunable per campaign density)."""
+        from tools.semantic_extraction import _get_max_detail_entities_per_turn
+        cfg = {"context_optimizations": {"max_detail_entities_per_turn": 30}}
+        assert _get_max_detail_entities_per_turn(cfg) == 30
+
+    def test_config_override_malformed_falls_back(self):
+        """Malformed / non-positive overrides fall back to the default, never 0."""
+        from tools.semantic_extraction import (
+            _get_max_detail_entities_per_turn,
+            _MAX_DETAIL_ENTITIES_PER_TURN,
+        )
+        for bad in [None, "abc", [], {}, -5, 0]:
+            cfg = {"context_optimizations": {"max_detail_entities_per_turn": bad}}
+            assert _get_max_detail_entities_per_turn(cfg) == _MAX_DETAIL_ENTITIES_PER_TURN
+
+    def test_config_optimizations_not_a_dict(self):
+        """A malformed (non-dict) context_optimizations falls back safely."""
+        from tools.semantic_extraction import (
+            _get_max_detail_entities_per_turn,
+            _MAX_DETAIL_ENTITIES_PER_TURN,
+        )
+        assert _get_max_detail_entities_per_turn(
+            {"context_optimizations": ["not", "a", "dict"]}
+        ) == _MAX_DETAIL_ENTITIES_PER_TURN
+        assert _get_max_detail_entities_per_turn("not a dict") == _MAX_DETAIL_ENTITIES_PER_TURN

@@ -333,23 +333,20 @@ class TestComputeShadow:
 
 class TestOutputIdentity:
     def _scenario(self):
-        ids = [f"char-{c}" for c in "abcdefghi"]
+        # 24 non-PC entities (a..x) + PC = 25 qualified, exceeding the raised
+        # cap (22) so the cap truncation fires (PC is exempt; the 24 non-PC are
+        # capped to <=21 by confidence, dropping char-v/char-w/char-x).
+        ids = [f"char-{c}" for c in "abcdefghijklmnopqrstuvwx"]
         names = {eid: eid.replace("-", " ").title() for eid in ids}
         catalogs = {"characters.json": [_make_entry(eid, names[eid]) for eid in ids]}
         catalogs["characters.json"].append(_make_entry("char-player", "Player Character"))
-        conf = {
-            "char-a": 0.95, "char-b": 0.9, "char-c": 0.85, "char-d": 0.8,
-            "char-e": 0.75, "char-f": 0.7, "char-g": 0.3, "char-h": 0.2,
-            "char-i": 0.1,
-        }
-        # >cap qualified set (9 existing + PC = 10) so the cap-6 truncation
-        # fires (PC is exempt; 9 non-PC capped to <=6).
+        conf = {eid: round(0.95 - i * 0.03, 4) for i, eid in enumerate(ids)}
         qualified = [_make_ref(eid, names[eid], confidence=conf[eid]) for eid in ids]
         qualified.append(_make_ref("char-player", "Player Character", confidence=0.9))
         turn = {
             "turn_id": "turn-100",
             "speaker": "DM",
-            "text": f"{names['char-a']} confronts {names['char-i']} while Char B watches.",
+            "text": f"{names['char-a']} confronts {names['char-x']} while Char B watches.",
         }
         return catalogs, qualified, turn
 
