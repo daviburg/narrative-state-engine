@@ -1,8 +1,8 @@
 """Behavioral tests for personal-name coreference handling (#524).
 
 These tests exercise the *deterministic* discovery-filter pipeline that the
-coreference fix touches â€” `_build_compound_word_index()` +
-`_is_compound_term_fragment()` â€” using the same two-step filter the production
+coreference fix touches — `_build_compound_word_index()` +
+`_is_compound_term_fragment()` — using the same two-step filter the production
 discovery phase applies at its call site.  The coref *decision* (continuity
 callback vs. fresh introduction) is made by the LLM via the discovery template;
 these tests verify that, given the discovery records the model is instructed to
@@ -31,13 +31,14 @@ from semantic_extraction import (
     _expand_compact_discovery_entries,
     _is_compound_term_fragment,
     _partition_detail_tasks,
+    _reset_pc_failure_tracking,
     _run_discovery_phase,
     _strip_any_prefix,
     _validate_existing_ids,
+    extract_and_merge,
     find_entity_by_id,
     get_entity_id,
 )
-import semantic_extraction as se
 from unittest.mock import MagicMock
 from catalog_merger import CATALOG_KEYS
 
@@ -47,7 +48,7 @@ def _apply_discovery_filter(catalogs: dict, qualified: list[dict]) -> list[dict]
 
     Builds the compound-word index from the catalog plus the current-turn
     candidates and returns the entities that survive the compound-fragment
-    rejection â€” exactly as `_run_discovery_phase` does before within-turn dedup.
+    rejection — exactly as `_run_discovery_phase` does before within-turn dedup.
     A reference is spared only when its existing_id resolves against the real
     catalog (#524), so the helper passes the known-id set through.
     """
@@ -67,7 +68,7 @@ def _catalog_with(*characters: dict) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 1 â€” continuity callback resolves to the existing id
+# Scenario 1 — continuity callback resolves to the existing id
 # ---------------------------------------------------------------------------
 
 class TestContinuityCallbackKept:
@@ -113,7 +114,7 @@ class TestContinuityCallbackKept:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 2 â€” conflicting second component mints a NEW id
+# Scenario 2 — conflicting second component mints a NEW id
 # ---------------------------------------------------------------------------
 
 class TestConflictingComponentMintsNewId:
@@ -137,7 +138,7 @@ class TestConflictingComponentMintsNewId:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 3 â€” fresh introduction of a new person
+# Scenario 3 — fresh introduction of a new person
 # ---------------------------------------------------------------------------
 
 class TestFreshIntroductionMintsNewId:
@@ -164,7 +165,7 @@ class TestFreshIntroductionMintsNewId:
         compound-fragment guard still drops a single-word NEW name that exactly
         matches a component of an existing compound, because such a proposal is
         indistinguishable from a fragment.  The guard ONLY spares known
-        references (existing_id / is_new=False) â€” so a fresh-introduction new
+        references (existing_id / is_new=False) — so a fresh-introduction new
         person should be emitted with a distinguishing form (see the kept case
         above), not a bare colliding token.
         """
@@ -212,7 +213,7 @@ class TestMixedTurnFilter:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 4 â€” unvalidated / unresolvable existing_id must NOT bypass #398
+# Scenario 4 — unvalidated / unresolvable existing_id must NOT bypass #398
 # (iteration-3 HIGH regression: the guard trusted model-supplied ids).
 # ---------------------------------------------------------------------------
 
@@ -223,7 +224,7 @@ class TestUnresolvableExistingIdRejected:
         Catalog has 'item-frost-precision' ("Frost Precision").  The LLM emits a
         bare 'Precision' with is_new=False + existing_id='item-precision' (an id
         that does NOT exist).  The guard must NOT spare it on the unvalidated id
-        â€” it is still a compound-term fragment and must be dropped (#524).
+        — it is still a compound-term fragment and must be dropped (#524).
         """
         catalogs = {
             "items.json": [
@@ -297,7 +298,7 @@ class TestCompactExpansionFailClosed:
 
 
 # ---------------------------------------------------------------------------
-# Scenario 5 â€” a FULL named record with an unresolvable existing_id must be
+# Scenario 5 — a FULL named record with an unresolvable existing_id must be
 # validated at the single uniform chokepoint in `_run_discovery_phase`, so it
 # never becomes a detail/merge task on EITHER the sequential or the batch path
 # (iteration-4 HIGH: a multi-word named bogus existing_id bypassed both the
@@ -534,7 +535,7 @@ class TestNamedUnresolvableExistingIdFailsClosed:
         introduced: rerouting "Mara Baker" onto ``char-mara-veylin`` would let
         ``merge_entity`` rename/overwrite "Mara Veylin" (the catalog_merger name
         guard only blocks ZERO-overlap names, and "Mara Baker"/"Mara Veylin"
-        share "Mara").  Fail closed instead â€” no identity corruption.
+        share "Mara").  Fail closed instead — no identity corruption.
         """
         catalogs = {
             "characters.json": [
@@ -559,7 +560,7 @@ class TestNamedUnresolvableExistingIdFailsClosed:
 
         entity_tasks = _build_entity_tasks(result["qualified"], catalogs)
         assert entity_tasks == []
-        # The collided catalog entry is UNCHANGED â€” not renamed to "Mara Baker".
+        # The collided catalog entry is UNCHANGED — not renamed to "Mara Baker".
         survivor = catalogs["characters.json"][0]
         assert survivor["id"] == "char-mara-veylin"
         assert survivor["name"] == "Mara Veylin"
@@ -621,7 +622,7 @@ class TestNamedUnresolvableExistingIdFailsClosed:
 
 
 # ---------------------------------------------------------------------------
-# #1 â€” defense-in-depth: the prefetch/batch path consumes
+# #1 — defense-in-depth: the prefetch/batch path consumes
 # ``prefetched_discovery["qualified"]`` directly at the ``extract_and_merge``
 # ingress.  The same ``_validate_existing_ids`` chokepoint must run there too
 # so a bogus named multi-word existing_id cannot bypass validation via the
@@ -716,8 +717,8 @@ class TestPrefetchIngressValidation:
         directly; the ingress re-validation must drop the bogus record so it
         reaches NO detail/merge task and is NEVER appended to the catalog.
         """
-        monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
-        se._reset_pc_failure_tracking()
+        monkeypatch.setattr("semantic_extraction.load_template", lambda name: f"{name} template")
+        _reset_pc_failure_tracking()
 
         catalogs = _fresh_catalogs()
         catalogs["characters.json"] = [
@@ -747,7 +748,7 @@ class TestPrefetchIngressValidation:
         turn = {"turn_id": "turn-100", "speaker": "DM",
                 "text": "Mara Baker greets the party at the gate."}
 
-        updated, _events, _failed, log = se.extract_and_merge(
+        updated, _events, _failed, log = extract_and_merge(
             turn, catalogs, [], llm, min_confidence=0.6,
             prefetched_discovery=prefetched,
         )
