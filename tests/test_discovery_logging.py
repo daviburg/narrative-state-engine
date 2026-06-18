@@ -95,9 +95,19 @@ class TestDiscoveryProposalsLogged:
         assert log["discovery_filtered"] == []
 
     def test_existing_entity_in_proposals(self, monkeypatch):
-        """An existing entity (is_new=false) is captured in proposals."""
+        """An existing entity (is_new=false) is captured in proposals.
+
+        The existing_id must resolve against the real catalog, otherwise the
+        record is dropped fail-closed before proposals are built (#524); seed
+        the catalog so this is a genuine existing-entity callback.
+        """
         monkeypatch.setattr(se, "load_template", lambda name: f"{name} template")
         se._reset_pc_failure_tracking()
+        catalogs = _fresh_catalogs()
+        catalogs["characters.json"].append(
+            {"id": "char-elder", "name": "Elder", "type": "character",
+             "first_seen_turn": "turn-001", "last_updated_turn": "turn-001"}
+        )
         entities = [
             {"name": "Elder", "is_new": False, "existing_id": "char-elder",
              "type": "character", "confidence": 0.95, "source_turn": "turn-002"},
@@ -106,7 +116,7 @@ class TestDiscoveryProposalsLogged:
         turn = {"turn_id": "turn-002", "speaker": "dm", "text": "The elder returns."}
 
         _, _, _, log = se.extract_and_merge(
-            turn, _fresh_catalogs(), [], llm, min_confidence=0.6,
+            turn, catalogs, [], llm, min_confidence=0.6,
         )
 
         proposals = log["discovery_proposals"]

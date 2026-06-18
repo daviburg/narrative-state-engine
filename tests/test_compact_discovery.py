@@ -3,7 +3,7 @@
 Covers:
 - Compact entries (existing_id + confidence only) get name/type from catalog
 - Mixed full + compact entries are handled correctly
-- Compact entries with unknown existing_id get safe defaults
+- Compact entries with an unresolvable existing_id are dropped (fail closed, #524)
 - _repair_truncated_discovery works with mixed full/compact JSON
 """
 import os
@@ -35,23 +35,11 @@ class TestCompactDiscoveryExpansion:
     """Verify that compact discovery entries are expanded from catalogs."""
 
     def _expand(self, discovered, catalogs):
-        """Simulate the expansion loop from extract_and_merge."""
-        from catalog_merger import find_entity_by_id, _infer_type_from_prefix
+        """Call the production compact-expansion helper (#310, #524)."""
+        from semantic_extraction import _expand_compact_discovery_entries
 
-        for entity in discovered:
-            if entity.get("existing_id") and not entity.get("name"):
-                eid = entity["existing_id"]
-                result = find_entity_by_id(catalogs, eid)
-                if result:
-                    _, cat_entry = result
-                    entity.setdefault("name", cat_entry.get("name", eid))
-                    entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
-                else:
-                    entity.setdefault("name", eid)
-                    entity.setdefault("type", _infer_type_from_prefix(eid))
-                entity.setdefault("is_new", False)
-                entity.setdefault("proposed_id", None)
-        return discovered
+        expanded, _count, _dropped = _expand_compact_discovery_entries(discovered, catalogs)
+        return expanded
 
     def test_compact_entry_gets_name_and_type(self):
         """A compact entry with only existing_id + confidence is expanded."""
@@ -112,14 +100,20 @@ class TestCompactDiscoveryExpansion:
         assert result[2]["name"] == "Communal Longhouse"
         assert result[2]["type"] == "location"
 
-    def test_unknown_existing_id_gets_defaults(self):
-        """Compact entry with unknown existing_id gets safe defaults."""
+    def test_unknown_existing_id_dropped(self):
+        """Compact entry with an unresolvable existing_id is dropped (fail closed, #524).
+
+        Fabricating ``name=raw-id`` + ``is_new=False`` for an id absent from the
+        catalog would smuggle a bogus fragment downstream into ``merge_entity``,
+        so the production helper rejects it instead of inventing defaults.
+        """
+        from semantic_extraction import _expand_compact_discovery_entries
+
         catalogs = _make_catalogs()  # empty
         discovered = [{"existing_id": "char-unknown", "confidence": 0.7}]
-        result = self._expand(discovered, catalogs)
-        assert result[0]["name"] == "char-unknown"
-        assert result[0]["type"] == "character"  # inferred from char- prefix
-        assert result[0]["is_new"] is False
+        expanded, _count, dropped = _expand_compact_discovery_entries(discovered, catalogs)
+        assert expanded == []
+        assert dropped == ["char-unknown"]
 
     def test_compact_entry_preserves_extra_fields(self):
         """If LLM includes extra fields in compact entry, they are kept."""
@@ -170,23 +164,11 @@ class TestCompactExpansionDownstreamCompat:
     """Verify expanded compact entries are compatible with downstream pipeline."""
 
     def _expand(self, discovered, catalogs):
-        """Simulate the expansion loop from extract_and_merge."""
-        from catalog_merger import find_entity_by_id, _infer_type_from_prefix
+        """Call the production compact-expansion helper (#310, #524)."""
+        from semantic_extraction import _expand_compact_discovery_entries
 
-        for entity in discovered:
-            if entity.get("existing_id") and not entity.get("name"):
-                eid = entity["existing_id"]
-                result = find_entity_by_id(catalogs, eid)
-                if result:
-                    _, cat_entry = result
-                    entity.setdefault("name", cat_entry.get("name", eid))
-                    entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
-                else:
-                    entity.setdefault("name", eid)
-                    entity.setdefault("type", _infer_type_from_prefix(eid))
-                entity.setdefault("is_new", False)
-                entity.setdefault("proposed_id", None)
-        return discovered
+        expanded, _count, _dropped = _expand_compact_discovery_entries(discovered, catalogs)
+        return expanded
 
     def test_expanded_entry_has_correct_entity_id(self):
         """get_entity_id returns existing_id for expanded compact entries."""

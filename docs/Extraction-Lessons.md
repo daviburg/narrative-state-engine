@@ -159,6 +159,109 @@ relationship data still flows through it.
 
 ---
 
+## 1.9 Compound Personal Names Fragment Without an Explicit Coreference Rule
+
+When a character is introduced by a full compound personal name (given name +
+surname) and later referenced by only the given name *or* only the surname, the
+discovery phase mints a **new** `char-*` id for each surface form. The same
+person ends up split across two or three catalog ids that interval/end-of-run
+dedup does not merge — the surface strings differ ("Mara", "Veylin", "Mara
+Veylin"), so name-similarity heuristics see three distinct entities.
+
+Failure observed (in an observed extraction, #524): roughly a 45%
+character-fragmentation rate, with families like `char-mara` / `char-veylin` /
+`char-mara-veylin` — a single person introduced as "Mara Veylin" split into
+three ids when later referenced by the bare given name ("Mara") and the bare
+surname ("Veylin").
+
+Root cause: the `entity-discovery.md` coreference examples covered title/rank
+changes, identity reveals, location aliases, group/subset, and *shortened
+descriptive* names ("the elder shaman" → "the elder"), but **not** personal
+given-name/surname components of a compound name. The model treated a bare
+first or last name as a brand-new proper noun.
+
+Correct rule (source-first, per Rule 10 — replicates the #443 coref-template
+win, not a new post-processing sweep):
+
+> A person's given name alone, their surname alone, and their full name are
+> **one** entity. Before minting a new `char-*` id, check whether the proposed
+> name shares a given-name or surname token with an existing character entity;
+> if so, emit that `existing_id` (`is_new=false`) instead of a new
+> `proposed_id`. The match is bidirectional: a bare component resolves to an
+> existing full name, and a full name resolves to an existing component entity.
+
+**Disambiguation guard (necessary but NOT sufficient).** A shared token is
+required to merge, but it does not on its own prove identity. Three extra
+conditions must hold before resolving to an existing character: (a) the shared
+token matches **exactly one** existing character — if two or more existing
+characters share it (e.g. two different "Mara"s), a bare reference is
+*ambiguous*, so do not guess; (b) the proposed name introduces **no
+conflicting second component** — a different surname paired with a matching
+given name, or a different given name paired with a matching surname, marks a
+**different person** (e.g. existing "Mara Veylin" vs. later "Joren Veylin" =
+two distinct characters); and (c) the surrounding context supports
+**continuity** with the existing character (a callback to someone already
+present), **not a fresh introduction** of a new individual. First-introduction
+language ("for the first time", "a stranger", "steps forward", "appears"), an
+appositive that conflicts with the known character's role ("Mara, the baker"
+when the known Mara is a guard), "another Mara", or "a young Veylin" all mark a
+**new** person — mint a new id even though the bare name collides. When any
+condition fails, or continuity is genuinely ambiguous, mint a new id rather
+than over-merge.
+
+**Precision/recall tradeoff (no overclaim of correctness).** This rule trades
+recall for precision: it reduces fragmentation, but a bare name matching an
+existing character is merged **only** when context continuity holds, and
+first-introduction / distinct-role context overrides the merge (mint new). The
+default bias is deliberately toward minting a new id when continuity is
+uncertain — fragmentation is recoverable in a later dedup pass, whereas a false
+merge corrupts identity and is far harder to undo. As a belt-and-suspenders
+net, the #398 compound-fragment filter (`_is_compound_term_fragment`) is taught
+to spare a bare-name callback **only when its `existing_id` resolves against the
+real catalog id-set** (`_build_known_id_set` / `find_entity_by_id`). A bare
+`is_new=false` with no resolvable id, or any unresolvable `existing_id`, does
+**not** bypass the filter — it **fails closed**. More generally, every
+discovery record carrying a non-empty `existing_id` is validated against the
+catalog id-set by one reusable helper (`_validate_existing_ids`) applied at
+**two** points: inside `_run_discovery_phase` (after compact expansion, before
+any record becomes a detail/merge task) **and** again at the `extract_and_merge`
+ingress on the prefetched `qualified` list (defense-in-depth for the batch
+path; idempotent — a no-op on already-clean data). When an `existing_id` does
+not resolve: if the record is an explicit brand-new entity (`is_new=true` with a
+non-empty, prefix-valid, **non-colliding** `proposed_id`) the bogus reference is
+cleared and the record proceeds as genuinely new; otherwise it is **dropped**
+(logged as `unresolvable_existing_id`). The drop deliberately includes the
+ambiguous **collision** case — an unresolvable `existing_id` whose `proposed_id`
+duplicates a real catalog id — which **fails closed** rather than being
+rerouted: proceed-as-new would reuse a colliding id (corrupts the matched
+entity), and reroute-as-existing would false-merge/rename a possibly-different
+entity (e.g. a genuinely-new "Mara Baker" carrying `proposed_id=char-mara-veylin`
+could rename the catalogued "Mara Veylin", since the name guard only blocks
+zero-overlap names), so dropping the rare malformed record — re-extractable next
+turn — is the only safe choice absent deterministic identity proof. A record
+with an unresolvable `existing_id` therefore never reaches a detail/merge task on
+**either** the sequential or the batch (prefetched) path, so the detail model
+can no longer be handed a fabricated "existing" id and `merge_entity` can no
+longer append a bogus catalog entity.
+The guard keys on id-resolution against the real catalog, not on a domain word
+list (Rules 9 & 10). The discovery template instructs personal-name callbacks
+to be emitted in the compact `{"existing_id": ..., "confidence": ...}`
+known-entity form, which is expanded to the catalogued full name before
+filtering.
+
+Fix (#524): `entity-discovery.md` gains a `PERSONAL NAME COREFERENCE` rule (with
+the three-part disambiguation guard, a negative "different person" example, and
+a fresh-introduction "new person" example) plus a "Personal-name components"
+example; `entity-detail.md` and `entity-detail-batch.md` instruct the detail
+phase to canonicalize to the fullest name **only when it is the same person**
+and record every shorter surface form in `stable_attributes.aliases`, so the
+merger keeps the fragments collapsed and later turns resolve to the canonical
+id. The `_is_compound_term_fragment` filter gains a known-reference skip so
+bare-name callbacks survive. No new Python word list or tuned threshold was
+added (Rules 9 & 10).
+
+---
+
 # 2. Core Design Principles
 
 1. **Entity persistence over narrative compression**

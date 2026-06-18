@@ -129,6 +129,99 @@ class TestIsCompoundTermFragment:
             assert is_frag is True, f"Expected '{word}' to be rejected as fragment"
             assert "Triangular Pattern Disruption Field" in compound
 
+    # ------------------------------------------------------------------
+    # Known-reference guard (#524): a bare-name callback to a catalogued
+    # entity is spared ONLY when its existing_id RESOLVES to a real catalog
+    # id.  An unvalidated / unresolvable existing_id must NOT bypass the #398
+    # fragment filter (iteration-3 HIGH regression fix).
+    # ------------------------------------------------------------------
+
+    def test_existing_id_reference_not_rejected(self):
+        """A bare given-name callback whose existing_id resolves is kept."""
+        index = self._make_index("Mara Veylin")
+        entity = {
+            "name": "Mara",
+            "type": "character",
+            "existing_id": "char-mara-veylin",
+        }
+        is_frag, _ = _is_compound_term_fragment(
+            entity, index, {"char-mara-veylin"}
+        )
+        assert is_frag is False
+
+    def test_resolvable_existing_id_with_is_new_false_not_rejected(self):
+        """Both reference markers set AND the id resolves -> kept."""
+        index = self._make_index("Mara Veylin")
+        entity = {
+            "name": "Mara",
+            "type": "character",
+            "is_new": False,
+            "existing_id": "char-mara-veylin",
+        }
+        is_frag, _ = _is_compound_term_fragment(
+            entity, index, {"char-mara-veylin"}
+        )
+        assert is_frag is False
+
+    def test_unresolvable_existing_id_fragment_rejected(self):
+        """A model-supplied existing_id that does NOT resolve must NOT spare the
+        fragment (#524 iteration-3 HIGH regression).  Catalog has
+        'item-frost-precision'; the model claims a bogus 'item-precision' for a
+        bare 'Precision' -> still rejected as a compound fragment."""
+        index = self._make_index("Frost Precision")
+        entity = {
+            "name": "Precision",
+            "type": "item",
+            "is_new": False,
+            "existing_id": "item-precision",
+        }
+        is_frag, compound = _is_compound_term_fragment(
+            entity, index, {"item-frost-precision"}
+        )
+        assert is_frag is True
+        assert compound == "Frost Precision"
+
+    def test_is_new_false_without_existing_id_fragment_rejected(self):
+        """is_new=False with NO existing_id is an unverifiable reference claim —
+        fail closed and let the #398 filter run (#524 iteration-3)."""
+        index = self._make_index("Mara Veylin")
+        entity = {"name": "Veylin", "type": "character", "is_new": False}
+        is_frag, compound = _is_compound_term_fragment(
+            entity, index, {"char-mara-veylin"}
+        )
+        assert is_frag is True
+        assert compound == "Mara Veylin"
+
+    def test_existing_id_not_spared_without_known_ids(self):
+        """Without a known-id set the guard cannot validate the reference, so it
+        fails closed rather than trusting a model-supplied existing_id."""
+        index = self._make_index("Mara Veylin")
+        entity = {
+            "name": "Mara",
+            "type": "character",
+            "existing_id": "char-mara-veylin",
+        }
+        is_frag, _ = _is_compound_term_fragment(entity, index)
+        assert is_frag is True
+
+    def test_new_fragment_still_rejected_when_not_a_reference(self):
+        """The guard only spares resolvable references; genuine new fragments drop."""
+        index = self._make_index("Mara Veylin")
+        # is_new defaults to True (no existing_id) -> still a fragment candidate.
+        is_frag, compound = _is_compound_term_fragment({"name": "Mara"}, index)
+        assert is_frag is True
+        assert compound == "Mara Veylin"
+
+    def test_new_explicit_fragment_rejected(self):
+        """Explicit is_new=True with no existing_id is still subject to rejection."""
+        index = self._make_index("Mara Veylin")
+        entity = {"name": "Veylin", "type": "character", "is_new": True}
+        is_frag, _ = _is_compound_term_fragment(
+            entity, index, {"char-mara-veylin"}
+        )
+        assert is_frag is True
+
+
     def test_frost_precision_fragment_rejected(self):
         """Reproduces the 'Frost Precision' ability fragmentation bug."""
         index = self._make_index("Frost Precision")

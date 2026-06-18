@@ -3877,9 +3877,140 @@ def _build_compound_word_index(
     return index
 
 
+def _build_known_id_set(catalogs: dict) -> set[str]:
+    """Return the set of every entity id currently present in the catalogs.
+
+    Used to validate model-supplied ``existing_id`` references against the
+    real catalog so an unresolvable id cannot bypass downstream filters (#524).
+    """
+    return {
+        entity["id"]
+        for entities in catalogs.values()
+        for entity in entities
+        if entity.get("id")
+    }
+
+
+def _expand_compact_discovery_entries(
+    discovered: list[dict],
+    catalogs: dict,
+) -> tuple[list[dict], int, list[str]]:
+    """Expand compact ``{existing_id, confidence}`` discovery entries (#310).
+
+    A compact entry carries only an ``existing_id`` (no ``name``).  When the id
+    resolves to a catalog entry the entry is expanded in place with the
+    catalogued name/type and marked ``is_new=False``.  When the id does NOT
+    resolve the entry is REJECTED (#524): fabricating ``name=raw-id`` +
+    ``is_new=False`` would smuggle a bogus fragment downstream into
+    ``merge_entity``.  Fail closed.  Keys on id-resolution against the real
+    catalog, not on a domain word list (Rule 9); uses no tuned threshold
+    (Rule 10).
+
+    Returns ``(expanded, compact_count, dropped_ids)`` where ``dropped_ids`` are
+    the unresolvable existing_ids that were rejected.
+    """
+    expanded: list[dict] = []
+    compact_count = 0
+    dropped_ids: list[str] = []
+    for entity in discovered:
+        if entity.get("existing_id") and not entity.get("name"):
+            eid = entity["existing_id"]
+            result = find_entity_by_id(catalogs, eid)
+            if not result:
+                dropped_ids.append(eid)
+                continue
+            compact_count += 1
+            _, cat_entry = result
+            entity.setdefault("name", cat_entry.get("name", eid))
+            entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
+            entity.setdefault("is_new", False)
+            entity.setdefault("proposed_id", None)
+        expanded.append(entity)
+    return expanded, compact_count, dropped_ids
+
+
+def _validate_existing_ids(
+    records: list[dict],
+    catalogs: dict,
+) -> tuple[list[dict], list[dict]]:
+    """Validate each record's ``existing_id`` against the real catalog (#524).
+
+    A discovery/qualified record whose ``existing_id`` does NOT resolve to a
+    real catalog entry must never become a detail/merge task — otherwise
+    ``merge_entity`` would append a bogus catalog entity.  This is the single
+    reusable chokepoint applied BOTH inside ``_run_discovery_phase`` (on the
+    fresh discovery output) AND at the ``extract_and_merge`` ingress (on the
+    prefetched ``qualified`` list) so neither the sequential nor the batch
+    path can smuggle an unresolvable id into a task.  Idempotent — re-running
+    on already-validated records is a no-op.
+
+    Resolution rules (fail closed) when ``existing_id`` is unresolvable:
+
+    - If the record is an explicit brand-new entity (``is_new`` truthy) with a
+      non-empty, prefix-valid, NON-colliding ``proposed_id``, clear the bogus
+      ``existing_id`` and let it proceed as genuinely new.
+    - Otherwise drop the record (logged as ``unresolvable_existing_id``).  This
+      includes the ambiguous collision case where ``proposed_id`` duplicates a
+      real catalog id: neither proceed-as-new (the colliding id would corrupt
+      the matched entity) nor reroute-as-existing (a possibly-different entity
+      would be false-merged/renamed) is safe, so we fail closed.
+
+    Keys on id-resolution against the real catalog id-set, not on a domain
+    word list (Rule 9); uses no tuned threshold (Rule 10).
+
+    Returns ``(validated_records, dropped)`` where ``dropped`` is a list of
+    ``{"name", "id", "reason"}`` log entries.
+    """
+    from catalog_merger import TYPE_TO_PREFIX
+    known_ids = _build_known_id_set(catalogs)
+    _valid_prefixes = tuple(TYPE_TO_PREFIX.values())
+    validated: list[dict] = []
+    dropped: list[dict] = []
+    for entity in records:
+        eid = entity.get("existing_id")
+        if eid and eid not in known_ids:
+            pid = entity.get("proposed_id")
+            if (
+                entity.get("is_new")
+                and pid
+                and pid.startswith(_valid_prefixes)
+                and pid not in known_ids
+            ):
+                # Genuinely new entity that also carried a bogus existing_id:
+                # clear the unresolvable reference and let it proceed as new.
+                # ``proposed_id`` must be a well-formed (typed-prefix) id that
+                # does NOT collide with a real catalog id; a missing/malformed
+                # or colliding proposed_id fails closed below.
+                entity["existing_id"] = None
+            else:
+                # Fail closed.  Drop when the record is not a clean new entity,
+                # OR when ``proposed_id`` COLLIDES with a known catalog id: the
+                # collision is ambiguous/malformed (existing_id unresolvable yet
+                # proposed_id duplicates a real entity) and unsafe to rescue —
+                # proceed-as-new would reuse a colliding id (corrupts the matched
+                # entity), reroute-as-existing would false-merge/rename a possibly
+                # different entity (corrupts identity), so dropping the one rare
+                # malformed record (re-extractable next turn) is the only safe
+                # choice absent deterministic identity proof.
+                print(
+                    f"  FILTER: dropped '{entity.get('name', '')}' "
+                    f"(unresolvable existing_id '{eid}')",
+                    file=sys.stderr,
+                )
+                dropped.append({
+                    "name": entity.get("name", ""),
+                    "id": eid,
+                    "reason": "unresolvable_existing_id",
+                })
+                continue
+        validated.append(entity)
+    return validated, dropped
+
+
 def _is_compound_term_fragment(
     entity: dict,
     compound_word_index: dict[str, str],
+    known_ids: set[str] | None = None,
 ) -> tuple[bool, str]:
     """Return (True, compound_name) if entity is a single-word compound-term fragment.
 
@@ -3890,6 +4021,19 @@ def _is_compound_term_fragment(
 
     Returns (False, "") when the entity should not be rejected.
     """
+    # A bare-name reference to an already-catalogued entity is a legitimate
+    # callback, not a fragment — e.g. a bare given-name mention of a known
+    # character whose full name is a compound ("Mara" -> char-mara-veylin).
+    # Spare such a reference ONLY when its existing_id RESOLVES to a real
+    # catalog entry (#524).  An unvalidated, model-supplied existing_id — or a
+    # bare is_new=false with no resolvable id — must NOT bypass the #398 filter;
+    # otherwise a bogus id (e.g. "item-precision" against catalogued
+    # "item-frost-precision") reopens the fragmentation noise.  Fail closed when
+    # the id is missing/unknown.  Keys on id-resolution against the real catalog,
+    # not on a domain word list (Rule 9); uses no tuned threshold (Rule 10).
+    existing_id = entity.get("existing_id")
+    if existing_id and known_ids is not None and existing_id in known_ids:
+        return False, ""
     name = entity.get("name", "").strip()
     words = name.split()
     if len(words) != 1:
@@ -4723,22 +4867,16 @@ def _run_discovery_phase(
     else:
         discovered = [e for e in discovered if isinstance(e, dict)]
 
-    # Expand compact discovery entries (#310)
-    _compact_count = 0
-    for entity in discovered:
-        if entity.get("existing_id") and not entity.get("name"):
-            _compact_count += 1
-            eid = entity["existing_id"]
-            result = find_entity_by_id(catalogs, eid)
-            if result:
-                _, cat_entry = result
-                entity.setdefault("name", cat_entry.get("name", eid))
-                entity.setdefault("type", cat_entry.get("type", _infer_type_from_prefix(eid)))
-            else:
-                entity.setdefault("name", eid)
-                entity.setdefault("type", _infer_type_from_prefix(eid))
-            entity.setdefault("is_new", False)
-            entity.setdefault("proposed_id", None)
+    # Expand compact discovery entries (#310); reject unresolvable ids (#524)
+    discovered, _compact_count, _dropped_compact = _expand_compact_discovery_entries(
+        discovered, catalogs
+    )
+    for _eid in _dropped_compact:
+        print(
+            f"  Skipping compact discovery entry with unresolvable "
+            f"existing_id: {_eid}",
+            file=sys.stderr,
+        )
     if _compact_count:
         print(f"  Expanded {_compact_count} compact discovery entries from catalog")
 
@@ -4753,6 +4891,29 @@ def _run_discovery_phase(
             if not validate_id_prefix(pid, etype):
                 entity["proposed_id"] = fix_id_prefix(pid, etype)
 
+    # Uniformly validate EVERY discovery record's ``existing_id`` against the
+    # real catalog id-set BEFORE any record can become a detail/merge task
+    # (#524).  This is the single chokepoint that both the sequential and the
+    # batch (prefetched) detail/merge paths flow through: both consume the
+    # ``qualified`` list produced here, which is built from this validated
+    # ``discovered`` list.  Compact entries (no name) were already resolved
+    # above; this catches the remaining cases — most importantly a FULL,
+    # multi-word, named record carrying an unresolvable ``existing_id`` that
+    # bypasses both compact expansion (has a name) and the compound-fragment
+    # guard (name is multi-word) and would otherwise be sent to entity-detail
+    # as an "existing" id and appended by ``merge_entity`` as a bogus catalog
+    # entity.  Resolution/fail-closed rules live in ``_validate_existing_ids``
+    # (an explicit new entity with a valid non-colliding ``proposed_id``
+    # proceeds as new; everything else — including the ambiguous collision case
+    # where ``proposed_id`` duplicates a real id — fails closed and is dropped
+    # as ``unresolvable_existing_id``).  The same
+    # helper is reapplied at the ``extract_and_merge`` ingress for the
+    # prefetch path (defense-in-depth, idempotent).  Keys on id-resolution
+    # against the real catalog id-set, not on a domain word list (Rule 9);
+    # uses no tuned threshold (Rule 10).
+    discovered, _existing_id_dropped = _validate_existing_ids(discovered, catalogs)
+    _discovery_filtered = list(_existing_id_dropped)
+
     # Build discovery log entries (#250)
     _discovery_proposals = []
     for entity in discovered:
@@ -4765,7 +4926,6 @@ def _run_discovery_phase(
         })
 
     # Filter by confidence (#250)
-    _discovery_filtered = []
     qualified = []
     for entity in discovered:
         if entity.get("confidence", 0) >= min_confidence:
@@ -4857,9 +5017,12 @@ def _run_discovery_phase(
 
     # Reject compound-term fragments (#398)
     _compound_word_index = _build_compound_word_index(catalogs, qualified)
+    _known_entity_ids = _build_known_id_set(catalogs)
     _compound_filtered = []
     for entity_ref in qualified:
-        is_frag, compound_name = _is_compound_term_fragment(entity_ref, _compound_word_index)
+        is_frag, compound_name = _is_compound_term_fragment(
+            entity_ref, _compound_word_index, _known_entity_ids
+        )
         if is_frag:
             eid = get_entity_id(entity_ref)
             print(
@@ -5000,6 +5163,15 @@ def extract_and_merge(
         turn_failed = prefetched_discovery["turn_failed"]
         _discovery_proposals = prefetched_discovery["discovery_proposals"]
         _discovery_filtered = prefetched_discovery["discovery_filtered"]
+        # Defense-in-depth (#524): re-validate the prefetched ``qualified``
+        # records' ``existing_id`` against the real catalog at the ingress
+        # before they build detail/merge tasks.  In production these are the
+        # already-validated output of ``_run_discovery_phase``, so this is
+        # idempotent (a no-op on clean data); it closes the prefetch-bypass
+        # path so no bogus id can reach a task via the batch route.
+        qualified, _pf_existing_dropped = _validate_existing_ids(qualified, catalogs)
+        if _pf_existing_dropped:
+            _discovery_filtered = list(_discovery_filtered) + _pf_existing_dropped
         _pf_phase = prefetched_discovery["phase_log"]
         _phase_log["discovery_ok"] = _pf_phase.get("discovery_ok", True)
         _phase_log["discovery_error"] = _pf_phase.get("discovery_error")
