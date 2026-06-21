@@ -97,12 +97,23 @@ def strip_turn_header(text: str) -> str:
     return text.strip()
 
 
-def run_semantic_extraction(turn_id, speaker, text, session_dir, args) -> None:
+def run_semantic_extraction(turn_id, speaker, text, session_dir, args) -> bool:
     """Run LLM-based semantic extraction (and DM profile analysis) for a turn.
 
     Shared by the normal --extract flow and the --extract-only flow so both
     use exactly the same extraction code path.
+
+    Returns:
+        ``True`` when semantic extraction completed successfully for the turn,
+        ``False`` when it could not run or reported a failure (LLM client
+        unavailable, the ``semantic_extraction`` module missing, a per-phase
+        extraction failure, or an unexpected error). Callers that need to
+        surface failure via the process exit code (e.g. ``--extract-only``)
+        can act on this; the normal ``--extract`` flow ignores it, preserving
+        existing behaviour. DM profile analysis failures do not affect the
+        returned extraction status.
     """
+    extraction_succeeded = False
     try:
         from semantic_extraction import extract_semantic_single
 
@@ -112,10 +123,10 @@ def run_semantic_extraction(turn_id, speaker, text, session_dir, args) -> None:
         if args.base_url:
             llm_overrides["base_url"] = args.base_url
 
-        extract_semantic_single(
+        extraction_succeeded = bool(extract_semantic_single(
             turn_id, speaker, text, session_dir, framework_dir=args.framework,
             overrides=llm_overrides or None,
-        )
+        ))
     except ModuleNotFoundError as exc:
         if exc.name == "semantic_extraction":
             print(
@@ -155,6 +166,8 @@ def run_semantic_extraction(turn_id, speaker, text, session_dir, args) -> None:
                 raise
         except Exception as exc:
             print(f"WARNING: DM profile analysis failed: {exc}", file=sys.stderr)
+
+    return extraction_succeeded
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -270,7 +283,15 @@ def main() -> None:
             sys.exit(1)
 
         print(f"Re-extracting {turn_id} ({speaker}) from {args.file}")
-        run_semantic_extraction(turn_id, speaker, text, session_dir, args)
+        extraction_succeeded = run_semantic_extraction(
+            turn_id, speaker, text, session_dir, args)
+        if not extraction_succeeded:
+            print(
+                f"ERROR: Semantic extraction failed for {turn_id}; "
+                "the turn was not re-extracted successfully.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
         return
 
     transcript_dir = os.path.join(session_dir, "transcript")

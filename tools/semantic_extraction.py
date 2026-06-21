@@ -4455,6 +4455,16 @@ def _extract_single_entity_detail(
     ):
         _filter_pc_attributes(entity_data)
         return entity_ref, entity_data, None
+    # Best-effort drop (#503): unrepairable, schema-invalid detail is discarded
+    # by returning ``(entity_ref, None, None)`` — a None error so the merge loop
+    # does NOT set turn_failed (unlike the ``str(e)`` LLM-error return above).
+    # The drop is recorded via ``validation_failures`` (auditable, not silent).
+    # We do not fail the turn here because the deterministic extractor would
+    # reproduce the same invalid detail on re-extraction -> a permanent
+    # ``--extract-only`` stall.  Mirrors the sequential path's best-effort drop.
+    # Known limitation (#528): for a NEW entity this drop loses the catalog
+    # record entirely (it stays only in discovery_proposals) — promoting a
+    # schema-valid stub is tracked there.
     return entity_ref, None, None
 
 
@@ -5829,6 +5839,20 @@ def extract_and_merge(
                 )
             if entity_data and not _filter_concept_prefix_from_items(entity_data):
                 continue
+            # Best-effort drop (#503): if entity_detail validation fails on
+            # unrepairable, schema-invalid LLM output, the malformed detail is
+            # discarded (this merge is skipped) but the turn is NOT failed.  The
+            # drop is recorded in the per-turn extraction log via
+            # ``validation_failures`` (drained at the end of extract_and_merge),
+            # so it is auditable, NOT silent.  We deliberately do not set
+            # turn_failed here: the extractor is deterministic, so re-extracting
+            # would reproduce the identical invalid detail -> a permanent
+            # ``--extract-only`` stall (and runaway refresh cost) on a turn the
+            # LLM cannot get right.  For existing entities the base record stays
+            # in the catalog (only enrichment is lost); a new entity's discovery
+            # is still recorded in ``discovery_proposals``.  Known limitation
+            # (#528): a NEW entity is lost from the catalog in this case —
+            # promoting a schema-valid stub is tracked there.
             if entity_data and _validate_entity_detail(
                 entity_data, turn=turn_id, entity_id=entity_id,
                 phase="entity_detail",
@@ -6121,7 +6145,14 @@ def extract_and_merge(
             else:
                 _phase_log["temporal_ok"] = True  # No signals is not an error
         except Exception as e:
+            # A RAISED error in this phase is a genuine extraction failure
+            # (consistent with the detail/relationship/event exception sites
+            # above, which all set turn_failed).  Flagging it lets
+            # ``--extract-only`` report a non-zero exit so the turn can be
+            # re-extracted.  The legitimate "no temporal signals" branch above
+            # is a success and must NOT set turn_failed.
             print(f"  WARNING: Temporal extraction failed for {turn_id}: {e}", file=sys.stderr)
+            turn_failed = True
             _phase_log["temporal_ok"] = False
             _phase_log["temporal_error"] = str(e)
 
@@ -9069,7 +9100,7 @@ def extract_semantic_single(
     config_path: str = "config/llm.json",
     min_confidence: float = DEFAULT_MIN_CONFIDENCE,
     overrides: dict | None = None,
-) -> None:
+) -> bool:
     """Run semantic extraction for a single new turn.
 
     Called from ingest_turn.py after writing the turn file.
@@ -9084,6 +9115,15 @@ def extract_semantic_single(
         min_confidence: Minimum confidence to catalog an entity.
         overrides: Optional dictionary of config key/value overrides passed to
             ``LLMClient`` to override settings loaded from ``config_path``.
+
+    Returns:
+        ``True`` when extraction completed successfully for the turn.
+        ``False`` when extraction could not run or reported a failure:
+        (a) the LLM client was unavailable, (b) ``extract_and_merge`` raised,
+        or (c) a per-phase extraction failure was reported
+        (``turn_failed=True``). Callers that need to detect failure (e.g.
+        ``ingest_turn.py --extract-only``) can use this to set the process
+        exit code; callers that ignore the return value are unaffected.
     """
     _reset_pc_failure_tracking()
 
@@ -9091,7 +9131,7 @@ def extract_semantic_single(
         llm = LLMClient(config_path, overrides=overrides)
     except (ImportError, LLMExtractionError, FileNotFoundError) as e:
         print(f"  WARNING: Semantic extraction not available: {e}", file=sys.stderr)
-        return
+        return False
 
     catalog_dir = os.path.join(framework_dir, "catalogs")
     extraction_log_path = os.path.join(framework_dir, "extraction-log.jsonl")
@@ -9136,7 +9176,7 @@ def extract_semantic_single(
         print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
-        return
+        return False
 
     _write_extraction_log(extraction_log_path, _turn_log)
 
@@ -9151,6 +9191,19 @@ def extract_semantic_single(
     save_catalogs(catalog_dir, catalogs)
     save_events(catalog_dir, events_list)
     save_timeline(catalog_dir, timeline)
+
+    # A per-phase extraction failure (turn_failed=True) means an LLM/parse
+    # phase failed and results may be zero/partial. The catalogs above are
+    # still saved (existing behaviour), but report failure so callers such as
+    # ``ingest_turn.py --extract-only`` can detect it via the exit code.
+    if _turn_failed:
+        print(
+            f"  WARNING: extraction reported a per-phase failure for {turn_id}; "
+            "results may be partial",
+            file=sys.stderr,
+        )
+        return False
+    return True
 
 
 def _save_progress(
