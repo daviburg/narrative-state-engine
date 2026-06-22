@@ -67,8 +67,11 @@ transcript, for re-extraction after a template or model change. In this mode the
 process exits non-zero when extraction actually **errors** for the turn — the LLM
 client is unavailable, `extract_and_merge` raises, or a phase reports an
 unrecoverable failure (an LLM/parse error, or an exception in the
-discovery / detail / relationship / event / **temporal** phases). These are
-failures that a re-extraction could fix, so automated/incremental callers can
+discovery / detail / relationship / event / **temporal** phases). It also exits
+non-zero when the optional `semantic_extraction` module or its LLM dependencies
+are unavailable (the extraction entry point returns failure), so callers without
+the optional deps get a clear failure signal. These are failures that a
+re-extraction could fix, so automated/incremental callers can
 detect them instead of silently advancing past an un-extracted turn.
 
 The exit code deliberately stays **zero** for the pipeline's intentional

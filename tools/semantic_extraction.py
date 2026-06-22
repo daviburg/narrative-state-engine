@@ -9174,8 +9174,13 @@ def extract_semantic_single(
         }
         _write_extraction_log(extraction_log_path, _turn_log)
         print(f"  ERROR at {turn_id}: {e}", file=sys.stderr)
+        # Preserve partial progress: persist catalogs, events, AND timeline.
+        # ``extract_and_merge`` may have mutated the in-memory timeline before
+        # raising; save it here so temporal signals are not lost and framework
+        # outputs stay consistent with the happy path (which saves all three).
         save_catalogs(catalog_dir, catalogs)
         save_events(catalog_dir, events_list)
+        save_timeline(catalog_dir, timeline)
         return False
 
     _write_extraction_log(extraction_log_path, _turn_log)

@@ -1341,6 +1341,11 @@ re-extraction could fix, so automated or incremental callers (e.g. those using
 `subprocess` with `check=True`) can detect them instead of silently advancing past
 an un-extracted turn.
 
+If the optional `semantic_extraction` module or its LLM dependencies are not
+installed, `--extract-only` also exits **non-zero** (the extraction entry point
+returns failure), so callers running without the optional deps get a clear
+failure signal rather than a silent no-op.
+
 The command stays at exit **0** for the pipeline's intentional best-effort
 behaviour and for legitimately empty turns:
 
