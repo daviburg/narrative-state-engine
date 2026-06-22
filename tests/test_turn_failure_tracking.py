@@ -258,3 +258,49 @@ class TestResumeRetry:
 
         assert "failed_turns" not in progress
         assert progress["completed"] is True
+
+
+# --- extract_semantic_single persists timeline on failure (#529 Copilot) ---
+
+class TestSingleExtractTimelinePersistedOnFailure:
+    """When extract_and_merge raises after mutating the in-memory timeline,
+    extract_semantic_single should still persist timeline.json alongside
+    catalogs/events so temporal progress is not lost."""
+
+    def test_timeline_saved_when_extract_and_merge_raises(self, monkeypatch, tmp_path):
+        framework_dir = str(tmp_path / "framework")
+        catalog_dir = os.path.join(framework_dir, "catalogs")
+        os.makedirs(catalog_dir, exist_ok=True)
+        session_dir = str(tmp_path / "session")
+        os.makedirs(session_dir, exist_ok=True)
+
+        llm = MagicMock()
+        llm.config = {}
+        monkeypatch.setattr(se, "LLMClient", lambda *a, **kw: llm)
+
+        mutated_entry = {"id": "time-001", "source_turn": "turn-001"}
+
+        def _raise_after_mutation(turn, catalogs, events_list, llm_, min_confidence,
+                                  catalog_dir=None, timeline=None, framework_dir=None):
+            # Simulate a temporal-phase mutation before the failure.
+            timeline.append(mutated_entry)
+            raise RuntimeError("boom during extraction")
+
+        monkeypatch.setattr(se, "extract_and_merge", _raise_after_mutation)
+
+        ok = se.extract_semantic_single(
+            "turn-001", "dm", "The DM describes the scene.",
+            session_dir, framework_dir=framework_dir,
+        )
+
+        assert ok is False
+
+        timeline_path = os.path.join(catalog_dir, "timeline.json")
+        assert os.path.exists(timeline_path), "timeline.json must be persisted on failure"
+        with open(timeline_path, "r", encoding="utf-8-sig") as f:
+            saved_timeline = json.load(f)
+        assert mutated_entry in saved_timeline
+
+        # Catalogs and events are also persisted (existing behaviour).
+        assert os.path.isdir(os.path.join(catalog_dir, "characters"))
+        assert os.path.exists(os.path.join(catalog_dir, "events.json"))

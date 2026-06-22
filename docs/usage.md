@@ -1332,6 +1332,38 @@ python tools/ingest_turn.py \
 never appends to `full-transcript.md`, creates a turn file, or updates
 `metadata.json`. To re-extract a whole session, loop over its turn files.
 
+Unlike the normal `--extract` flow (which warns and continues on extraction
+problems), `--extract-only` exits **non-zero** when semantic extraction actually
+**errors** for the turn — the LLM client is unavailable, extraction raises, or a
+phase reports an unrecoverable failure (an LLM/parse error, or an exception in the
+discovery, detail, relationship, event, or temporal phase). These are failures a
+re-extraction could fix, so automated or incremental callers (e.g. those using
+`subprocess` with `check=True`) can detect them instead of silently advancing past
+an un-extracted turn.
+
+If the optional `semantic_extraction` module or its LLM dependencies are not
+installed, `--extract-only` also exits **non-zero** (the extraction entry point
+returns failure), so callers running without the optional deps get a clear
+failure signal rather than a silent no-op.
+
+The command stays at exit **0** for the pipeline's intentional best-effort
+behaviour and for legitimately empty turns:
+
+- An `entity_detail` completion that fails schema validation and cannot be
+  repaired is **dropped** — the entity still merges from discovery, only the
+  malformed enrichment is lost. The drop is recorded in the per-turn
+  extraction-log `validation_failures` field (auditable, not silent), so it does
+  **not** fail the turn. Failing it would stall re-extraction permanently, because
+  the deterministic extractor would reproduce the same invalid output.
+- A turn that legitimately yields zero entities, or no temporal signals, exits 0.
+- PC-character extraction failures are tracked separately (`pc_ok` / `pc_error`)
+  and do not affect the exit code.
+
+Known limitation (issue #528): when the dropped detail belongs to a **new**
+entity, that entity is lost from the catalog (it remains only in
+`discovery_proposals`). This is the best-effort drop case above (exit 0, recorded
+in `validation_failures`); promoting a schema-valid stub instead is tracked there.
+
 ### Extraction Log
 
 During extraction (batch, segmented, or single-turn), the pipeline writes a per-turn log to `<framework-dir>/extraction-log.jsonl`. Each line is a JSON object recording:

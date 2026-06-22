@@ -63,7 +63,28 @@ or via the `--extract` flag on `ingest_turn.py` (incremental). It requires an LL
 endpoint configured in `config/llm.json` and gracefully degrades if unavailable.
 The `--extract-only` flag on `ingest_turn.py` re-runs extraction against an existing
 turn file (given via `--file`) without creating a new turn or modifying the raw
-transcript, for re-extraction after a template or model change.
+transcript, for re-extraction after a template or model change. In this mode the
+process exits non-zero when extraction actually **errors** for the turn — the LLM
+client is unavailable, `extract_and_merge` raises, or a phase reports an
+unrecoverable failure (an LLM/parse error, or an exception in the
+discovery / detail / relationship / event / **temporal** phases). It also exits
+non-zero when the optional `semantic_extraction` module or its LLM dependencies
+are unavailable (the extraction entry point returns failure), so callers without
+the optional deps get a clear failure signal. These are failures that a
+re-extraction could fix, so automated/incremental callers can
+detect them instead of silently advancing past an un-extracted turn.
+
+The exit code deliberately stays **zero** for the pipeline's intentional
+best-effort behaviour: an `entity_detail` completion that fails schema validation
+and cannot be repaired is dropped (the entity still merges from discovery; only
+the malformed enrichment is lost), and that drop is recorded in the per-turn log's
+`validation_failures` (auditable, not silent). Failing the turn there would stall
+re-extraction forever, since the deterministic extractor would reproduce the same
+invalid output. A turn that legitimately yields zero entities or no temporal
+signals also exits 0. PC-extraction failures are tracked separately (`pc_ok` /
+`pc_error`) and do not drive the exit code. The new-entity detail-validation-drop
+case (a NEW entity lost from the catalog when its detail is unrepairable; exit 0,
+recorded in `validation_failures`) is a known limitation tracked in issue #528.
 
 Planning layer derivation (`derive_planning_layer.py`) bridges the gap between
 extracted catalog data and the derived planning files consumed by
