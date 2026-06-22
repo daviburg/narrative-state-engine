@@ -568,6 +568,404 @@ class TestDeriveState:
         )
         assert not os.path.exists(state_path)
 
+    def test_force_regenerates_non_placeholder_world_state(self, catalog_fixture):
+        """force=True overwrites a non-placeholder world_state from catalogs."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "Old prose that should be replaced.",
+                "player_state": {},
+                "active_threads": [],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+        plot_threads = _load_json(
+            os.path.join(catalog_dir, "plot-threads.json"), default=[]
+        )
+
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, plot_threads,
+            force=True,
+        )
+
+        assert "Old prose" not in state["current_world_state"]
+        assert "Rusty Tankard" in state["current_world_state"]
+
+    def test_force_resets_world_state_to_placeholder_when_empty(self, catalog_fixture):
+        """force=True resets world_state to the placeholder when catalogs are empty."""
+        from build_context import load_indexes
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "Stale prose presented as current.",
+                "player_state": {},
+                "active_threads": ["plot-existing"],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        # No entities (no locations with current_status) and an EMPTY (but
+        # available) plot_threads list => empty catalog candidates.
+        state = derive_state(
+            session_dir, catalog_dir, [], id_lookup, [],
+            force=True,
+        )
+
+        # Honest principle: reset to placeholder, do NOT preserve stale prose.
+        assert state["current_world_state"] == "TODO: Update from transcript."
+        # Empty-but-available plot_threads -> reflect it honestly as [].
+        assert state["active_threads"] == []
+
+    def test_force_recomputes_active_threads(self, catalog_fixture):
+        """force=True recomputes active_threads even when already populated."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {},
+                "active_threads": ["plot-stale-thread"],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+        plot_threads = _load_json(
+            os.path.join(catalog_dir, "plot-threads.json"), default=[]
+        )
+
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, plot_threads,
+            force=True,
+        )
+
+        assert "plot-stale-thread" not in state["active_threads"]
+        assert "plot-bandit-threat" in state["active_threads"]
+
+    def test_force_overwrites_player_state(self, catalog_fixture):
+        """force=True overwrites non-placeholder player_state from volatile_state."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        # Pre-seed real (non-placeholder) player_state values.
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {
+                    "location": "Old Town",
+                    "condition": "Healthy",
+                    "inventory_notes": "An old map",
+                    "relationships_summary": "Knows the mayor",
+                },
+                "active_threads": [],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+        plot_threads = _load_json(
+            os.path.join(catalog_dir, "plot-threads.json"), default=[]
+        )
+
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, plot_threads,
+            force=True,
+        )
+
+        # char-player volatile_state resolves location -> "the Rusty Tankard",
+        # condition -> "healthy"; force overwrites the pre-seeded real values.
+        ps = state["player_state"]
+        assert ps["location"] == "the Rusty Tankard"
+        assert ps["condition"] == "healthy"
+
+    def test_force_resets_player_state_to_placeholder_when_volatile_empty(self, catalog_fixture):
+        """force=True resets player_state to placeholders when volatile_state empty."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        # Give the player entity an EMPTY volatile_state.
+        chars_dir = os.path.join(catalog_dir, "characters")
+        player = _load_json(os.path.join(chars_dir, "char-player.json"), default={})
+        player["volatile_state"] = {}
+        with open(os.path.join(chars_dir, "char-player.json"), "w") as f:
+            json.dump(player, f)
+
+        # Pre-seed real (non-placeholder) player_state values.
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {
+                    "location": "Old Town",
+                    "condition": "Healthy",
+                },
+                "active_threads": [],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+        plot_threads = _load_json(
+            os.path.join(catalog_dir, "plot-threads.json"), default=[]
+        )
+
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, plot_threads,
+            force=True,
+        )
+
+        # Honest principle: empty volatile_state -> reset to placeholders,
+        # NOT preserve the stale real values.
+        ps = state["player_state"]
+        assert ps["location"] == "Unknown"
+        assert ps["condition"] == "Unknown"
+
+    def test_force_sets_active_threads_empty_when_none_active(self, catalog_fixture):
+        """force=True empties active_threads when no thread is currently active."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        # All plot threads resolved -> no active threads.
+        plot_threads = _load_json(
+            os.path.join(catalog_dir, "plot-threads.json"), default=[]
+        )
+        for t in plot_threads:
+            t["status"] = "resolved"
+        with open(os.path.join(catalog_dir, "plot-threads.json"), "w") as f:
+            json.dump(plot_threads, f)
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {},
+                "active_threads": ["plot-x"],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, plot_threads,
+            force=True,
+        )
+
+        # Honest principle: no longer falsely present a resolved thread as active.
+        assert state["active_threads"] == []
+
+    def test_force_preserves_active_threads_when_plot_threads_none(self, catalog_fixture):
+        """force=True preserves active_threads when the plot-thread catalog is unavailable."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {},
+                "active_threads": ["plot-keepme"],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+
+        # plot_threads is None => catalog UNAVAILABLE => preserve existing value.
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, None,
+            force=True,
+        )
+
+        assert state["active_threads"] == ["plot-keepme"]
+
+    def test_default_repairs_null_active_threads(self, catalog_fixture):
+        """force=False repairs active_threads: null -> [] (original behavior)."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {},
+                "active_threads": None,
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+
+        # Default (force=False) with an EMPTY but available plot_threads list.
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, [],
+        )
+
+        assert state["active_threads"] == []
+
+    def test_force_skips_nonstring_candidates(self, catalog_fixture):
+        """force=True rejects non-string catalog candidates (condition list, thread id)."""
+        from build_context import load_indexes
+        from derive_planning_layer import _load_all_entities
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        # Player volatile condition is a LIST (malformed) -> non-string candidate.
+        chars_dir = os.path.join(catalog_dir, "characters")
+        player = _load_json(os.path.join(chars_dir, "char-player.json"), default={})
+        player["volatile_state"] = {"condition": ["poisoned"]}
+        with open(os.path.join(chars_dir, "char-player.json"), "w") as f:
+            json.dump(player, f)
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {"condition": "Healthy"},
+                "active_threads": [],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+        entities = _load_all_entities(catalog_dir, id_lookup)
+
+        # Plot thread with a non-string id alongside a valid active thread.
+        plot_threads = [
+            {"id": 12345, "status": "active"},
+            {"id": "plot-valid", "status": "active"},
+        ]
+
+        state = derive_state(
+            session_dir, catalog_dir, entities, id_lookup, plot_threads,
+            force=True,
+        )
+
+        # Non-string condition rejected -> reset to placeholder (not a list).
+        assert state["player_state"]["condition"] == "Unknown"
+        assert not isinstance(state["player_state"]["condition"], list)
+        # Non-string thread id excluded; valid string id retained.
+        assert state["active_threads"] == ["plot-valid"]
+
+    def test_force_resets_known_constraints_when_empty(self, catalog_fixture):
+        """force=True empties known_constraints when the catalog yields none."""
+        from build_context import load_indexes
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {},
+                "known_constraints": ["old constraint"],
+                "active_threads": [],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+
+        # Catalog AVAILABLE (entities is a list) but yields no constraints.
+        state = derive_state(
+            session_dir, catalog_dir, [], id_lookup, [],
+            force=True,
+        )
+
+        # Honest empty: catalog present + none -> [], not preserved.
+        assert state["known_constraints"] == []
+
+    def test_force_preserves_known_constraints_when_entities_none(self, catalog_fixture):
+        """force=True preserves known_constraints when the entity catalog is unavailable."""
+        from build_context import load_indexes
+
+        session_dir = catalog_fixture["session"]
+        catalog_dir = catalog_fixture["catalog_dir"]
+        derived = os.path.join(session_dir, "derived")
+
+        with open(os.path.join(derived, "state.json"), "w") as f:
+            json.dump({
+                "as_of_turn": "turn-001",
+                "current_world_state": "X",
+                "player_state": {},
+                "known_constraints": ["old constraint"],
+                "active_threads": [],
+            }, f)
+
+        _, id_lookup = load_indexes(catalog_dir)
+
+        # entities is None => catalog UNAVAILABLE => preserve existing value.
+        state = derive_state(
+            session_dir, catalog_dir, None, id_lookup, [],
+            force=True,
+        )
+
+        assert state["known_constraints"] == ["old constraint"]
+
+    def test_cli_regen_from_catalogs_flag(self, catalog_fixture, monkeypatch):
+        """--regen-from-catalogs parses and threads force=True into derive_all."""
+        import derive_planning_layer as dpl
+
+        captured = {}
+
+        def fake_derive_all(session, framework, turns, *, dry_run=False, force=False):
+            captured["force"] = force
+            return {"state": {}, "evidence": [], "timeline": []}
+
+        monkeypatch.setattr(dpl, "derive_all", fake_derive_all)
+
+        # With the flag -> force=True
+        monkeypatch.setattr(sys, "argv", [
+            "derive_planning_layer.py",
+            "--session", catalog_fixture["session"],
+            "--framework", catalog_fixture["framework"],
+            "--regen-from-catalogs",
+        ])
+        dpl.main()
+        assert captured["force"] is True
+
+        # Without the flag -> force=False
+        monkeypatch.setattr(sys, "argv", [
+            "derive_planning_layer.py",
+            "--session", catalog_fixture["session"],
+            "--framework", catalog_fixture["framework"],
+        ])
+        dpl.main()
+        assert captured["force"] is False
+
 
 # ---------------------------------------------------------------------------
 # Evidence derivation
