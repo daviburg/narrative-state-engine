@@ -90,3 +90,8 @@ framework-eval-*/
 error.log
 setup_pg.sh
 *.task-prompt.md
+
+# Local agent memory store — never commit. Holds local-only operational notes
+# and secret-access hints; gitignoring it ensures a secret written there can
+# never be committed.
+memories/
