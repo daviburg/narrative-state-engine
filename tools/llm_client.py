@@ -57,9 +57,9 @@ def strip_thinking_blocks(text: Optional[str]) -> Optional[str]:
     (stripped from the result).
 
     Returns ``text`` unchanged (still passed through ``str`` truthiness --
-    e.g. ``None``/``""`` pass through as-is) if it is falsy, since callers
-    such as ``generate_text``'s empty-response check expect to see the
-    ORIGINAL falsy value, not a stripped one.
+    e.g. ``None``/``""`` pass through as-is) if it is falsy, so callers such
+    as ``generate_text`` can run their empty-response check on the STRIPPED
+    result and still correctly treat a falsy ``None``/``""`` input as empty.
     """
     if not text:
         return text
@@ -1349,11 +1349,20 @@ class LLMClient:
                         input_tokens=stream_in_tokens,
                     )
 
-                if not raw_text:
+                # Strip <think>...</think> blocks BEFORE checking for an
+                # empty response, not after: a response that is ENTIRELY a
+                # think block (reasoning content with no actual answer
+                # outside it) must be treated the same as a genuinely empty
+                # response. Checking `raw_text` for emptiness first (as this
+                # used to) would let a think-only completion pass as
+                # "successful" and return "" to the caller, since the RAW
+                # text is non-blank even though nothing survives stripping.
+                stripped_text = strip_thinking_blocks(raw_text)
+                if not stripped_text:
                     raise LLMExtractionError("Empty response from LLM.")
 
                 self.stats.record_success()
-                return strip_thinking_blocks(raw_text.strip())
+                return stripped_text
 
             except Exception as e:
                 last_error = e

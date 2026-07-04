@@ -1137,6 +1137,23 @@ class TestGenerateTextThinkStripping:
             result = client.generate_text(system_prompt="sys", user_prompt="user")
         assert result == "A normal response with no think tag at all."
 
+    def test_think_only_response_treated_as_empty(self, tmp_path):
+        """A response that is ENTIRELY a think block must be treated the
+        same as a genuinely empty raw response (#538 review round 4): the
+        RAW text is non-blank (it has reasoning content), but nothing
+        survives ``strip_thinking_blocks``, so this must raise the same
+        "Empty response from LLM." error rather than returning "".
+        """
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        response = _mock_ok_response(
+            content="<think>Reasoning about the scene, but no final answer.</think>"
+        )
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=response):
+            with pytest.raises(LLMExtractionError, match="Empty response from LLM"):
+                client.generate_text(system_prompt="sys", user_prompt="user")
+
 
 # ---------------------------------------------------------------------------
 # _is_cloud_provider explicit self_hosted override (#472)

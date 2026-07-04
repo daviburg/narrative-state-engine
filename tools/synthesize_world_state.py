@@ -626,8 +626,8 @@ def synthesize_world_state(
         raise WorldStateSynthesisError(
             f"LLM response failed a basic output-sanity check (expected "
             f"roughly 3-8 sentences per the synthesis template; got only "
-            f"{len(paragraph.split())} word(s) and/or no sentence-ending "
-            f"punctuation): {paragraph!r}"
+            f"{_count_synthesis_tokens(paragraph)} token(s) and/or no "
+            f"sentence-ending punctuation): {paragraph!r}"
         )
 
     return paragraph, latest_turn_id
