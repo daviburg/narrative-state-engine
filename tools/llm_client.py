@@ -15,6 +15,7 @@ import threading
 import time
 from collections import namedtuple
 from datetime import datetime, timezone
+from typing import Optional
 
 
 # Result of an Ollama native streaming call (#501): the assembled visible
@@ -25,6 +26,44 @@ from datetime import datetime, timezone
 _StreamResult = namedtuple(
     "_StreamResult", ["text", "eval_count", "prompt_eval_count", "done_reason"]
 )
+
+
+# Matches a <think>...</think> reasoning block: case-insensitive (some
+# backends/models emit <Think> or <THINK>), DOTALL so the block's content
+# can span multiple lines, and non-greedy so back-to-back blocks are each
+# matched individually rather than one match spanning from the first
+# opening tag to the last closing tag. Matches the empty-block case
+# (`<think>\s*</think>`, e.g. qwen3.5 in "thinking" mode with the server's
+# --reasoning flag NOT actually suppressing the tag) just as well as a
+# block containing real reasoning text, since `.*?` matches zero or more
+# characters.
+_THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
+
+
+def strip_thinking_blocks(text: Optional[str]) -> Optional[str]:
+    """Strip all ``<think>...</think>`` reasoning blocks from LLM output.
+
+    Some backends (observed: qwen3.5 in "thinking" mode via an
+    OpenAI-compatible endpoint) prepend a literal ``<think>...</think>``
+    block to every completion -- sometimes empty (``<think>\\n\\n</think>``)
+    -- regardless of server-side ``--reasoning`` flags intended to suppress
+    it. This must be treated as defense-in-depth on the CLIENT side: relying
+    on upstream server configuration to disable the behavior is not
+    sufficient, since that configuration can silently fail to take effect.
+
+    Handles (see ``_THINK_BLOCK_RE``): case-insensitive tags, multi-line
+    content (DOTALL), the empty-block case, multiple blocks in one
+    response, and leading/trailing whitespace left behind after removal
+    (stripped from the result).
+
+    Returns ``text`` unchanged (still passed through ``str`` truthiness --
+    e.g. ``None``/``""`` pass through as-is) if it is falsy, so callers such
+    as ``generate_text`` can run their empty-response check on the STRIPPED
+    result and still correctly treat a falsy ``None``/``""`` input as empty.
+    """
+    if not text:
+        return text
+    return _THINK_BLOCK_RE.sub("", text).strip()
 
 
 def _estimate_tokens(text: str) -> int:
@@ -1127,7 +1166,7 @@ class LLMClient:
         text = raw_text.strip()
 
         # Strip <think>...</think> blocks (qwen3.5 thinking mode output)
-        text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
+        text = strip_thinking_blocks(text)
 
         # Strip markdown code fences if present
         fence_match = re.match(r"^```(?:json)?\s*\n(.*)\n```\s*$", text, re.DOTALL)
@@ -1310,11 +1349,20 @@ class LLMClient:
                         input_tokens=stream_in_tokens,
                     )
 
-                if not raw_text:
+                # Strip <think>...</think> blocks BEFORE checking for an
+                # empty response, not after: a response that is ENTIRELY a
+                # think block (reasoning content with no actual answer
+                # outside it) must be treated the same as a genuinely empty
+                # response. Checking `raw_text` for emptiness first (as this
+                # used to) would let a think-only completion pass as
+                # "successful" and return "" to the caller, since the RAW
+                # text is non-blank even though nothing survives stripping.
+                stripped_text = strip_thinking_blocks(raw_text)
+                if not stripped_text:
                     raise LLMExtractionError("Empty response from LLM.")
 
                 self.stats.record_success()
-                return raw_text.strip()
+                return stripped_text
 
             except Exception as e:
                 last_error = e
