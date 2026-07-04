@@ -954,6 +954,45 @@ The derivation tool can also be run standalone:
 python tools/derive_planning_layer.py --session sessions/session-001 --framework framework/
 ```
 
+### World-State Synthesis (LLM)
+
+`derive_planning_layer.py` only ever joins catalog data into `current_world_state`
+once — once it holds any non-placeholder value, later runs leave it untouched, so it
+goes stale as `as_of_turn` keeps advancing. `synthesize_world_state.py` re-synthesizes
+`current_world_state` via an LLM on demand, reading the last few transcript turns plus
+a compact catalog summary, and advances `as_of_turn` to match in the same write:
+
+```bash
+python tools/synthesize_world_state.py --session sessions/session-001 --framework framework/
+```
+
+Options:
+- `--recent-turns N` — number of most-recent transcript turns to send to the LLM
+  (default: 6). Kept small to keep prompt size reasonable.
+- `--dry-run` — print the would-be `current_world_state` and `as_of_turn` without
+  writing `state.json`.
+- `--config`, `--model`, `--base-url` — same LLM config overrides as other tools
+  (see `config/llm.json`).
+
+This tool touches **only** `current_world_state` and `as_of_turn` in `state.json`;
+every other field (`player_state`, `active_threads`, `known_constraints`,
+`opportunities`, `risks`, `inferred_constraints`, `temporal`) is preserved unchanged.
+On any LLM error, timeout, or empty/unparseable response, `state.json` is left
+**completely untouched** and the process exits non-zero (mirroring the
+`ingest_turn.py --extract-only` exit-code-honesty convention, #529) — a caller can
+tell "regen failed, state left stale" from "regen succeeded" purely from the exit
+code, with no silent partial write.
+
+**Concurrency:** the tool guards against a concurrent writer (e.g.
+`derive_planning_layer.py` or the advisor writing `state.json` at the same time) by
+re-checking a content fingerprint immediately before the atomic swap. This
+significantly narrows — but does **not** fully eliminate — the race window: a
+concurrent writer could still (in principle) write between that final check and the
+`os.replace()` swap itself, since no OS-level lock is taken. This tool therefore
+assumes it is **not** invoked concurrently with another `state.json` writer for the
+same session; callers must ensure single-writer-at-a-time access to `state.json` —
+for example, by sequencing tool invocations rather than running them in parallel.
+
 ### Limitations
 
 `update_state.py` does **not** currently update:

@@ -236,6 +236,56 @@ class TestParseJsonThinkStripping:
 
 
 # ---------------------------------------------------------------------------
+# strip_thinking_blocks — shared client-layer utility (defense-in-depth: a
+# real GPU smoke test with qwen3.5 showed a server's --reasoning flag can
+# silently fail to suppress a literal <think>...</think> block, including
+# the empty-block form <think>\n\n</think>\n\n, so this must not rely on
+# upstream server config being correct).
+# ---------------------------------------------------------------------------
+
+class TestStripThinkingBlocks:
+    def test_empty_think_block_stripped(self):
+        from llm_client import strip_thinking_blocks
+        raw = "<think>\n\n</think>\n\nThe village square is quiet tonight."
+        assert strip_thinking_blocks(raw) == "The village square is quiet tonight."
+
+    def test_nonempty_think_block_stripped(self):
+        from llm_client import strip_thinking_blocks
+        raw = (
+            "<think>The player asked about the scholar, I should mention "
+            "the innkeeper's evasiveness.</think>\n"
+            "The innkeeper deflects questions about the missing scholar."
+        )
+        assert strip_thinking_blocks(raw) == (
+            "The innkeeper deflects questions about the missing scholar."
+        )
+
+    def test_case_insensitive_tag(self):
+        from llm_client import strip_thinking_blocks
+        raw = "<Think>\nReasoning here.\n</THINK>\nReal prose follows."
+        assert strip_thinking_blocks(raw) == "Real prose follows."
+
+    def test_think_only_strips_to_empty(self):
+        """Stripping a response that is ONLY a think block (with no real
+        content after it) must yield an empty string, not be special-cased
+        into passing -- callers' own sanity gates decide what to do with an
+        empty result."""
+        from llm_client import strip_thinking_blocks
+        assert strip_thinking_blocks("<think>\n\n</think>\n\n") == ""
+        assert strip_thinking_blocks("<think>Just thinking.</think>") == ""
+
+    def test_no_think_tag_unchanged(self):
+        from llm_client import strip_thinking_blocks
+        raw = "A normal response with no think tag at all."
+        assert strip_thinking_blocks(raw) == raw
+
+    def test_falsy_input_passed_through(self):
+        from llm_client import strip_thinking_blocks
+        assert strip_thinking_blocks("") == ""
+        assert strip_thinking_blocks(None) is None
+
+
+# ---------------------------------------------------------------------------
 # Fallback JSON extraction (inline preamble handling)
 # ---------------------------------------------------------------------------
 
@@ -1038,6 +1088,54 @@ class TestGenerateTextSamplerParams:
         assert "top_p" not in captured
         assert "seed" not in captured
         assert "extra_body" not in captured
+
+
+# ---------------------------------------------------------------------------
+# generate_text — think-tag stripping (defense-in-depth at the shared client
+# layer; a real GPU smoke test with qwen3.5 showed the server's --reasoning
+# flag can silently fail to suppress a literal <think>...</think> block, and
+# generate_text() previously returned it verbatim -- unlike extract_json(),
+# whose _parse_json_response already stripped it).
+# ---------------------------------------------------------------------------
+
+
+class TestGenerateTextThinkStripping:
+    def test_leading_empty_think_block_stripped(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        response = _mock_ok_response(
+            content="<think>\n\n</think>\n\nThe village square is quiet tonight."
+        )
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=response):
+            result = client.generate_text(system_prompt="sys", user_prompt="user")
+        assert result == "The village square is quiet tonight."
+
+    def test_nonempty_think_block_stripped(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        response = _mock_ok_response(
+            content=(
+                "<think>The player asked about the scholar, mention the "
+                "innkeeper's evasiveness.</think>\n"
+                "The innkeeper deflects questions about the missing scholar."
+            )
+        )
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=response):
+            result = client.generate_text(system_prompt="sys", user_prompt="user")
+        assert result == "The innkeeper deflects questions about the missing scholar."
+        assert "evasiveness" not in result
+        assert "<think>" not in result
+
+    def test_no_think_tag_unchanged(self, tmp_path):
+        cfg = _write_config(tmp_path, {"retry_attempts": 1})
+        client = LLMClient(config_path=cfg)
+        response = _mock_ok_response(content="A normal response with no think tag at all.")
+        with patch.object(client.client.chat.completions, "create",
+                          return_value=response):
+            result = client.generate_text(system_prompt="sys", user_prompt="user")
+        assert result == "A normal response with no think tag at all."
 
 
 # ---------------------------------------------------------------------------

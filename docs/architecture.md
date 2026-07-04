@@ -47,6 +47,11 @@ tools/derive_planning_layer.py       (catalog → derived planning files)
       +---> sessions/*/derived/timeline.json     (merged session + catalog timeline)
       |
       v
+tools/synthesize_world_state.py      (LLM synthesis of current_world_state)
+      |
+      +---> sessions/*/derived/state.json        (current_world_state + as_of_turn ONLY)
+      |
+      v
 tools/build_context.py               (entity context for a specific turn)
       |
       +---> sessions/*/derived/turn-context.json
@@ -90,6 +95,41 @@ Planning layer derivation (`derive_planning_layer.py`) bridges the gap between
 extracted catalog data and the derived planning files consumed by
 `analyze_next_move.py`. It runs automatically when `update_state.py` is invoked
 with `--framework`, or can be run standalone.
+
+World-state synthesis (`synthesize_world_state.py`) closes a gap `derive_planning_layer.py`
+cannot: that tool only ever *joins* catalog data into `current_world_state` once
+(it skips the field once it holds any non-placeholder value), so `current_world_state`
+freezes at whatever it first computed even as `as_of_turn` keeps advancing elsewhere,
+and a deterministic re-join cannot be made honest anyway — individual entities'
+`current_status` fields freeze at different turns, so re-joining them would silently
+mix current and stale details with no way to tell which is which. Instead,
+`synthesize_world_state.py` reads the most recent transcript turns plus a compact
+catalog summary (recently-updated entities, plus all locations when the catalog is
+small — the small-catalog threshold, `_SMALL_LOCATION_CATALOG_THRESHOLD = 15`, is a
+prompt-budget bound to keep the compact summary cheap, not an extraction-quality
+heuristic) and asks an LLM to synthesize a concise, strictly-grounded `current_world_state`
+paragraph, writing it and the new `as_of_turn` together in the same update — content
+and label change atomically, so the field is never stale-but-labeled-current. It runs
+after planning-layer derivation and before `analyze_next_move.py`, and touches ONLY
+`current_world_state` and `as_of_turn` in `state.json`; every other field (`player_state`,
+`active_threads`, `known_constraints`, `opportunities`, `risks`, `inferred_constraints`,
+`temporal`) is preserved unchanged. It mirrors the exit-code-honesty convention
+established for `ingest_turn.py --extract-only` (#529): on any LLM error, timeout,
+empty/unparseable response, or a missing/malformed existing `state.json`, `state.json`
+is left **completely untouched** and the process exits non-zero, so a caller (e.g. an
+advisor refresh step) can distinguish "regen failed, state left stale" from "regen
+succeeded" purely from the exit code — never a silent partial write. The write itself
+is atomic (temp file + `os.replace()` in the same directory) so a kill or OSError
+mid-write cannot leave `state.json` truncated.
+
+**Concurrency:** the tool narrows — but does not fully close — the classic TOCTOU
+lost-update race via a content-fingerprint recheck immediately before the atomic
+`os.replace()` swap; a concurrent writer could still (in principle) write between
+that final check and the swap itself, since no OS-level lock is taken. The tool
+therefore assumes single-writer-at-a-time access to `state.json` for a given
+session — callers (e.g. a future advisor-wiring PR) must sequence invocations of
+`synthesize_world_state.py`, `derive_planning_layer.py`, and the advisor rather
+than running them concurrently.
 
 ---
 
@@ -408,6 +448,7 @@ All data structures are defined in `schemas/`. See each schema file for field de
 | `tools/ingest_turn.py` | Add a new turn to a session |
 | `tools/update_state.py` | Regenerate session-local derived scaffolds, turn summaries, structured extraction outputs, and (with `--framework`) planning layer derivation |
 | `tools/derive_planning_layer.py` | Synthesize catalog data into derived planning files (state.json, evidence.json, timeline.json) |
+| `tools/synthesize_world_state.py` | LLM synthesis of `state.json`'s `current_world_state` + `as_of_turn`; honest no-partial-write failure contract (#529 convention) |
 | `tools/analyze_next_move.py` | Generate next-move analysis and prompt candidates |
 | `tools/validate.py` | Validate all JSON files against schemas |
 | `tools/validate_extraction.py` | Post-extraction validation against curated ground truth (alias merges, missing entities, staleness) |
