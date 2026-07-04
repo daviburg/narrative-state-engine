@@ -437,6 +437,45 @@ class TestWriteWorldStateAtomicity:
         leftover = [f for f in os.listdir(derived_dir) if f != "state.json"]
         assert leftover == [], f"temp file(s) left behind: {leftover}"
 
+    def test_fdopen_failure_closes_fd_and_leaves_original_untouched(
+        self, session_fixture, monkeypatch,
+    ):
+        """If ``os.fdopen(fd, ...)`` itself raises, the returned file object
+        never takes ownership of ``fd`` — so nothing else would close it.
+        The raw fd must be explicitly closed in that case (never leaked),
+        and the original state.json / temp-file cleanup must behave exactly
+        as any other failure mid-write."""
+        before = open(session_fixture["state_path"], "r", encoding="utf-8").read()
+
+        real_close = os.close
+        closed_fds = []
+
+        def _tracking_close(fd, *args, **kwargs):
+            closed_fds.append(fd)
+            return real_close(fd, *args, **kwargs)
+
+        def _raise_fdopen(fd, *args, **kwargs):
+            raise OSError("simulated os.fdopen() failure")
+
+        monkeypatch.setattr(_mod.os, "fdopen", _raise_fdopen)
+        monkeypatch.setattr(_mod.os, "close", _tracking_close)
+
+        with pytest.raises(OSError):
+            write_world_state(session_fixture["session_dir"], "New state.", "turn-008")
+
+        assert len(closed_fds) == 1, (
+            f"expected the raw fd to be closed exactly once when "
+            f"os.fdopen() raises, got {len(closed_fds)} close() calls "
+            f"(a leaked fd, or a double-close, would both be bugs)"
+        )
+
+        after = open(session_fixture["state_path"], "r", encoding="utf-8").read()
+        assert after == before, "original state.json must be byte-unchanged after a failed write"
+
+        derived_dir = os.path.dirname(session_fixture["state_path"])
+        leftover = [f for f in os.listdir(derived_dir) if f != "state.json"]
+        assert leftover == [], f"temp file(s) left behind: {leftover}"
+
 
 # ---------------------------------------------------------------------------
 # B1 — no precondition check before write: a missing or malformed state.json
@@ -1195,6 +1234,28 @@ class TestSynthesisSanityGate:
         itself works.
         """
         response = "The village square has grown quiet as evening settles in。"
+        fake = FakeLLMClient(response=response)
+        text, as_of_turn = synthesize_world_state(
+            session_fixture["session_dir"], framework_fixture["framework_dir"], fake,
+            recent_turns=3,
+        )
+        assert text == response
+        assert as_of_turn == "turn-008"
+
+    def test_cjk_only_response_with_no_whitespace_passes(
+        self, session_fixture, framework_fixture,
+    ):
+        """A legitimate CJK-only response commonly has little or no ASCII
+        whitespace at all, so ``paragraph.split()`` alone would badly
+        undercount its tokens and reject it despite meeting the intent of
+        the CJK punctuation broadening (``。``/``！``/``？``) above. Each
+        CJK character (Hiragana/Katakana/CJK Unified Ideographs) must count
+        as its own token so a short CJK-only paragraph with enough
+        characters — but zero ASCII whitespace — still meets the same
+        minimum-token floor as whitespace-delimited prose.
+        """
+        response = "今日は静かな夜になりました。"
+        assert " " not in response
         fake = FakeLLMClient(response=response)
         text, as_of_turn = synthesize_world_state(
             session_fixture["session_dir"], framework_fixture["framework_dir"], fake,
