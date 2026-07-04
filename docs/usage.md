@@ -977,7 +977,12 @@ Options:
 This tool touches **only** `current_world_state` and `as_of_turn` in `state.json`;
 every other field (`player_state`, `active_threads`, `known_constraints`,
 `opportunities`, `risks`, `inferred_constraints`, `temporal`) is preserved unchanged.
-On any LLM error, timeout, or empty/unparseable response, `state.json` is left
+The tool also refuses to run — non-zero exit, **no write** — if `state.json` is
+missing, malformed (not valid JSON), or fails schema validation against
+`schemas/state.schema.json`; this precondition check happens **before** any LLM
+call, and it's a common first-run condition (e.g. `derive_planning_layer.py` hasn't
+been run yet to create `state.json`). On any LLM error, timeout, or
+empty/unparseable response, `state.json` is left
 **completely untouched** and the process exits non-zero (mirroring the
 `ingest_turn.py --extract-only` exit-code-honesty convention, #529) — a caller can
 tell "regen failed, state left stale" from "regen succeeded" purely from the exit

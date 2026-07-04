@@ -620,6 +620,115 @@ class TestWriteWorldStateConcurrentWriter:
 
 
 # ---------------------------------------------------------------------------
+# Regression test for the load/fingerprint TOCTOU gap: a prior version of
+# write_world_state() called `_load_existing_state(state_path)` (its own
+# open+read) and THEN `_state_fingerprint(state_path)` (a SECOND, independent
+# open+read) to capture `fingerprint_at_load`. A concurrent writer's change
+# landing in the window BETWEEN those two reads would be reflected in the
+# fingerprint but NOT in the in-memory `state` -- and if nothing else changed
+# before the pre-swap re-check, the fingerprints would match (both "new"),
+# letting the write silently proceed and clobber the concurrent writer's
+# change instead of raising. The fix reads state.json's raw bytes ONCE
+# (`_read_state_bytes`) and derives both the initial fingerprint
+# (`_fingerprint_bytes`) and the parsed/validated state
+# (`_parse_and_validate_state`) from that SAME buffer, closing the gap.
+# ---------------------------------------------------------------------------
+
+class TestLoadFingerprintConsistency:
+    def test_state_json_is_read_only_once_before_the_atomic_swap(
+        self, session_fixture, monkeypatch,
+    ):
+        """The initial load + fingerprint capture must come from a SINGLE
+        read of state.json's raw bytes -- not two independent reads (the
+        original bug). If a regression reintroduced two separate reads
+        here, this assertion would catch it even without a concurrent
+        writer actually landing in the gap."""
+        state_path = session_fixture["state_path"]
+        original_read_bytes = _mod._read_state_bytes
+        calls = []
+
+        def _counting_read_bytes(path):
+            calls.append(path)
+            return original_read_bytes(path)
+
+        monkeypatch.setattr(_mod, "_read_state_bytes", _counting_read_bytes)
+
+        write_world_state(session_fixture["session_dir"], "New state.", "turn-008")
+
+        assert calls.count(state_path) == 1, (
+            f"expected exactly one raw read of {state_path} before the "
+            f"atomic swap, got {len(calls)}: this would reopen the "
+            f"load/fingerprint TOCTOU gap"
+        )
+
+    def test_concurrent_write_landing_in_the_old_load_fingerprint_gap_is_still_caught(
+        self, session_fixture, monkeypatch,
+    ):
+        """Simulate a concurrent writer's change landing in EXACTLY the
+        window the original bug left open: immediately after state.json's
+        raw bytes are read (what used to be `_load_existing_state()`'s own
+        read) but before the fingerprint used to be captured (what used to
+        be a SECOND, separate `_state_fingerprint()` read).
+
+        Under the OLD (buggy) code, this sequence would have gone
+        undetected: `_load_existing_state()` would return the OLD content,
+        then the separate `_state_fingerprint()` call would hash the NEW
+        (post-concurrent-write) content as `fingerprint_at_load` -- and
+        since nothing else changes afterward, the pre-swap re-check would
+        find the fingerprint UNCHANGED (still "new"), silently permitting a
+        write built from stale `state` that discards the concurrent
+        writer's change.
+
+        Under the FIXED code, `_read_state_bytes()` is the ONLY read used
+        for both the initial fingerprint and the parsed state, so a
+        concurrent write happening right after it returns is invisible to
+        neither: the fingerprint captured is anchored to the pre-write
+        bytes, and the mandatory pre-swap re-check (a fresh, independent
+        disk read) sees the now-different on-disk content and correctly
+        raises -- proving the fingerprint used for the final
+        compare-before-replace corresponds to the SAME bytes that were
+        parsed into `state`, not a later independent read.
+        """
+        state_path = session_fixture["state_path"]
+        original_read_bytes = _mod._read_state_bytes
+        call_count = {"n": 0}
+
+        def _read_then_simulate_concurrent_write(path):
+            raw = original_read_bytes(path)
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # A concurrent writer (e.g. derive_planning_layer.py or the
+                # advisor) modifies state.json immediately after our single
+                # read returns -- landing exactly in the old two-read gap.
+                with open(path, "r", encoding="utf-8") as f:
+                    concurrent_state = json.load(f)
+                concurrent_state["player_state"]["condition"] = "Poisoned"
+                with open(path, "w", encoding="utf-8") as f:
+                    json.dump(concurrent_state, f, indent=2)
+                    f.write("\n")
+            return raw
+
+        monkeypatch.setattr(
+            _mod, "_read_state_bytes", _read_then_simulate_concurrent_write,
+        )
+
+        with pytest.raises(WorldStateSynthesisError):
+            write_world_state(session_fixture["session_dir"], "New state.", "turn-008")
+
+        with open(state_path, "r", encoding="utf-8") as f:
+            after = json.load(f)
+        # The concurrent writer's change must survive untouched -- no lost
+        # update, even though the "concurrent write" landed in what used to
+        # be the load/fingerprint gap.
+        assert after["player_state"]["condition"] == "Poisoned"
+        assert after["current_world_state"] != "New state."
+
+        derived_dir = os.path.dirname(state_path)
+        leftover = [f for f in os.listdir(derived_dir) if f != "state.json"]
+        assert leftover == [], f"temp file(s) left behind: {leftover}"
+
+
+# ---------------------------------------------------------------------------
 # as_of_turn monotonicity guard: write_world_state must never regress
 # as_of_turn to an earlier turn than what's already recorded in state.json.
 # ---------------------------------------------------------------------------

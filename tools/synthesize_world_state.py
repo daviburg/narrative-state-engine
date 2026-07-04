@@ -116,8 +116,52 @@ def _load_state_schema() -> dict:
         return json.load(f)
 
 
-def _load_existing_state(state_path: str) -> dict:
-    """Load and validate the existing state.json before reading OR writing it.
+def _read_state_bytes(state_path: str) -> bytes:
+    """Read state.json's raw on-disk bytes in a single read.
+
+    This is the ONLY place ``write_world_state`` touches disk to obtain
+    state.json's content for its initial load: both the concurrent-writer
+    fingerprint (``_fingerprint_bytes``) and the parsed/validated state
+    (``_parse_and_validate_state``) are derived from the exact bytes
+    returned here — never from two independent reads. A prior version of
+    this tool called ``_load_existing_state(state_path)`` (which opened and
+    read the file itself) and THEN separately called
+    ``_state_fingerprint(state_path)`` (a second, independent open+read) to
+    capture ``fingerprint_at_load``. That left a TOCTOU window between the
+    two reads: if a concurrent writer modified state.json in that window,
+    the fingerprint would reflect the NEW bytes while ``state`` in memory
+    still held the OLD (pre-modification) content — and if nothing else
+    changed before the pre-swap re-check, the fingerprints would match
+    (both "new"), silently letting ``write_world_state`` proceed and
+    clobber the concurrent writer's change instead of raising. Reading once
+    and deriving both values from the same buffer eliminates that window
+    entirely.
+
+    Raises ``WorldStateSynthesisError`` if ``state_path`` does not exist.
+    """
+    try:
+        with open(state_path, "rb") as f:
+            return f.read()
+    except FileNotFoundError as exc:
+        raise WorldStateSynthesisError(
+            f"state.json not found at {state_path}; synthesis requires an "
+            f"existing schema-valid state.json to update (run "
+            f"derive_planning_layer.py first)."
+        ) from exc
+
+
+def _fingerprint_bytes(raw_bytes: bytes) -> str:
+    """SHA-256 hex digest of already-read state.json bytes.
+
+    See :func:`_read_state_bytes` for why callers must obtain ``raw_bytes``
+    from a SINGLE read shared with parsing, rather than re-reading the file
+    here.
+    """
+    return hashlib.sha256(raw_bytes).hexdigest()
+
+
+def _parse_and_validate_state(state_path: str, raw_bytes: bytes) -> dict:
+    """Parse and schema-validate already-read state.json bytes.
 
     Unlike ``_load_json(..., default={})``, this never silently degrades a
     missing/malformed state.json to ``{}`` — doing so would let
@@ -140,22 +184,20 @@ def _load_existing_state(state_path: str) -> dict:
     mode, which exists for a context where jsonschema might not be
     installed).
 
-    Raises ``WorldStateSynthesisError`` if ``state_path`` does not exist,
-    cannot be parsed as JSON, does not parse to a JSON object, is missing
-    any of ``_REQUIRED_STATE_KEYS``, or fails schema validation. Never
-    returns a partial/fabricated result.
-    """
-    if not os.path.exists(state_path):
-        raise WorldStateSynthesisError(
-            f"state.json not found at {state_path}; synthesis requires an "
-            f"existing schema-valid state.json to update (run "
-            f"derive_planning_layer.py first)."
-        )
+    ``raw_bytes`` must come from a single read of ``state_path`` (see
+    :func:`_read_state_bytes`) — this function does no disk I/O of its own,
+    so that callers computing a fingerprint from the same ``raw_bytes`` are
+    guaranteed the fingerprint and the parsed state agree on exactly which
+    on-disk snapshot they describe.
 
+    Raises ``WorldStateSynthesisError`` if ``raw_bytes`` cannot be decoded
+    or parsed as JSON, does not parse to a JSON object, is missing any of
+    ``_REQUIRED_STATE_KEYS``, or fails schema validation. Never returns a
+    partial/fabricated result.
+    """
     try:
-        with open(state_path, "r", encoding="utf-8-sig") as f:
-            state = json.load(f)
-    except (json.JSONDecodeError, ValueError) as exc:
+        state = json.loads(raw_bytes.decode("utf-8-sig"))
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as exc:
         raise WorldStateSynthesisError(
             f"state.json at {state_path} is not valid JSON: {exc}"
         ) from exc
@@ -186,6 +228,27 @@ def _load_existing_state(state_path: str) -> dict:
         )
 
     return state
+
+
+def _load_existing_state(state_path: str) -> dict:
+    """Load and validate the existing state.json before reading OR writing it.
+
+    Convenience wrapper around :func:`_read_state_bytes` +
+    :func:`_parse_and_validate_state` for callers (e.g.
+    ``synthesize_world_state()``) that only need the parsed state and have
+    no separate fingerprint to keep in sync with it. ``write_world_state``
+    does NOT use this wrapper — it calls ``_read_state_bytes`` once and
+    feeds the SAME bytes to both ``_fingerprint_bytes`` and
+    ``_parse_and_validate_state`` directly, so its fingerprint and its
+    parsed state can never diverge (see :func:`_read_state_bytes`).
+
+    Raises ``WorldStateSynthesisError`` if ``state_path`` does not exist,
+    cannot be parsed as JSON, does not parse to a JSON object, is missing
+    any of ``_REQUIRED_STATE_KEYS``, or fails schema validation. Never
+    returns a partial/fabricated result.
+    """
+    raw_bytes = _read_state_bytes(state_path)
+    return _parse_and_validate_state(state_path, raw_bytes)
 
 
 def list_recent_turns(session_dir: str, recent_turns: int) -> list[dict]:
@@ -563,18 +626,27 @@ def _turn_num(turn_id) -> int | None:
 
 
 def _state_fingerprint(state_path: str) -> str:
-    """SHA-256 hex digest of state.json's raw on-disk bytes.
+    """SHA-256 hex digest of state.json's raw on-disk bytes, re-read fresh.
 
-    Used by :func:`write_world_state` to guard against a concurrent writer
-    (lost-update race): capturing this at load time and re-checking it
-    immediately before the atomic ``os.replace()`` swap significantly
+    Used ONLY for the pre-swap re-check in :func:`write_world_state`
+    (immediately before the atomic ``os.replace()``), where a fresh disk
+    read is exactly what's needed: it must observe whatever the LATEST
+    on-disk content is, right up to the moment of the swap, to detect a
+    concurrent writer that landed after the initial load. This significantly
     narrows the window in which a concurrent writer's changes could be
-    lost, by re-validating the file's content hasn't changed immediately
-    before the swap. This does NOT fully eliminate the race — a concurrent
-    writer could still (in principle) write between the final fingerprint
-    check and the ``os.replace()`` call itself; only OS-level locking
-    could close that window completely. See :func:`write_world_state` for
-    the single-writer-at-a-time invariant this guard depends on instead.
+    lost. It does NOT fully eliminate the race — a concurrent writer could
+    still (in principle) write between this final fingerprint check and the
+    ``os.replace()`` call itself; only OS-level locking could close that
+    window completely. See :func:`write_world_state` for the
+    single-writer-at-a-time invariant this guard depends on instead.
+
+    For the INITIAL fingerprint (captured at load time, before any editing
+    happens), ``write_world_state`` does NOT call this function — it
+    derives that fingerprint directly from the same bytes returned by
+    :func:`_read_state_bytes` via :func:`_fingerprint_bytes`, so the
+    initial fingerprint and the parsed state can never disagree about which
+    on-disk snapshot they describe (see :func:`_read_state_bytes` for the
+    TOCTOU gap this avoids).
     """
     with open(state_path, "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
@@ -585,10 +657,17 @@ def write_world_state(session_dir: str, current_world_state: str, as_of_turn: st
 
     All other fields (player_state, active_threads, known_constraints,
     opportunities, risks, inferred_constraints, temporal, ...) are loaded
-    and re-serialized unchanged — this function must never be called with
-    unvalidated content (see ``synthesize_world_state``'s error contract).
+    and re-serialized with their VALUES unchanged — this function must
+    never be called with unvalidated content (see
+    ``synthesize_world_state``'s error contract). This is VALUE
+    preservation, not byte preservation: ``json.dump()`` below
+    re-serializes the entire state dict, which can change incidental
+    on-disk formatting of untouched fields (whitespace, key order,
+    ``ensure_ascii`` escaping) even though their values are identical to
+    what was loaded. True byte-for-byte patching of only the two touched
+    fields is intentionally out of scope here.
 
-    Re-validates the existing state.json (B1, ``_load_existing_state``)
+    Re-validates the existing state.json (B1, ``_parse_and_validate_state``)
     immediately before writing — belt-and-suspenders in case this function
     is ever called directly, or state.json changes between
     ``synthesize_world_state()`` and this call.
@@ -603,14 +682,26 @@ def write_world_state(session_dir: str, current_world_state: str, as_of_turn: st
     improve even for the same turn); higher always succeeds (normal
     advancement).
 
-    Concurrent-writer guard (lost-update race): captures a fingerprint
-    (SHA-256 of the raw on-disk bytes, ``_state_fingerprint``) of
-    state.json at load time, and re-checks it immediately before the
-    atomic swap below. This significantly narrows the window in which a
-    concurrent writer's changes could be lost, by re-validating the
-    file's content hasn't changed immediately before the atomic swap — it
-    does NOT fully eliminate the race: a concurrent writer could still (in
-    principle) write between the final fingerprint check and the
+    Concurrent-writer guard (lost-update race): reads state.json's raw
+    bytes ONCE at load time (``_read_state_bytes``) and derives BOTH the
+    initial fingerprint (``_fingerprint_bytes``) and the parsed/validated
+    state (``_parse_and_validate_state``) from that SAME buffer — never
+    from two independent reads. An earlier version of this function called
+    ``_load_existing_state(state_path)`` (its own open+read) and THEN
+    ``_state_fingerprint(state_path)`` (a second, independent open+read) to
+    capture ``fingerprint_at_load``, leaving a TOCTOU window between the
+    two reads: a concurrent writer's change landing in that window would be
+    reflected in the fingerprint but NOT in the in-memory ``state``, so if
+    nothing else changed before the pre-swap re-check below, the
+    fingerprints would match (both "new") and the write would proceed,
+    silently discarding the concurrent writer's change instead of raising.
+    Reading once and deriving both values from the same bytes closes that
+    gap. This tool then re-checks the fingerprint (via a fresh disk read,
+    ``_state_fingerprint``) immediately before the atomic swap, to catch
+    any writer that landed AFTER this initial load. This significantly
+    narrows the window in which a concurrent writer's changes could be
+    lost — it does NOT fully eliminate the race: a concurrent writer could
+    still (in principle) write between that final fingerprint check and the
     ``os.replace()`` call itself, since this tool takes no OS-level lock.
     If the fingerprint DOES differ, the write is aborted
     (``WorldStateSynthesisError``, no write) rather than clobbering that
@@ -638,7 +729,9 @@ def write_world_state(session_dir: str, current_world_state: str, as_of_turn: st
     """
     derived_dir = os.path.join(session_dir, "derived")
     state_path = os.path.join(derived_dir, "state.json")
-    state = _load_existing_state(state_path)
+    raw_bytes = _read_state_bytes(state_path)
+    fingerprint_at_load = _fingerprint_bytes(raw_bytes)
+    state = _parse_and_validate_state(state_path, raw_bytes)
 
     existing_num = _turn_num(state.get("as_of_turn"))
     candidate_num = _turn_num(as_of_turn)
@@ -651,8 +744,6 @@ def write_world_state(session_dir: str, current_world_state: str, as_of_turn: st
             f"up-to-date transcript directory). state.json was left "
             f"untouched."
         )
-
-    fingerprint_at_load = _state_fingerprint(state_path)
 
     state["current_world_state"] = current_world_state
     state["as_of_turn"] = as_of_turn

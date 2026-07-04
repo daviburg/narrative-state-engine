@@ -15,6 +15,7 @@ import threading
 import time
 from collections import namedtuple
 from datetime import datetime, timezone
+from typing import Optional
 
 
 # Result of an Ollama native streaming call (#501): the assembled visible
@@ -39,7 +40,7 @@ _StreamResult = namedtuple(
 _THINK_BLOCK_RE = re.compile(r"<think>.*?</think>", re.IGNORECASE | re.DOTALL)
 
 
-def strip_thinking_blocks(text: str) -> str:
+def strip_thinking_blocks(text: Optional[str]) -> Optional[str]:
     """Strip all ``<think>...</think>`` reasoning blocks from LLM output.
 
     Some backends (observed: qwen3.5 in "thinking" mode via an
