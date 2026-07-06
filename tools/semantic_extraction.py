@@ -3869,7 +3869,12 @@ def _build_compound_word_index(
     (deduplicated by compound_name/type pair) that contributed the word —
     recording the multi-word entity name(s) the word came from and their
     `type`(s) (used both for diagnostic messages and for the type-aware
-    check in `_is_compound_term_fragment`).
+    check in `_is_compound_term_fragment`). The stored `type` is normalized
+    via `_norm_compound_type` (lowercased, blank/missing → ``None``) BEFORE
+    the dedup comparison, so two entries for the same compound name whose
+    `type` differs only by case or surrounding whitespace (e.g. "Faction" vs
+    "faction ") collapse into a single entry instead of both being kept as
+    spuriously-distinct entries (#539 follow-up, reviewer finding).
     """
     index: dict[str, list[dict]] = {}
 
@@ -3877,11 +3882,12 @@ def _build_compound_word_index(
         stripped = name.strip()
         words = stripped.split()
         if len(words) >= 2:
+            normalized_type = _norm_compound_type(entity_type)
             for word in words:
                 w = re.sub(r"[^a-z]", "", word.lower())
                 if len(w) >= 3:
                     entries = index.setdefault(w, [])
-                    entry = {"compound_name": stripped, "type": entity_type}
+                    entry = {"compound_name": stripped, "type": normalized_type}
                     if entry not in entries:
                         entries.append(entry)
 

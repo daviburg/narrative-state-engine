@@ -92,6 +92,23 @@ class TestBuildCompoundWordIndex:
         index = _build_compound_word_index(catalogs)
         assert len(index) == 0
 
+    def test_type_case_and_whitespace_variants_deduplicate_to_one_entry(self):
+        """Two contributions of the same compound name whose `type` differs
+        only by case or surrounding whitespace must collapse into a single
+        index entry with a normalized `type`, not be kept as two spuriously
+        distinct entries (#539 follow-up, reviewer finding)."""
+        catalogs = {"factions.json": [{"name": "Red Ledger Syndicate", "type": "Faction"}]}
+        current = [{"name": "Red Ledger Syndicate", "type": " faction "}]
+        index = _build_compound_word_index(catalogs, current_entities=current)
+        assert index["ledger"] == [{"compound_name": "Red Ledger Syndicate", "type": "faction"}]
+
+    def test_blank_type_normalized_to_none_in_index(self):
+        """A blank/whitespace-only `type` is stored as `None`, matching the
+        normalization used for a missing `type` key (#539 follow-up)."""
+        catalogs = {"factions.json": [{"name": "Red Ledger Syndicate", "type": "   "}]}
+        index = _build_compound_word_index(catalogs)
+        assert index["ledger"] == [{"compound_name": "Red Ledger Syndicate", "type": None}]
+
 
 # ---------------------------------------------------------------------------
 # _is_compound_term_fragment
