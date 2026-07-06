@@ -1418,7 +1418,7 @@ During extraction (batch, segmented, or single-turn), the pipeline writes a per-
 - `*_error` — error message when a phase failed (null on success)
 - `new_entities`, `new_events` — counts of entities/events added by this turn
 - `discovery_proposals` — array of all entities proposed by the model for this turn, each with `name`, `is_new`, `proposed_id`, `existing_id`, and `confidence`
-- `discovery_filtered` — array of entities rejected during filtering, each with `name`, `id`, and `reason` (`below_confidence_threshold`, `concept_prefix`, or `compound_term_fragment`). `compound_term_fragment` indicates the entity's single-word name was found in the runtime compound-term index built from multi-word entity names in the catalog and current turn (e.g., "quiet" rejected because "Quiet Weave" exists).
+- `discovery_filtered` — array of entities rejected during filtering, each with `name`, `id`, and `reason` (`below_confidence_threshold`, `concept_prefix`, or `compound_term_fragment`). `compound_term_fragment` indicates the entity's single-word name was found in the runtime compound-term index built from multi-word entity names in the catalog and current turn, AND the candidate's `type` matches the type of the multi-word entity that contributed the word (e.g., "quiet" rejected because location "Quiet Weave" exists; but item "ledger" is NOT rejected merely because a faction "Red Ledger Syndicate" exists — different types cannot fragment one another).
 - `elapsed_ms` — wall-clock time for the turn
 
 The file is append-only and survives interruptions. To diagnose a failed run:
