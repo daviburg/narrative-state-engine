@@ -482,3 +482,51 @@ class TestIsCompoundTermFragment:
         )
         assert is_frag is True
         assert compound == "Ice Shard"
+
+    # ------------------------------------------------------------------
+    # Two DISTINCT same-type multi-word entities sharing a word (reviewer
+    # question on PR #540: would "Red Pill" and "Blue Pill" — both `item`,
+    # both sharing the word "pill" — get falsely conflated?). Multi-word
+    # names are never subject to the fragment check at all (the function
+    # returns (False, "") for any name with more than one word before the
+    # type-aware index lookup even runs), so both compounds are retained as
+    # distinct entities regardless of the shared word or matching type. Only
+    # a BARE single-word "pill" mention is rejected as a fragment — it is
+    # ambiguous/duplicative of an already-known compound, not a new third
+    # entity — and reports back whichever compound was indexed first
+    # (order-dependent, but harmless: the important outcome, rejection, is
+    # the same either way).
+    # ------------------------------------------------------------------
+
+    def test_two_same_type_compounds_sharing_a_word_both_retained(self):
+        """Two different, same-type multi-word entities that share a word
+        ("Red Pill" and "Blue Pill", both `item`, sharing "pill") are each
+        retained as distinct entities -- neither is flagged as a fragment of
+        the other. A bare single-word "pill" candidate of the same type IS
+        rejected as a fragment, since standing alone it is ambiguous with an
+        already-known compound rather than a genuine new entity."""
+        catalogs = {
+            "items.json": [
+                {"name": "Red Pill", "type": "item"},
+                {"name": "Blue Pill", "type": "item"},
+            ],
+        }
+        index = _build_compound_word_index(catalogs)
+
+        is_frag_red, compound_red = _is_compound_term_fragment(
+            {"name": "Red Pill", "type": "item"}, index
+        )
+        assert is_frag_red is False
+        assert compound_red == ""
+
+        is_frag_blue, compound_blue = _is_compound_term_fragment(
+            {"name": "Blue Pill", "type": "item"}, index
+        )
+        assert is_frag_blue is False
+        assert compound_blue == ""
+
+        is_frag_bare, compound_bare = _is_compound_term_fragment(
+            {"name": "pill", "type": "item"}, index
+        )
+        assert is_frag_bare is True
+        assert compound_bare in ("Red Pill", "Blue Pill")
