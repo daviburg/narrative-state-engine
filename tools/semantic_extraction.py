@@ -3846,35 +3846,74 @@ def _is_misclassified_item(entity: dict) -> bool:
 def _build_compound_word_index(
     catalogs: dict,
     current_entities: list | None = None,
-) -> dict[str, str]:
-    """Build a map of lowercase word → compound entity name for multi-word entities.
+) -> dict[str, list[dict]]:
+    """Build a map of lowercase word → compound-entity info for multi-word entities.
 
     Words that appear in 2+-word entity names are potential compound-term
     components.  When a single-word entity matches one of these words it is
-    likely a fragment of the compound term and should be rejected (#398).
+    likely a fragment of the compound term and should be rejected (#398) —
+    but ONLY when the candidate shares the compound entity's `type` (#539):
+    an item named "ledger" is not a fragment of a faction named "Red Ledger
+    Syndicate" just because they share a word.
 
-    Returns a dict mapping lowercase word → the compound entity name it
-    came from (used for diagnostic messages).
+    A single word can be a component of MORE THAN ONE multi-word entity of
+    DIFFERENT types in the same run (e.g. a faction "Red Ledger Syndicate"
+    and an item "Ledger of Debts" both contain "ledger") (#539 follow-up).
+    Storing only one `{"compound_name", "type"}` slot per word would let
+    whichever entity is processed first win the slot non-deterministically
+    (catalog/dict iteration order), silently hiding a genuine same-type
+    fragment for the entity type that lost the slot.
+
+    Returns a dict mapping lowercase word → a list of ``{"compound_name":
+    str, "type": str | None}`` entries — one per distinct multi-word entity
+    (deduplicated by compound_name/type pair) that contributed the word —
+    recording the multi-word entity name(s) the word came from and their
+    `type`(s) (used both for diagnostic messages and for the type-aware
+    check in `_is_compound_term_fragment`). The stored `type` is normalized
+    via `_norm_compound_type` (lowercased, blank/missing → ``None``) BEFORE
+    the dedup comparison, so two entries for the same compound name whose
+    `type` differs only by case or surrounding whitespace (e.g. "Faction" vs
+    "faction ") collapse into a single entry instead of both being kept as
+    spuriously-distinct entries (#539 follow-up, reviewer finding).
     """
-    index: dict[str, str] = {}
+    index: dict[str, list[dict]] = {}
 
-    def _index_name(name: str) -> None:
+    def _index_name(name: str, entity_type: str | None) -> None:
         stripped = name.strip()
         words = stripped.split()
         if len(words) >= 2:
+            normalized_type = _norm_compound_type(entity_type)
             for word in words:
                 w = re.sub(r"[^a-z]", "", word.lower())
                 if len(w) >= 3:
-                    index.setdefault(w, stripped)
+                    entries = index.setdefault(w, [])
+                    entry = {"compound_name": stripped, "type": normalized_type}
+                    if entry not in entries:
+                        entries.append(entry)
 
     for _filename, entities in catalogs.items():
         for entity in entities:
-            _index_name(entity.get("name", ""))
+            _index_name(entity.get("name", ""), entity.get("type"))
     if current_entities:
         for entity in current_entities:
-            _index_name(entity.get("name", ""))
+            _index_name(entity.get("name", ""), entity.get("type"))
 
     return index
+
+
+def _norm_compound_type(type_value: str | None) -> str | None:
+    """Normalize a `type` value for compound-fragment comparison (#539).
+
+    Lowercases for case-insensitive comparison (the discovery-phase `type`
+    field is raw LLM output not yet schema-validated at the point this filter
+    runs) and treats a missing key and a blank/whitespace-only string
+    identically — both normalize to ``None`` — so the type-agnostic fallback
+    in `_is_compound_term_fragment` triggers consistently regardless of
+    whether a caller omits the field or supplies an empty string.
+    """
+    if not type_value or not type_value.strip():
+        return None
+    return type_value.strip().lower()
 
 
 def _build_known_id_set(catalogs: dict) -> set[str]:
@@ -4009,7 +4048,7 @@ def _validate_existing_ids(
 
 def _is_compound_term_fragment(
     entity: dict,
-    compound_word_index: dict[str, str],
+    compound_word_index: dict[str, list[dict]],
     known_ids: set[str] | None = None,
 ) -> tuple[bool, str]:
     """Return (True, compound_name) if entity is a single-word compound-term fragment.
@@ -4018,6 +4057,25 @@ def _is_compound_term_fragment(
     component word in a multi-word entity name from the catalog or current
     turn (#398).  Multi-word entities and entities with no name are never
     flagged.
+
+    The check is type-aware (#539): a candidate is only flagged as a fragment
+    when its own `type` matches the `type` recorded for a compound entity that
+    indexed the word.  A single-word "item" proposal (e.g. "ledger") must not
+    be rejected as a fragment of an unrelated multi-word "faction" name (e.g.
+    "Red Ledger Syndicate") that merely happens to share a word — the two
+    entity types are conceptually unrelated.  When either side's type is
+    unknown/missing (including blank strings — see `_norm_compound_type`), the
+    check falls back to the original type-agnostic behavior (fail toward
+    rejection, matching pre-#539 behavior) so untyped callers are unaffected.
+
+    A single word may be a component of MULTIPLE, differently-typed compound
+    entities in the same run (e.g. "ledger" from both a faction "Red Ledger
+    Syndicate" and an item "Ledger of Debts") (#539 follow-up).
+    `compound_word_index` maps each word to a LIST of every contributing
+    entity's `{"compound_name", "type"}`; this checks the candidate's type
+    against EVERY entry in that list (not just one arbitrarily-chosen entry)
+    and rejects using whichever entry actually matches, so same-type
+    fragmentation is caught regardless of catalog/dict iteration order.
 
     Returns (False, "") when the entity should not be rejected.
     """
@@ -4039,9 +4097,21 @@ def _is_compound_term_fragment(
     if len(words) != 1:
         return False, ""
     name_lower = re.sub(r"[^a-z]", "", name.lower())
-    compound_name = compound_word_index.get(name_lower)
-    if compound_name:
-        return True, compound_name
+    matches = compound_word_index.get(name_lower)
+    if not matches:
+        return False, ""
+    entity_type_norm = _norm_compound_type(entity.get("type"))
+    for match in matches:
+        compound_type_norm = _norm_compound_type(match.get("type"))
+        if (
+            compound_type_norm is None
+            or entity_type_norm is None
+            or compound_type_norm == entity_type_norm
+        ):
+            return True, match["compound_name"]
+    # The word is indexed but every contributing entity's type is known and
+    # none matches the candidate's (also known) type — cross-type collision
+    # on a shared word only, not a real fragment (#539).
     return False, ""
 
 
