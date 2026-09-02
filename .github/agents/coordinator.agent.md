@@ -108,7 +108,7 @@ If you (coordinator) catch yourself about to dispatch an agent to run a >1 minut
 | "Review this PR" | @reviewer |
 | "Ship this feature end-to-end" | @pm (plan) → @developer (implement, stage) → @reviewer (pre-push review of staged diff) → @developer (commit + push) → CI → @tester (verify and resolve review threads) → @reviewer (final GitHub approval) |
 | "Set up a new model for extraction" | @model-optimizer (quality) + @b70-optimizer or @rtx4070-optimizer (performance) |
-| "PR needs review feedback addressed" | @developer (fix, stage) → @reviewer (review staged diff) → @developer (commit + push) → CI → @developer (reply to actionable roots) → @tester (classify, verify, and resolve all review threads) |
+| "PR needs review feedback addressed" | @developer (fix, stage) → @reviewer (review staged diff) → @developer (commit + push) → CI → @developer (reply to actionable roots) → @tester (classify, verify, and resolve all review threads) → @reviewer (final GitHub approval) |
 | "Automate VS Code agent interactions" | @automation-engineer |
 | "Fix broken selectors after VS Code update" | @automation-engineer |
 | "Build CrewAI → VS Code bridge" | @automation-engineer + @developer (Python side) |
