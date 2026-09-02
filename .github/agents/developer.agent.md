@@ -38,10 +38,16 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 8. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
 9. **CI gate**: After every push (initial or follow-up), run `gh pr checks <PR#> --watch` and wait for all checks to pass. Report the result proactively to the coordinator. If CI fails, diagnose and fix immediately before proceeding. Never hand off to @tester or @reviewer with a red CI.
 10. **Rebase**: Before handing off to @tester or @reviewer, check if the branch is behind main. If so, `git rebase origin/main` and force-push with `--force-with-lease`. Re-verify CI after the rebase.
-11. **Review feedback**: After creating a PR, check for automated review comments (Copilot, CodeQL, linters). For each **PR review comment** (inline code comments): (a) fix the code or determine why no change is needed, (b) **post a reply on the comment thread** using `gh api repos/{owner}/{repo}/pulls/comments/{comment_id}/replies -f body="**[@developer]** Fixed in <sha>: <description>"` explaining what was fixed and referencing the commit hash. For follow-up issues, use: `**[@developer]** Tracked as follow-up in #NNN: <description>`. Both the code fix AND the reply are required — an unreplied review comment is an unresolved conversation, even if the code is fixed. Note: check annotations (e.g., CodeQL findings) and issue-style PR comments do not support threaded replies — address those by fixing the code; no reply post is needed.
+11. **Review feedback**: After creating a PR, enumerate every page of review comments and identify all root comments before assessing closure. Address each root, then post a substantive thread reply prefixed `**[@developer]**` that identifies the fixing commit SHA and change or explains why no change is warranted. Resolve threads where the platform supports resolution, and repeat the paginated scan until there are zero unresolved threads and zero root comments without a developer reply. Check annotations and issue-style PR comments separately because they do not support threaded replies.
 12. **Cleanup**: After push, remove the worktree: `git worktree remove <path>`
 
 All developer PR comments and replies must be prefixed with `**[@developer]**`.
+
+## Engineering Change Contracts
+
+- **Parser extensions**: Change only the extension layer the repository owns; delegate baseline tokenization, grammar, and error semantics to the host parser instead of reimplementing them. Add adversarial grammar cases and differential tests against the host parser for all overlapping syntax.
+- **Renderer/browser changes**: Exercise the real production page and shipped assets, not only a synthetic harness. Cover stage-failure fallback, equivalent history and live behavior, accessible state exposure, and responsive containment at supported viewport bounds.
+- **Minimum runtime**: Derive the effective minimum from the engine constraints of locked direct and transitive dependencies. Test a strict install and the relevant suite on the exact CI floor, and update the manifest, lockfile, CI matrix, and user-facing documentation together whenever that floor changes.
 
 ## Key Conventions
 
