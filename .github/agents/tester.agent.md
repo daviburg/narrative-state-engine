@@ -67,7 +67,7 @@ When a test cannot be executed due to environment constraints (missing hardware,
 Begin only after the pushed commit is green in CI. Enumerate every review thread and classify each root. A root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable. Acknowledgements and purely informational roots are non-actionable and do not require a developer reply. Check annotations and issue-style PR comments have no review thread ID and are outside this threaded protocol; verify separately that each was fixed or has an explicit dismissal/no-change rationale.
 
 1. **For "Fixed in <sha>" replies**: Check the commit diff to confirm the fix actually addresses the comment. Use `git show <sha>` or `gh api` to verify.
-2. **For "Tracked as follow-up in #NNN" replies**: Verify the issue exists and is open: `gh issue view NNN`.
+2. **For "Tracked as follow-up in #NNN" replies**: Verify the issue exists and is open with a state-only query that makes the contract explicit — `gh issue view NNN --json state --jq '.state'` must print `OPEN` (a missing issue errors; a `CLOSED` result fails the check).
 3. **For "No change" replies**: Check the cited code and PR context to confirm the rationale addresses the finding without a change.
 4. **If an actionable claim is verified**: Resolve the conversation using its GraphQL review thread `id`, not a comment database ID:
    ```bash
