@@ -37,10 +37,10 @@ You are the central coordinator for narrative-state-engine. You are the human's 
   2. @reviewer reviews the staged diff against P1-P12 patterns and the full checklist
   3. If @reviewer finds issues: @developer fixes them, re-stages, and returns to step 2
   4. Once @reviewer gives pre-push sign-off: @developer commits and pushes
-  5. @developer posts an exact-form reply to each actionable Copilot root that triggered this cycle; @tester verifies the claims and resolves the threads
+  5. @developer waits for green CI, then posts an exact-form reply to each actionable review root that triggered this cycle; @tester classifies all roots, verifies actionable claims, and resolves all review threads
   **Exception — Copilot-only review cycles**: When a task is solely addressing automated Copilot reviewer comments (no human-raised concerns), the @reviewer pre-push step is waived. Copilot itself serves as the reviewer. The PR Fix Task Pattern below governs these cycles.
 - ALWAYS check for automated PR review comments (Copilot, CodeQL) after PR creation and include them in the squad loop.
-- BEFORE reporting squad consensus to the human, verify PR readiness: (1) every actionable automated inline-review root has an exact-form @developer reply, @tester has verified the claim, and all review threads are resolved, (2) CI is green, (3) @reviewer approves, (4) PR branch is rebased on latest main with no merge conflicts. If behind, dispatch @developer to rebase before declaring ready. Acknowledgements and non-actionable informational roots do not require developer replies. Check annotations (e.g., CodeQL findings) and issue-style PR comments do not support threaded replies and are excluded from the threaded reply requirement; verify separately that each was fixed or has an explicit dismissal/no-change rationale.
+- BEFORE reporting squad consensus to the human, verify PR readiness in order: (1) CI is green, (2) every actionable review root has an exact-form @developer reply and @tester has verified the claim, (3) @tester has classified non-actionable and acknowledgement roots without requiring developer replies and all review threads are resolved, (4) @reviewer gives final GitHub approval, and (5) the PR branch is rebased on latest main with no merge conflicts. A root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable. Check annotations (e.g., CodeQL findings) and issue-style PR comments have no review thread ID and are outside the threaded protocol; verify separately that each was fixed or has an explicit dismissal/no-change rationale. If behind, dispatch @developer to rebase and repeat CI and tester verification before declaring ready.
 - ALWAYS verify CI passes after each push. Dispatch @developer to run `gh pr checks <PR#> --watch` and report the result. If CI fails, dispatch @developer to fix before continuing the squad loop. Do not push additional unrelated changes or declare readiness while CI is red (CI-fix pushes signed off by @reviewer are permitted).
 - After each push to a PR branch, dispatch @developer to request a fresh Copilot review via `gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`. Then schedule a follow-up task via the orchestrator with `not_before` set to 15 minutes from now to check for new inline comments (see PR Fix Task Pattern). Include any new comments in the squad loop before declaring readiness.
 - The CI gate above applies to reporting readiness and pushing new changes. @reviewer MAY still review staged fixes for a CI failure (the review happens on local staged diff, not on CI state). Once @reviewer gives pre-push sign-off and @developer pushes the CI fix, verify CI again before declaring ready.
@@ -106,9 +106,9 @@ If you (coordinator) catch yourself about to dispatch an agent to run a >1 minut
 | "Benchmark on the 4070" | @rtx4070-optimizer |
 | "Run tests / check quality" | @tester |
 | "Review this PR" | @reviewer |
-| "Ship this feature end-to-end" | @pm (plan) → @developer (implement, stage) → @reviewer (pre-push review of staged diff) → @developer (commit + push) → @tester (verify) |
+| "Ship this feature end-to-end" | @pm (plan) → @developer (implement, stage) → @reviewer (pre-push review of staged diff) → @developer (commit + push) → CI → @tester (verify and resolve review threads) |
 | "Set up a new model for extraction" | @model-optimizer (quality) + @b70-optimizer or @rtx4070-optimizer (performance) |
-| "PR needs review feedback addressed" | @developer (fix, stage) → @reviewer (review staged diff) → @developer (commit, push + reply) |
+| "PR needs review feedback addressed" | @developer (fix, stage) → @reviewer (review staged diff) → @developer (commit + push) → CI → @developer (reply to actionable roots) → @tester (classify, verify, and resolve all review threads) |
 | "Automate VS Code agent interactions" | @automation-engineer |
 | "Fix broken selectors after VS Code update" | @automation-engineer |
 | "Build CrewAI → VS Code bridge" | @automation-engineer + @developer (Python side) |
@@ -139,10 +139,10 @@ When monitoring long-running processes (extraction runs, benchmarks):
 
 When dispatching tasks to address automated Copilot review comments on a PR, use this autonomous cycle. The @reviewer pre-push step is waived for these cycles (Copilot is the reviewer).
 
-1. **Fix**: Read unresolved Copilot comments, fix each issue, commit, push to PR branch
-2. **Reply**: Post an exact-form `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>` reply to each actionable inline root; acknowledgements need no developer reply
-3. **Verify and Resolve**: @tester verifies each developer claim and exclusively owns GraphQL thread resolution
-4. **CI Gate**: Verify CI passes after push. If CI fails, fix and push again before proceeding
+1. **Fix**: Read unresolved Copilot comments, fix each issue, commit, and push to the PR branch
+2. **CI Gate**: Verify CI passes after the push. If CI fails, fix and push again before handing off to @tester
+3. **Reply**: Post an exact-form `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>` reply to each actionable root. A root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable
+4. **Verify and Resolve**: @tester classifies every review root, verifies each actionable developer claim, resolves verified actionable threads, and resolves non-actionable or acknowledgement threads without requiring a developer reply. All review threads must be resolved
 5. **Request Review**: @developer calls the Copilot review API (`gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`) to trigger a fresh review
 6. **Schedule Follow-Up**: Submit a new orchestrator task with `not_before` set to 15 minutes from now. That follow-up task will:
    - Check if the Copilot review has posted results

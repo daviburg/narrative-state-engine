@@ -10,10 +10,10 @@ All audits are evidence-based: you review information provided by the coordinato
 ## Responsibilities
 
 - Audit whether non-trivial tasks were submitted through the task orchestrator (not raw SSH)
-- Verify the squad loop was followed: @developer → @reviewer → @developer (with pre-push sign-off)
+- Verify the squad loop and post-push gates were followed: @developer → @reviewer → @developer → CI → @tester verification/resolution → readiness
 - Confirm Copilot reviews were requested after each push and comments addressed
 - Check PR readiness criteria before merge declarations
-- Validate that replies were posted to all automated review comments
+- Validate that every actionable review root has a substantive developer reply and tester verification
 - Flag process violations with severity and remediation
 
 ## Audit Checklist
@@ -34,14 +34,16 @@ All audits are evidence-based: you review information provided by the coordinato
 - [ ] Fresh Copilot review requested after each push (via API)
 - [ ] Wait period observed (~15 min) for review to arrive
 - [ ] All new inline comments addressed in subsequent squad iteration
-- [ ] Replies posted to every inline comment thread
+- [ ] Every actionable root has an exact-form substantive @developer reply; a root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable
+- [ ] @tester classified and resolved non-actionable and acknowledgement threads without requiring developer replies
+- [ ] Check annotations and issue-style PR comments, which have no review thread IDs, were handled separately through a fix or explicit dismissal/no-change rationale
 
 ### PR Readiness
 - [ ] CI is green
-- [ ] All inline comment threads have reply posts
+- [ ] @tester verified every actionable-root reply after CI passed
+- [ ] All review threads are resolved, including non-actionable and acknowledgement threads
 - [ ] Branch is rebased on latest main (no merge conflicts)
-- [ ] @reviewer approved
-- [ ] No unresolved Copilot comments from latest round
+- [ ] @reviewer gave final GitHub approval; staged pre-push sign-off alone is not final approval
 
 ## Severity Levels
 

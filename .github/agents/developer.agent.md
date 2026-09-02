@@ -39,10 +39,14 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 9. **CI gate**: After every push (initial or follow-up), run `gh pr checks <PR#> --watch` and wait for all checks to pass. Report the result proactively to the coordinator. If CI fails, diagnose and fix immediately before proceeding. Never hand off to @tester or @reviewer with a red CI.
 10. **Rebase**: Before handing off to @tester or @reviewer, check if the branch is behind main. If so, `git rebase origin/main` and force-push with `--force-with-lease`. Re-verify CI after the rebase.
 11. **Review feedback**: After creating a PR, enumerate every page of inline review comments and group replies under their roots before assessing closure. Replace `OWNER`, `REPO`, and `PR`, then run this paginated REST audit:
-   ```bash
-   gh api --paginate "repos/OWNER/REPO/pulls/PR/comments?per_page=100" --jq '.[] | {id, in_reply_to_id, author: .user.login, url: .html_url, path, line: (.line // .original_line), body}'
-   ```
-   Entries with `in_reply_to_id: null` are roots; every other entry names its root. Address every actionable root and reply on its thread with exactly one of these forms: `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>`. Acknowledgements and non-actionable informational roots do not require a developer reply. Do not resolve threads: @tester verifies each claim and owns thread resolution under its Comment Verification Protocol. Automated findings delivered as check annotations or issue-style PR comments do not support threaded replies and are excluded from this reply requirement; still fix each finding or record a separate dismissal/no-change rationale through the provider's dismissal mechanism or a PR comment.
+      ```bash
+      gh api --paginate "repos/OWNER/REPO/pulls/PR/comments?per_page=100" --jq '.[] | {id, in_reply_to_id, author: .user.login, url: .html_url, path, line: (.line // .original_line), body}'
+      ```
+      Entries with `in_reply_to_id: null` are roots; every other entry names its root. A root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable. Acknowledgements and purely informational roots are non-actionable. Address every actionable root and reply on its thread with exactly one of these forms: `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>`. Post the reply to the root comment's `id` with the concrete REST route:
+      ```bash
+      gh api -X POST "repos/OWNER/REPO/pulls/PR/comments/ROOT_ID/replies" -f body='**[@developer]** Fixed in <sha>: <description>'
+      ```
+      Acknowledgements and non-actionable roots do not require a developer reply. After the push is green in CI, hand off all review threads to @tester for classification, claim verification where actionable, and resolution. Do not resolve threads yourself. Check annotations and issue-style PR comments have no review thread ID and are outside this threaded protocol; still fix each finding or record a dismissal/no-change rationale through the provider's mechanism or a PR comment.
 12. **Cleanup**: After push, remove the worktree: `git worktree remove <path>`
 
 All developer PR comments and replies must be prefixed with `**[@developer]**`.
