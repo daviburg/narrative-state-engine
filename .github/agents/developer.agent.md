@@ -38,7 +38,7 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 8. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
 9. **CI gate**: After every push (initial or follow-up), run `gh pr checks <PR#> --watch` and wait for all checks to pass. Report the result proactively to the coordinator. If CI fails, diagnose and fix immediately before proceeding. Never hand off to @tester or @reviewer with a red CI.
 10. **Rebase**: Before handing off to @tester or @reviewer, check if the branch is behind main. If so, `git rebase origin/main` and force-push with `--force-with-lease`. Re-verify CI after the rebase.
-11. **Review feedback**: After creating a PR, enumerate every page of inline review comments and group replies under their roots before assessing closure. Replace `OWNER`, `REPO`, and `PR`, then run this paginated REST audit:
+11. **Review feedback**: After creating a PR and waiting for CI to go green, enumerate every page of inline review comments and group replies under their roots before assessing closure. Post actionable-root replies only after CI is green (matching coordinator PR Fix step 2→3 ordering and the tester protocol). Replace `OWNER`, `REPO`, and `PR`, then run this paginated REST audit:
       ```bash
       gh api --paginate "repos/OWNER/REPO/pulls/PR/comments?per_page=100" --jq '.[] | {id, in_reply_to_id, author: .user.login, url: .html_url, path, line: (.line // .original_line), body}'
       ```
