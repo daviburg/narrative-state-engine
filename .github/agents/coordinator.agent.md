@@ -37,10 +37,10 @@ You are the central coordinator for narrative-state-engine. You are the human's 
   2. @reviewer reviews the staged diff against P1-P12 patterns and the full checklist
   3. If @reviewer finds issues: @developer fixes them, re-stages, and returns to step 2
   4. Once @reviewer gives pre-push sign-off: @developer commits and pushes
-  5. @developer posts replies to any Copilot comments that triggered this cycle
+  5. @developer posts an exact-form reply to each actionable Copilot root that triggered this cycle; @tester verifies the claims and resolves the threads
   **Exception — Copilot-only review cycles**: When a task is solely addressing automated Copilot reviewer comments (no human-raised concerns), the @reviewer pre-push step is waived. Copilot itself serves as the reviewer. The PR Fix Task Pattern below governs these cycles.
 - ALWAYS check for automated PR review comments (Copilot, CodeQL) after PR creation and include them in the squad loop.
-- BEFORE reporting squad consensus to the human, verify PR readiness: (1) all automated PR review comments (inline code comments) have reply posts, (2) CI is green, (3) @reviewer approves, (4) PR branch is rebased on latest main with no merge conflicts. If behind, dispatch @developer to rebase before declaring ready. If any review comment thread lacks a reply, dispatch @developer to post replies before declaring the PR ready. Note: check annotations (e.g., CodeQL findings) and issue-style PR comments do not support threaded replies and are excluded from this check — they are resolved by fixing the underlying code.
+- BEFORE reporting squad consensus to the human, verify PR readiness: (1) every actionable automated inline-review root has an exact-form @developer reply, @tester has verified the claim, and all review threads are resolved, (2) CI is green, (3) @reviewer approves, (4) PR branch is rebased on latest main with no merge conflicts. If behind, dispatch @developer to rebase before declaring ready. Acknowledgements and non-actionable informational roots do not require developer replies. Check annotations (e.g., CodeQL findings) and issue-style PR comments do not support threaded replies and are excluded from the threaded reply requirement; verify separately that each was fixed or has an explicit dismissal/no-change rationale.
 - ALWAYS verify CI passes after each push. Dispatch @developer to run `gh pr checks <PR#> --watch` and report the result. If CI fails, dispatch @developer to fix before continuing the squad loop. Do not push additional unrelated changes or declare readiness while CI is red (CI-fix pushes signed off by @reviewer are permitted).
 - After each push to a PR branch, dispatch @developer to request a fresh Copilot review via `gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`. Then schedule a follow-up task via the orchestrator with `not_before` set to 15 minutes from now to check for new inline comments (see PR Fix Task Pattern). Include any new comments in the squad loop before declaring readiness.
 - The CI gate above applies to reporting readiness and pushing new changes. @reviewer MAY still review staged fixes for a CI failure (the review happens on local staged diff, not on CI state). Once @reviewer gives pre-push sign-off and @developer pushes the CI fix, verify CI again before declaring ready.
@@ -140,15 +140,16 @@ When monitoring long-running processes (extraction runs, benchmarks):
 When dispatching tasks to address automated Copilot review comments on a PR, use this autonomous cycle. The @reviewer pre-push step is waived for these cycles (Copilot is the reviewer).
 
 1. **Fix**: Read unresolved Copilot comments, fix each issue, commit, push to PR branch
-2. **Reply**: Post `**[@developer]**` reply to each addressed comment with commit SHA
-3. **CI Gate**: Verify CI passes after push. If CI fails, fix and push again before proceeding
-4. **Request Review**: @developer calls the Copilot review API (`gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`) to trigger a fresh review
-5. **Schedule Follow-Up**: Submit a new orchestrator task with `not_before` set to 15 minutes from now. That follow-up task will:
+2. **Reply**: Post an exact-form `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>` reply to each actionable inline root; acknowledgements need no developer reply
+3. **Verify and Resolve**: @tester verifies each developer claim and exclusively owns GraphQL thread resolution
+4. **CI Gate**: Verify CI passes after push. If CI fails, fix and push again before proceeding
+5. **Request Review**: @developer calls the Copilot review API (`gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`) to trigger a fresh review
+6. **Schedule Follow-Up**: Submit a new orchestrator task with `not_before` set to 15 minutes from now. That follow-up task will:
    - Check if the Copilot review has posted results
    - If review is not ready yet: return failure with explicit error (orchestrator retries with backoff)
    - If review posted "no new comments": return success — PR is clean
    - If review posted 1+ new comments: restart at step 1 (new fix cycle)
-6. **Iteration Cap**: If the cycle exceeds 15 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
+7. **Iteration Cap**: If the cycle exceeds 15 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
 
 The canonical, reusable submitter is `saas/orchestrator/scripts/submit_pr_fix.py --repo <owner/name> --pr <N>` (in narrative-state-engine-private, alongside the rest of `saas/`; it supersedes the one-off `_submit_pr_fix_*.py` scripts). Tasks target **arclight** by default — the primary authenticated copilot-cli worker; windows-dev is an authenticated fallback worker. The branch is auto-derived from the PR via `gh pr view`, and a built-in duplicate guard prevents double-submission of a fix for the same PR.
 

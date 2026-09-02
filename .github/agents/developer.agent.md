@@ -38,16 +38,20 @@ You are the code developer for narrative-state-engine. Your job is to implement 
 8. **PR**: Create with `gh pr create --body-file` — never inline `--body`.
 9. **CI gate**: After every push (initial or follow-up), run `gh pr checks <PR#> --watch` and wait for all checks to pass. Report the result proactively to the coordinator. If CI fails, diagnose and fix immediately before proceeding. Never hand off to @tester or @reviewer with a red CI.
 10. **Rebase**: Before handing off to @tester or @reviewer, check if the branch is behind main. If so, `git rebase origin/main` and force-push with `--force-with-lease`. Re-verify CI after the rebase.
-11. **Review feedback**: After creating a PR, enumerate every page of review comments and identify all root comments before assessing closure. Address each root, then post a substantive thread reply prefixed `**[@developer]**` that identifies the fixing commit SHA and change or explains why no change is warranted. Resolve threads where the platform supports resolution, and repeat the paginated scan until there are zero unresolved threads and zero root comments without a developer reply. Check annotations and issue-style PR comments separately because they do not support threaded replies.
+11. **Review feedback**: After creating a PR, enumerate every page of inline review comments and group replies under their roots before assessing closure. Replace `OWNER`, `REPO`, and `PR`, then run this paginated REST audit:
+   ```bash
+   gh api --paginate "repos/OWNER/REPO/pulls/PR/comments?per_page=100" --jq '.[] | {id, in_reply_to_id, author: .user.login, url: .html_url, path, line: (.line // .original_line), body}'
+   ```
+   Entries with `in_reply_to_id: null` are roots; every other entry names its root. Address every actionable root and reply on its thread with exactly one of these forms: `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>`. Acknowledgements and non-actionable informational roots do not require a developer reply. Do not resolve threads: @tester verifies each claim and owns thread resolution under its Comment Verification Protocol. Automated findings delivered as check annotations or issue-style PR comments do not support threaded replies and are excluded from this reply requirement; still fix each finding or record a separate dismissal/no-change rationale through the provider's dismissal mechanism or a PR comment.
 12. **Cleanup**: After push, remove the worktree: `git worktree remove <path>`
 
 All developer PR comments and replies must be prefixed with `**[@developer]**`.
 
 ## Engineering Change Contracts
 
-- **Parser extensions**: Change only the extension layer the repository owns; delegate baseline tokenization, grammar, and error semantics to the host parser instead of reimplementing them. Add adversarial grammar cases and differential tests against the host parser for all overlapping syntax.
-- **Renderer/browser changes**: Exercise the real production page and shipped assets, not only a synthetic harness. Cover stage-failure fallback, equivalent history and live behavior, accessible state exposure, and responsive containment at supported viewport bounds.
-- **Minimum runtime**: Derive the effective minimum from the engine constraints of locked direct and transitive dependencies. Test a strict install and the relevant suite on the exact CI floor, and update the manifest, lockfile, CI matrix, and user-facing documentation together whenever that floor changes.
+- **Parser extensions**: When a change extends parser syntax or semantics, change only the extension layer the repository owns; delegate baseline tokenization, grammar, and error semantics to the host parser instead of reimplementing them. Add adversarial grammar cases and differential tests against the host parser for overlapping syntax.
+- **Renderer/browser changes**: When a change affects browser rendering, exercise the real production page and shipped assets, not only a synthetic harness. Cover applicable stage-failure fallback, history/live parity, accessible state exposure, and responsive containment at supported viewport bounds.
+- **Minimum runtime**: When a change affects the supported runtime floor or dependencies that constrain it, derive the effective minimum from the engine constraints of locked direct and transitive dependencies. Test a strict install and the relevant suite on the exact CI floor, and synchronize the affected package's manifest and lockfile when they exist, the applicable CI matrix, and user-facing documentation.
 
 ## Key Conventions
 

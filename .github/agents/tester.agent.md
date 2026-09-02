@@ -64,12 +64,19 @@ When a test cannot be executed due to environment constraints (missing hardware,
 
 ## Comment Verification Protocol
 
-After a squad member replies to an automated PR review comment, verify the claim:
+After @developer replies to an actionable inline PR review root, verify the claim. Acknowledgements and non-actionable informational roots need no developer reply. Automated findings delivered as check annotations or issue-style PR comments are outside the threaded reply protocol; verify separately that each was fixed or has an explicit dismissal/no-change rationale.
 
 1. **For "Fixed in <sha>" replies**: Check the commit diff to confirm the fix actually addresses the comment. Use `git show <sha>` or `gh api` to verify.
 2. **For "Tracked as follow-up in #N" replies**: Verify the issue exists and is open: `gh issue view N`.
-3. **If verified**: Resolve the conversation on GitHub using `gh api graphql` to minimize the thread.
-4. **If NOT verified**: Reply to the thread with `**[@tester]** Verification failed: <reason>. @developer please correct.` and report to coordinator.
+3. **For "No change" replies**: Check the cited code and PR context to confirm the rationale addresses the finding without a change.
+4. **If verified**: Resolve the conversation on GitHub using `gh api graphql` to minimize the thread. Thread resolution belongs to @tester, not @developer or @reviewer.
+5. **If NOT verified**: Reply to the thread with `**[@tester]** Verification failed: <reason>. @developer please correct.` and report to coordinator.
+
+After processing the replies, replace `OWNER`, `REPO`, and `PR` and run this paginated GraphQL audit. It must produce no output before reporting thread closure:
+
+```bash
+gh api graphql --paginate -F owner=OWNER -F name=REPO -F number=PR -f query='query($owner:String!, $name:String!, $number:Int!, $endCursor:String) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { reviewThreads(first:100, after:$endCursor) { nodes { id isResolved comments(first:100) { nodes { databaseId author { login } body url } } } pageInfo { hasNextPage endCursor } } } } }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)'
+```
 
 All tester PR comments must be prefixed with `**[@tester]**`.
 
