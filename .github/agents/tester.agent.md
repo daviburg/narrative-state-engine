@@ -64,14 +64,25 @@ When a test cannot be executed due to environment constraints (missing hardware,
 
 ## Comment Verification Protocol
 
-After a squad member replies to an automated PR review comment, verify the claim:
+Begin only after the pushed commit is green in CI. Enumerate every review thread and classify each root. A root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable. Acknowledgements and purely informational roots are non-actionable and do not require a developer reply. Check annotations and issue-style PR comments have no review thread ID and are outside this threaded protocol; verify separately that each was fixed or has an explicit dismissal/no-change rationale.
 
 1. **For "Fixed in <sha>" replies**: Check the commit diff to confirm the fix actually addresses the comment. Use `git show <sha>` or `gh api` to verify.
-2. **For "Tracked as follow-up in #N" replies**: Verify the issue exists and is open: `gh issue view N`.
-3. **If verified**: Resolve the conversation on GitHub using `gh api graphql` to minimize the thread.
-4. **If NOT verified**: Reply to the thread with `**[@tester]** Verification failed: <reason>. @developer please correct.` and report to coordinator.
+2. **For "Tracked as follow-up in #NNN" replies**: Verify the issue exists and is open with a state-only query that makes the contract explicit — `gh issue view NNN --json state --jq '.state'` must print `OPEN` (a missing issue errors; a `CLOSED` result fails the check).
+3. **For "No change" replies**: Check the cited code and PR context to confirm the rationale addresses the finding without a change.
+4. **If an actionable claim is verified**: Resolve the conversation using its GraphQL review thread `id`, not a comment database ID:
+   ```bash
+   gh api graphql -F id=THREAD_ID -f query='mutation($id:ID!) { resolveReviewThread(input:{threadId:$id}) { thread { id isResolved } } }'
+   ```
+5. **If a root is non-actionable**: Resolve it with the same `resolveReviewThread(input:{threadId:$id})` mutation without requiring a developer reply.
+6. **If an actionable claim is NOT verified**: Leave the thread unresolved, reply with `**[@tester]** Verification failed: <reason>. @developer please correct.`, and report to coordinator.
 
-All tester PR comments must be prefixed with `**[@tester]**`.
+After processing the replies, replace `OWNER`, `REPO`, and `PR` and run this paginated GraphQL audit. It must produce no output before reporting thread closure:
+
+```bash
+gh api graphql --paginate -F owner=OWNER -F name=REPO -F number=PR -f query='query($owner:String!, $name:String!, $number:Int!, $endCursor:String) { repository(owner:$owner, name:$name) { pullRequest(number:$number) { reviewThreads(first:100, after:$endCursor) { nodes { id isResolved comments(first:100) { nodes { databaseId author { login } body url } } } pageInfo { hasNextPage endCursor } } } } }' --jq '.data.repository.pullRequest.reviewThreads.nodes[] | select(.isResolved == false)'
+```
+
+The audit must return no unresolved review threads, including non-actionable and acknowledgement threads, before readiness. All tester PR comments must be prefixed with `**[@tester]**`.
 
 ## Self-Improvement
 
