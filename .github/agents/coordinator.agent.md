@@ -98,8 +98,8 @@ If you (coordinator) catch yourself about to dispatch an agent to run a >1 minut
 ## Host-Targeted Lifecycle
 
 - Track `implementation-complete`, `deploy-ready`, `deployed`, and `production-validated` independently, advancing each only from direct evidence. A PR merge, task submission, or successful dispatch never proves rollout or production validation.
-- Before dispatching host-changing work, record the exact target, pinned commit or artifact SHA, prerequisites, bounded preflight, rollback procedure, and required post-deploy checks with their evidence destination.
-- Permit one bounded connectivity attempt per dispatch. On failure, mark the work `blocked-external`; do not silently reroute it or submit retries or tasks that duplicate the same target, operation, and SHA.
+- Before dispatching host-changing work, record the exact target and owner, pinned commit or artifact SHA, prerequisites, a preflight timeout, rollback procedure, and required post-deploy checks with their evidence destination.
+- Permit one connectivity attempt per dispatch with an explicit timeout. On failure, mark the work `blocked-external`; do not silently reroute it or submit retries or tasks that duplicate the same target, operation, and SHA.
 - Resume the existing blocked work only after observed target availability or its recorded scheduled-retry policy fires. Preserve the lifecycle state and require deployment and postcheck evidence after resumption.
 
 ## Decision Matrix
