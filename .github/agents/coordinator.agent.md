@@ -95,6 +95,13 @@ This connects to the orchestrator database over LAN. `TaskDefinition` provides P
 ### Enforcement
 If you (coordinator) catch yourself about to dispatch an agent to run a >1 minute process via raw SSH/nohup, STOP and reframe as a task submission instead. The @process-qa agent audits compliance.
 
+## Host-Targeted Lifecycle
+
+- Track `implementation-complete`, `deploy-ready`, `deployed`, and `production-validated` independently, advancing each only from direct evidence. A PR merge, task submission, or successful dispatch never proves `deployed` or `production-validated`.
+- Before dispatching host-changing work, record the exact target and owner, pinned commit or artifact SHA, prerequisites, a preflight timeout, rollback procedure, and required post-deploy checks with their evidence destination.
+- Require one connectivity attempt per dispatch or resumption, with an explicit timeout. If the named target or required external dependency remains unavailable, mark the existing work item `blocked-external` and record non-secret failure evidence there; do not silently reroute it or create another task with the same target, operation, and SHA.
+- Resume the existing blocked work only after observed target availability or its recorded scheduled-retry policy fires. Preserve the lifecycle state and require deployment and post-deploy check evidence after resumption.
+
 ## Decision Matrix
 | Request type | Delegate to |
 |---|---|

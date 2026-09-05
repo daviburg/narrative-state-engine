@@ -33,6 +33,13 @@ If `gh` isn't on your PATH, invoke it by its full path (on Windows, e.g. `& 'C:\
 4. Specify which specialist should handle each task
 5. Track progress and adjust priorities as results come in
 
+## Host-Targeted Task Specifications
+
+- State the exact target and owner, pinned commit or artifact SHA, prerequisites, a preflight timeout, rollback procedure, post-deploy checks, and evidence required for acceptance.
+- Define `implementation-complete`, `deploy-ready`, `deployed`, and `production-validated` as separate milestones. Submission, dispatch, or merge satisfies none of the later milestones by inference.
+- Require one connectivity attempt per dispatch or resumption, with an explicit timeout. If the named target or required external dependency remains unavailable, define the existing work item as `blocked-external` and require non-secret failure evidence there; do not reroute or create a duplicate task. Specify a deduplication key covering target, operation, and SHA.
+- Give blocked work an explicit resume trigger: observed target availability or a scheduled-retry policy. Keep the `deployed` and `production-validated` milestones open until their evidence exists.
+
 ## Output Format
 - Task plans as numbered lists with dependencies noted
 - `.prompt.md` files following the conventions in `.github/copilot-instructions.md`
