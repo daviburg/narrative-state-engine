@@ -148,18 +148,18 @@ When monitoring long-running processes (extraction runs, benchmarks):
 
 ## PR Fix Task Pattern
 
-When dispatching tasks to address automated Copilot review comments on a PR, use this autonomous cycle. The @reviewer pre-push step is waived for these cycles (Copilot is the reviewer), except for the security-sensitive changes defined above.
+When dispatching tasks to address automated findings on a PR, use this autonomous cycle. The @reviewer pre-push step is waived when the findings are solely from Copilot (Copilot is the reviewer), except for the security-sensitive changes defined above.
 
-1. **Fix**: Read unresolved Copilot comments, fix each issue, commit, and push to the PR branch
+1. **Fix**: Parse inline Copilot comments, suppressed or body-only review findings, check annotations, and issue-style PR comments; fix each actionable issue, commit, and push to the PR branch
 2. **CI Gate**: Verify CI passes after the push. If CI fails, fix and push again before handing off to @tester
-3. **Reply**: Post an exact-form `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>` reply to each actionable root. A root is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous roots to actionable
-4. **Verify and Resolve**: @tester classifies every review root, verifies each actionable developer claim, resolves verified actionable threads, and resolves non-actionable or acknowledgement threads without requiring a developer reply. All review threads must be resolved
+3. **Reply**: Post an exact-form `**[@developer]** Fixed in <sha>: <description>`, `**[@developer]** Tracked as follow-up in #NNN: <description>`, or `**[@developer]** No change: <rationale>` reply to each actionable inline root. Record the same disposition in an attributed PR comment for each suppressed, body-only, annotation, or issue-style finding that has no thread. A finding is actionable when it requests or implies a code, test, documentation, or readiness change; default ambiguous findings to actionable
+4. **Verify and Resolve**: @tester classifies every finding, verifies each actionable developer claim, resolves verified actionable threads, and resolves non-actionable or acknowledgement threads without requiring a developer reply. All review threads must be resolved, and every non-thread finding must have a verified disposition
 5. **Request Review**: @developer calls the Copilot review API (`gh api repos/{owner}/{repo}/pulls/{pr}/requested_reviewers -X POST -f "reviewers[]=copilot-pull-request-reviewer[bot]"`) to trigger a fresh review
 6. **Schedule Follow-Up**: Submit a new orchestrator task with `not_before` set to 15 minutes from now. That follow-up task will:
-   - Check if the Copilot review has posted results
+   - Check whether Copilot review results, check annotations, or issue-style findings have appeared
    - If review is not ready yet: return failure with explicit error (orchestrator retries with backoff)
-   - If review posted "no new comments": return success — PR is clean
-   - If review posted 1+ new comments: restart at step 1 (new fix cycle)
+   - If every automated surface has no new findings: return success — PR is clean
+   - If any automated surface has 1+ new findings: restart at step 1 (new fix cycle)
 7. **Iteration Cap**: If the cycle exceeds 15 rounds without converging to zero comments, escalate to the human with a summary of remaining issues. Do not loop indefinitely.
 
 The canonical, reusable submitter is `saas/orchestrator/scripts/submit_pr_fix.py --repo <owner/name> --pr <N>` (in narrative-state-engine-private, alongside the rest of `saas/`; it supersedes the one-off `_submit_pr_fix_*.py` scripts). Tasks target **arclight** by default — the primary authenticated copilot-cli worker; windows-dev is an authenticated fallback worker. The branch is auto-derived from the PR via `gh pr view`, and a built-in duplicate guard prevents double-submission of a fix for the same PR.
