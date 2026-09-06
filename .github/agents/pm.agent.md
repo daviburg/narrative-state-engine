@@ -37,7 +37,7 @@ If `gh` isn't on your PATH, invoke it by its full path (on Windows, e.g. `& 'C:\
 
 - State the exact target and owner, pinned commit SHA or artifact digest, prerequisites, a preflight timeout, rollback procedure, post-deploy checks, and evidence required for acceptance.
 - Define `implementation-complete`, `deploy-ready`, `deployed`, and `production-validated` as separate milestones. Submission, dispatch, or merge satisfies none of the later milestones by inference.
-- Require one connectivity attempt per dispatch or resumption, with an explicit timeout. If the named target or required external dependency remains unavailable after the timed attempt, set the existing work item to `blocked-external`. This state means the named target or required external dependency remains unavailable after that attempt; record non-secret failure evidence in the work item, and do not reroute or create a duplicate task. Specify a deduplication key covering target, operation, and SHA.
+- Require one connectivity attempt per dispatch or resumption, with an explicit timeout. If the named target or required external dependency remains unavailable after the timed attempt, set the existing work item to `blocked-external`. This state means the named target or required external dependency remains unavailable after that attempt; record non-secret failure evidence in the work item, and do not reroute or create a duplicate task. Specify a deduplication key covering target, operation, and the pinned identifier (commit SHA or artifact digest).
 - Give blocked work an explicit resume trigger: observed target availability or a scheduled-retry policy. Keep the `deployed` and `production-validated` milestones open until their evidence exists.
 
 ## Output Format
