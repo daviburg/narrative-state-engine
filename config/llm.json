@@ -5,7 +5,7 @@
     "http://localhost:8000/v1",
     "http://localhost:8001/v1"
   ],
-  "model": "Qwen3.6-35B-A3B-UD-Q4_K_M.gguf",
+  "model": "qwen3.8-27b-gptq-int4",
   "api_key_env": "",
   "temperature": 0,
   "top_k": 1,
@@ -58,5 +58,8 @@
       "mode": "recover_only",
       "_comment": "S1 relevance-scoped entity_detail selection (epic #477, lever (b)/A2a, #498; builds on the S0 shadow #494). Default OFF and byte-identical to the cap-6 baseline when off (the A/B control). When on in mode 'recover_only' (S1a), the detail set becomes the cap-6 set UNION the relevance recoveries -- cap-dropped entities the existing #233 relevance signal (_select_context_aware_entities) marks relevant (PC, new, or mentioned/co-located/one-hop-active) -- so the ~245 real updates the cap-6 silently drops are recovered. Recover-only is a SUPERSET of the cap-6 set: it ADDS recoveries and drops NOTHING currently detailed. max_detail_entities is the ceiling (telemetry-derived from S0 would_select p95 = 10, max = 18; caps the climax spike, binds on < 5% of turns); on bind it trims the lowest-relevance recovery tail, never the cap-6 set and never the floor (PC/new/mentioned). It is clamped >= the hard cap (_MAX_DETAIL_ENTITIES_PER_TURN, default 22). The 'mode' field is the forward-compat seam for S1b ('drop_filler', not implemented here); an unrecognised mode normalises to 'recover_only'. S1 is gated on a QUALITY update-retention A/B vs a cap-6 control, NOT the 60h token A/B (its token delta is ~flat by design)."
     }
+  },
+  "chat_template_kwargs": {
+    "enable_thinking": false
   }
 }
