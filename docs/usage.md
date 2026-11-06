@@ -126,6 +126,18 @@ export GEMINI_API_KEY="your-key-here"
 
 ### Using a Local Model
 
+For self-hosted vLLM JSON extraction, `config/llm.json` may set
+`"chat_template_kwargs": {"enable_thinking": false}`. The server/model template
+must honor that option; it is not forwarded to cloud providers. The checked-in
+Arclight configuration uses `qwen3.8-27b-gptq-int4` and retains temperature 0,
+top-k 1, top-p 1, min-p 0 and seed 42. Verify actual responses for unwanted
+reasoning: `--reasoning-format none` only changes its presentation.
+
+Event extraction accepts an `events` envelope or an independently schema-valid
+single event. Both pipeline paths wrap a valid single event without changing
+its content and log `wrap_single_event` in the turn's `validation_repairs`.
+Invalid/missing envelopes are errors, not empty-event successes.
+
 The recommended local backend is **llama-server** (from [llama.cpp](https://github.com/ggml-org/llama.cpp)), which exposes an OpenAI-compatible `/v1` endpoint with true parallel slot processing. Download a pre-built release from the [llama.cpp releases page](https://github.com/ggml-org/llama.cpp/releases) — CUDA, Vulkan, and SYCL builds are available.
 
 ```bash

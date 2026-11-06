@@ -6,6 +6,22 @@
 
 # 1. Lessons Learned
 
+## Structured event envelopes and JSON-only inference
+
+Event responses must contain an `events` array, or be a single event that passes
+the existing event schema independently. Serial and parallel extraction share
+the same normalization: a schema-valid single event is wrapped without changing
+its facts, and the repair is recorded in `validation_repairs`. Invalid or missing
+envelopes are errors, not implicit empty-event successes. The client validates
+the accepted response union locally so malformed responses follow its normal
+retry path even when server-side `response_format` is disabled.
+
+RPG extraction uses thinking-off inference. Removing `<think>` blocks from a
+response, or setting llama.cpp's `reasoning_format` to `none`, does not prevent
+their generation. The backend must honor the thinking-off setting; vLLM model
+defaults and per-request chat-template options are verified separately from JSON
+parsing. Hidden reasoning is not counted as useful JSON response throughput.
+
 ## 1.1 Summary is not State
 
 A narrative summary is inherently lossy.

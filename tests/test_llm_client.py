@@ -750,6 +750,28 @@ def _capture_request_kwargs(client):
 class TestSamplerParamsInRequestBody:
     """Verify explicit sampler params (#471) are threaded into the request."""
 
+    def test_thinking_off_template_options_are_forwarded_to_local_backend(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "base_url": "http://localhost:8000/v1", "retry_attempts": 1,
+            "temperature": 0, "chat_template_kwargs": {"enable_thinking": False},
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+        with patch.object(client.client.chat.completions, "create", side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+        assert captured["extra_body"]["chat_template_kwargs"] == {"enable_thinking": False}
+        assert client.config["chat_template_kwargs"] == {"enable_thinking": False}
+
+    def test_local_template_options_do_not_reach_cloud_provider(self, tmp_path):
+        cfg = _write_config(tmp_path, {
+            "retry_attempts": 1, "chat_template_kwargs": {"enable_thinking": False},
+        })
+        client = LLMClient(config_path=cfg)
+        captured, fake_create = _capture_request_kwargs(client)
+        with patch.object(client.client.chat.completions, "create", side_effect=fake_create):
+            client.extract_json(system_prompt="sys", user_prompt="user")
+        assert "extra_body" not in captured
+
     def test_sampler_params_present_when_configured(self, tmp_path):
         """top_k/top_p/min_p/seed appear in the request when set in config."""
         cfg = _write_config(tmp_path, {
