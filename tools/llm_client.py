@@ -1037,6 +1037,11 @@ class LLMClient:
                             sampler_extra["top_k"] = self.top_k
                         if self.min_p is not None:
                             sampler_extra["min_p"] = self.min_p
+                        template_kwargs = self.config.get("chat_template_kwargs")
+                        if template_kwargs is not None:
+                            if not isinstance(template_kwargs, dict):
+                                raise LLMExtractionError("chat_template_kwargs must be a JSON object.")
+                            sampler_extra["chat_template_kwargs"] = dict(template_kwargs)
                     # Ollama hangs when response_format=json_object is used with
                     # qwen3.5 models (thinking-mode conflict).  Skip it for those.
                     if not self._skip_response_format:

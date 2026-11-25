@@ -1336,6 +1336,43 @@ def _validate_event(event_data: dict) -> bool:
         return False
 
 
+def _event_response_schema() -> dict:
+    envelope = {
+        "type": "object",
+        "required": ["events"],
+        "properties": {"events": {"type": "array", "items": {"type": "object"}}},
+    }
+    event_schema = _load_schema("event.schema.json")
+    return {"anyOf": [envelope, event_schema]} if event_schema is not None else envelope
+
+
+def _normalize_event_response(result: dict, turn_id: str) -> list[dict]:
+    """Preserve event arrays, or wrap only an independently schema-valid event."""
+    if not isinstance(result, dict):
+        raise LLMExtractionError("Event extraction requires a JSON object.")
+    if "events" in result:
+        events = result["events"]
+        if not isinstance(events, list) or any(not isinstance(event, dict) for event in events):
+            raise LLMExtractionError("Event extraction requires an events array of objects.")
+        return events
+    schema = _load_schema("event.schema.json")
+    if schema is None or jsonschema is None:
+        raise LLMExtractionError("Cannot normalize a single event without event schema validation.")
+    try:
+        jsonschema.validate(result, schema)
+    except jsonschema.ValidationError as error:
+        raise LLMExtractionError(
+            "Event response has neither an events array nor a valid single event: " + error.message
+        ) from error
+    _record_validation_repairs(turn_id, None, "event", [{
+        "repair": "wrap_single_event", "path": "$.events", "layer": "event_envelope",
+        "event_id": result["id"],
+    }])
+    print(f"  Event response repair for {turn_id}: wrapped schema-valid single event {result['id']}",
+          file=sys.stderr)
+    return [result]
+
+
 # Maximum turn distance for event source_turns to be considered valid (#127)
 _MAX_SOURCE_TURN_DISTANCE = 5
 
@@ -4816,9 +4853,10 @@ def _extract_events_parallel(
         event_result = llm.extract_json(
             system_prompt=load_template("event-extractor"),
             user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
+            schema=_event_response_schema(),
             capture={"turn": turn_id, "phase": "event", "entity_id": None},
         )
-        return event_result.get("events", [])
+        return _normalize_event_response(event_result, turn_id)
     except QuotaExhaustedError:
         raise
     except LLMExtractionError as e:
@@ -5672,7 +5710,8 @@ def extract_and_merge(
                 futures_map[f] = ("relationship", None)
 
             # Submit event extraction
-            f = pool.submit(
+            f = _submit_in_context(
+                pool,
                 _extract_events_parallel,
                 llm, turn, next_evt_id, entity_ids,
             )
@@ -6169,9 +6208,10 @@ def extract_and_merge(
             event_result = llm.extract_json(
                 system_prompt=load_template("event-extractor"),
                 user_prompt=format_event_prompt(turn, next_evt_id, entity_ids),
+                schema=_event_response_schema(),
                 capture={"turn": turn_id, "phase": "event", "entity_id": None},
             )
-            new_events = event_result.get("events", [])
+            new_events = _normalize_event_response(event_result, turn_id)
             _fix_event_source_turns(new_events, turn_id)
             known_ids = _collect_all_entity_ids(catalogs)
             for event in new_events:
